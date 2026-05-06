@@ -313,11 +313,11 @@ JSON key stored as a Supabase secret. Used by edge functions only.
 
 Phase 1 (Foundation):
 - 1.1 Supabase project: DONE.
-- 1.2 Google Cloud Console user-facing OAuth client: DONE (Internal type). Service account: NOT created yet.
-- 1.3 Service account domain-wide delegation: NOT done. Requires Mirror NYC Workspace admin.
+- 1.2 Google Cloud Console user-facing OAuth client + service account: DONE. Service account `mirror-ny-hq-backend@mirror-nyc-hq.iam.gserviceaccount.com`. JSON key lives outside git in `secrets/` (gitignored).
+- 1.3 Service account domain-wide delegation: DONE. Verified via `scripts/verify-service-account.ts` (impersonates jobs@mirrornyc.com, lists 1 Gmail message, prints 403/`unauthorized_client` hint on failure). Currently authorized for `gmail.readonly`; Phase 3 will add `gmail.send` and Phase 4 will add `presentations` + `drive`.
 - 1.4 GitHub repo: DONE.
 - 1.5 Netlify imported repo: DONE.
-- 1.6 Local toolchain: Git DONE; Supabase CLI status TBD; psql status TBD; Node assumed DONE.
+- 1.6 Local toolchain: Git, Supabase CLI 2.98.1, psql 18.3, Node 25.9.0 all DONE.
 
 Phase 2 (Schema and auth):
 - 2.1 Lovable project, Supabase connector, GitHub connector, Google OAuth, sign-in tested: DONE. Jimmie's account confirmed in `auth.users`.
