@@ -126,6 +126,7 @@ export type Database = {
         Row: {
           anthropic_spend_cap_monthly_usd: number
           anthropic_spend_current_month_usd: number
+          cap_alert_sent_this_month: boolean
           default_drive_folder_for_standalone_vs_decks: string | null
           email_notifications_enabled: boolean
           id: string
@@ -137,6 +138,7 @@ export type Database = {
         Insert: {
           anthropic_spend_cap_monthly_usd?: number
           anthropic_spend_current_month_usd?: number
+          cap_alert_sent_this_month?: boolean
           default_drive_folder_for_standalone_vs_decks?: string | null
           email_notifications_enabled?: boolean
           id?: string
@@ -148,6 +150,7 @@ export type Database = {
         Update: {
           anthropic_spend_cap_monthly_usd?: number
           anthropic_spend_current_month_usd?: number
+          cap_alert_sent_this_month?: boolean
           default_drive_folder_for_standalone_vs_decks?: string | null
           email_notifications_enabled?: boolean
           id?: string
@@ -559,6 +562,79 @@ export type Database = {
           },
         ]
       }
+      ts_evaluations: {
+        Row: {
+          candidate_id: string
+          eval_prompt_snapshot: string
+          evaluated_at: string
+          id: string
+          internal_notes_at_time: string | null
+          key_gaps: Json | null
+          recruiter_overview: string | null
+          role_id: string
+          score: number | null
+          score_breakdown: Json | null
+          scorecard_snapshot: Json
+          tier: string | null
+          top_strengths: Json | null
+          triggered_by: string | null
+        }
+        Insert: {
+          candidate_id: string
+          eval_prompt_snapshot: string
+          evaluated_at?: string
+          id?: string
+          internal_notes_at_time?: string | null
+          key_gaps?: Json | null
+          recruiter_overview?: string | null
+          role_id: string
+          score?: number | null
+          score_breakdown?: Json | null
+          scorecard_snapshot: Json
+          tier?: string | null
+          top_strengths?: Json | null
+          triggered_by?: string | null
+        }
+        Update: {
+          candidate_id?: string
+          eval_prompt_snapshot?: string
+          evaluated_at?: string
+          id?: string
+          internal_notes_at_time?: string | null
+          key_gaps?: Json | null
+          recruiter_overview?: string | null
+          role_id?: string
+          score?: number | null
+          score_breakdown?: Json | null
+          scorecard_snapshot?: Json
+          tier?: string | null
+          top_strengths?: Json | null
+          triggered_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ts_evaluations_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "ts_candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ts_evaluations_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "ts_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ts_evaluations_triggered_by_fkey"
+            columns: ["triggered_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ts_final_reviews: {
         Row: {
           candidate_count_limit: number | null
@@ -609,8 +685,10 @@ export type Database = {
           completed_at: string | null
           created_by: string | null
           id: string
+          pending_candidates: Json
           pulled_from: string | null
           pulled_to: string | null
+          reeval_last_progress_at: string | null
           role_id: string
           started_at: string
           status: Database["public"]["Enums"]["ts_pull_round_status"]
@@ -620,8 +698,10 @@ export type Database = {
           completed_at?: string | null
           created_by?: string | null
           id?: string
+          pending_candidates?: Json
           pulled_from?: string | null
           pulled_to?: string | null
+          reeval_last_progress_at?: string | null
           role_id: string
           started_at?: string
           status?: Database["public"]["Enums"]["ts_pull_round_status"]
@@ -631,8 +711,10 @@ export type Database = {
           completed_at?: string | null
           created_by?: string | null
           id?: string
+          pending_candidates?: Json
           pulled_from?: string | null
           pulled_to?: string | null
+          reeval_last_progress_at?: string | null
           role_id?: string
           started_at?: string
           status?: Database["public"]["Enums"]["ts_pull_round_status"]
@@ -1402,3 +1484,5 @@ export const Constants = {
   },
 } as const
 <claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
+A new version of Supabase CLI is available: v2.98.2 (currently installed v2.98.1)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

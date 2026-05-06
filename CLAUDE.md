@@ -319,7 +319,7 @@ JSON key stored as a Supabase secret. Used by edge functions only.
 ### Cross-cutting
 - `notifications-dispatch(event_type, entity_id, recipient_user_ids)`: insert notifications + send email via Gmail API service account.
 - `auth-on-signup(user_id)`: create public.users row with `permission_role = 'member'`.
-- `anthropic-spend-tracker` (helper): wraps every Anthropic call, tracks spend, refuses calls if cap is hit (refuse + email admin, do NOT pause new pulls).
+- `_shared/anthropic.ts` exports `callClaude(app, messages, options)` where `app` is `'talent_scout' | 'venue_scout' | 'hq'` and selects the per-app secret (`ANTHROPIC_API_KEY_TS` / `_VS` / `_HQ`). Wraps the raw fetch to `api.anthropic.com`, computes cost from the response usage block (incl. cache-read/write discounts), increments `global_settings.anthropic_spend_current_month_usd`, and emails the admin once per cap crossing (gated by `cap_alert_sent_this_month`). Does NOT refuse calls when over cap — graceful degradation, not a hard failure.
 
 ## Cron jobs (pg_cron)
 
@@ -347,7 +347,8 @@ Phase 2 (Schema and auth):
 Phase 3 (Talent Scout port):
 - 3.1 Inventory + port plan: DONE. See `docs/talent-scout-port-plan.md` for the full breakdown of what lifts/adapts/rewrites/drops, schema diff, and the section-9 sub-phase sequence that drives 3.2 through 3.8.
 - 3.2 Schema augmentation, edge function shells, CLAUDE.md sync: DONE. Migration `20260506162543_phase_3_2_schema_augmentation.sql` added `ts_pull_rounds.pending_candidates` + `reeval_last_progress_at`, the `ts_evaluations` history table (admin-only RLS), and `global_settings.cap_alert_sent_this_month`. Stub edge functions `ts-pull-candidates` and `ts-generate-scorecard` deployed to the Supabase project (501 responses; real impl in 3.3 / 3.4).
-- 3.3 Roles CRUD + wizard: NOT done. **You're picking up here.**
+- 3.3 Roles CRUD + wizard: DONE. `/talent-scout/*` route tree mounted (admin-gated via `<AdminRoute>`), top-nav entry visible only to admins, three-step new-role wizard (`/new/details` → `/new/search` → `/new/scorecard`) with a hiring-manager picker over admin users, Claude-driven scorecard generation, and a single-screen edit + close/reopen at `/roles/:id/settings`. `_shared/anthropic.ts` `callClaude` wrapper landed alongside the real `ts-generate-scorecard`. Lifted: `parseClaudeJson` (edge), `wizardStore`, `defaultEvalPrompt`, `poolStatus`, `scoreColor`. Built fresh for HQ design system: `Stepper`, `RoleStatusPill`, `TagInput`. `CandidateTable` placeholder in place; full port comes in 3.5.
+- 3.4 Pull pipeline: NOT done. **You're picking up here.**
 
 ### Locked decisions from the Talent Scout port plan
 
@@ -358,21 +359,25 @@ Resolutions to the six open questions in `docs/talent-scout-port-plan.md` § 8.
 - **Q3 (hiring manager identity): block on first sign-in.** `ts_roles.hiring_manager_id` FKs to `users`, and the new-role wizard looks up by email at submit time. If no `users` row exists yet, role creation is blocked with "Hiring manager must sign in to HQ at least once first." No auto-creating users from email strings.
 - **Q4 (notification consolidation): standalone first, fold later.** Phase 3.8 ships `ts-send-pull-notification` standalone so Talent Scout doesn't block on Phase 5 work. Phase 5 folds it into `notifications-dispatch`.
 - **Q5 (two packet generators): read both, then consolidate.** Before writing `ts-packet-generate` in Phase 3.6, do a 30-min read of the source `generate-packet` (832 lines) vs `generate-final-review-packet` (767 lines) to confirm whether they're two distinct flows (candidate-pool packet vs final-review packet) or one is dead code. Consolidate based on that read.
-- **Q6 (anthropic-spend-tracker shape): explicit wrapper around fetch.** Single helper `withSpendTracking(fn)` that wraps a Claude call: pre-call checks `anthropic_spend_cap_monthly_usd` vs `anthropic_spend_current_month_usd` and either lets the call through, or refuses + emails the admin (gated by `cap_alert_sent_this_month` to avoid spam) + returns a typed error. Post-call increments spend from the response's usage block. Locks in this phase via the `cap_alert_sent_this_month` column; helper code lands when the first Claude-calling function is built (Phase 3.3, `ts-generate-scorecard`).
+- **Q6 (anthropic-spend-tracker shape): explicit `callClaude(app, ...)` wrapper.** Single helper in `supabase/functions/_shared/anthropic.ts`. Selects the right key from `ANTHROPIC_API_KEY_TS` / `_VS` / `_HQ` based on the `app` argument. After each successful call, computes cost from the response usage block (incl. prompt-cache discounts) and increments `global_settings.anthropic_spend_current_month_usd`. Emails the admin once per cap crossing, gated by `cap_alert_sent_this_month`. Does NOT refuse calls when over cap — graceful degradation, not a hard failure. Email path is currently a console-log stub; Phase 3.8 wires real notifications.
 
-## Picking up at Phase 3.3
+## Picking up at Phase 3.4
 
-### Phase 3.3: Roles CRUD + wizard
+### Phase 3.4: Pull pipeline
 
-Port the source repo's role-creation wizard and dashboard pages to `/talent-scout/*`. Per the port plan section 9, this phase ships:
-- Pages: `Index` (all roles), `NewRoleDetails`, `NewRoleSearch`, `NewRoleScorecard`, `RoleDashboard` (read-only at this stage), `RoleSettings`.
-- Edge function: `ts-generate-scorecard` (real implementation; calls Claude with the spend-tracker wrapper).
-- Wizard state: lift `src/lib/wizardStore.ts` from the source repo as-is.
+Port the source repo's `pull-candidates` Edge Function (1129 lines) to HQ as `ts-pull-candidates`. The chunked self-invoking architecture stays intact (BATCH_SIZE=8, self-invoke continuation via `pending_candidates` jsonb). Replace the per-installation Gmail OAuth refresh-token flow with a service-account JWT impersonating `jobs@mirrornyc.com` — reuse the same JWT-bearer pattern as `scripts/verify-service-account.ts`, but read the SA key from a Supabase secret.
 
-Hiring-manager email lookup happens client-side at wizard submit; if no `users` row exists, block with a clear message (Q3).
+This phase ships:
+- Edge function: `ts-pull-candidates` (real implementation; replaces the 501 stub).
+- Shared module: `_shared/gmailServiceAccount.ts` for the JWT bearer flow.
+- Pages: `PullLoading` (realtime subscription on `ts_pull_rounds.status`), `PullRoundDetail` (read-only list of candidates from a round). Pull is triggered from `RoleDashboard` via a "+ Pull candidates" button.
+- Schema: nothing new (3.2 already added `pending_candidates` and `reeval_last_progress_at`).
 
-Heads up before starting Phase 3.3:
-- This is the first Claude-calling function. Build the `withSpendTracking` helper alongside `ts-generate-scorecard` per Q6.
+The first Claude-calling path that runs at scale; this is where prompt caching (1-hour TTL on system + role-context blocks) earns its keep. Use `callClaude('talent_scout', ...)` and pass `anthropic_beta: ["prompt-caching-2024-07-31", "extended-cache-ttl-2025-04-11"]` per the source repo's `buildClaudeEvalRequest`.
+
+Heads up before starting Phase 3.4:
+- Service account JSON key must be uploaded as a Supabase secret (e.g. `GOOGLE_SERVICE_ACCOUNT_KEY` containing the JSON). The Edge Function reads it from `Deno.env.get(...)`. Don't try to read it from disk — Edge Functions have no filesystem access.
+- The source pipeline's `pending_candidates` mechanic is critical for any pull >2 minutes (Edge Function wall-time budget). Don't simplify it away.
 - Future migrations creating tables MUST include explicit GRANTs to `authenticated` and `service_role`. Auto-expose stays off as the project security default. See `20260506065157_grant_data_api_access.sql` for the canonical pattern.
 
 ## Beyond Phase 3
