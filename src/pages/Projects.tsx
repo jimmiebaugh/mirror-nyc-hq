@@ -6,10 +6,12 @@ import { Badge } from "@/components/ui/badge";
 interface ProjectRow {
   id: string;
   name?: string | null;
-  client?: string | null;
+  client_id?: string | null;
+  clients?: { name: string | null } | null;
   status?: string | null;
-  start_date?: string | null;
-  end_date?: string | null;
+  live_dates_start?: string | null;
+  live_dates_end?: string | null;
+  archived_at?: string | null;
 }
 
 function formatDate(d?: string | null) {
@@ -22,30 +24,20 @@ function formatDate(d?: string | null) {
 export default function Projects() {
   const [rows, setRows] = useState<ProjectRow[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      // The projects table may not exist yet — query untyped and handle gracefully.
-      const { data, error } = await (supabase as unknown as {
-        from: (t: string) => { select: (q: string) => Promise<{ data: ProjectRow[] | null; error: { code?: string; message: string } | null }> };
-      })
+      const { data, error } = await supabase
         .from("projects")
-        .select("id, name, client, status, start_date, end_date");
+        .select("id, name, status, live_dates_start, live_dates_end, client_id, archived_at, clients(name)")
+        .is("archived_at", null);
 
       if (!active) return;
 
       if (error) {
-        const msg = error.message?.toLowerCase() ?? "";
-        // Postgres "undefined table" or PostgREST schema-cache miss
-        if (error.code === "42P01" || error.code === "PGRST205" || msg.includes("does not exist") || msg.includes("schema cache")) {
-          setMissing(true);
-        } else {
-          setMissing(true);
-          // eslint-disable-next-line no-console
-          console.warn("projects query error:", error);
-        }
+        // eslint-disable-next-line no-console
+        console.warn("projects query error:", error);
         setRows([]);
       } else {
         setRows(data ?? []);
@@ -68,9 +60,7 @@ export default function Projects() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : !rows || rows.length === 0 ? (
         <Card className="border-dashed border-border bg-transparent p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            {missing ? "No projects yet." : "No projects yet."}
-          </p>
+          <p className="text-sm text-muted-foreground">No projects yet.</p>
         </Card>
       ) : (
         <Card className="border-border overflow-hidden">
@@ -87,7 +77,7 @@ export default function Projects() {
                 className="grid grid-cols-12 gap-4 px-6 py-4 text-sm hover:bg-secondary/40 transition-colors"
               >
                 <div className="col-span-4 font-medium">{p.name ?? "Untitled"}</div>
-                <div className="col-span-3 text-muted-foreground">{p.client ?? "—"}</div>
+                <div className="col-span-3 text-muted-foreground">{p.clients?.name ?? "—"}</div>
                 <div className="col-span-2">
                   {p.status ? (
                     <Badge variant="secondary" className="capitalize">
@@ -98,7 +88,7 @@ export default function Projects() {
                   )}
                 </div>
                 <div className="col-span-3 text-muted-foreground">
-                  {formatDate(p.start_date)} – {formatDate(p.end_date)}
+                  {formatDate(p.live_dates_start)} – {formatDate(p.live_dates_end)}
                 </div>
               </li>
             ))}

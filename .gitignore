@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Supabase CLI scratch state (contains linked project ref + JWT secret)
+supabase/.temp/
