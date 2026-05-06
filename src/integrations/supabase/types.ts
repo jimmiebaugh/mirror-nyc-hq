@@ -682,40 +682,52 @@ export type Database = {
       }
       ts_pull_rounds: {
         Row: {
+          attempt: number
+          candidates_found: number
           completed_at: string | null
           created_by: string | null
           id: string
           pending_candidates: Json
+          processed_count: number
           pulled_from: string | null
           pulled_to: string | null
           reeval_last_progress_at: string | null
           role_id: string
+          round_number: number | null
           started_at: string
           status: Database["public"]["Enums"]["ts_pull_round_status"]
           triggered_by: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
         }
         Insert: {
+          attempt?: number
+          candidates_found?: number
           completed_at?: string | null
           created_by?: string | null
           id?: string
           pending_candidates?: Json
+          processed_count?: number
           pulled_from?: string | null
           pulled_to?: string | null
           reeval_last_progress_at?: string | null
           role_id: string
+          round_number?: number | null
           started_at?: string
           status?: Database["public"]["Enums"]["ts_pull_round_status"]
           triggered_by: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
         }
         Update: {
+          attempt?: number
+          candidates_found?: number
           completed_at?: string | null
           created_by?: string | null
           id?: string
           pending_candidates?: Json
+          processed_count?: number
           pulled_from?: string | null
           pulled_to?: string | null
           reeval_last_progress_at?: string | null
           role_id?: string
+          round_number?: number | null
           started_at?: string
           status?: Database["public"]["Enums"]["ts_pull_round_status"]
           triggered_by?: Database["public"]["Enums"]["ts_pull_round_triggered_by"]

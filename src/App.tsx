@@ -18,6 +18,8 @@ import NewRoleSearch from "./pages/talent-scout/NewRoleSearch";
 import NewRoleScorecard from "./pages/talent-scout/NewRoleScorecard";
 import RoleDashboard from "./pages/talent-scout/RoleDashboard";
 import RoleSettings from "./pages/talent-scout/RoleSettings";
+import PullDetail from "./pages/talent-scout/PullDetail";
+import CandidateDetail from "./pages/talent-scout/CandidateDetail";
 
 const queryClient = new QueryClient();
 
@@ -87,6 +89,22 @@ const App = () => (
                 element={
                   <AdminRoute>
                     <RoleSettings />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/talent-scout/roles/:id/pulls/:pullRoundId"
+                element={
+                  <AdminRoute>
+                    <PullDetail />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/talent-scout/candidates/:id"
+                element={
+                  <AdminRoute>
+                    <CandidateDetail />
                   </AdminRoute>
                 }
               />

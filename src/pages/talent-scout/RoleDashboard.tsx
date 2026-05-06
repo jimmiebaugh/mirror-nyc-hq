@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Download, Loader2, Settings as SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { RoleStatusPill } from "@/components/talent-scout/RoleStatusPill";
+import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 
@@ -47,24 +48,57 @@ export default function RoleDashboard() {
   const nav = useNavigate();
   const [role, setRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
+  const [runningRoundId, setRunningRoundId] = useState<string | null>(null);
+  const [pulling, setPulling] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     let active = true;
     (async () => {
-      const { data } = await supabase
-        .from("ts_roles")
-        .select("*, hiring_manager:users!ts_roles_hiring_manager_id_fkey(full_name, email)")
-        .eq("id", id)
-        .maybeSingle();
+      const [{ data: r }, { data: rr }] = await Promise.all([
+        supabase
+          .from("ts_roles")
+          .select("*, hiring_manager:users!ts_roles_hiring_manager_id_fkey(full_name, email)")
+          .eq("id", id)
+          .maybeSingle(),
+        supabase
+          .from("ts_pull_rounds")
+          .select("id")
+          .eq("role_id", id)
+          .eq("status", "running")
+          .order("started_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
       if (!active) return;
-      setRole((data as unknown as Role) ?? null);
+      setRole((r as unknown as Role) ?? null);
+      setRunningRoundId((rr?.id as string | undefined) ?? null);
       setLoading(false);
     })();
     return () => {
       active = false;
     };
   }, [id]);
+
+  const startPull = async () => {
+    if (!id) return;
+    setPulling(true);
+    const { data, error } = await supabase.functions.invoke<{ pull_round_id?: string; error?: string }>(
+      "ts-pull-candidates",
+      { body: { role_id: id, triggered_by: "manual" } },
+    );
+    setPulling(false);
+    const errMsg = error?.message ?? data?.error ?? null;
+    if (errMsg || !data?.pull_round_id) {
+      toast({
+        title: "Couldn't start pull",
+        description: errMsg ?? "No pull_round_id returned",
+        variant: "destructive",
+      });
+      return;
+    }
+    nav(`/talent-scout/roles/${id}/pulls/${data.pull_round_id}`);
+  };
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!role) {
@@ -97,12 +131,29 @@ export default function RoleDashboard() {
             <span>Hiring manager: {managerLabel}</span>
           </div>
         </div>
-        <Button asChild variant="outline">
-          <Link to={`/talent-scout/roles/${role.id}/settings`}>
-            <SettingsIcon className="mr-2 h-4 w-4" />
-            Edit role
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {role.status === "open" && (
+            runningRoundId ? (
+              <Button asChild variant="default">
+                <Link to={`/talent-scout/roles/${role.id}/pulls/${runningRoundId}`}>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  View running pull
+                </Link>
+              </Button>
+            ) : (
+              <Button onClick={startPull} disabled={pulling}>
+                <Download className="mr-2 h-4 w-4" />
+                {pulling ? "Starting…" : "Pull candidates"}
+              </Button>
+            )
+          )}
+          <Button asChild variant="outline">
+            <Link to={`/talent-scout/roles/${role.id}/settings`}>
+              <SettingsIcon className="mr-2 h-4 w-4" />
+              Edit role
+            </Link>
+          </Button>
+        </div>
       </header>
 
       <div className="grid gap-4 md:grid-cols-2">
