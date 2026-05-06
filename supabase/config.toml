@@ -1,10 +1,20 @@
 project_id = "amipjjmphblfxpghjnel"
 
-# ts-pull-candidates self-invokes for chunked processing. The Supabase gateway
-# on this project rejects the service-role bearer token at the verify_jwt
-# layer, so we move JWT verification into the function itself
-# (supabase/functions/_shared/internalAuth.ts handles user JWT, INTERNAL_API_SECRET
-# header, and direct service-role-key match). Anon callers that slip past the
-# gateway are still rejected by internalAuth's 401.
+# Self-invoking functions need verify_jwt = false because this project's
+# Supabase gateway rejects the service-role bearer at the verify_jwt layer.
+# Auth enforcement lives in supabase/functions/_shared/internalAuth.ts.
+# See CLAUDE.md "Edge Function self-invocation auth" for the full pattern.
 [functions.ts-pull-candidates]
+verify_jwt = false
+
+# ts-bulk-reevaluate self-invokes for chunked re-eval (same pattern as
+# ts-pull-candidates).
+[functions.ts-bulk-reevaluate]
+verify_jwt = false
+
+# ts-evaluate-candidate is called both from the UI (user JWT) and from
+# ts-bulk-reevaluate (server-to-server, service-role bearer + internal-secret).
+# Gateway can't accept the service-role path, so move JWT verify into the
+# function. internalAuth still enforces user-JWT validity for the UI path.
+[functions.ts-evaluate-candidate]
 verify_jwt = false

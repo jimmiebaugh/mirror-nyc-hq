@@ -123,6 +123,9 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec, whic
 - `auto_pull_schedule` (enum: `off`, `daily`, `every_3_days`, `weekly`)
 - `auto_rejection_threshold` (int)
 - `status` (enum: `open`, `closed`), `closed_at` (timestamp)
+- `reeval_status` (enum: `idle`, `running`, `complete`, `failed`), `reeval_status_filter` (text)
+- `reeval_total`, `reeval_processed`, `reeval_failed` (int): per-run counters for `ts-bulk-reevaluate`.
+- `reeval_started_at`, `reeval_completed_at`, `reeval_last_progress_at` (timestamptz): bulk re-eval timestamps; `reeval_last_progress_at` is the heartbeat the re-eval watchdog (Phase 3.7) reads to detect stalled runs.
 - `created_by` (FK), `created_at`, `updated_at`
 - Daily cron purges where `closed_at` > 60 days ago, cascading.
 
@@ -132,8 +135,10 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec, whic
 - `status` (enum: `running`, `complete`, `failed`, `stalled`)
 - `triggered_by` (enum: `manual`, `scheduled`)
 - `started_at`, `completed_at`, `created_by` (FK)
+- `round_number` (int): `R1`, `R2`, ... per role. Set at insert time as `max(round_number) + 1` for the role.
+- `candidates_found`, `processed_count`, `attempt` (int): operational counters used by progress UI and watchdog.
 - `pending_candidates` (jsonb, default `[]`): queue of Gmail message IDs the chunked pull pipeline batches in groups of 8 across self-invocations.
-- `reeval_last_progress_at` (timestamptz, nullable): heartbeat the re-eval watchdog reads to detect stalled bulk re-evals.
+- `reeval_last_progress_at` (timestamptz, nullable): legacy column from Phase 3.2 spec. Phase 3.5 moved bulk-re-eval state to `ts_roles` (role-scoped, not round-scoped); this column is unused and can be dropped in a future cleanup migration.
 
 #### ts_evaluations (per-evaluation history)
 - `id` (uuid, PK)
@@ -145,18 +150,20 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec, whic
 - `tier` (text), `internal_notes_at_time` (text)
 - `evaluated_at` (timestamptz), `triggered_by` (FK to users)
 - Index on `(candidate_id, evaluated_at DESC)` for the candidate-detail timeline.
-- One row per evaluation. The latest row's fields are mirrored onto `ts_candidates` for fast list queries; older rows preserve scoring history when prompts/scorecards evolve.
+- **History table.** New row per evaluation (INSERT, never UPSERT). The latest fields are mirrored onto `ts_candidates` for fast list queries; older rows preserve scoring history for audit. Bulk re-eval (which implies the prompt or scorecard changed) is the one exception: it deletes prior rows for the candidate before inserting via the `overwrite_history: true` flag on `ts-evaluate-candidate`.
 
 #### ts_candidates
 - `id`, `pull_round_id` (FK), `role_id` (FK; denormalized)
 - `name`, `email` (text), `applied_date` (date), `gmail_message_id` (text)
+- `location` (text, nullable): extracted by Claude from candidate materials and persisted on initial pull / re-eval.
 - `score` (numeric)
-- `status` (enum: `consider`, `promote`, `reject`, `fast_track`, `auto_rejected`)
+- `status` (enum: `consider`, `interview`, `reject`, `fast_track`, `auto_rejected`). `interview` was renamed from the original spec's `promote` in Phase 3.5 (concrete next-stage action). `auto_rejected` is AI-only; admins can pick the four manual ones via `StatusDropdown` or the bulk action bar.
 - `recruiter_overview` (text)
 - `top_strengths`, `key_gaps`, `quick_overview` (jsonb arrays)
-- `score_breakdown` (jsonb)
+- `score_breakdown` (jsonb): `{criterion_name: int}`. Sum of values + competitor bonus = total score on this row.
 - `tier` (text), `internal_notes` (text)
 - `portfolio_type` (enum: `file`, `url`, `none`), `portfolio_path_or_url` (text)
+- `detected_links` (jsonb, default `[]`): array of `{url, type}` for every URL extracted from the email body + attachments + bare-domain mentions, classified into `vimeo_reel | drive_folder | portfolio_site | other`. Surfaced in CandidateDetail's Files & Materials section. The single best one is also picked into `portfolio_type` / `portfolio_path_or_url`.
 - `last_evaluated_at`, `created_at`, `updated_at`
 
 #### ts_candidate_attachments
@@ -371,7 +378,8 @@ Phase 3 (Talent Scout port):
 - 3.2 Schema augmentation, edge function shells, CLAUDE.md sync: DONE. Migration `20260506162543_phase_3_2_schema_augmentation.sql` added `ts_pull_rounds.pending_candidates` + `reeval_last_progress_at`, the `ts_evaluations` history table (admin-only RLS), and `global_settings.cap_alert_sent_this_month`. Stub edge functions `ts-pull-candidates` and `ts-generate-scorecard` deployed to the Supabase project (501 responses; real impl in 3.3 / 3.4).
 - 3.3 Roles CRUD + wizard: DONE. `/talent-scout/*` route tree mounted (admin-gated via `<AdminRoute>`), top-nav entry visible only to admins, three-step new-role wizard (`/new/details` → `/new/search` → `/new/scorecard`) with a hiring-manager picker over admin users, Claude-driven scorecard generation, and a single-screen edit + close/reopen at `/roles/:id/settings`. `_shared/anthropic.ts` `callClaude` wrapper landed alongside the real `ts-generate-scorecard`. Lifted: `parseClaudeJson` (edge), `wizardStore`, `defaultEvalPrompt`, `poolStatus`, `scoreColor`. Built fresh for HQ design system: `Stepper`, `RoleStatusPill`, `TagInput`. `CandidateTable` placeholder in place; full port comes in 3.5.
 - 3.4 Pull pipeline: DONE. `ts-pull-candidates` ports the source's chunked streaming pipeline (BATCH_SIZE=8 self-invoke via `pending_candidates` jsonb). Service-account Gmail auth (`_shared/gmailServiceAccount.ts`) replaces per-install OAuth refresh tokens. PullDetail page subscribes to `ts_pull_rounds` via Supabase Realtime. Adapted from source: schema renames everywhere; scorecard read from `ts_roles.scorecard` (not separate table); `callClaude('talent_scout', ...)` for scoring with prompt caching; per-evaluation history written to `ts_evaluations`. End-to-end verified: R3 = 4 candidates pulled, scored, persisted with 9 attachments to Storage, $0.24 Anthropic spend.
-- 3.5 Candidate detail + re-eval: NOT done. **You're picking up here.**
+- 3.5 Candidate detail + re-eval: DONE. CandidateDetail page (recruiter overview, files & materials, top strengths / key gaps, internal notes auto-save, score breakdown by tier, status dropdown, re-evaluate button). `ts-evaluate-candidate` for single re-eval (history INSERT) and `ts-bulk-reevaluate` for role-scoped pool re-eval; round-scoped re-eval lives on PullDetail and uses `overwrite_history: true` since prompt/scorecard changes invalidate prior evals. RoleDashboard restructured around the master pool: 4 stat tiles, last-pull relative time, pull-round cards (3 per row, latest+failed badges, "Show all"), CandidateSearch, CandidateTable. PullDetail mirrors the same pattern, round-filtered. CandidateTable is two-tier (active above, rejected below collapsible) with status-priority sort (Interview → Fast-Track → Consider, then Rejected → Auto-Rejected), shift-click range select, slide-in bulk action bar (Reject/Consider/Fast-Track/Interview/Re-evaluate), inline StatusDropdown per row. Schema: `promote` → `interview` enum rename, `ts_candidates.location` + `ts_candidates.detected_links` added, `ts_role_reeval_status` enum + 7 reeval columns on `ts_roles`. Generate Final Review and Generate Packet placeholder buttons land in 3.6.
+- 3.6 Final review + packet: NOT done. **You're picking up here.**
 
 ### Locked decisions from the Talent Scout port plan
 
@@ -391,18 +399,29 @@ Resolutions to the six open questions in `docs/talent-scout-port-plan.md` § 8.
 - **All attachments to Storage (drift from source).** Source kept small attachments in Gmail and let the dashboard fetch them on demand via a `gmail-attachment` Edge Function. HQ's port persists every attachment to the `candidate_attachments` bucket regardless of size. Slightly more Storage cost, much simpler download path (`supabase.storage.createSignedUrl`), and no separate Edge Function needed for candidate-detail attachment viewing in 3.5.
 - **`ts_pull_rounds` operational columns.** `candidates_found`, `processed_count`, `attempt`, `round_number` added in `20260506175156_phase_3_4_pull_pipeline.sql` so progress and round labels work without joining `ts_candidates` per render. Source's `step_progress` jsonb / `current_step` / `error_log` were dropped — the simpler `processed_count / candidates_found` is enough for the test path; richer progress UI can be added back later if needed.
 
-## Picking up at Phase 3.5
+### Architectural decisions surfaced during Phase 3.5
 
-### Phase 3.5: Candidate detail + re-eval
+- **Re-eval history retention with one bulk-overwrite escape hatch.** `ts_evaluations` is a history table — every single re-eval (from CandidateDetail's button or the row-level Re-evaluate selected bulk action) INSERTs a new row, preserving prior scores for audit. Bulk re-evaluate at the role or round level (the "Re-Evaluate Pool" action) is the exception: it implies the prompt or scorecard changed, so prior evals are no longer meaningful. The `overwrite_history: true` flag on `ts-evaluate-candidate` deletes prior rows for that candidate before inserting. The candidate-detail UI shows only the latest fields (mirrored onto `ts_candidates`); history accumulates server-side without UI surface yet.
+- **`promote` → `interview` enum rename.** Original schema used `promote` as the "advance" status. Renamed to `interview` in Phase 3.5 — concrete next-stage action that maps to actual hiring workflow language. `ts_candidate_status` is now `(consider, interview, reject, fast_track, auto_rejected)`.
+- **Status priority is the primary sort everywhere.** `CandidateTable` always sorts by status bucket first (Interview → Fast-Track → Consider in active tier; Rejected → Auto-Rejected in the collapsible rejected tier), then by the user-selectable column. Buckets never interleave regardless of column or direction. The active/rejected divider is collapsible inline, not a separate table.
+- **Bulk re-eval is role-scoped, with a parallel-fan-out variant on PullDetail.** `ts-bulk-reevaluate` (chunked self-invoke, `verify_jwt = false`) operates on the role's master pool with optional `status_filter`. PullDetail's "Re-Evaluate Pool" is round-scoped and skips the dedicated function — instead, it fans out parallel `ts-evaluate-candidate` calls (concurrency=6) with `overwrite_history: true`. Floating bottom-right widget shows progress; cancellable mid-run.
+- **Round-scoped state on `ts_pull_rounds`, role-scoped state on `ts_roles`.** Source repo put bulk-reeval state on `pull_rounds`. HQ Phase 3.5 spec moved to role-scoped, so the `reeval_status` / `reeval_total` / `reeval_processed` / `reeval_failed` / `reeval_started_at` / `reeval_completed_at` / `reeval_last_progress_at` columns live on `ts_roles`. The legacy `ts_pull_rounds.reeval_last_progress_at` from Phase 3.2 is dead (drop in a future cleanup).
+- **Status dropdown writes are awaited before parent refetch.** `StatusDropdown.onValueChange` awaits the DB UPDATE before calling its `onChange` callback (which triggers parent reload). Calling onChange first races the write and leaves the displayed value one click behind. Future inline-mutation components in HQ should follow the same order.
 
-Build `/talent-scout/candidates/:id` (currently a Phase 3.5 stub) into the real candidate-detail page. Per the port plan section 9, this phase ships:
-- Page: `CandidateDetail` (recruiter overview, score breakdown by criterion, top strengths / key gaps, internal notes textarea, attachment links via storage signed URLs, evaluation history list pulled from `ts_evaluations`, "Re-evaluate" button).
-- Edge functions: `ts-evaluate-candidate(candidate_id)` for single re-eval, `ts-bulk-reevaluate(role_id)` for the master pool. Both write a new `ts_evaluations` row and update the latest fields on `ts_candidates`. Bulk re-eval bumps `ts_pull_rounds.reeval_last_progress_at` as a heartbeat for the re-eval watchdog (Phase 3.7).
-- UI plumbing: lift `ScoreBar`, `StatusDropdown` from the source repo for the score visualization and manual status changes (consider/promote/reject/fast_track/auto_rejected).
+## Picking up at Phase 3.6
 
-Heads up before starting Phase 3.5:
-- `ts-evaluate-candidate` and `ts-bulk-reevaluate` self-invoke for chunked re-eval (same pattern as `ts-pull-candidates`). Add `[functions.<name>] verify_jwt = false` to `supabase/config.toml` for each.
-- Future migrations creating tables MUST include explicit GRANTs to `authenticated` and `service_role`. Auto-expose stays off as the project security default. See `20260506065157_grant_data_api_access.sql` for the canonical pattern.
+### Phase 3.6: Final review + packet
+
+Build the comparative-final-review flow + packet PDF generation. Per the port plan section 9 + the disabled placeholders already wired into RoleDashboard (Generate Final Review + Top-N input) and PullDetail (Generate Packet + Top-N input), this phase ships:
+- Edge function `ts-final-review(role_id, candidate_count_limit?)` that compares the master pool comparatively (not per-candidate), produces a pool summary + final rankings jsonb, writes to `ts_final_reviews`. Updates `ts_roles` (or final-review-aware status pill) so the "Final Report" indicator on `RoleStatusPill` lights up.
+- Edge function `ts-packet-generate(role_id, pull_round_id?, candidate_count?)`. **Q5 follow-up needed first**: read the source's `generate-packet` (832 lines) vs `generate-final-review-packet` (767 lines) to confirm whether they're two distinct flows (candidate-pool packet vs final-review packet) or one is dead code; consolidate into one HQ function based on that read.
+- Pages: `FinalReviewLoading` (realtime sub on a generation status field), `FinalReviewDetail` (renders the pool summary + ranked list with rationale per candidate). Wire the disabled buttons + Top-N inputs on RoleDashboard / PullDetail to fire the new functions.
+
+Heads up before starting Phase 3.6:
+- Final review consumes the entire master pool's structured data — likely large prompt. Anthropic prompt caching with the role context block earns its keep here (1-hour TTL, same cache key per role).
+- Packet generation needs to talk to Google Slides + Drive APIs (already proven via the service account; scopes confirmed). Use `_shared/gmailServiceAccount.ts` as the template; same JWT bearer flow with different scopes.
+- Both functions self-invoke for long runs. Add `[functions.<name>] verify_jwt = false` to `supabase/config.toml` for each, per the pattern in the auth model section.
+- Future migrations creating tables MUST include explicit GRANTs to `authenticated` and `service_role`. Auto-expose stays off as the project security default.
 
 ## Beyond Phase 3
 
