@@ -323,24 +323,22 @@ Phase 2 (Schema and auth):
 - 2.1 Lovable project, Supabase connector, GitHub connector, Google OAuth, sign-in tested: DONE. Jimmie's account confirmed in `auth.users`.
 - 2.2 Schema migration: DONE. All 22 tables, enums, helper + trigger functions, RLS policies, and 5 storage buckets applied via `supabase/migrations/20260506061457_initial_schema.sql`.
 - 2.3 Seed Jimmie as admin: DONE. `public.users` row inserted manually with `permission_role = 'admin'`.
-- 2.4 Sanity test: NOT done. **You're picking up here.**
+- 2.4 Sanity test: DONE. Fixed `/projects` query to match new schema (`client_id` + clients join, `live_dates_*`, `archived_at IS NULL` filter), regenerated typed Supabase client, granted Data API access to authenticated/service_role (`supabase/migrations/20260506065157_grant_data_api_access.sql`), confirmed sign-in lands on local dashboard and projects list renders. Cross-user RLS violation test deferred to Phase 6.4 when a second team account is available.
 
-## Picking up at Phase 2.4
+## Picking up at Phase 3
 
-### Phase 2.4: Sanity test
+### Phase 3: Talent Scout port
 
-Note: Lovable's initial scaffold may have wired the projects-list query to read a plain `client` text field. The real schema uses `client_id` FK to clients. Fix this wiring as part of the sanity test, either via a follow-up Lovable prompt or directly in code.
+Use Jimmie's cloned `mirror-talent-scout` repo as reference. Bring UI components, Anthropic eval logic, and Gmail integration into the `/talent-scout` route of HQ. Set up the Talent Scout edge functions (`ts-pull-candidates`, `ts-evaluate-candidate`, `ts-bulk-reevaluate`, `ts-final-review`, `ts-packet-generate`) and the four `ts-cron-*` jobs. Phase 3 must complete fully before Phase 4 (Venue Scout) starts.
 
-1. Jimmie signs in to the Lovable preview.
-2. /projects route should load against real schema. Fix any wiring mismatches (especially `client` vs `client_id`).
-3. Insert a test project via UI or psql; verify it lands.
-4. Try an RLS violation (e.g., update another user's permission_role from a non-admin session); should fail.
+Heads up before starting Phase 3:
+- The Google service account with domain-wide delegation (Phase 1.3) is still NOT done and is required for Gmail ingestion. Block Phase 3 implementation on getting Workspace admin to grant delegation, or scaffold the route with mocked Gmail responses while waiting.
+- Future migrations creating tables MUST include explicit GRANTs to `authenticated` and `service_role`. Auto-expose stays off as the project security default. See `20260506065157_grant_data_api_access.sql` for the canonical pattern.
 
-## Beyond Phase 2
+## Beyond Phase 3
 
 Phase 3 (Talent Scout) goes BEFORE Phase 4 (Venue Scout). Sequential, not parallel. Talent Scout fully working before Venue Scout starts.
 
-- Phase 3 (Talent Scout port): use Jimmie's cloned `mirror-talent-scout` repo as reference. Bring UI components, Anthropic eval logic, Gmail integration over to `/talent-scout` route. Set up edge functions and crons.
 - Phase 4 (Venue Scout): same approach. Venue Scout draft repo is incomplete; the screen-by-screen spec (Jimmie has this; can paste on request) is the source of truth, not the draft.
 - Phase 5 (Cross-cutting): notifications, activity log feed, admin pages, polish.
 - Phase 6 (Cutover):
