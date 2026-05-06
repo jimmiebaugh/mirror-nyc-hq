@@ -31,3 +31,14 @@ supabase/.temp/
 .claude/skills/
 # Claude Code per-user settings (don't share across the team)
 .claude/settings.local.json
+
+# Secrets / credentials. Never commit these. `/*.json` is too broad (would
+# block package.json etc.), so list specific patterns + a local-only stash.
+.local/
+secrets/
+*.pem
+*.key
+*service-account*.json
+*-sa-key*.json
+*-credentials*.json
+google-*-key.json
