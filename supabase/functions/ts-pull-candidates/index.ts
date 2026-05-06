@@ -493,6 +493,7 @@ async function processOne(
       name: cleanedName,
       email,
       applied_date: date.slice(0, 10),
+      location: (r.candidate_location as string | null) ?? null,
       score: r.total_score ?? null,
       status,
       recruiter_overview: r.recruiter_note ?? null,
@@ -508,7 +509,8 @@ async function processOne(
     }).select("id").single();
     if (candErr) { errors.push({ step: "save", messageId: id, error: String(candErr) }); return "failed"; }
 
-    // ts_evaluations history row.
+    // INSERT into ts_evaluations — history table, one row per evaluation.
+    // Pull is the candidate's first eval; later re-evals append more rows.
     const { error: evalErr } = await supabase.from("ts_evaluations").insert({
       role_id: roleId,
       candidate_id: candRow.id,
@@ -520,6 +522,7 @@ async function processOne(
       top_strengths: r.top_strengths ?? [],
       key_gaps: r.key_gaps ?? [],
       tier: r.recommendation_tier ?? null,
+      evaluated_at: new Date().toISOString(),
     });
     if (evalErr) errors.push({ step: "save_eval", messageId: id, error: String(evalErr) });
 

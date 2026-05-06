@@ -292,17 +292,25 @@ export default function NewRoleScorecard() {
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
-        <Button variant="ghost" onClick={() => navigate("/talent-scout/new/search")}>
-          ← Back
-        </Button>
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted-foreground">
-            Total: <strong className={total === 100 ? "text-foreground" : "text-amber-400"}>{total} pts + {COMPETITOR_BONUS_POINTS} bonus</strong>
-          </span>
-          <Button onClick={onApprove} disabled={saving} size="lg">
-            {saving ? "Saving…" : "Approve & lock scorecard →"}
+      {/* Spacer so the floating bottom nav doesn't overlap the last criterion. */}
+      <div className="h-16" />
+
+      <div className="sticky bottom-0 -mx-4 border-t-2 border-primary/40 bg-primary/10 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-primary/15 sm:-mx-6 sm:px-6">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+          <Button variant="ghost" onClick={() => navigate("/talent-scout/new/search")}>
+            ← Back
           </Button>
+          <div className="flex items-center gap-4">
+            <span className="text-lg text-muted-foreground">
+              Total:{" "}
+              <strong className={total === 100 ? "text-foreground" : "text-amber-400"}>
+                {total} pts + {COMPETITOR_BONUS_POINTS} bonus
+              </strong>
+            </span>
+            <Button onClick={onApprove} disabled={saving} size="lg">
+              {saving ? "Saving…" : "Approve & lock scorecard →"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

@@ -4,9 +4,10 @@ type Props = {
   status: "open" | "closed" | string | null;
   latestRound?: number | null;
   hasFinalReport?: boolean;
+  size?: "default" | "lg";
 };
 
-export function RoleStatusPill({ status, latestRound, hasFinalReport }: Props) {
+export function RoleStatusPill({ status, latestRound, hasFinalReport, size = "default" }: Props) {
   let label: string;
   let cls: string;
 
@@ -24,10 +25,13 @@ export function RoleStatusPill({ status, latestRound, hasFinalReport }: Props) {
     cls = "bg-secondary text-muted-foreground border-border";
   }
 
+  const sizeCls = size === "lg" ? "px-3 py-1.5 text-[13px]" : "px-2.5 py-1 text-[11px]";
+
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider",
+        "inline-flex items-center gap-1.5 rounded-sm border font-bold uppercase tracking-wider",
+        sizeCls,
         cls,
       )}
     >

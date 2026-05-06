@@ -50,7 +50,7 @@ You are conducting a full candidate review on behalf of Mirror NYC for the role 
 
 Job Description: ${jd}
 Hiring Priorities: ${hiring_priorities || "(none provided)"}
-Location: ${location || "(unspecified)"} · Type: ${employment_type || "(unspecified)"} · Comp: ${comp || "(not specified)"}
+Location: ${location} · Type: ${employment_type} · Comp: ${comp || "(not specified)"}
 
 Generate a weighted scorecard with 8-12 criteria across 3 tiers:
 - Tier 1 (Must-Haves): disqualifying if absent

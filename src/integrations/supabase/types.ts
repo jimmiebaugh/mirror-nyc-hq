@@ -486,6 +486,7 @@ export type Database = {
           internal_notes: string | null
           key_gaps: Json
           last_evaluated_at: string | null
+          location: string | null
           name: string | null
           portfolio_path_or_url: string | null
           portfolio_type: Database["public"]["Enums"]["ts_candidate_portfolio_type"]
@@ -510,6 +511,7 @@ export type Database = {
           internal_notes?: string | null
           key_gaps?: Json
           last_evaluated_at?: string | null
+          location?: string | null
           name?: string | null
           portfolio_path_or_url?: string | null
           portfolio_type?: Database["public"]["Enums"]["ts_candidate_portfolio_type"]
@@ -534,6 +536,7 @@ export type Database = {
           internal_notes?: string | null
           key_gaps?: Json
           last_evaluated_at?: string | null
+          location?: string | null
           name?: string | null
           portfolio_path_or_url?: string | null
           portfolio_type?: Database["public"]["Enums"]["ts_candidate_portfolio_type"]
@@ -769,6 +772,14 @@ export type Database = {
           id: string
           job_description: string | null
           location: string | null
+          reeval_completed_at: string | null
+          reeval_failed: number
+          reeval_last_progress_at: string | null
+          reeval_processed: number
+          reeval_started_at: string | null
+          reeval_status: Database["public"]["Enums"]["ts_role_reeval_status"]
+          reeval_status_filter: string | null
+          reeval_total: number
           scorecard: Json
           start_date: string | null
           status: Database["public"]["Enums"]["ts_role_status"]
@@ -792,6 +803,14 @@ export type Database = {
           id?: string
           job_description?: string | null
           location?: string | null
+          reeval_completed_at?: string | null
+          reeval_failed?: number
+          reeval_last_progress_at?: string | null
+          reeval_processed?: number
+          reeval_started_at?: string | null
+          reeval_status?: Database["public"]["Enums"]["ts_role_reeval_status"]
+          reeval_status_filter?: string | null
+          reeval_total?: number
           scorecard?: Json
           start_date?: string | null
           status?: Database["public"]["Enums"]["ts_role_status"]
@@ -815,6 +834,14 @@ export type Database = {
           id?: string
           job_description?: string | null
           location?: string | null
+          reeval_completed_at?: string | null
+          reeval_failed?: number
+          reeval_last_progress_at?: string | null
+          reeval_processed?: number
+          reeval_started_at?: string | null
+          reeval_status?: Database["public"]["Enums"]["ts_role_reeval_status"]
+          reeval_status_filter?: string | null
+          reeval_total?: number
           scorecard?: Json
           start_date?: string | null
           status?: Database["public"]["Enums"]["ts_role_status"]
@@ -1312,13 +1339,14 @@ export type Database = {
       ts_candidate_portfolio_type: "file" | "url" | "none"
       ts_candidate_status:
         | "consider"
-        | "promote"
+        | "interview"
         | "reject"
         | "fast_track"
         | "auto_rejected"
       ts_pull_round_status: "running" | "complete" | "failed" | "stalled"
       ts_pull_round_triggered_by: "manual" | "scheduled"
       ts_role_auto_pull_schedule: "off" | "daily" | "every_3_days" | "weekly"
+      ts_role_reeval_status: "idle" | "running" | "complete" | "failed"
       ts_role_status: "open" | "closed"
       vs_research_status: "pending" | "researching" | "complete" | "failed"
       vs_scout_phase: "sourcing" | "deck" | "done"
@@ -1482,7 +1510,7 @@ export const Constants = {
       ts_candidate_portfolio_type: ["file", "url", "none"],
       ts_candidate_status: [
         "consider",
-        "promote",
+        "interview",
         "reject",
         "fast_track",
         "auto_rejected",
@@ -1490,6 +1518,7 @@ export const Constants = {
       ts_pull_round_status: ["running", "complete", "failed", "stalled"],
       ts_pull_round_triggered_by: ["manual", "scheduled"],
       ts_role_auto_pull_schedule: ["off", "daily", "every_3_days", "weekly"],
+      ts_role_reeval_status: ["idle", "running", "complete", "failed"],
       ts_role_status: ["open", "closed"],
       vs_research_status: ["pending", "researching", "complete", "failed"],
       vs_scout_phase: ["sourcing", "deck", "done"],
