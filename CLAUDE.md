@@ -132,6 +132,20 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec, whic
 - `status` (enum: `running`, `complete`, `failed`, `stalled`)
 - `triggered_by` (enum: `manual`, `scheduled`)
 - `started_at`, `completed_at`, `created_by` (FK)
+- `pending_candidates` (jsonb, default `[]`): queue of Gmail message IDs the chunked pull pipeline batches in groups of 8 across self-invocations.
+- `reeval_last_progress_at` (timestamptz, nullable): heartbeat the re-eval watchdog reads to detect stalled bulk re-evals.
+
+#### ts_evaluations (per-evaluation history)
+- `id` (uuid, PK)
+- `role_id` (FK to ts_roles), `candidate_id` (FK to ts_candidates)
+- `scorecard_snapshot` (jsonb, not null): role.scorecard at evaluation time.
+- `eval_prompt_snapshot` (text, not null): role.evaluation_prompt at evaluation time.
+- `score` (numeric), `score_breakdown` (jsonb)
+- `recruiter_overview` (text), `top_strengths` (jsonb), `key_gaps` (jsonb)
+- `tier` (text), `internal_notes_at_time` (text)
+- `evaluated_at` (timestamptz), `triggered_by` (FK to users)
+- Index on `(candidate_id, evaluated_at DESC)` for the candidate-detail timeline.
+- One row per evaluation. The latest row's fields are mirrored onto `ts_candidates` for fast list queries; older rows preserve scoring history when prompts/scorecards evolve.
 
 #### ts_candidates
 - `id`, `pull_round_id` (FK), `role_id` (FK; denormalized)
@@ -215,11 +229,14 @@ Sync rule: when `shortlisted` flips false to true, OR when an `added_manually` v
 #### global_settings (single row)
 - `id` (uuid, PK)
 - `anthropic_spend_cap_monthly_usd`, `anthropic_spend_current_month_usd` (numeric)
+- `cap_alert_sent_this_month` (bool, default false): paired with `anthropic_spend_current_month_usd` so the spend tracker emails the admin once per cap crossing instead of every API call after the cap is hit.
 - `default_drive_folder_for_standalone_vs_decks` (text)
 - `venue_research_priority_sites` (text[]; admin-configurable, NOT a hard restriction)
 - `talent_scout_packet_default_count` (int, default 15)
 - `email_notifications_enabled`, `in_app_notifications_enabled` (bool)
 - `updated_at`
+
+A monthly cron (planned, not yet implemented) resets `anthropic_spend_current_month_usd` to 0 and `cap_alert_sent_this_month` to false at the start of each calendar month.
 
 #### activity_log
 - `id`, `entity_type` (text: `project`, `venue`, `task`, etc.)
@@ -284,11 +301,13 @@ JSON key stored as a Supabase secret. Used by edge functions only.
 ## Edge functions
 
 ### Talent Scout
-- `ts-pull-candidates(role_id, triggered_by)`: Gmail search, attachment download, PDF text extraction, link parsing, portfolio detection, Anthropic scoring.
-- `ts-evaluate-candidate(candidate_id)`: single-candidate eval/re-eval.
-- `ts-bulk-reevaluate(role_id)`: re-eval the master pool.
+- `ts-pull-candidates(role_id, triggered_by)`: Gmail search, attachment download, PDF text extraction, link parsing, portfolio detection, Anthropic scoring. Chunked self-invoking pipeline (BATCH_SIZE=8) using `ts_pull_rounds.pending_candidates`.
+- `ts-evaluate-candidate(candidate_id)`: single-candidate eval/re-eval. Inserts a row into `ts_evaluations` and mirrors the result onto `ts_candidates`.
+- `ts-bulk-reevaluate(role_id)`: re-eval the master pool. Updates `ts_pull_rounds.reeval_last_progress_at` as a heartbeat.
+- `ts-generate-scorecard(title, job_description, hiring_priorities)`: drafts a tiered scorecard via Claude; the new-role wizard's step-3 page calls this.
 - `ts-final-review(role_id, candidate_count_limit?)`: comparative final review.
 - `ts-packet-generate(role_id, pull_round_id?, candidate_count?)`: build packet PDF and email to hiring manager.
+- `ts-send-pull-notification(role_id, pull_round_id)`: emails the hiring manager when a pull completes. Standalone in Phase 3.8 to ship Talent Scout cleanly; folds into `notifications-dispatch` in Phase 5.
 
 ### Venue Scout
 - `vs-parse-brief(file_path)`: parse uploaded brief.
@@ -325,14 +344,35 @@ Phase 2 (Schema and auth):
 - 2.3 Seed Jimmie as admin: DONE. `public.users` row inserted manually with `permission_role = 'admin'`.
 - 2.4 Sanity test: DONE. Fixed `/projects` query to match new schema (`client_id` + clients join, `live_dates_*`, `archived_at IS NULL` filter), regenerated typed Supabase client, granted Data API access to authenticated/service_role (`supabase/migrations/20260506065157_grant_data_api_access.sql`), confirmed sign-in lands on local dashboard and projects list renders. Cross-user RLS violation test deferred to Phase 6.4 when a second team account is available.
 
-## Picking up at Phase 3
+Phase 3 (Talent Scout port):
+- 3.1 Inventory + port plan: DONE. See `docs/talent-scout-port-plan.md` for the full breakdown of what lifts/adapts/rewrites/drops, schema diff, and the section-9 sub-phase sequence that drives 3.2 through 3.8.
+- 3.2 Schema augmentation, edge function shells, CLAUDE.md sync: DONE. Migration `20260506162543_phase_3_2_schema_augmentation.sql` added `ts_pull_rounds.pending_candidates` + `reeval_last_progress_at`, the `ts_evaluations` history table (admin-only RLS), and `global_settings.cap_alert_sent_this_month`. Stub edge functions `ts-pull-candidates` and `ts-generate-scorecard` deployed to the Supabase project (501 responses; real impl in 3.3 / 3.4).
+- 3.3 Roles CRUD + wizard: NOT done. **You're picking up here.**
 
-### Phase 3: Talent Scout port
+### Locked decisions from the Talent Scout port plan
 
-Use Jimmie's cloned `mirror-talent-scout` repo as reference. Bring UI components, Anthropic eval logic, and Gmail integration into the `/talent-scout` route of HQ. Set up the Talent Scout edge functions (`ts-pull-candidates`, `ts-evaluate-candidate`, `ts-bulk-reevaluate`, `ts-final-review`, `ts-packet-generate`) and the four `ts-cron-*` jobs. Phase 3 must complete fully before Phase 4 (Venue Scout) starts.
+Resolutions to the six open questions in `docs/talent-scout-port-plan.md` § 8.
 
-Heads up before starting Phase 3:
-- The Google service account with domain-wide delegation (Phase 1.3) is still NOT done and is required for Gmail ingestion. Block Phase 3 implementation on getting Workspace admin to grant delegation, or scaffold the route with mocked Gmail responses while waiting.
+- **Q1 (re-eval history): keep history.** New `ts_evaluations` table snapshots scorecard + eval prompt at evaluation time, so old scores stay reproducible when the role's prompt evolves. Latest row's fields are mirrored onto `ts_candidates` for fast list queries.
+- **Q2 (pending-candidate parking spot): jsonb on the round.** `ts_pull_rounds.pending_candidates` matches the source pipeline's existing shape; no separate table.
+- **Q3 (hiring manager identity): block on first sign-in.** `ts_roles.hiring_manager_id` FKs to `users`, and the new-role wizard looks up by email at submit time. If no `users` row exists yet, role creation is blocked with "Hiring manager must sign in to HQ at least once first." No auto-creating users from email strings.
+- **Q4 (notification consolidation): standalone first, fold later.** Phase 3.8 ships `ts-send-pull-notification` standalone so Talent Scout doesn't block on Phase 5 work. Phase 5 folds it into `notifications-dispatch`.
+- **Q5 (two packet generators): read both, then consolidate.** Before writing `ts-packet-generate` in Phase 3.6, do a 30-min read of the source `generate-packet` (832 lines) vs `generate-final-review-packet` (767 lines) to confirm whether they're two distinct flows (candidate-pool packet vs final-review packet) or one is dead code. Consolidate based on that read.
+- **Q6 (anthropic-spend-tracker shape): explicit wrapper around fetch.** Single helper `withSpendTracking(fn)` that wraps a Claude call: pre-call checks `anthropic_spend_cap_monthly_usd` vs `anthropic_spend_current_month_usd` and either lets the call through, or refuses + emails the admin (gated by `cap_alert_sent_this_month` to avoid spam) + returns a typed error. Post-call increments spend from the response's usage block. Locks in this phase via the `cap_alert_sent_this_month` column; helper code lands when the first Claude-calling function is built (Phase 3.3, `ts-generate-scorecard`).
+
+## Picking up at Phase 3.3
+
+### Phase 3.3: Roles CRUD + wizard
+
+Port the source repo's role-creation wizard and dashboard pages to `/talent-scout/*`. Per the port plan section 9, this phase ships:
+- Pages: `Index` (all roles), `NewRoleDetails`, `NewRoleSearch`, `NewRoleScorecard`, `RoleDashboard` (read-only at this stage), `RoleSettings`.
+- Edge function: `ts-generate-scorecard` (real implementation; calls Claude with the spend-tracker wrapper).
+- Wizard state: lift `src/lib/wizardStore.ts` from the source repo as-is.
+
+Hiring-manager email lookup happens client-side at wizard submit; if no `users` row exists, block with a clear message (Q3).
+
+Heads up before starting Phase 3.3:
+- This is the first Claude-calling function. Build the `withSpendTracking` helper alongside `ts-generate-scorecard` per Q6.
 - Future migrations creating tables MUST include explicit GRANTs to `authenticated` and `service_role`. Auto-expose stays off as the project security default. See `20260506065157_grant_data_api_access.sql` for the canonical pattern.
 
 ## Beyond Phase 3
