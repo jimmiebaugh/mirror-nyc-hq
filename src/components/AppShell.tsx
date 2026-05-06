@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,18 +13,23 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 
-const navItems = [
+type NavItem = { to: string; label: string; end?: boolean; adminOnly?: boolean };
+
+const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", end: true },
   { to: "/projects", label: "Projects" },
   { to: "/venues", label: "Venues" },
   { to: "/clients", label: "Clients" },
   { to: "/tasks", label: "Tasks" },
+  { to: "/talent-scout", label: "Talent Scout", adminOnly: true },
 ];
 
 export default function AppShell() {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useUserRole();
   const email = user?.email ?? "";
   const initials = email.slice(0, 2).toUpperCase();
+  const visibleNav = navItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <div className="min-h-screen bg-background">
@@ -36,7 +42,7 @@ export default function AppShell() {
               </span>
             </NavLink>
             <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => (
+              {visibleNav.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
