@@ -1,0 +1,91 @@
+import { NavLink, Outlet } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { LogOut } from "lucide-react";
+
+const navItems = [
+  { to: "/", label: "Dashboard", end: true },
+  { to: "/projects", label: "Projects" },
+  { to: "/venues", label: "Venues" },
+  { to: "/clients", label: "Clients" },
+  { to: "/tasks", label: "Tasks" },
+];
+
+export default function AppShell() {
+  const { user, signOut } = useAuth();
+  const email = user?.email ?? "";
+  const initials = email.slice(0, 2).toUpperCase();
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-6">
+          <div className="flex items-center gap-8">
+            <NavLink to="/" className="flex items-center gap-2">
+              <span className="text-sm font-semibold tracking-tight">
+                Mirror NYC <span className="text-primary">HQ</span>
+              </span>
+            </NavLink>
+            <nav className="hidden md:flex items-center gap-1">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `rounded-md px-3 py-1.5 text-sm transition-colors ${
+                      isActive
+                        ? "text-foreground bg-secondary"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-9 gap-2 px-2">
+                <Avatar className="h-7 w-7">
+                  <AvatarFallback className="text-xs bg-secondary">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="hidden sm:inline text-sm text-muted-foreground">
+                  {email}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <div className="text-xs text-muted-foreground">Signed in as</div>
+                <div className="truncate text-sm">{email}</div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={signOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-6 py-10">
+        <Outlet />
+      </main>
+    </div>
+  );
+}
