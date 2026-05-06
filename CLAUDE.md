@@ -298,6 +298,28 @@ Single Google service account with domain-wide delegation, owned by Mirror NYC's
 
 JSON key stored as a Supabase secret. Used by edge functions only.
 
+### Edge Function self-invocation auth
+
+Some Edge Functions (`ts-pull-candidates` so far; the re-eval and packet-generate functions in 3.5/3.6 will join) self-invoke for chunked processing. The Supabase gateway on this project rejects the service-role bearer token at its `verify_jwt` layer (likely a new-format-key vs legacy-JWT mismatch — applies to whatever key Supabase ships in `SUPABASE_SERVICE_ROLE_KEY` for newer projects). To unblock self-invocation:
+
+1. **Per-function `verify_jwt = false`** in `supabase/config.toml`, e.g.:
+   ```toml
+   [functions.ts-pull-candidates]
+   verify_jwt = false
+   ```
+   This disables gateway JWT verification for that function only. Other functions stay on the default `verify_jwt = true`.
+
+2. **`INTERNAL_API_SECRET`** is set as a Supabase secret (random 256-bit hex). Self-invocations send it as the `x-internal-secret` header.
+
+3. **Auth enforcement moves into the function** via `supabase/functions/_shared/internalAuth.ts`'s `requireInternalOrUserAuth(req)`. It returns null (allow) for any of:
+   - `x-internal-secret` matches `INTERNAL_API_SECRET` (self-invocation, cron callers)
+   - Authorization bearer matches `SUPABASE_SERVICE_ROLE_KEY` exactly (direct service-role calls)
+   - Authorization bearer is a valid user JWT (frontend `supabase.functions.invoke` from signed-in admin)
+
+   Anything else → 401. Anon callers that slip past the disabled gateway are rejected here.
+
+**When to use this pattern:** any Edge Function that POSTs back to itself (chunked pipelines, batch processing). Use the default `verify_jwt = true` for one-shot user-invoked functions like `ts-generate-scorecard` — they don't need the override.
+
 ## Edge functions
 
 ### Talent Scout
@@ -348,7 +370,8 @@ Phase 3 (Talent Scout port):
 - 3.1 Inventory + port plan: DONE. See `docs/talent-scout-port-plan.md` for the full breakdown of what lifts/adapts/rewrites/drops, schema diff, and the section-9 sub-phase sequence that drives 3.2 through 3.8.
 - 3.2 Schema augmentation, edge function shells, CLAUDE.md sync: DONE. Migration `20260506162543_phase_3_2_schema_augmentation.sql` added `ts_pull_rounds.pending_candidates` + `reeval_last_progress_at`, the `ts_evaluations` history table (admin-only RLS), and `global_settings.cap_alert_sent_this_month`. Stub edge functions `ts-pull-candidates` and `ts-generate-scorecard` deployed to the Supabase project (501 responses; real impl in 3.3 / 3.4).
 - 3.3 Roles CRUD + wizard: DONE. `/talent-scout/*` route tree mounted (admin-gated via `<AdminRoute>`), top-nav entry visible only to admins, three-step new-role wizard (`/new/details` → `/new/search` → `/new/scorecard`) with a hiring-manager picker over admin users, Claude-driven scorecard generation, and a single-screen edit + close/reopen at `/roles/:id/settings`. `_shared/anthropic.ts` `callClaude` wrapper landed alongside the real `ts-generate-scorecard`. Lifted: `parseClaudeJson` (edge), `wizardStore`, `defaultEvalPrompt`, `poolStatus`, `scoreColor`. Built fresh for HQ design system: `Stepper`, `RoleStatusPill`, `TagInput`. `CandidateTable` placeholder in place; full port comes in 3.5.
-- 3.4 Pull pipeline: NOT done. **You're picking up here.**
+- 3.4 Pull pipeline: DONE. `ts-pull-candidates` ports the source's chunked streaming pipeline (BATCH_SIZE=8 self-invoke via `pending_candidates` jsonb). Service-account Gmail auth (`_shared/gmailServiceAccount.ts`) replaces per-install OAuth refresh tokens. PullDetail page subscribes to `ts_pull_rounds` via Supabase Realtime. Adapted from source: schema renames everywhere; scorecard read from `ts_roles.scorecard` (not separate table); `callClaude('talent_scout', ...)` for scoring with prompt caching; per-evaluation history written to `ts_evaluations`. End-to-end verified: R3 = 4 candidates pulled, scored, persisted with 9 attachments to Storage, $0.24 Anthropic spend.
+- 3.5 Candidate detail + re-eval: NOT done. **You're picking up here.**
 
 ### Locked decisions from the Talent Scout port plan
 
@@ -361,23 +384,24 @@ Resolutions to the six open questions in `docs/talent-scout-port-plan.md` § 8.
 - **Q5 (two packet generators): read both, then consolidate.** Before writing `ts-packet-generate` in Phase 3.6, do a 30-min read of the source `generate-packet` (832 lines) vs `generate-final-review-packet` (767 lines) to confirm whether they're two distinct flows (candidate-pool packet vs final-review packet) or one is dead code. Consolidate based on that read.
 - **Q6 (anthropic-spend-tracker shape): explicit `callClaude(app, ...)` wrapper.** Single helper in `supabase/functions/_shared/anthropic.ts`. Selects the right key from `ANTHROPIC_API_KEY_TS` / `_VS` / `_HQ` based on the `app` argument. After each successful call, computes cost from the response usage block (incl. prompt-cache discounts) and increments `global_settings.anthropic_spend_current_month_usd`. Emails the admin once per cap crossing, gated by `cap_alert_sent_this_month`. Does NOT refuse calls when over cap — graceful degradation, not a hard failure. Email path is currently a console-log stub; Phase 3.8 wires real notifications.
 
-## Picking up at Phase 3.4
+### Architectural decisions surfaced during Phase 3.4
 
-### Phase 3.4: Pull pipeline
+- **Edge Function self-invocation auth.** The Supabase gateway on this project rejects the service-role bearer token at the verify_jwt layer (likely a new-format-key vs legacy-JWT mismatch). To unstick the chunked self-invoke pattern, `ts-pull-candidates` was deployed with `verify_jwt = false` (per-function override in `supabase/config.toml`) and an `INTERNAL_API_SECRET` shared secret was set as a Supabase secret. JWT validation moved into `_shared/internalAuth.ts`, which accepts: (a) the `x-internal-secret` header match, (b) a direct `SUPABASE_SERVICE_ROLE_KEY` bearer match, or (c) a valid user JWT. Anon callers that slip past the gateway still get 401 from the function. Any future Talent Scout / Venue Scout function that self-invokes will need the same `verify_jwt = false` override; non-self-invoking functions stay on the default `verify_jwt = true`.
+- **Realtime publication.** The PullDetail page subscribes to `ts_pull_rounds` `UPDATE` events. The `supabase_realtime` publication on this project starts empty, so `ts_pull_rounds` was added to it via a migration with `REPLICA IDENTITY FULL`. Any future table the UI needs to subscribe to will need the same treatment.
+- **All attachments to Storage (drift from source).** Source kept small attachments in Gmail and let the dashboard fetch them on demand via a `gmail-attachment` Edge Function. HQ's port persists every attachment to the `candidate_attachments` bucket regardless of size. Slightly more Storage cost, much simpler download path (`supabase.storage.createSignedUrl`), and no separate Edge Function needed for candidate-detail attachment viewing in 3.5.
+- **`ts_pull_rounds` operational columns.** `candidates_found`, `processed_count`, `attempt`, `round_number` added in `20260506175156_phase_3_4_pull_pipeline.sql` so progress and round labels work without joining `ts_candidates` per render. Source's `step_progress` jsonb / `current_step` / `error_log` were dropped — the simpler `processed_count / candidates_found` is enough for the test path; richer progress UI can be added back later if needed.
 
-Port the source repo's `pull-candidates` Edge Function (1129 lines) to HQ as `ts-pull-candidates`. The chunked self-invoking architecture stays intact (BATCH_SIZE=8, self-invoke continuation via `pending_candidates` jsonb). Replace the per-installation Gmail OAuth refresh-token flow with a service-account JWT impersonating `jobs@mirrornyc.com` — reuse the same JWT-bearer pattern as `scripts/verify-service-account.ts`, but read the SA key from a Supabase secret.
+## Picking up at Phase 3.5
 
-This phase ships:
-- Edge function: `ts-pull-candidates` (real implementation; replaces the 501 stub).
-- Shared module: `_shared/gmailServiceAccount.ts` for the JWT bearer flow.
-- Pages: `PullLoading` (realtime subscription on `ts_pull_rounds.status`), `PullRoundDetail` (read-only list of candidates from a round). Pull is triggered from `RoleDashboard` via a "+ Pull candidates" button.
-- Schema: nothing new (3.2 already added `pending_candidates` and `reeval_last_progress_at`).
+### Phase 3.5: Candidate detail + re-eval
 
-The first Claude-calling path that runs at scale; this is where prompt caching (1-hour TTL on system + role-context blocks) earns its keep. Use `callClaude('talent_scout', ...)` and pass `anthropic_beta: ["prompt-caching-2024-07-31", "extended-cache-ttl-2025-04-11"]` per the source repo's `buildClaudeEvalRequest`.
+Build `/talent-scout/candidates/:id` (currently a Phase 3.5 stub) into the real candidate-detail page. Per the port plan section 9, this phase ships:
+- Page: `CandidateDetail` (recruiter overview, score breakdown by criterion, top strengths / key gaps, internal notes textarea, attachment links via storage signed URLs, evaluation history list pulled from `ts_evaluations`, "Re-evaluate" button).
+- Edge functions: `ts-evaluate-candidate(candidate_id)` for single re-eval, `ts-bulk-reevaluate(role_id)` for the master pool. Both write a new `ts_evaluations` row and update the latest fields on `ts_candidates`. Bulk re-eval bumps `ts_pull_rounds.reeval_last_progress_at` as a heartbeat for the re-eval watchdog (Phase 3.7).
+- UI plumbing: lift `ScoreBar`, `StatusDropdown` from the source repo for the score visualization and manual status changes (consider/promote/reject/fast_track/auto_rejected).
 
-Heads up before starting Phase 3.4:
-- Service account JSON key must be uploaded as a Supabase secret (e.g. `GOOGLE_SERVICE_ACCOUNT_KEY` containing the JSON). The Edge Function reads it from `Deno.env.get(...)`. Don't try to read it from disk — Edge Functions have no filesystem access.
-- The source pipeline's `pending_candidates` mechanic is critical for any pull >2 minutes (Edge Function wall-time budget). Don't simplify it away.
+Heads up before starting Phase 3.5:
+- `ts-evaluate-candidate` and `ts-bulk-reevaluate` self-invoke for chunked re-eval (same pattern as `ts-pull-candidates`). Add `[functions.<name>] verify_jwt = false` to `supabase/config.toml` for each.
 - Future migrations creating tables MUST include explicit GRANTs to `authenticated` and `service_role`. Auto-expose stays off as the project security default. See `20260506065157_grant_data_api_access.sql` for the canonical pattern.
 
 ## Beyond Phase 3

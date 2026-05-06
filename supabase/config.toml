@@ -1,1 +1,10 @@
 project_id = "amipjjmphblfxpghjnel"
+
+# ts-pull-candidates self-invokes for chunked processing. The Supabase gateway
+# on this project rejects the service-role bearer token at the verify_jwt
+# layer, so we move JWT verification into the function itself
+# (supabase/functions/_shared/internalAuth.ts handles user JWT, INTERNAL_API_SECRET
+# header, and direct service-role-key match). Anon callers that slip past the
+# gateway are still rejected by internalAuth's 401.
+[functions.ts-pull-candidates]
+verify_jwt = false
