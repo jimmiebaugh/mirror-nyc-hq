@@ -1,0 +1,23 @@
+# Mirror NYC HQ — Netlify build config
+#
+# Build: Vite outputs to dist/. Netlify auto-detects this for Vite projects
+# but make it explicit so future framework changes don't drift.
+#
+# Redirects: React Router uses client-side routing. Without the SPA fallback
+# below, hitting /talent-scout (or any direct path) returns the static
+# Netlify 404 page instead of letting the React app handle the route.
+# Status 200 (not 301) so the URL stays put after the rewrite.
+#
+# Env vars (VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY) are NOT set
+# here. Configure them in the Netlify Dashboard:
+#   Site settings -> Build & deploy -> Environment -> Environment variables
+# Vite reads them at build time and inlines them into the bundle.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
