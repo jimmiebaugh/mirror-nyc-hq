@@ -40,6 +40,8 @@ Monolith. Mirror NYC HQ is the single app. Talent Scout and Venue Scout are rout
 
 ## Schema
 
+All timestamp columns use `timestamptz` (timezone-aware). Date-only columns use `date`.
+
 ### HQ Core
 
 #### users (synced from auth.users via auth-on-signup)
@@ -319,61 +321,15 @@ Phase 1 (Foundation):
 
 Phase 2 (Schema and auth):
 - 2.1 Lovable project, Supabase connector, GitHub connector, Google OAuth, sign-in tested: DONE. Jimmie's account confirmed in `auth.users`.
-- 2.2 Schema migration: NOT done. **You're picking up here.**
-- 2.3 Seed Jimmie as admin: NOT done.
-- 2.4 Sanity test: NOT done.
+- 2.2 Schema migration: DONE. All 22 tables, enums, helper + trigger functions, RLS policies, and 5 storage buckets applied via `supabase/migrations/20260506061457_initial_schema.sql`.
+- 2.3 Seed Jimmie as admin: DONE. `public.users` row inserted manually with `permission_role = 'admin'`.
+- 2.4 Sanity test: NOT done. **You're picking up here.**
 
-## Picking up at Phase 2.2
-
-### Phase 2.2: Write and apply the schema migration
-
-1. Verify Supabase CLI: `supabase --version`. If missing: `brew install supabase/tap/supabase`.
-2. Verify psql: `psql --version`. If missing: `brew install postgresql`.
-3. From repo root: `supabase login` (Jimmie auths in browser).
-4. Link: `supabase link --project-ref amipjjmphblfxpghjnel` (prompts for DB password).
-5. Generate file: `supabase migration new initial_schema` creates `supabase/migrations/[timestamp]_initial_schema.sql`.
-6. Write the full SQL into that file. Cover, in dependency order:
-   - All enums (project_status, task_status, ts_pull_round_status, ts_candidate_status, etc.)
-   - All tables (clients before projects, venues before project_venues, users before everything that FKs to it, etc.)
-   - All Postgres functions and triggers
-   - Explicit `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on every table (auto-RLS is on at the project level; explicit is belt-and-suspenders)
-   - All RLS policies per the auth model
-   - Storage bucket creation and policies
-   - The `auth.users` to `public.users` sync (Postgres function + trigger on auth.users insert that sets permission_role to 'member' by default)
-7. Apply: `supabase db push`. If it fails partway, fix the SQL and re-apply.
-8. Verify with psql:
-```
-   psql "postgresql://postgres:[PASSWORD]@db.amipjjmphblfxpghjnel.supabase.co:5432/postgres"
-```
-   Then `\dt` to list tables, `\d projects` to inspect.
-
-Note: Lovable's initial scaffold may have wired the projects-list query to read a plain `client` text field. The real schema uses `client_id` FK to clients. You'll fix this wiring in Phase 2.4 either via a follow-up Lovable prompt or directly in code.
-
-### Phase 2.3: Seed Jimmie as admin
-
-After the migration applies cleanly:
-
-1. Connect via psql.
-2. `SELECT id, email FROM auth.users;` to find Jimmie's row.
-3. If no row in public.users yet (auth-on-signup trigger may not have fired retroactively), INSERT manually:
-```sql
-   INSERT INTO public.users (id, email, full_name, permission_role, active)
-   VALUES (
-     '<jimmie_auth_id>',
-     'jimmie@mirrornyc.com',
-     'Jimmie Baugh',
-     'admin',
-     true
-   );
-```
-4. If row exists with `member`, UPDATE:
-```sql
-   UPDATE public.users SET permission_role = 'admin'
-   WHERE email = 'jimmie@mirrornyc.com';
-```
-5. Verify: `SELECT id, email, permission_role FROM public.users;`.
+## Picking up at Phase 2.4
 
 ### Phase 2.4: Sanity test
+
+Note: Lovable's initial scaffold may have wired the projects-list query to read a plain `client` text field. The real schema uses `client_id` FK to clients. Fix this wiring as part of the sanity test, either via a follow-up Lovable prompt or directly in code.
 
 1. Jimmie signs in to the Lovable preview.
 2. /projects route should load against real schema. Fix any wiring mismatches (especially `client` vs `client_id`).
