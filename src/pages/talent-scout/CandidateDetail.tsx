@@ -26,10 +26,14 @@ type Criterion = {
 
 type DetectedLink = { url: string; type?: string };
 
+// Tier colors aligned with source's tier-badge--{1,2,3} (Phase 3.5b):
+// T1 red-500 (#ef4444), T2 amber-500 (#f59e0b), T3 green-400 (#4ade80).
+// HQ pre-3.5b used emerald-500/400 for T3 — replaced with green-400 to match
+// source's #4ade80 success hue exactly.
 const TIER_META = {
-  1: { label: "Tier 1 — Must-Haves", color: "bg-red-500/10 border-red-500/30 text-red-400" },
-  2: { label: "Tier 2 — Strong Differentiators", color: "bg-amber-500/10 border-amber-500/30 text-amber-400" },
-  3: { label: "Tier 3 — Nice-to-Haves", color: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" },
+  1: { label: "Tier 1 — Must-Haves", color: "bg-red-500/10 border-red-500/30 text-red-500" },
+  2: { label: "Tier 2 — Strong Differentiators", color: "bg-amber-500/10 border-amber-500/30 text-amber-500" },
+  3: { label: "Tier 3 — Nice-to-Haves", color: "bg-green-400/10 border-green-400/30 text-green-400" },
 } as const;
 
 function fileBadge(mime: string | null | undefined) {

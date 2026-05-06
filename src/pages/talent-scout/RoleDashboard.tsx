@@ -190,7 +190,7 @@ export default function RoleDashboard() {
                   className={cn(
                     "inline-flex items-center gap-2 rounded-sm border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
                     scheduleOn
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                      ? "border-green-400/30 bg-green-400/10 text-green-400"
                       : "border-border bg-secondary text-muted-foreground",
                   )}
                 >
@@ -299,12 +299,12 @@ export default function RoleDashboard() {
                           </span>
                         )}
                         {isFailed && (
-                          <span className="inline-flex items-center rounded-sm border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-400">
+                          <span className="inline-flex items-center rounded-sm border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-500">
                             Failed
                           </span>
                         )}
                         {isStalled && (
-                          <span className="inline-flex items-center rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                          <span className="inline-flex items-center rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-500">
                             Stalled
                           </span>
                         )}

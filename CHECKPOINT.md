@@ -3,9 +3,10 @@
 Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-06
-**Latest commit on main:** `f96e800` — Add netlify.toml: explicit Vite build config + SPA redirect fallback
-**Current phase:** Phase 3.6 (Final review + packet) — not yet started
-**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirror-nyc-hq.netlify.app`)
+**Latest commit on main:** `495a53f` — Restructure docs: split CLAUDE.md into specialized docs, add CHECKPOINT.md
+**Active feature branch:** `phase-3-5b-visual-brand` — visual brand pass under Jimmie's local review, NOT merged.
+**Current phase:** Phase 3.5b awaiting review; Phase 3.6 (Final review + packet) starts after the brand merge.
+**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirror-nyc-hq.netlify.app`) — still serving `main` (495a53f).
 
 ## What's live in production
 
@@ -31,11 +32,11 @@ Living-state doc. Update on every meaningful merge to `main`.
 ## Recent commits
 
 ```
+phase-3-5b-visual-brand: Phase 3.5b: Visual brand pass, colors and typography aligned with source  (NOT MERGED)
+495a53f  Restructure docs: split CLAUDE.md into specialized docs, add CHECKPOINT.md
 f96e800  Add netlify.toml: explicit Vite build config + SPA redirect fallback
 a427116  Use authoritative Mirror wordmark SVG; bump landing logo + text 20%; restore HQ title metadata
 568fa7a  Add coming-soon stealth landing with hidden sign-in trigger
-ab21c58  Phase 3.5: Candidate detail, ts-evaluate-candidate, ts-bulk-reevaluate, master pool restructure, eval history retention, two-tier candidate table
-1017720  Document verify_jwt=false + INTERNAL_API_SECRET pattern in auth model
 ```
 
 ## Recent migrations
@@ -56,7 +57,15 @@ ab21c58  Phase 3.5: Candidate detail, ts-evaluate-candidate, ts-bulk-reevaluate,
 
 ## Next up
 
-**Phase 3.6: Final review + packet.** See `docs/roadmap.md` for the full plan. Two new edge functions (`ts-final-review`, `ts-packet-generate`) plus FinalReviewLoading + FinalReviewDetail pages. Q5 reminder: read source's `generate-packet` vs `generate-final-review-packet` before implementing to confirm whether to build one function or two.
+**Phase 3.5b — Visual brand pass.** Code-level brand alignment is done on `phase-3-5b-visual-brand`. Awaiting Jimmie's local review:
+
+```
+git fetch && git checkout phase-3-5b-visual-brand && npm run dev
+```
+
+Walk through every page on localhost. Use `docs/visual-audit/audit-trail.md` as the click-through checklist (every change is listed with file/line). On approval, FF-merge to main; Netlify auto-deploys.
+
+**Phase 3.6: Final review + packet.** Starts after Phase 3.5b merges. See `docs/roadmap.md` for the full plan. Two new edge functions (`ts-final-review`, `ts-packet-generate`) plus FinalReviewLoading + FinalReviewDetail pages. Q5 reminder: read source's `generate-packet` vs `generate-final-review-packet` before implementing to confirm whether to build one function or two.
 
 ## How to update this file
 

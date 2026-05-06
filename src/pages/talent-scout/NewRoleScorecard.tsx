@@ -13,10 +13,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
+// Tier colors aligned with CandidateDetail / source's tier-badge--{1,2,3}.
+// T1 red-500, T2 amber-500, T3 green-400 (= source's #4ade80).
 const TIER_META = {
-  1: { label: "Tier 1 — Must-Haves", subtitle: "Disqualifying if absent", color: "bg-red-500/10 border-red-500/30 text-red-400" },
-  2: { label: "Tier 2 — Strong Differentiators", subtitle: "Meaningfully elevates a candidate", color: "bg-amber-500/10 border-amber-500/30 text-amber-400" },
-  3: { label: "Tier 3 — Nice-to-Haves", subtitle: "Bonus value · not required", color: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" },
+  1: { label: "Tier 1 — Must-Haves", subtitle: "Disqualifying if absent", color: "bg-red-500/10 border-red-500/30 text-red-500" },
+  2: { label: "Tier 2 — Strong Differentiators", subtitle: "Meaningfully elevates a candidate", color: "bg-amber-500/10 border-amber-500/30 text-amber-500" },
+  3: { label: "Tier 3 — Nice-to-Haves", subtitle: "Bonus value · not required", color: "bg-green-400/10 border-green-400/30 text-green-400" },
 } as const;
 
 const COMPETITOR_BONUS_POINTS = 12;
@@ -277,7 +279,9 @@ export default function NewRoleScorecard() {
         <CardContent className="space-y-3 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <span className="inline-flex items-center rounded-sm border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-purple-400">
+              {/* Source's tier-badge--bonus uses coral primary (#ef5b5b),
+                  not purple. Aligned in Phase 3.5b. */}
+              <span className="inline-flex items-center rounded-sm border border-primary/40 bg-primary/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
                 Bonus — Competitor Experience
               </span>
               <span className="text-xs text-muted-foreground">Up to +{COMPETITOR_BONUS_POINTS} bonus points</span>

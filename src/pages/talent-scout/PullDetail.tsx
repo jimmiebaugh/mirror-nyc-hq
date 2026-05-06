@@ -298,7 +298,7 @@ export default function PullDetail() {
                 )}
                 <RoundStatusPill status={round.status} />
                 {isLatest && (
-                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-green-400/40 bg-green-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-400">
                     <span className="h-1 w-1 rounded-full bg-current" />
                     Latest
                   </span>

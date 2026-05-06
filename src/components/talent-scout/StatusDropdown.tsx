@@ -14,10 +14,14 @@ type Opt = { value: CandidateStatus; label: string; cls: string; aiOnly?: boolea
 // Status labels are past-tense states ("Rejected"); bulk-action buttons in
 // CandidateTable are imperative verbs ("Reject") — distinct affordances.
 const OPTIONS: Opt[] = [
-  { value: "interview",     label: "Interview",     cls: "bg-cyan-500/10 text-cyan-400 border-cyan-500/40" },
-  { value: "fast_track",    label: "Fast-Track",    cls: "bg-purple-500/10 text-purple-400 border-purple-500/40" },
-  { value: "consider",      label: "Consider",      cls: "bg-amber-500/10 text-amber-400 border-amber-500/30" },
-  { value: "reject",        label: "Rejected",      cls: "bg-red-500/10 text-red-400 border-red-500/40" },
+  // Status colors aligned with source's StatusDropdown (Phase 3.5b):
+  // text uses 500-shade hex equivalents (cyan-500 #06b6d4, purple-500 #a855f7,
+  // amber-500 #f59e0b, red-500 #ef4444). auto_rejected stays muted (red-400/80)
+  // since it's AI-only / disabled and shouldn't read as a live action color.
+  { value: "interview",     label: "Interview",     cls: "bg-cyan-500/10 text-cyan-500 border-cyan-500/40" },
+  { value: "fast_track",    label: "Fast-Track",    cls: "bg-purple-500/10 text-purple-500 border-purple-500/40" },
+  { value: "consider",      label: "Consider",      cls: "bg-amber-500/10 text-amber-500 border-amber-500/30" },
+  { value: "reject",        label: "Rejected",      cls: "bg-red-500/10 text-red-500 border-red-500/40" },
   { value: "auto_rejected", label: "Auto-Rejected", cls: "bg-red-500/5 text-red-400/80 border-red-500/20", aiOnly: true },
 ];
 

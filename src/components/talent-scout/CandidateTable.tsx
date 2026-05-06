@@ -347,27 +347,29 @@ export function CandidateTable({
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {/* Phase 3.5b: 500-shade text matches StatusDropdown's
+                 source-aligned status colors. */}
             <BulkStatusButton
               label="Reject"
-              colorClass="bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20"
+              colorClass="bg-red-500/10 text-red-500 border-red-500/30 hover:bg-red-500/20"
               onClick={() => setStatusBulk("reject")}
               disabled={bulkBusy}
             />
             <BulkStatusButton
               label="Consider"
-              colorClass="bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
+              colorClass="bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500/20"
               onClick={() => setStatusBulk("consider")}
               disabled={bulkBusy}
             />
             <BulkStatusButton
               label="Fast-Track"
-              colorClass="bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20"
+              colorClass="bg-purple-500/10 text-purple-500 border-purple-500/30 hover:bg-purple-500/20"
               onClick={() => setStatusBulk("fast_track")}
               disabled={bulkBusy}
             />
             <BulkStatusButton
               label="Interview"
-              colorClass="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20"
+              colorClass="bg-cyan-500/10 text-cyan-500 border-cyan-500/30 hover:bg-cyan-500/20"
               onClick={() => setStatusBulk("interview")}
               disabled={bulkBusy}
             />

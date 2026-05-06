@@ -11,12 +11,17 @@ export function RoleStatusPill({ status, latestRound, hasFinalReport, size = "de
   let label: string;
   let cls: string;
 
+  // Brand colors aligned with source (Phase 3.5b):
+  //  - Final Report: success green (#4ade80 = green-400)
+  //  - Closed: red-500 family (#ef4444)
+  //  - Active round: coral primary (#ef5b5b)
+  //  - Open / no round: muted surface
   if (hasFinalReport) {
     label = "Final Report";
-    cls = "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+    cls = "bg-green-400/10 text-green-400 border-green-400/30";
   } else if (status === "closed") {
     label = "Closed";
-    cls = "bg-red-500/10 text-red-400 border-red-500/30";
+    cls = "bg-red-500/10 text-red-500 border-red-500/30";
   } else if (latestRound && latestRound > 0) {
     label = `R${latestRound}`;
     cls = "bg-primary/15 text-primary border-primary/40";
