@@ -298,6 +298,28 @@ Single Google service account with domain-wide delegation, owned by Mirror NYC's
 
 JSON key stored as a Supabase secret. Used by edge functions only.
 
+### Edge Function self-invocation auth
+
+Some Edge Functions (`ts-pull-candidates` so far; the re-eval and packet-generate functions in 3.5/3.6 will join) self-invoke for chunked processing. The Supabase gateway on this project rejects the service-role bearer token at its `verify_jwt` layer (likely a new-format-key vs legacy-JWT mismatch — applies to whatever key Supabase ships in `SUPABASE_SERVICE_ROLE_KEY` for newer projects). To unblock self-invocation:
+
+1. **Per-function `verify_jwt = false`** in `supabase/config.toml`, e.g.:
+   ```toml
+   [functions.ts-pull-candidates]
+   verify_jwt = false
+   ```
+   This disables gateway JWT verification for that function only. Other functions stay on the default `verify_jwt = true`.
+
+2. **`INTERNAL_API_SECRET`** is set as a Supabase secret (random 256-bit hex). Self-invocations send it as the `x-internal-secret` header.
+
+3. **Auth enforcement moves into the function** via `supabase/functions/_shared/internalAuth.ts`'s `requireInternalOrUserAuth(req)`. It returns null (allow) for any of:
+   - `x-internal-secret` matches `INTERNAL_API_SECRET` (self-invocation, cron callers)
+   - Authorization bearer matches `SUPABASE_SERVICE_ROLE_KEY` exactly (direct service-role calls)
+   - Authorization bearer is a valid user JWT (frontend `supabase.functions.invoke` from signed-in admin)
+
+   Anything else → 401. Anon callers that slip past the disabled gateway are rejected here.
+
+**When to use this pattern:** any Edge Function that POSTs back to itself (chunked pipelines, batch processing). Use the default `verify_jwt = true` for one-shot user-invoked functions like `ts-generate-scorecard` — they don't need the override.
+
 ## Edge functions
 
 ### Talent Scout
