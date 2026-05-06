@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -12,7 +13,7 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  public: {
+  graphql_public: {
     Tables: {
       [_ in never]: never
     }
@@ -20,10 +21,1212 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  public: {
+    Tables: {
+      activity_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          payload: Json
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          payload?: Json
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          payload?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      global_settings: {
+        Row: {
+          anthropic_spend_cap_monthly_usd: number
+          anthropic_spend_current_month_usd: number
+          default_drive_folder_for_standalone_vs_decks: string | null
+          email_notifications_enabled: boolean
+          id: string
+          in_app_notifications_enabled: boolean
+          talent_scout_packet_default_count: number
+          updated_at: string
+          venue_research_priority_sites: string[]
+        }
+        Insert: {
+          anthropic_spend_cap_monthly_usd?: number
+          anthropic_spend_current_month_usd?: number
+          default_drive_folder_for_standalone_vs_decks?: string | null
+          email_notifications_enabled?: boolean
+          id?: string
+          in_app_notifications_enabled?: boolean
+          talent_scout_packet_default_count?: number
+          updated_at?: string
+          venue_research_priority_sites?: string[]
+        }
+        Update: {
+          anthropic_spend_cap_monthly_usd?: number
+          anthropic_spend_current_month_usd?: number
+          default_drive_folder_for_standalone_vs_decks?: string | null
+          email_notifications_enabled?: boolean
+          id?: string
+          in_app_notifications_enabled?: boolean
+          talent_scout_packet_default_count?: number
+          updated_at?: string
+          venue_research_priority_sites?: string[]
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          delivered_email: boolean
+          delivered_in_app: boolean
+          id: string
+          link_url: string | null
+          read: boolean
+          read_at: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          delivered_email?: boolean
+          delivered_in_app?: boolean
+          id?: string
+          link_url?: string | null
+          read?: boolean
+          read_at?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          delivered_email?: boolean
+          delivered_in_app?: boolean
+          id?: string
+          link_url?: string | null
+          read?: boolean
+          read_at?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_account_managers: {
+        Row: {
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_account_managers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_account_managers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_designers: {
+        Row: {
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_designers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_designers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_venues: {
+        Row: {
+          project_id: string
+          venue_id: string
+        }
+        Insert: {
+          project_id: string
+          venue_id: string
+        }
+        Update: {
+          project_id?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_venues_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_venues_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          archived_at: string | null
+          budget_sheet_url: string | null
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          design_decks_folder_url: string | null
+          id: string
+          latest_creative_deck_url: string | null
+          live_dates_end: string | null
+          live_dates_start: string | null
+          name: string
+          notes: string | null
+          production_folder_url: string | null
+          slack_channel_url: string | null
+          status: Database["public"]["Enums"]["project_status"]
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          budget_sheet_url?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          design_decks_folder_url?: string | null
+          id?: string
+          latest_creative_deck_url?: string | null
+          live_dates_end?: string | null
+          live_dates_start?: string | null
+          name: string
+          notes?: string | null
+          production_folder_url?: string | null
+          slack_channel_url?: string | null
+          status?: Database["public"]["Enums"]["project_status"]
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          budget_sheet_url?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          design_decks_folder_url?: string | null
+          id?: string
+          latest_creative_deck_url?: string | null
+          live_dates_end?: string | null
+          live_dates_start?: string | null
+          name?: string
+          notes?: string | null
+          production_folder_url?: string | null
+          slack_channel_url?: string | null
+          status?: Database["public"]["Enums"]["project_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          assignee_id: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          due_date: string | null
+          id: string
+          project_id: string | null
+          status: Database["public"]["Enums"]["task_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assignee_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["task_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assignee_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["task_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_assignee_id_fkey"
+            columns: ["assignee_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ts_candidate_attachments: {
+        Row: {
+          attachment_type: Database["public"]["Enums"]["ts_candidate_attachment_type"]
+          candidate_id: string
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size_bytes: number | null
+          id: string
+        }
+        Insert: {
+          attachment_type: Database["public"]["Enums"]["ts_candidate_attachment_type"]
+          candidate_id: string
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size_bytes?: number | null
+          id?: string
+        }
+        Update: {
+          attachment_type?: Database["public"]["Enums"]["ts_candidate_attachment_type"]
+          candidate_id?: string
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size_bytes?: number | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ts_candidate_attachments_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "ts_candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ts_candidates: {
+        Row: {
+          applied_date: string | null
+          created_at: string
+          email: string | null
+          gmail_message_id: string | null
+          id: string
+          internal_notes: string | null
+          key_gaps: Json
+          last_evaluated_at: string | null
+          name: string | null
+          portfolio_path_or_url: string | null
+          portfolio_type: Database["public"]["Enums"]["ts_candidate_portfolio_type"]
+          pull_round_id: string
+          quick_overview: Json
+          recruiter_overview: string | null
+          role_id: string
+          score: number | null
+          score_breakdown: Json
+          status: Database["public"]["Enums"]["ts_candidate_status"]
+          tier: string | null
+          top_strengths: Json
+          updated_at: string
+        }
+        Insert: {
+          applied_date?: string | null
+          created_at?: string
+          email?: string | null
+          gmail_message_id?: string | null
+          id?: string
+          internal_notes?: string | null
+          key_gaps?: Json
+          last_evaluated_at?: string | null
+          name?: string | null
+          portfolio_path_or_url?: string | null
+          portfolio_type?: Database["public"]["Enums"]["ts_candidate_portfolio_type"]
+          pull_round_id: string
+          quick_overview?: Json
+          recruiter_overview?: string | null
+          role_id: string
+          score?: number | null
+          score_breakdown?: Json
+          status?: Database["public"]["Enums"]["ts_candidate_status"]
+          tier?: string | null
+          top_strengths?: Json
+          updated_at?: string
+        }
+        Update: {
+          applied_date?: string | null
+          created_at?: string
+          email?: string | null
+          gmail_message_id?: string | null
+          id?: string
+          internal_notes?: string | null
+          key_gaps?: Json
+          last_evaluated_at?: string | null
+          name?: string | null
+          portfolio_path_or_url?: string | null
+          portfolio_type?: Database["public"]["Enums"]["ts_candidate_portfolio_type"]
+          pull_round_id?: string
+          quick_overview?: Json
+          recruiter_overview?: string | null
+          role_id?: string
+          score?: number | null
+          score_breakdown?: Json
+          status?: Database["public"]["Enums"]["ts_candidate_status"]
+          tier?: string | null
+          top_strengths?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ts_candidates_pull_round_id_fkey"
+            columns: ["pull_round_id"]
+            isOneToOne: false
+            referencedRelation: "ts_pull_rounds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ts_candidates_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "ts_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ts_final_reviews: {
+        Row: {
+          candidate_count_limit: number | null
+          final_rankings: Json
+          generated_at: string
+          id: string
+          pool_summary: string | null
+          role_id: string
+          triggered_by: string | null
+        }
+        Insert: {
+          candidate_count_limit?: number | null
+          final_rankings?: Json
+          generated_at?: string
+          id?: string
+          pool_summary?: string | null
+          role_id: string
+          triggered_by?: string | null
+        }
+        Update: {
+          candidate_count_limit?: number | null
+          final_rankings?: Json
+          generated_at?: string
+          id?: string
+          pool_summary?: string | null
+          role_id?: string
+          triggered_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ts_final_reviews_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "ts_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ts_final_reviews_triggered_by_fkey"
+            columns: ["triggered_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ts_pull_rounds: {
+        Row: {
+          completed_at: string | null
+          created_by: string | null
+          id: string
+          pulled_from: string | null
+          pulled_to: string | null
+          role_id: string
+          started_at: string
+          status: Database["public"]["Enums"]["ts_pull_round_status"]
+          triggered_by: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
+        }
+        Insert: {
+          completed_at?: string | null
+          created_by?: string | null
+          id?: string
+          pulled_from?: string | null
+          pulled_to?: string | null
+          role_id: string
+          started_at?: string
+          status?: Database["public"]["Enums"]["ts_pull_round_status"]
+          triggered_by: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
+        }
+        Update: {
+          completed_at?: string | null
+          created_by?: string | null
+          id?: string
+          pulled_from?: string | null
+          pulled_to?: string | null
+          role_id?: string
+          started_at?: string
+          status?: Database["public"]["Enums"]["ts_pull_round_status"]
+          triggered_by?: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ts_pull_rounds_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ts_pull_rounds_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "ts_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ts_roles: {
+        Row: {
+          auto_pull_schedule: Database["public"]["Enums"]["ts_role_auto_pull_schedule"]
+          auto_rejection_threshold: number | null
+          closed_at: string | null
+          compensation: string | null
+          competitor_bonus: Json
+          created_at: string
+          created_by: string | null
+          email_keywords: string[]
+          email_search_start_date: string | null
+          evaluation_prompt: string | null
+          hiring_manager_id: string | null
+          hiring_priorities: string | null
+          id: string
+          job_description: string | null
+          location: string | null
+          scorecard: Json
+          start_date: string | null
+          status: Database["public"]["Enums"]["ts_role_status"]
+          title: string
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          auto_pull_schedule?: Database["public"]["Enums"]["ts_role_auto_pull_schedule"]
+          auto_rejection_threshold?: number | null
+          closed_at?: string | null
+          compensation?: string | null
+          competitor_bonus?: Json
+          created_at?: string
+          created_by?: string | null
+          email_keywords?: string[]
+          email_search_start_date?: string | null
+          evaluation_prompt?: string | null
+          hiring_manager_id?: string | null
+          hiring_priorities?: string | null
+          id?: string
+          job_description?: string | null
+          location?: string | null
+          scorecard?: Json
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["ts_role_status"]
+          title: string
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auto_pull_schedule?: Database["public"]["Enums"]["ts_role_auto_pull_schedule"]
+          auto_rejection_threshold?: number | null
+          closed_at?: string | null
+          compensation?: string | null
+          competitor_bonus?: Json
+          created_at?: string
+          created_by?: string | null
+          email_keywords?: string[]
+          email_search_start_date?: string | null
+          evaluation_prompt?: string | null
+          hiring_manager_id?: string | null
+          hiring_priorities?: string | null
+          id?: string
+          job_description?: string | null
+          location?: string | null
+          scorecard?: Json
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["ts_role_status"]
+          title?: string
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ts_roles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ts_roles_hiring_manager_id_fkey"
+            columns: ["hiring_manager_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          active: boolean
+          avatar_url: string | null
+          created_at: string
+          department_tags: string[]
+          email: string
+          full_name: string | null
+          id: string
+          permission_role: Database["public"]["Enums"]["permission_role"]
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          avatar_url?: string | null
+          created_at?: string
+          department_tags?: string[]
+          email: string
+          full_name?: string | null
+          id: string
+          permission_role?: Database["public"]["Enums"]["permission_role"]
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          avatar_url?: string | null
+          created_at?: string
+          department_tags?: string[]
+          email?: string
+          full_name?: string | null
+          id?: string
+          permission_role?: Database["public"]["Enums"]["permission_role"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      venue_types: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      venues: {
+        Row: {
+          address: string | null
+          capacity: number | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by: string | null
+          features: string[]
+          id: string
+          name: string
+          neighborhood: string | null
+          notes: string | null
+          photos: string[]
+          square_footage: number | null
+          updated_at: string
+          venue_type_id: string | null
+          website_url: string | null
+        }
+        Insert: {
+          address?: string | null
+          capacity?: number | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          features?: string[]
+          id?: string
+          name: string
+          neighborhood?: string | null
+          notes?: string | null
+          photos?: string[]
+          square_footage?: number | null
+          updated_at?: string
+          venue_type_id?: string | null
+          website_url?: string | null
+        }
+        Update: {
+          address?: string | null
+          capacity?: number | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          features?: string[]
+          id?: string
+          name?: string
+          neighborhood?: string | null
+          notes?: string | null
+          photos?: string[]
+          square_footage?: number | null
+          updated_at?: string
+          venue_type_id?: string | null
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venues_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "venues_venue_type_id_fkey"
+            columns: ["venue_type_id"]
+            isOneToOne: false
+            referencedRelation: "venue_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vs_briefs: {
+        Row: {
+          budget: string | null
+          client: string | null
+          created_at: string
+          event_dates_end: string | null
+          event_dates_start: string | null
+          event_name: string | null
+          event_overview: string | null
+          id: string
+          ideal_features: string | null
+          neighborhoods: string[]
+          scout_id: string
+          source_file_path: string | null
+          square_footage_max: number | null
+          square_footage_min: number | null
+          target_audience: string | null
+          updated_at: string
+          vibe: string | null
+        }
+        Insert: {
+          budget?: string | null
+          client?: string | null
+          created_at?: string
+          event_dates_end?: string | null
+          event_dates_start?: string | null
+          event_name?: string | null
+          event_overview?: string | null
+          id?: string
+          ideal_features?: string | null
+          neighborhoods?: string[]
+          scout_id: string
+          source_file_path?: string | null
+          square_footage_max?: number | null
+          square_footage_min?: number | null
+          target_audience?: string | null
+          updated_at?: string
+          vibe?: string | null
+        }
+        Update: {
+          budget?: string | null
+          client?: string | null
+          created_at?: string
+          event_dates_end?: string | null
+          event_dates_start?: string | null
+          event_name?: string | null
+          event_overview?: string | null
+          id?: string
+          ideal_features?: string | null
+          neighborhoods?: string[]
+          scout_id?: string
+          source_file_path?: string | null
+          square_footage_max?: number | null
+          square_footage_min?: number | null
+          target_audience?: string | null
+          updated_at?: string
+          vibe?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vs_briefs_scout_id_fkey"
+            columns: ["scout_id"]
+            isOneToOne: false
+            referencedRelation: "vs_scouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vs_candidate_venues: {
+        Row: {
+          added_manually: boolean
+          address: string | null
+          alignment_criteria: Json
+          considerations: string | null
+          created_at: string
+          features: string[]
+          id: string
+          include_in_deck: boolean
+          linked_venue_id: string | null
+          name: string
+          neighborhood: string | null
+          notes: string | null
+          order_in_deck: number | null
+          photos: Json
+          pitch_notes: string | null
+          pitched: boolean
+          rank: number | null
+          recommendations: string | null
+          research_status: Database["public"]["Enums"]["vs_research_status"]
+          scout_id: string
+          shortlisted: boolean
+          sourcing_round_id: string
+          updated_at: string
+          venue_type: string | null
+          website_url: string | null
+        }
+        Insert: {
+          added_manually?: boolean
+          address?: string | null
+          alignment_criteria?: Json
+          considerations?: string | null
+          created_at?: string
+          features?: string[]
+          id?: string
+          include_in_deck?: boolean
+          linked_venue_id?: string | null
+          name: string
+          neighborhood?: string | null
+          notes?: string | null
+          order_in_deck?: number | null
+          photos?: Json
+          pitch_notes?: string | null
+          pitched?: boolean
+          rank?: number | null
+          recommendations?: string | null
+          research_status?: Database["public"]["Enums"]["vs_research_status"]
+          scout_id: string
+          shortlisted?: boolean
+          sourcing_round_id: string
+          updated_at?: string
+          venue_type?: string | null
+          website_url?: string | null
+        }
+        Update: {
+          added_manually?: boolean
+          address?: string | null
+          alignment_criteria?: Json
+          considerations?: string | null
+          created_at?: string
+          features?: string[]
+          id?: string
+          include_in_deck?: boolean
+          linked_venue_id?: string | null
+          name?: string
+          neighborhood?: string | null
+          notes?: string | null
+          order_in_deck?: number | null
+          photos?: Json
+          pitch_notes?: string | null
+          pitched?: boolean
+          rank?: number | null
+          recommendations?: string | null
+          research_status?: Database["public"]["Enums"]["vs_research_status"]
+          scout_id?: string
+          shortlisted?: boolean
+          sourcing_round_id?: string
+          updated_at?: string
+          venue_type?: string | null
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vs_candidate_venues_linked_venue_id_fkey"
+            columns: ["linked_venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vs_candidate_venues_scout_id_fkey"
+            columns: ["scout_id"]
+            isOneToOne: false
+            referencedRelation: "vs_scouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vs_candidate_venues_sourcing_round_id_fkey"
+            columns: ["sourcing_round_id"]
+            isOneToOne: false
+            referencedRelation: "vs_sourcing_rounds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vs_pitch_decks: {
+        Row: {
+          drive_folder_path: string | null
+          generated_at: string
+          generated_by: string | null
+          google_slides_id: string | null
+          google_slides_url: string | null
+          id: string
+          scout_id: string
+          version_number: number
+        }
+        Insert: {
+          drive_folder_path?: string | null
+          generated_at?: string
+          generated_by?: string | null
+          google_slides_id?: string | null
+          google_slides_url?: string | null
+          id?: string
+          scout_id: string
+          version_number?: number
+        }
+        Update: {
+          drive_folder_path?: string | null
+          generated_at?: string
+          generated_by?: string | null
+          google_slides_id?: string | null
+          google_slides_url?: string | null
+          id?: string
+          scout_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vs_pitch_decks_generated_by_fkey"
+            columns: ["generated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vs_pitch_decks_scout_id_fkey"
+            columns: ["scout_id"]
+            isOneToOne: false
+            referencedRelation: "vs_scouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vs_scouts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          last_touched_at: string
+          name: string
+          phase: Database["public"]["Enums"]["vs_scout_phase"]
+          project_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_touched_at?: string
+          name: string
+          phase?: Database["public"]["Enums"]["vs_scout_phase"]
+          project_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_touched_at?: string
+          name?: string
+          phase?: Database["public"]["Enums"]["vs_scout_phase"]
+          project_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vs_scouts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vs_scouts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vs_sourcing_rounds: {
+        Row: {
+          generated_at: string
+          id: string
+          scout_id: string
+          source_type: Database["public"]["Enums"]["vs_sourcing_round_source_type"]
+          status: Database["public"]["Enums"]["vs_sourcing_round_status"]
+          uploaded_file_path: string | null
+        }
+        Insert: {
+          generated_at?: string
+          id?: string
+          scout_id: string
+          source_type: Database["public"]["Enums"]["vs_sourcing_round_source_type"]
+          status?: Database["public"]["Enums"]["vs_sourcing_round_status"]
+          uploaded_file_path?: string | null
+        }
+        Update: {
+          generated_at?: string
+          id?: string
+          scout_id?: string
+          source_type?: Database["public"]["Enums"]["vs_sourcing_round_source_type"]
+          status?: Database["public"]["Enums"]["vs_sourcing_round_status"]
+          uploaded_file_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vs_sourcing_rounds_scout_id_fkey"
+            columns: ["scout_id"]
+            isOneToOne: false
+            referencedRelation: "vs_scouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      current_user_role: {
+        Args: never
+        Returns: Database["public"]["Enums"]["permission_role"]
+      }
+      is_admin: { Args: never; Returns: boolean }
+      is_producer_or_admin: { Args: never; Returns: boolean }
+    }
+    Enums: {
+      permission_role: "member" | "producer" | "admin"
+      project_status:
+        | "Quoting"
+        | "Quote Sent"
+        | "On Hold"
+        | "Awaiting FB"
+        | "Awaiting Files"
+        | "Awaiting Approval"
+        | "In Progress"
+        | "Complete"
+        | "In Production"
+        | "Event Live"
+        | "Billing"
+        | "Proof Out"
+        | "Location Scouting"
+        | "In Review"
+      task_status: "todo" | "in_progress" | "blocked" | "done"
+      ts_candidate_attachment_type:
+        | "resume"
+        | "cover_letter"
+        | "portfolio"
+        | "email_pdf"
+        | "other"
+      ts_candidate_portfolio_type: "file" | "url" | "none"
+      ts_candidate_status:
+        | "consider"
+        | "promote"
+        | "reject"
+        | "fast_track"
+        | "auto_rejected"
+      ts_pull_round_status: "running" | "complete" | "failed" | "stalled"
+      ts_pull_round_triggered_by: "manual" | "scheduled"
+      ts_role_auto_pull_schedule: "off" | "daily" | "every_3_days" | "weekly"
+      ts_role_status: "open" | "closed"
+      vs_research_status: "pending" | "researching" | "complete" | "failed"
+      vs_scout_phase: "sourcing" | "deck" | "done"
+      vs_sourcing_round_source_type: "uploaded_sheet" | "ai_research"
+      vs_sourcing_round_status: "researching" | "complete" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -149,7 +1352,53 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  public: {
+  graphql_public: {
     Enums: {},
   },
+  public: {
+    Enums: {
+      permission_role: ["member", "producer", "admin"],
+      project_status: [
+        "Quoting",
+        "Quote Sent",
+        "On Hold",
+        "Awaiting FB",
+        "Awaiting Files",
+        "Awaiting Approval",
+        "In Progress",
+        "Complete",
+        "In Production",
+        "Event Live",
+        "Billing",
+        "Proof Out",
+        "Location Scouting",
+        "In Review",
+      ],
+      task_status: ["todo", "in_progress", "blocked", "done"],
+      ts_candidate_attachment_type: [
+        "resume",
+        "cover_letter",
+        "portfolio",
+        "email_pdf",
+        "other",
+      ],
+      ts_candidate_portfolio_type: ["file", "url", "none"],
+      ts_candidate_status: [
+        "consider",
+        "promote",
+        "reject",
+        "fast_track",
+        "auto_rejected",
+      ],
+      ts_pull_round_status: ["running", "complete", "failed", "stalled"],
+      ts_pull_round_triggered_by: ["manual", "scheduled"],
+      ts_role_auto_pull_schedule: ["off", "daily", "every_3_days", "weekly"],
+      ts_role_status: ["open", "closed"],
+      vs_research_status: ["pending", "researching", "complete", "failed"],
+      vs_scout_phase: ["sourcing", "deck", "done"],
+      vs_sourcing_round_source_type: ["uploaded_sheet", "ai_research"],
+      vs_sourcing_round_status: ["researching", "complete", "failed"],
+    },
+  },
 } as const
+<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
