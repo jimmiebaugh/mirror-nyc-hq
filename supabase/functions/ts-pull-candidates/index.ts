@@ -503,6 +503,7 @@ async function processOne(
       tier: r.recommendation_tier ?? null,
       portfolio_type,
       portfolio_path_or_url,
+      detected_links: classifyDetectedUrls(urls),
       last_evaluated_at: new Date().toISOString(),
     }).select("id").single();
     if (candErr) { errors.push({ step: "save", messageId: id, error: String(candErr) }); return "failed"; }
@@ -546,7 +547,6 @@ async function processOne(
     parsedResult = null;
     // bind unused imports so lint stays quiet
     void unwrapSecurityWrapper;
-    void classifyDetectedUrls;
     void LARGE_ATTACHMENT_THRESHOLD_BYTES;
   }
 

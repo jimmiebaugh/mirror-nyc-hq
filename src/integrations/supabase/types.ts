@@ -479,6 +479,7 @@ export type Database = {
         Row: {
           applied_date: string | null
           created_at: string
+          detected_links: Json
           email: string | null
           gmail_message_id: string | null
           id: string
@@ -502,6 +503,7 @@ export type Database = {
         Insert: {
           applied_date?: string | null
           created_at?: string
+          detected_links?: Json
           email?: string | null
           gmail_message_id?: string | null
           id?: string
@@ -525,6 +527,7 @@ export type Database = {
         Update: {
           applied_date?: string | null
           created_at?: string
+          detected_links?: Json
           email?: string | null
           gmail_message_id?: string | null
           id?: string
