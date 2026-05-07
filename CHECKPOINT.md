@@ -3,13 +3,13 @@
 Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-06
-**Latest commit on main:** `495a53f` — Restructure docs: split CLAUDE.md into specialized docs, add CHECKPOINT.md
-**Active feature branch:** `phase-3-5b-visual-brand` — visual brand pass under Jimmie's local review, NOT merged.
-**Current phase:** Phase 3.5b awaiting review; Phase 3.6 (Final review + packet) starts after the brand merge.
-**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirror-nyc-hq.netlify.app`) — still serving `main` (495a53f).
+**Latest commit on main:** Phase 3.5b: Visual brand pass — Mirror deck-canonical typography + dynamic brand caption (merged via FF)
+**Current phase:** Phase 3.6 (Final review + packet) — next.
+**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirror-nyc-hq.netlify.app`).
 
 ## What's live in production
 
+- **Mirror brand identity applied site-wide** (Phase 3.5b): coral `#BE4E44`, Montserrat ExtraBold display + Roboto Mono captions + Roboto body, dynamic `HQ` / `TALENT` / `VENUES` caption next to the M wordmark in the top nav based on which sub-app you're in. Brand spec lives in `docs/visual-audit/mirror-style-guide.md` with the deck-template authority (`BLANK DECK TEMPLATE (2026).pptx`).
 - Stealth coming-soon landing at `/` for unauthenticated visitors. Hidden sign-in trigger is the bottom "STRATEGY / DESIGN / PRODUCTION" line (no visible affordance, default cursor, not keyboard-focusable).
 - Authenticated users land on Dashboard. `/projects` renders the projects list. Other HQ Core pages (`/venues`, `/clients`, `/tasks`) are `<ComingSoon />` stubs.
 - Talent Scout is fully wired through Phase 3.5 for admin users:
@@ -32,11 +32,11 @@ Living-state doc. Update on every meaningful merge to `main`.
 ## Recent commits
 
 ```
-phase-3-5b-visual-brand: Phase 3.5b pass 2: Mirror brand applied per deck template  (NOT MERGED)
-phase-3-5b-visual-brand: Phase 3.5b: Visual brand pass, colors and typography aligned with source  (NOT MERGED)
+Phase 3.5b: Visual brand pass — passes 1 through 14, FF-merged from phase-3-5b-visual-brand
 495a53f  Restructure docs: split CLAUDE.md into specialized docs, add CHECKPOINT.md
 f96e800  Add netlify.toml: explicit Vite build config + SPA redirect fallback
 a427116  Use authoritative Mirror wordmark SVG; bump landing logo + text 20%; restore HQ title metadata
+568fa7a  Add coming-soon stealth landing with hidden sign-in trigger
 ```
 
 ## Recent migrations
@@ -57,15 +57,7 @@ a427116  Use authoritative Mirror wordmark SVG; bump landing logo + text 20%; re
 
 ## Next up
 
-**Phase 3.5b — Visual brand pass.** Code-level brand alignment is done on `phase-3-5b-visual-brand`. Awaiting Jimmie's local review:
-
-```
-git fetch && git checkout phase-3-5b-visual-brand && npm run dev
-```
-
-Walk through every page on localhost. Use `docs/visual-audit/audit-trail.md` as the click-through checklist (every change is listed with file/line). On approval, FF-merge to main; Netlify auto-deploys.
-
-**Phase 3.6: Final review + packet.** Starts after Phase 3.5b merges. See `docs/roadmap.md` for the full plan. Two new edge functions (`ts-final-review`, `ts-packet-generate`) plus FinalReviewLoading + FinalReviewDetail pages. Q5 reminder: read source's `generate-packet` vs `generate-final-review-packet` before implementing to confirm whether to build one function or two.
+**Phase 3.6: Final review + packet.** See `docs/roadmap.md` for the full plan. Two new edge functions (`ts-final-review`, `ts-packet-generate`) plus FinalReviewLoading + FinalReviewDetail pages. Q5 reminder: read source's `generate-packet` vs `generate-final-review-packet` before implementing to confirm whether to build one function or two.
 
 ## How to update this file
 
