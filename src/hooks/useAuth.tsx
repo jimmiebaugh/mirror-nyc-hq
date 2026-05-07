@@ -19,7 +19,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    // Phase 3.6.14: diagnostic logging for OAuth debugging on production.
+    // Remove once OAuth is verified stable.
+    console.log("[auth] mount", {
+      url: window.location.href,
+      hasHash: !!window.location.hash,
+      hasCode: window.location.search.includes("code="),
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      console.log("[auth] state change", { event, hasSession: !!newSession, email: newSession?.user?.email });
       if (newSession?.user && !isAllowedEmail(newSession.user.email)) {
         // Belt-and-suspenders: kick non-mirrornyc accounts out immediately.
         setSession(null);
@@ -37,7 +46,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session: existing } }) => {
+    supabase.auth.getSession().then(({ data: { session: existing }, error }) => {
+      console.log("[auth] getSession result", { hasSession: !!existing, error: error?.message });
       if (existing?.user && !isAllowedEmail(existing.user.email)) {
         supabase.auth.signOut();
         setSession(null);
