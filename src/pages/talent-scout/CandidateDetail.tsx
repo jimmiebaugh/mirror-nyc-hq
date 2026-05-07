@@ -214,7 +214,7 @@ export default function CandidateDetail() {
             <Card>
               <CardContent className="space-y-3 p-6">
                 <div className="flex items-start justify-between gap-4">
-                  <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary">
+                  <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
                     Recruiter Overview
                   </div>
                   <div
@@ -230,7 +230,7 @@ export default function CandidateDetail() {
           )}
 
           <Card className="overflow-hidden">
-            <div className="border-b border-border px-6 py-4 text-[11px] font-mono font-bold uppercase tracking-wider text-primary">
+            <div className="border-b border-border px-6 py-4 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
               Files & Materials
             </div>
             {attachments.length === 0 && detectedLinks.length === 0 && !portfolioPath && !portfolioWeb && (
@@ -285,7 +285,7 @@ export default function CandidateDetail() {
 
             {(portfolioPath || portfolioWeb) && (
               <>
-                <div className="border-t border-border bg-secondary/30 px-6 py-3 text-[11px] font-mono font-bold uppercase tracking-wider text-primary">
+                <div className="border-t border-border bg-secondary/30 px-6 py-3 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
                   Portfolio
                 </div>
                 <div className="divide-y divide-border">
@@ -334,7 +334,7 @@ export default function CandidateDetail() {
           {(cand.top_strengths as unknown[] | null)?.length ? (
             <Card>
               <CardContent className="space-y-3 p-6">
-                <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary">Top Strengths</div>
+                <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">Top Strengths</div>
                 <ul className="space-y-2 text-sm">
                   {(cand.top_strengths as string[]).map((s, i) => (
                     <li key={i} className="flex gap-2">
@@ -350,7 +350,7 @@ export default function CandidateDetail() {
           {(cand.key_gaps as unknown[] | null)?.length ? (
             <Card>
               <CardContent className="space-y-3 p-6">
-                <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary">Key Gaps</div>
+                <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">Key Gaps</div>
                 <ul className="space-y-2 text-sm">
                   {(cand.key_gaps as string[]).map((s, i) => (
                     <li key={i} className="flex gap-2">
@@ -368,7 +368,7 @@ export default function CandidateDetail() {
         <div className="flex min-w-0 flex-col gap-6">
           <Card>
             <CardContent className="space-y-3 p-6">
-              <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary">Internal Notes</div>
+              <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">Internal Notes</div>
               <Textarea
                 value={notes}
                 onChange={(e) => onNotesChange(e.target.value)}
@@ -383,7 +383,7 @@ export default function CandidateDetail() {
           </Card>
 
           <Card className="overflow-hidden">
-            <div className="border-b border-border px-6 py-4 text-[11px] font-mono font-bold uppercase tracking-wider text-primary">
+            <div className="border-b border-border px-6 py-4 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
               Score Breakdown
             </div>
             <div className="space-y-5 p-6">
@@ -421,7 +421,7 @@ export default function CandidateDetail() {
               return (
                 <div className="flex items-end justify-between border-t border-border bg-secondary/30 p-6">
                   <div>
-                    <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-muted-foreground">Total</div>
+                    <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-muted-foreground">Total</div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {bonus > 0 ? `${base} base + ${bonus} bonus` : `${base} pts`}
                       {cand.tier ? ` · Tier ${cand.tier}` : ""}

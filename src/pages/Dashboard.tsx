@@ -21,7 +21,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-10">
       <header className="space-y-2">
-        <div className="text-xs uppercase tracking-widest text-primary">Dashboard</div>
+        <div className="text-xs font-mono uppercase tracking-widest text-primary">Dashboard</div>
         <h1 className="h-page">
           Welcome, {firstName(user)}
         </h1>

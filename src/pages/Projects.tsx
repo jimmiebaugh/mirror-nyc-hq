@@ -52,7 +52,7 @@ export default function Projects() {
   return (
     <div className="space-y-8">
       <header className="space-y-2">
-        <div className="text-xs uppercase tracking-widest text-primary">Projects</div>
+        <div className="text-xs font-mono uppercase tracking-widest text-primary">Projects</div>
         <h1 className="h-page">All projects</h1>
       </header>
 
@@ -64,7 +64,7 @@ export default function Projects() {
         </Card>
       ) : (
         <Card className="border-border overflow-hidden">
-          <div className="grid grid-cols-12 gap-4 border-b border-border px-6 py-3 text-xs uppercase tracking-wider text-muted-foreground">
+          <div className="grid grid-cols-12 gap-4 border-b border-border px-6 py-3 text-xs font-mono uppercase tracking-wider text-muted-foreground">
             <div className="col-span-4">Project</div>
             <div className="col-span-3">Client</div>
             <div className="col-span-2">Status</div>

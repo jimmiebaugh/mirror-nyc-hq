@@ -63,7 +63,7 @@ export default function NewRoleSearch() {
       <Card>
         <CardContent className="space-y-6 p-6">
           <div className="space-y-2">
-            <Label className="text-xs font-mono font-bold uppercase tracking-wider text-primary">
+            <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
               Subject line keywords
               <span className="ml-2 text-[11px] font-normal normal-case tracking-normal text-muted-foreground">
                 Add every variant you want to catch · press Enter
@@ -82,7 +82,7 @@ export default function NewRoleSearch() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label className="text-xs font-mono font-bold uppercase tracking-wider text-primary">
+              <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
                 Start pulling from
               </Label>
               <Input
@@ -96,7 +96,7 @@ export default function NewRoleSearch() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-mono font-bold uppercase tracking-wider text-primary">
+              <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
                 Scheduled auto-pull
                 <span className="ml-2 text-[11px] font-normal normal-case tracking-normal text-muted-foreground">Optional</span>
               </Label>

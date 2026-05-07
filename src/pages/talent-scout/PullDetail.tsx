@@ -502,7 +502,7 @@ export default function PullDetail() {
               reevalCancelRef.current = true;
               setReevalState((s) => ({ ...s, running: false }));
             }}
-            className="ml-2 text-[11px] font-mono font-bold uppercase tracking-wider underline opacity-90 hover:opacity-100"
+            className="ml-2 text-[13px] font-mono font-bold uppercase tracking-wider underline opacity-90 hover:opacity-100"
           >
             Cancel
           </button>

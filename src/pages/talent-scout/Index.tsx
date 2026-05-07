@@ -58,7 +58,7 @@ const GRID = "grid-cols-[minmax(0,2fr)_140px_140px_140px_90px_90px_180px]";
 function RoleHeader() {
   return (
     <div
-      className={`grid ${GRID} gap-4 border-b border-border bg-secondary/30 px-5 py-3 text-[11px] font-mono font-bold uppercase tracking-wider text-muted-foreground`}
+      className={`grid ${GRID} gap-4 border-b border-border bg-secondary/30 px-5 py-3 text-[13px] font-mono font-bold uppercase tracking-wider text-muted-foreground`}
     >
       <div>Role / Hiring Manager</div>
       <div>Role Posted</div>
@@ -111,14 +111,14 @@ function RoleRow({
             <button
               type="button"
               onClick={() => onReopen?.(r.id)}
-              className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary hover:underline"
+              className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary hover:underline"
             >
               Reopen
             </button>
             <button
               type="button"
               onClick={() => onDelete?.(r)}
-              className="text-[11px] font-mono font-bold uppercase tracking-wider text-red-400 hover:text-red-300 hover:underline"
+              className="text-[13px] font-mono font-bold uppercase tracking-wider text-red-400 hover:text-red-300 hover:underline"
             >
               Delete
             </button>
@@ -126,7 +126,7 @@ function RoleRow({
         ) : (
           <Link
             to={`/talent-scout/roles/${r.id}/settings`}
-            className="text-[11px] font-mono font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            className="text-[13px] font-mono font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
           >
             Settings
           </Link>
@@ -301,7 +301,7 @@ export default function TalentScoutIndex() {
         <button
           type="button"
           onClick={() => setClosedOpen((v) => !v)}
-          className="flex w-full items-center gap-3 rounded-md border border-border bg-card px-5 py-3 text-left text-xs font-mono font-bold uppercase tracking-wider transition-colors hover:bg-secondary/40"
+          className="flex w-full items-center gap-3 rounded-md border border-border bg-card px-5 py-3 text-left text-[13px] font-mono font-bold uppercase tracking-wider transition-colors hover:bg-secondary/40"
         >
           <ChevronRight
             className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${closedOpen ? "rotate-90" : ""}`}

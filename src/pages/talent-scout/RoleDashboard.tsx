@@ -272,7 +272,7 @@ export default function RoleDashboard() {
           <CardContent className="p-6">
             <div className="flex items-start justify-between gap-6">
               <div className="shrink-0">
-                <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary">Pull Rounds</div>
+                <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">Pull Rounds</div>
                 <div className="mt-1 text-xs text-muted-foreground">Each pull is reviewed as its own batch</div>
               </div>
               <div className="grid min-w-0 flex-1 grid-cols-3 gap-3">
@@ -336,7 +336,7 @@ export default function RoleDashboard() {
                   <button
                     type="button"
                     onClick={() => setShowAllRounds((s) => !s)}
-                    className="text-xs font-mono font-bold uppercase tracking-wider text-primary underline hover:opacity-80"
+                    className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary underline hover:opacity-80"
                   >
                     {showAllRounds ? "Show fewer" : `Show all (${rounds.length})`}
                   </button>

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { MirrorMark } from "@/components/MirrorMark";
 import { LogOut } from "lucide-react";
 
 type NavItem = { to: string; label: string; end?: boolean; adminOnly?: boolean };
@@ -36,12 +37,14 @@ export default function AppShell() {
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-6">
           <div className="flex items-center gap-8">
-            <NavLink to="/" className="flex items-center gap-2">
-              {/* Mirror brand mark — Montserrat ExtraBold uppercase per the
-                  deck template's display treatment. The "HQ" suffix stays
-                  coral as the brand accent. */}
-              <span className="font-display text-[15px] font-extrabold uppercase tracking-tight">
-                Mirror NYC <span className="text-primary">HQ</span>
+            <NavLink to="/" className="flex items-center gap-3 text-foreground">
+              {/* Mirror M wordmark + HQ caption. The mark IS the brand, so
+                  no "Mirror NYC" text — that'd be redundant. "HQ" sits to
+                  the right in mono coral as the app identifier, mirroring
+                  the deck's "M | TALENT SCOUT" header pattern. */}
+              <MirrorMark className="h-6 w-auto" />
+              <span className="hidden sm:inline font-mono text-[12px] font-bold uppercase tracking-[0.12em] text-primary">
+                HQ
               </span>
             </NavLink>
             <nav className="hidden md:flex items-center gap-1">

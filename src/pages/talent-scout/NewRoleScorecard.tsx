@@ -251,7 +251,7 @@ export default function NewRoleScorecard() {
           <div key={tier} className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className={cn("inline-flex items-center rounded-sm border px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-wider", meta.color)}>
+                <span className={cn("inline-flex items-center rounded-sm border px-2.5 py-1 text-[13px] font-mono font-bold uppercase tracking-wider", meta.color)}>
                   {meta.label}
                 </span>
                 <span className="text-xs text-muted-foreground">{meta.subtitle}</span>
@@ -266,7 +266,7 @@ export default function NewRoleScorecard() {
               <button
                 type="button"
                 onClick={() => addManual(tier)}
-                className="w-full rounded-md border border-dashed border-border py-3 text-xs font-mono font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                className="w-full rounded-md border border-dashed border-border py-3 text-[13px] font-mono font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary hover:text-primary"
               >
                 + Add tier {tier} criterion
               </button>
@@ -281,7 +281,7 @@ export default function NewRoleScorecard() {
             <div className="flex items-center gap-3">
               {/* Source's tier-badge--bonus uses coral primary (#ef5b5b),
                   not purple. Aligned in Phase 3.5b. */}
-              <span className="inline-flex items-center rounded-sm border border-primary/40 bg-primary/15 px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-wider text-primary">
+              <span className="inline-flex items-center rounded-sm border border-primary/40 bg-primary/15 px-2.5 py-1 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
                 Bonus — Competitor Experience
               </span>
               <span className="text-xs text-muted-foreground">Up to +{COMPETITOR_BONUS_POINTS} bonus points</span>

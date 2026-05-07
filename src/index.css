@@ -153,24 +153,28 @@
     font-family: var(--font-display);
     letter-spacing: -0.005em;
   }
+  /* Roboto Mono renders ~10% wider than Inter, so caption sizes that read
+     "right" in Inter feel undersized in mono. The base label/eyebrow size
+     bumped from 11px to 13px in the post-deck-template review pass; small
+     captions (10–11px) are reserved for in-tile sub-labels and pill text. */
   .label-section {
-    @apply text-[11px] font-bold uppercase text-foreground;
+    @apply text-[13px] font-bold uppercase text-foreground;
     font-family: var(--font-mono);
     letter-spacing: 0.06em;
   }
   .label-form {
-    @apply text-[11px] font-bold uppercase text-foreground;
+    @apply text-[13px] font-bold uppercase text-foreground;
     font-family: var(--font-mono);
     letter-spacing: 0.06em;
   }
   .crumb {
-    @apply text-[11px] font-medium uppercase;
+    @apply text-[12px] font-medium uppercase;
     font-family: var(--font-mono);
     color: hsl(var(--primary));
     letter-spacing: 0.08em;
   }
   .eyebrow {
-    @apply text-[11px] font-bold uppercase;
+    @apply text-[12px] font-bold uppercase;
     font-family: var(--font-mono);
     color: hsl(var(--primary));
     letter-spacing: 0.08em;

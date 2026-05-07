@@ -23,7 +23,7 @@ export function RoundStatusPill({ status }: Props) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-wider",
+        "inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-[13px] font-mono font-bold uppercase tracking-wider",
         isRunning && "border-amber-500/30 bg-amber-500/10 text-amber-500",
         isFailed && "border-red-500/30 bg-red-500/10 text-red-500",
       )}
