@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
@@ -25,12 +25,23 @@ const navItems: NavItem[] = [
   { to: "/talent-scout", label: "Talent Scout", adminOnly: true },
 ];
 
+// Brand caption next to the M wordmark — reflects which app surface
+// the user is currently inside. Defaults to HQ for the core dashboard
+// surfaces (/, /projects, /venues, /clients, /tasks).
+function brandCaptionFor(pathname: string) {
+  if (pathname.startsWith("/talent-scout")) return "TALENT";
+  if (pathname.startsWith("/venue-scout")) return "VENUES";
+  return "HQ";
+}
+
 export default function AppShell() {
   const { user, signOut } = useAuth();
   const { isAdmin } = useUserRole();
+  const location = useLocation();
   const email = user?.email ?? "";
   const initials = email.slice(0, 2).toUpperCase();
   const visibleNav = navItems.filter((item) => !item.adminOnly || isAdmin);
+  const brandCaption = brandCaptionFor(location.pathname);
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,7 +58,7 @@ export default function AppShell() {
                   the deck's "M | TALENT SCOUT" header pattern. */}
               <MirrorMark className="h-[42px] w-auto" />
               <span className="hidden sm:inline font-mono text-[14px] font-bold uppercase tracking-[0.12em] text-primary">
-                HQ
+                {brandCaption}
               </span>
             </NavLink>
             <nav className="hidden md:flex items-center gap-1">
