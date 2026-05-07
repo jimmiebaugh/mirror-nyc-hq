@@ -45,7 +45,7 @@ export default function AppShell() {
                   no "Mirror NYC" text — that'd be redundant. "HQ" sits to
                   the right in mono coral as the app identifier, mirroring
                   the deck's "M | TALENT SCOUT" header pattern. */}
-              <MirrorMark className="h-10 w-auto" />
+              <MirrorMark className="h-12 w-auto" />
               <span className="hidden sm:inline font-mono text-[14px] font-bold uppercase tracking-[0.12em] text-primary">
                 HQ
               </span>
