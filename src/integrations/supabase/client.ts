@@ -1,17 +1,20 @@
-// Phase 3.6.16: hardcoded publishable key (was VITE_SUPABASE_PUBLISHABLE_KEY
-// env var). The Supabase project was migrated to the new sb_publishable_* /
-// sb_secret_* key system, and the legacy JWT anon key (still displayed in
-// the dashboard's "Legacy" tab) returns 401 against /auth/v1 endpoints.
-// Netlify's env var was holding the legacy JWT. Hardcoding the publishable
-// key here is the recommended pattern: publishable keys are designed to be
-// safely exposed in client bundles, no different from the anon JWT was.
+// Phase 3.6.18: reverted to env-var pattern now that Netlify + local .env
+// hold the new sb_publishable_* key (Phase 3.6.16 hardcoded fallback was
+// shipped while the env var was still on the dead legacy JWT).
 //
-// If/when the Supabase project is rotated or replaced, update both values.
+// Hardcoded fallbacks remain so a missing env var doesn't break the app at
+// runtime; if/when this Supabase project is rotated, update either the env
+// var or the literals below. Publishable keys are safe to expose in the
+// bundle (same security posture the legacy anon JWT had).
+//
+// IMPORTANT: never put the secret key (sb_secret_*) here. Server-only.
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://amipjjmphblfxpghjnel.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_glongs0Rm7PW5HK8XAqwzA_clq7Hw-4";
+const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL ?? "https://amipjjmphblfxpghjnel.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "sb_publishable_glongs0Rm7PW5HK8XAqwzA_clq7Hw-4";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

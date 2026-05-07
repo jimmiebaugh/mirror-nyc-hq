@@ -71,7 +71,7 @@ Auto-deploys on push to `main`. Build status visible in Netlify Dashboard → De
 If a deploy fails:
 1. Check Netlify Deploys page for the failed build's logs.
 2. Common causes:
-   - Missing env var (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) in the Site → Environment settings. Note: as of Phase 3.6.16 these values are also hardcoded in `src/integrations/supabase/client.ts` (the hardcoded values are authoritative). If you re-introduce the env-var pattern, both Netlify env and local `.env` need the new `sb_publishable_*` value, not the legacy JWT anon key — the legacy key returns 401 against `/auth/v1`.
+   - Missing env var (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) in the Site → Environment settings. Note: `client.ts` carries the same values as a hardcoded fallback (Phase 3.6.18), so a missing env var won't break the app — but if the env var is set to a stale value (e.g. the legacy JWT anon key), Vite inlines that and overrides the fallback. The legacy JWT anon key returns 401 against `/auth/v1`.
    - GitHub deploy key expired (`Host key verification failed` in the prep stage). Fix by re-linking the repo in Netlify Dashboard → Site settings → Build & deploy → Repository.
    - TypeScript errors. Run `npm run build` locally to reproduce.
 
