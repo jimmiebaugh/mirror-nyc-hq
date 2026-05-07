@@ -7,22 +7,22 @@ import type { Database } from "@/integrations/supabase/types";
 
 export type CandidateStatus = Database["public"]["Enums"]["ts_candidate_status"];
 
-type Opt = { value: CandidateStatus; label: string; cls: string; aiOnly?: boolean };
+type Opt = { value: CandidateStatus; label: string; cls: string; colorHex: string; aiOnly?: boolean };
 
 // Manual options first, in admin-relevance order. auto_rejected is shown only
 // when the AI set it; admins can't pick it manually (Source repo pattern).
 // Status labels are past-tense states ("Rejected"); bulk-action buttons in
 // CandidateTable are imperative verbs ("Reject") — distinct affordances.
+//
+// colorHex is the solid 500-shade (or 400 for auto_rejected) used for inline
+// styling like the row left-border in CandidateTable. cls is the Tailwind
+// compound for the pill itself.
 const OPTIONS: Opt[] = [
-  // Status colors aligned with source's StatusDropdown (Phase 3.5b):
-  // text uses 500-shade hex equivalents (cyan-500 #06b6d4, purple-500 #a855f7,
-  // amber-500 #f59e0b, red-500 #ef4444). auto_rejected stays muted (red-400/80)
-  // since it's AI-only / disabled and shouldn't read as a live action color.
-  { value: "interview",     label: "Interview",     cls: "bg-cyan-500/10 text-cyan-500 border-cyan-500/40" },
-  { value: "fast_track",    label: "Fast-Track",    cls: "bg-purple-500/10 text-purple-500 border-purple-500/40" },
-  { value: "consider",      label: "Consider",      cls: "bg-amber-500/10 text-amber-500 border-amber-500/30" },
-  { value: "reject",        label: "Rejected",      cls: "bg-red-500/10 text-red-500 border-red-500/40" },
-  { value: "auto_rejected", label: "Auto-Rejected", cls: "bg-red-500/5 text-red-400/80 border-red-500/20", aiOnly: true },
+  { value: "interview",     label: "Interview",     cls: "bg-cyan-500/10 text-cyan-500 border-cyan-500/40",       colorHex: "#06b6d4" },
+  { value: "fast_track",    label: "Fast-Track",    cls: "bg-purple-500/10 text-purple-500 border-purple-500/40", colorHex: "#a855f7" },
+  { value: "consider",      label: "Consider",      cls: "bg-amber-500/10 text-amber-500 border-amber-500/30",   colorHex: "#f59e0b" },
+  { value: "reject",        label: "Rejected",      cls: "bg-red-500/10 text-red-500 border-red-500/40",         colorHex: "#ef4444" },
+  { value: "auto_rejected", label: "Auto-Rejected", cls: "bg-red-500/5 text-red-400/80 border-red-500/20",       colorHex: "#f87171", aiOnly: true },
 ];
 
 export function statusStyle(v: string | null | undefined) {

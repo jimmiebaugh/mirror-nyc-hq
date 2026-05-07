@@ -356,8 +356,20 @@ export default function FinalReviewDetail() {
                       <span className="font-display text-[20px] font-extrabold tabular-nums text-primary leading-none">{rank}</span>
                       <span className="text-[16px] font-bold leading-tight">{c?.name ?? "—"}</span>
                     </div>
+                    {/* Phase 3.7.1: email is a mailto link. stopPropagation
+                        keeps the row's navigation onClick from firing. */}
                     <div className="text-[12px] text-muted-foreground mt-1 ml-[34px] truncate max-w-[220px]">
-                      {c?.email ?? ""}
+                      {c?.email ? (
+                        <a
+                          href={`mailto:${c.email}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="hover:text-foreground hover:underline"
+                        >
+                          {c.email}
+                        </a>
+                      ) : (
+                        ""
+                      )}
                     </div>
                     <div className="text-[12.5px] text-muted-foreground mt-0.5 ml-[34px]">
                       {c?.applied_date ? `Applied ${new Date(c.applied_date).toLocaleDateString()}` : "—"}

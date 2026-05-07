@@ -20,7 +20,7 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { unwrapSecurityWrapper } from "@/lib/unwrapUrl";
 import { ScoreInline } from "@/components/talent-scout/ScoreInline";
-import { StatusDropdown } from "@/components/talent-scout/StatusDropdown";
+import { StatusDropdown, statusStyle } from "@/components/talent-scout/StatusDropdown";
 import type { Database } from "@/integrations/supabase/types";
 
 export type CandidateRow = Database["public"]["Tables"]["ts_candidates"]["Row"];
@@ -574,9 +574,13 @@ function Row({
   dim?: boolean;
 }) {
   const overview = (c.quick_overview as string[] | null) ?? null;
+  // Phase 3.7.1: row gets a left-border in the candidate's status color, same
+  // pattern as FinalReviewDetail's rationale cell (inline borderColor hex).
+  const rowAccent = statusStyle(c.status).colorHex;
   return (
     <div
       onClick={onRowClick}
+      style={{ borderLeft: `3px solid ${rowAccent}` }}
       className={cn(
         "grid",
         GRID_COLS,
@@ -588,7 +592,19 @@ function Row({
       {/* Candidate stack — diagnostic tint removed (Phase 3.6.9). */}
       <div className="min-w-0 pr-2">
         <div className="truncate text-[16px] font-bold leading-tight">{c.name ?? "—"}</div>
-        <div className="mt-1 truncate text-[12px] text-muted-foreground">{c.email ?? ""}</div>
+        {/* Phase 3.7.1: email is a mailto link. stopPropagation prevents
+            the row's onRowClick from firing when clicking the email. */}
+        {c.email ? (
+          <a
+            href={`mailto:${c.email}`}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-1 block truncate text-[12px] text-muted-foreground hover:text-foreground hover:underline"
+          >
+            {c.email}
+          </a>
+        ) : (
+          <div className="mt-1 truncate text-[12px] text-muted-foreground">—</div>
+        )}
         <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
           {c.applied_date
             ? `Applied ${new Date(c.applied_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`

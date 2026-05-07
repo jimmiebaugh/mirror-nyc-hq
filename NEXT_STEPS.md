@@ -1,68 +1,58 @@
 # Next Steps
 
-Ordered most-immediate first. Branch is `phase-3-6-final-review-packet`, latest commit `d6a53d6`, working tree clean.
+Ordered most-immediate first. On `main`. Working tree clean (or about to be after the in-flight Pass commits).
 
-## 1. Jimmie reviews latest visual state
+Phase 3.7 is in progress: **Candidates UX + referral ingestion**. Five small passes. Cron + watchdogs got pushed to Phase 3.8.
 
-- **Goal:** Get sign-off (or another revision request) on the CandidateTable layout after `d6a53d6` (15px padding between Portfolio and Quick Overview).
-- **Files to look at:** `src/components/talent-scout/CandidateTable.tsx` rendered on `/talent-scout/roles/[id]` (RoleDashboard) and `/talent-scout/roles/[id]/pulls/[pullId]` (PullDetail).
-- **External dep:** Waiting on Jimmie. He may come back with another nudge or say it's done.
-- **Gotcha:** Local dev needs to be running. Use `http://127.0.0.1:8080/`, not `localhost:8080` (Vite binds IPv6, Chrome misroutes localhost).
+## 1. Phase 3.7.1 — mailto + row left-border  ✓ LANDED
 
-## 2. Verify packet-generate end-to-end after the WORKER_RESOURCE_LIMIT fix
+Email cells across CandidateTable, CandidateDetail, FinalReviewDetail are now `mailto:` links. Each candidate row in CandidateTable gets a 3px left-border in its status color via inline `borderLeft` style (matches the FinalReviewDetail rationale-cell pattern). `statusStyle()` in `StatusDropdown.tsx` now exposes a `colorHex` field per option.
 
-- **Goal:** Confirm `ts-final-review-packet` actually generates a PDF, uploads to the `packets` bucket, and sends the signed-URL email. The fix landed in this conversation but the path was not retested after the change.
-- **Files involved:**
-  - `supabase/functions/ts-final-review-packet/index.ts`
-  - `supabase/functions/_shared/packetRender.ts` (`uploadPacketAndSign`, `sendPacketEmail`)
-- **How:** From the FinalReviewDetail page, click "Generate Packet". Watch Edge Function logs (`supabase functions logs ts-final-review-packet --tail`). Confirm:
-  - PDF lands in the `packets` bucket
-  - Email arrives with signed URL link in body (no MIME attachment)
-  - Signed URL opens in browser
-- **Gotcha:** Two URLs in play — 1h `signedUrl` for browser, 7d `emailUrl` for email body. If links 404 after a few hours, that's expected; not a bug.
+## 2. Phase 3.7.2 — `manually_reviewed` field + auto/manual pill
 
-## 3. Confirm the Phase 3.6 migration state
+- **Migration:** add `manually_reviewed boolean not null default false` to `ts_candidates`.
+- **Edge Functions:** no changes needed for initial AI eval (defaults to false). For re-eval (`ts-evaluate-candidate`, `ts-bulk-reevaluate`, round-scoped re-eval), if the candidate row has `manually_reviewed = true`, write the new score / breakdown / strengths / gaps / overview but DO NOT update `status`. Keep the user's status decision intact.
+- **`StatusDropdown.tsx`:** `onValueChange` should also set `manually_reviewed = true`. Remove the `if (next === current) return;` short-circuit so re-selecting the same value still flips reviewed.
+- **`CandidateTable.tsx`:** under the Status dropdown in each row, render a small grey pill: `auto` if `manually_reviewed=false`, `manual` if true. When `manually_reviewed=false`, the row gets a slightly lighter background tint (try `bg-white/[0.02]` or similar). Click on the `auto` pill flips to manual (one-way only). When the referral pill is also rendered (Pass 5), the two pills go side-by-side — combined width ~50%/50% of the status column (132px → ~66px each).
+- **Bulk actions:** the bulk-action handlers in CandidateTable that update status should also set `manually_reviewed = true` for every row in the action.
+- **`CandidateDetail.tsx`:** stack the same auto/manual pill below the status dropdown.
+- **Gotcha:** existing rows backfill to `false` (so they render as `auto`). That's correct — they were created via AI eval before this field existed.
 
-- **Goal:** Know whether `20260506213340_phase_3_6_final_review_and_packets.sql` is applied to local AND production Supabase, and whether it still includes `final_overview` if that column was added there.
-- **How:**
-  ```
-  supabase migration list --linked
-  ```
-  Compare local vs remote. If `final_overview` column exists on `ts_final_reviews` and we no longer write to it, decide: drop column in a follow-up migration, or leave it as dead column for now.
-- **Gotcha:** CHECKPOINT.md (last updated 2026-05-06) still says this migration is not yet applied. That's stale — `ts-final-review` ran successfully which means it's at least applied locally. Production status unverified from this conversation.
+## 3. Phase 3.7.3 — CandidateDetail card layout reorg
 
-## 4. Update CHECKPOINT.md before merging to main
+- Restructure the cards on `src/pages/talent-scout/CandidateDetail.tsx` into a 3×2 grid:
+  - R1: Files & Materials (L) | Recruiter Overview (R)
+  - R2: Top Strengths (L) | Key Gaps (R)
+  - R3: Internal Notes (L) | Score Breakdown (R)
+- Use Tailwind `grid grid-cols-2 gap-6` with `items-start` so each row's cards top-align even when heights differ. Default CSS Grid row behavior handles this.
+- Pure layout, no schema/logic.
 
-- **Goal:** Bring CHECKPOINT.md current. It was last touched 2026-05-06 and predates the entire 3.6.1 → 3.6.11 iteration.
-- **What to update:**
-  - Latest commit on the active branch
-  - "What's on the active branch" section — reflect current state (CloudConvert removed, prompts consolidated, ScoreInline, etc.)
-  - "Recent commits" list
-  - Migration status (see step 3)
-- **Gotcha:** Project rule from `CLAUDE.md`: update CHECKPOINT.md on every meaningful merge to main. So this should land before the merge, not after.
+## 4. Phase 3.7.4 — Scorecard 100-point cap
 
-## 5. Merge `phase-3-6-final-review-packet` to `main`
+- Tighten the prompt in `supabase/functions/_shared/prompts.ts` (`scorecardGenerationPrompt`) — restate "Total weights = 100 points (HARD)" and explicitly say "If your selections don't sum to 100, scale them proportionally before returning."
+- Add a post-Claude normalizer in `supabase/functions/ts-generate-scorecard/index.ts`: after parsing, sum `criteria[].weight`. If `sum !== 100`, multiply each weight by `100 / sum` and round; fix the delta on the largest weight so the sum is exactly 100.
+- Optional: surface a non-blocking warning in the wizard's step-3 UI if Claude returned non-100 (defensive — prompt + normalizer should make this rare).
 
-- **Goal:** Ship Phase 3.6 to production.
-- **Pre-merge checks:**
-  - Steps 1-4 complete
-  - `npx tsc --noEmit` clean
-  - `npm run build` clean
-  - Phase 3.6 migration applied on production via `supabase db push --linked`
-  - Updated types committed: `supabase gen types typescript --linked > /tmp/types.ts && test -s /tmp/types.ts && mv /tmp/types.ts src/integrations/supabase/types.ts`
-- **Gotcha:** Don't pipe `supabase gen types` directly into the file. Shell `>` truncates first; if the gen fails the file ends up empty (this happened mid-conversation, recovered via `git checkout`).
-- **Gotcha:** `docs/decisions.md` and `docs/schema.md` should be updated in the same commit if schema changed.
+## 5. Phase 3.7.5 — Referral ingestion
 
-## 6. Phase 3.7 — Cron + watchdogs
+The biggest pass. Forwards from Mirror managers should ingest the original applicant.
 
-- **Goal:** Schedule the things that currently require a manual button. Per `docs/roadmap.md` and CHECKPOINT, Phase 3.7 starts after 3.6 merges.
-- **Scope (from CHECKPOINT context, verify against `docs/roadmap.md` before starting):**
-  - Scheduled candidate pulls (currently manual)
-  - Watchdog jobs to clean up stuck rounds / stale state
-  - `monthly-spend-reset` cron for `cap_alert_sent_this_month` (currently manual SQL reset)
-- **Gotcha:** Don't start until Phase 3.6 merges. The active branch already touches some of the same surfaces (Edge Functions, Realtime publication).
+- **Migration:** add to `ts_candidates`:
+  - `is_referral boolean not null default false`
+  - `referrer_email text` (nullable; only set when `is_referral=true`)
+- **`ts-pull-candidates/index.ts`:** for each Gmail message in the role's pull window:
+  - If sender domain is `mirrornyc.com` AND the subject matches the role's existing search settings (the same filter that's already applied to direct-jobs@ messages), treat as a potential referral.
+  - Parse the message body to find the forwarded original. Standard markers: `---------- Forwarded message ---------` (Gmail), `Begin forwarded message:` (Apple Mail), `From: <name> <email@host>` header block (Outlook). Extract the original sender's email + name, the original subject, the original body.
+  - Use the original sender as the candidate identity (name, email). Set `is_referral=true`, `referrer_email = manager's email`. Otherwise the eval pipeline runs identically — eval prompt is BLIND to referral status.
+  - Attachments: forwarded MIME messages typically preserve attachments as parts. Pull them through the existing attachment pipeline.
+- **Frontend pill:** when `is_referral=true`, render an electric-blue pill (try `#3b82f6` / blue-500) inline-right of the auto/manual pill. When BOTH pills are rendered, each is ~50% of the status column width (132px column → roughly 64-66px each pill).
+- **Edge cases to handle:**
+  - Same candidate emails jobs@ directly AND gets forwarded: dedupe on email address. First-write wins; if direct came first, don't flip to referral; if referral came first, leave is_referral=true even after a direct email arrives.
+  - Forward chains (manager A forwards to jobs@, but the original email itself was a forward to manager A): only unwrap once. Use the deepest "From" email as the candidate.
+  - Plain-text vs HTML body: handle both. The existing email parser likely covers this.
 
-## Cross-cutting cleanup queued for a future migration
+## Other open items (queued, not strictly part of 3.7)
 
-- Drop `ts_pull_rounds.reeval_last_progress_at` (dead since Phase 3.5).
-- Possibly drop `ts_final_reviews.final_overview` if the migration added it (see step 3).
+- **Verify `ts-final-review-packet` end-to-end** after the WORKER_RESOURCE_LIMIT fix. Then flip `PACKET_FEATURE_ENABLED` from `false` to `true` in `PullDetail.tsx` + `FinalReviewDetail.tsx`.
+- **Drop dead column:** `ts_pull_rounds.reeval_last_progress_at` (replaced by `ts_roles` reeval state in Phase 3.5). Cleanup migration whenever convenient.
+- **`monthly-spend-reset` cron** — `cap_alert_sent_this_month` doesn't auto-reset. Lands with Phase 3.8 cron work.

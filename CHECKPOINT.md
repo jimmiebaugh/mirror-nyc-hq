@@ -2,10 +2,10 @@
 
 Living-state doc. Update on every meaningful merge to `main`.
 
-**Last updated:** 2026-05-07
-**Latest commit on main:** Phase 3.6: Final Review + Packet generation (squash-merged from `phase-3-6-final-review-packet`)
-**Active feature branch:** none — Phase 3.6 merged. Phase 3.7 branch not yet cut.
-**Current phase:** Phase 3.7 (Cron + watchdogs) — next up.
+**Last updated:** 2026-05-08
+**Latest commit on main:** Phase 3.7.1 — mailto links + status-colored row left-borders
+**Active feature branch:** none (3.7 work landing directly on main, small commits).
+**Current phase:** Phase 3.7 — Candidates UX + referral ingestion. Cron + watchdogs renamed to Phase 3.8.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`).
 
 ## What's live in production
@@ -62,7 +62,14 @@ f96e800  Add netlify.toml: explicit Vite build config + SPA redirect fallback
 
 ## Next up
 
-**Phase 3.7: Cron + watchdogs.** Schedule the things that currently require a manual button. `ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-final-review-watchdog`, `ts-cron-storage-cleanup`. Plus `monthly-spend-reset` cron for `cap_alert_sent_this_month`. Cut a fresh `phase-3-7-cron-watchdogs` branch when starting.
+**Phase 3.7: Candidates UX + referral ingestion.** Five passes, in order:
+1. **3.7.1 ✓** — mailto links + status-colored row left-border (LANDED).
+2. **3.7.2** — `manually_reviewed` field with auto/manual pill (table + detail), one-way flip on dropdown change/re-select/pill-click/bulk-action, light row tint when auto, Re-Eval respects manual. Migration: add `manually_reviewed boolean default false` to `ts_candidates`.
+3. **3.7.3** — CandidateDetail card layout reorg into 3×2 grid (Files & Materials | Recruiter Overview / Top Strengths | Key Gaps / Internal Notes | Score Breakdown).
+4. **3.7.4** — Scorecard 100-point cap (post-Claude normalize in `ts-generate-scorecard`, prompt tightening).
+5. **3.7.5** — Referral ingestion: `ts-pull-candidates` detects forwards from `*@mirrornyc.com` (subject must match role search settings), unwraps body for original sender / body / attachments. Migration: `is_referral boolean` + `referrer_email text` on `ts_candidates`. UI: electric-blue inline pill with auto/manual.
+
+**Phase 3.8: Cron + watchdogs** queued behind 3.7.
 
 **Side-quest before flipping packet UI back on:** verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix (signed-URL link in email body). Once verified, flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`.
 
