@@ -61,7 +61,7 @@ export default function AppShell() {
                    descent space; translate-y nudges the caps down so the
                    visible glyph bottom sits flush with the underbar of the
                    M wordmark instead of floating ~3px above it. */}
-              <span className="hidden sm:inline font-mono text-[20px] font-bold uppercase leading-none tracking-[0.12em] text-primary translate-y-[3px]">
+              <span className="hidden sm:inline font-mono text-[16px] font-bold uppercase leading-none tracking-[0.12em] text-primary translate-y-[2px]">
                 {brandCaption}
               </span>
             </NavLink>
