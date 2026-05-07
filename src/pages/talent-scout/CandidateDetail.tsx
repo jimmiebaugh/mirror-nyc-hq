@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { StatusDropdown } from "@/components/talent-scout/StatusDropdown";
 import { getScoreColor } from "@/lib/talent-scout/scoreColor";
+import { unwrapSecurityWrapper } from "@/lib/unwrapUrl";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -229,11 +230,63 @@ export default function CandidateDetail() {
             </Card>
           )}
 
+          {/* Portfolio card — moved ABOVE Resume & Files per Phase 3.6.3.
+              Only renders when there's something to show. */}
+          {(portfolioPath || portfolioWeb) && (
+            <Card className="overflow-hidden">
+              <div className="border-b border-border px-6 py-4 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
+                Portfolio
+              </div>
+              <div className="divide-y divide-border">
+                {portfolioPath && (
+                  <button
+                    type="button"
+                    onClick={() => openSignedFile(portfolioPath)}
+                    className="flex w-full items-center gap-4 px-6 py-3 text-left hover:bg-secondary/40"
+                  >
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-sm border border-primary/30 bg-primary/10">
+                      <FileText className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-bold">
+                        <span className="font-normal text-muted-foreground">Portfolio (file): </span>
+                        {portfolioPath.split("/").pop()}
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">Open ↗</span>
+                  </button>
+                )}
+                {portfolioWeb && (
+                  <a
+                    href={unwrapSecurityWrapper(portfolioWeb)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex w-full items-center gap-4 px-6 py-3 hover:bg-secondary/40"
+                  >
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-sm border border-border bg-secondary">
+                      <LinkIcon className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-bold">
+                        <span className="font-normal text-muted-foreground">Portfolio (web): </span>
+                        {portfolioWeb}
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">Open ↗</span>
+                  </a>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* Resume & Files (renamed from "Files & Materials" in Phase 3.6.3).
+              Holds the resume, cover letter, other attachments, plus
+              detected links. */}
           <Card className="overflow-hidden">
             <div className="border-b border-border px-6 py-4 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-              Files & Materials
+              Resume & Files
             </div>
-            {attachments.length === 0 && detectedLinks.length === 0 && !portfolioPath && !portfolioWeb && (
+            {attachments.length === 0 && detectedLinks.length === 0 && (
               <div className="px-6 py-6 text-sm text-muted-foreground">No files or links.</div>
             )}
             <div className="divide-y divide-border">
@@ -264,7 +317,7 @@ export default function CandidateDetail() {
               {detectedLinks.map((u) => (
                 <a
                   key={u.url}
-                  href={u.url}
+                  href={unwrapSecurityWrapper(u.url)}
                   target="_blank"
                   rel="noreferrer"
                   className="flex w-full items-center gap-4 px-6 py-3 hover:bg-secondary/40"
@@ -282,53 +335,6 @@ export default function CandidateDetail() {
                 </a>
               ))}
             </div>
-
-            {(portfolioPath || portfolioWeb) && (
-              <>
-                <div className="border-t border-border bg-secondary/30 px-6 py-3 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-                  Portfolio
-                </div>
-                <div className="divide-y divide-border">
-                  {portfolioPath && (
-                    <button
-                      type="button"
-                      onClick={() => openSignedFile(portfolioPath)}
-                      className="flex w-full items-center gap-4 px-6 py-3 text-left hover:bg-secondary/40"
-                    >
-                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-sm border border-primary/30 bg-primary/10">
-                        <FileText className="h-4 w-4 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-bold">
-                          <span className="font-normal text-muted-foreground">Portfolio (file): </span>
-                          {portfolioPath.split("/").pop()}
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">Open ↗</span>
-                    </button>
-                  )}
-                  {portfolioWeb && (
-                    <a
-                      href={portfolioWeb}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex w-full items-center gap-4 px-6 py-3 hover:bg-secondary/40"
-                    >
-                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-sm border border-border bg-secondary">
-                        <LinkIcon className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-bold">
-                          <span className="font-normal text-muted-foreground">Portfolio (web): </span>
-                          {portfolioWeb}
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">Open ↗</span>
-                    </a>
-                  )}
-                </div>
-              </>
-            )}
           </Card>
 
           {(cand.top_strengths as unknown[] | null)?.length ? (

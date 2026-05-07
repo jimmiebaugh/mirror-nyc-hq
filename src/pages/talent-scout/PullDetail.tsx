@@ -26,7 +26,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { CandidateTable, type CandidateRow } from "@/components/talent-scout/CandidateTable";
-import { CandidateSearch, matchesSearch } from "@/components/talent-scout/CandidateSearch";
+import { matchesSearch } from "@/components/talent-scout/CandidateSearch";
 import { RoundStatusPill } from "@/components/talent-scout/RoundStatusPill";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
@@ -35,6 +35,12 @@ type PullRoundRow = Database["public"]["Tables"]["ts_pull_rounds"]["Row"];
 
 const POOL_STATUSES = new Set(["consider", "interview", "fast_track"]);
 const REJECTED_STATUSES = new Set(["reject", "auto_rejected"]);
+
+// Phase 3.6.12: packet generation is hidden in the UI while the path is
+// being stabilized. Flip this back to `true` once the round-scoped packet
+// flow is verified end-to-end. Logic (generatePacket, openExistingPacket,
+// state, imports) stays in place so re-enabling is one line.
+const PACKET_FEATURE_ENABLED = false;
 
 export default function PullDetail() {
   const { id: roleId, pullRoundId } = useParams<{ id: string; pullRoundId: string }>();
@@ -56,6 +62,59 @@ export default function PullDetail() {
   }>({ running: false, total: 0, processed: 0, failed: 0 });
   const reevalCancelRef = useRef(false);
   const [packetTopN, setPacketTopN] = useState("15");
+  const [generatingPacket, setGeneratingPacket] = useState(false);
+
+  const generatePacket = async (force = false) => {
+    if (!pullRoundId) return;
+    if (!force && round?.packet_url) {
+      // Existing packet — open it instead of regenerating.
+      void openExistingPacket();
+      return;
+    }
+    setGeneratingPacket(true);
+    const top_n = packetTopN ? Number(packetTopN) : 15;
+    const { data, error } = await supabase.functions.invoke<{ url?: string; path?: string; error?: string }>(
+      "ts-packet-generate",
+      { body: { pull_round_id: pullRoundId, top_n } },
+    );
+    setGeneratingPacket(false);
+    const errMsg = error?.message ?? data?.error ?? null;
+    if (errMsg || !data?.url) {
+      toast({
+        title: "Packet generation failed",
+        description: errMsg ?? "No URL returned",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({
+      title: "Packet ready",
+      description: "Emailed to the hiring manager and opened in a new tab.",
+    });
+    window.open(data.url, "_blank");
+    // Refresh round so packet_url shows up locally.
+    const { data: rr } = await supabase.from("ts_pull_rounds").select("*").eq("id", pullRoundId).maybeSingle();
+    if (rr) setRound(rr as PullRoundRow);
+  };
+
+  const openExistingPacket = async () => {
+    if (!round?.packet_url) return;
+    const p = round.packet_url;
+    if (p.startsWith("http")) {
+      window.open(p, "_blank");
+      return;
+    }
+    const { data: signed, error } = await supabase.storage.from("packets").createSignedUrl(p, 3600);
+    if (error || !signed?.signedUrl) {
+      toast({
+        title: "Could not open packet",
+        description: error?.message ?? "Signed URL failed",
+        variant: "destructive",
+      });
+      return;
+    }
+    window.open(signed.signedUrl, "_blank");
+  };
 
   // Initial fetch + realtime subscription on the round.
   useEffect(() => {
@@ -289,13 +348,17 @@ export default function PullDetail() {
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="h-page">{roleTitle || "Role"}</h1>
+                {/* Phase 3.6.6: R-pill moved to the LEFT of the title and
+                     scaled +25% so the surface reads as a pull round at a
+                     glance, not a role page (text-[13px] → text-[16px],
+                     px-3/py-1.5 → px-4/py-2 ≈ +25%). */}
                 {round.round_number != null && (
-                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/15 px-3 py-1.5 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  <span className="inline-flex items-center gap-2 rounded-sm border border-primary/40 bg-primary/15 px-4 py-2 text-[16px] font-mono font-bold uppercase tracking-wider text-primary">
+                    <span className="h-2 w-2 rounded-full bg-current" />
                     R{round.round_number}
                   </span>
                 )}
+                <h1 className="h-page">{roleTitle || "Role"}</h1>
                 <RoundStatusPill status={round.status} />
                 {isLatest && (
                   <span className="inline-flex items-center gap-1.5 rounded-sm border border-green-400/40 bg-green-400/10 px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider text-green-400">
@@ -328,31 +391,36 @@ export default function PullDetail() {
             </div>
 
             <div className="flex shrink-0 items-end gap-2">
-              {/* Generate Packet — Phase 3.6 placeholder. */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-block">
-                    <Button variant="outline" disabled>
-                      ↓ Generate Packet
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Packet generation lands in Phase 3.6.</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
+              {/* Generate Packet + Top-N input hidden while packet path is
+                   broken (Phase 3.6.12). Toggle PACKET_FEATURE_ENABLED to
+                   restore. */}
+              {PACKET_FEATURE_ENABLED && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={generatePacket}
+                    disabled={generatingPacket || isRunning}
+                    title={isRunning ? "Wait for pull to finish before generating a packet." : undefined}
+                  >
+                    {generatingPacket ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</>
+                    ) : round.packet_url ? (
+                      <>↓ Re-generate Packet</>
+                    ) : (
+                      <>↓ Generate Packet</>
+                    )}
+                  </Button>
                   <Input
                     type="number"
-                    min={0}
+                    min={1}
                     max={50}
                     value={packetTopN}
                     onChange={(e) => setPacketTopN(e.target.value)}
-                    disabled
                     className="w-14 text-center"
+                    title="Top-N candidates by score for the packet (default 15)."
                   />
-                </TooltipTrigger>
-                <TooltipContent>Top-N for packet · Phase 3.6.</TooltipContent>
-              </Tooltip>
+                </>
+              )}
 
               {(isComplete || isFailed) && (
                 <DropdownMenu>
@@ -371,9 +439,20 @@ export default function PullDetail() {
                         Re-Evaluate Pool Candidates
                       </DropdownMenuItem>
                     )}
+                    {PACKET_FEATURE_ENABLED && isComplete && round.packet_url && (
+                      <DropdownMenuItem onSelect={openExistingPacket}>
+                        ↓ Open Last Packet
+                      </DropdownMenuItem>
+                    )}
+                    {PACKET_FEATURE_ENABLED && isComplete && (
+                      <DropdownMenuItem onSelect={() => generatePacket(true)} disabled={generatingPacket}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Re-generate Packet
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem
                       onSelect={() => setShowDelete(true)}
-                      className="text-red-400 focus:text-red-300"
+                      className="text-red-500 focus:text-red-500"
                     >
                       Delete Round
                     </DropdownMenuItem>
@@ -417,17 +496,11 @@ export default function PullDetail() {
 
       {/* Candidate search + table */}
       {isComplete && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <CandidateSearch value={search} onChange={setSearch} />
-            {search && (
-              <span className="text-xs text-muted-foreground">
-                {filteredCandidates.length} of {candidates.length} match
-              </span>
-            )}
-          </div>
+        <div>
           <CandidateTable
             candidates={filteredCandidates}
+            search={search}
+            onSearchChange={setSearch}
             emptyMessage={search ? `No candidates match "${search}".` : "No candidates in this round."}
             onChanged={reloadCandidates}
           />

@@ -18,3 +18,16 @@ verify_jwt = false
 # function. internalAuth still enforces user-JWT validity for the UI path.
 [functions.ts-evaluate-candidate]
 verify_jwt = false
+
+# Phase 3.6 functions. ts-final-review uses EdgeRuntime.waitUntil for the
+# Anthropic call; ts-packet-generate / ts-final-review-packet make repeated
+# CloudConvert calls that exceed the gateway's verify_jwt latency budget.
+# All three use requireInternalOrUserAuth.
+[functions.ts-final-review]
+verify_jwt = false
+
+[functions.ts-packet-generate]
+verify_jwt = false
+
+[functions.ts-final-review-packet]
+verify_jwt = false

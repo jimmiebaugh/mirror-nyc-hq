@@ -1,10 +1,14 @@
 // Service-account-based Gmail auth. Reads the GOOGLE_SERVICE_ACCOUNT_KEY
 // secret (the JSON contents of the SA key), builds a JWT impersonating
-// jobs@mirrornyc.com with the gmail.readonly scope, and exchanges it for an
-// access token via OAuth2 STS.
+// jobs@mirrornyc.com with both gmail.readonly + gmail.send scopes, and
+// exchanges it for an access token via OAuth2 STS.
 //
-// Mirrors scripts/verify-service-account.ts logic but reads the key from env
-// instead of disk (Edge Functions have no filesystem access).
+// readonly is used by ts-pull-candidates for Gmail message ingestion.
+// send is used by ts-packet-generate / ts-final-review-packet for emailing
+// packets to hiring managers (added in Phase 3.6).
+//
+// Both scopes are delegated to the service account in the Mirror NYC
+// Workspace Admin Console (see docs/auth-model.md § Service account).
 //
 // Token expiry is honored: same JWT is reused inside its 1-hour TTL via a
 // module-level cache so a long pull doesn't re-mint per call.
@@ -13,6 +17,7 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const IMPERSONATE_USER = "jobs@mirrornyc.com";
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.send",
 ];
 
 type ServiceAccountKey = {

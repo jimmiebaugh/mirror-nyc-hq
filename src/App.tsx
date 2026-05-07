@@ -19,6 +19,8 @@ import RoleDashboard from "./pages/talent-scout/RoleDashboard";
 import RoleSettings from "./pages/talent-scout/RoleSettings";
 import PullDetail from "./pages/talent-scout/PullDetail";
 import CandidateDetail from "./pages/talent-scout/CandidateDetail";
+import FinalReviewLoading from "./pages/talent-scout/FinalReviewLoading";
+import FinalReviewDetail from "./pages/talent-scout/FinalReviewDetail";
 
 const queryClient = new QueryClient();
 
@@ -103,6 +105,30 @@ const App = () => (
                 element={
                   <AdminRoute>
                     <CandidateDetail />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/talent-scout/roles/:id/final-review"
+                element={
+                  <AdminRoute>
+                    <FinalReviewDetail />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/talent-scout/roles/:id/final-review/:reviewId"
+                element={
+                  <AdminRoute>
+                    <FinalReviewDetail />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/talent-scout/roles/:id/final-review/:reviewId/generating"
+                element={
+                  <AdminRoute>
+                    <FinalReviewLoading />
                   </AdminRoute>
                 }
               />

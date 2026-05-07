@@ -49,8 +49,9 @@ Currently published: `ts_pull_rounds` (PullDetail subscribes for pull-progress U
 
 ## Storage
 
-Five private buckets, all behind RLS:
+Six private buckets, all behind RLS:
 - `candidate_attachments` (admin only, Talent Scout)
+- `packets` (admin only, Talent Scout — round + final-review packet PDFs, Phase 3.6)
 - `briefs` (producer+, Venue Scout)
 - `sourcing_sheets` (producer+, Venue Scout)
 - `venue_photos` (read auth, write producer+, HQ + Venue Scout)

@@ -1,4 +1,3 @@
-Initialising login role...
 export type Json =
   | string
   | number
@@ -481,6 +480,7 @@ export type Database = {
           created_at: string
           detected_links: Json
           email: string | null
+          email_body_text: string | null
           gmail_message_id: string | null
           id: string
           internal_notes: string | null
@@ -506,6 +506,7 @@ export type Database = {
           created_at?: string
           detected_links?: Json
           email?: string | null
+          email_body_text?: string | null
           gmail_message_id?: string | null
           id?: string
           internal_notes?: string | null
@@ -531,6 +532,7 @@ export type Database = {
           created_at?: string
           detected_links?: Json
           email?: string | null
+          email_body_text?: string | null
           gmail_message_id?: string | null
           id?: string
           internal_notes?: string | null
@@ -643,30 +645,63 @@ export type Database = {
       }
       ts_final_reviews: {
         Row: {
+          candidate_count: number | null
           candidate_count_limit: number | null
+          claude_raw_response: Json | null
+          duration_seconds: number | null
+          error_log: Json
+          error_message: string | null
           final_rankings: Json
           generated_at: string
           id: string
+          packet_generated_at: string | null
+          packet_include_fast_track: boolean | null
+          packet_top_n: number | null
+          packet_url: string | null
           pool_summary: string | null
           role_id: string
+          status: Database["public"]["Enums"]["ts_final_review_status"]
+          step_progress: Json
           triggered_by: string | null
         }
         Insert: {
+          candidate_count?: number | null
           candidate_count_limit?: number | null
+          claude_raw_response?: Json | null
+          duration_seconds?: number | null
+          error_log?: Json
+          error_message?: string | null
           final_rankings?: Json
           generated_at?: string
           id?: string
+          packet_generated_at?: string | null
+          packet_include_fast_track?: boolean | null
+          packet_top_n?: number | null
+          packet_url?: string | null
           pool_summary?: string | null
           role_id: string
+          status?: Database["public"]["Enums"]["ts_final_review_status"]
+          step_progress?: Json
           triggered_by?: string | null
         }
         Update: {
+          candidate_count?: number | null
           candidate_count_limit?: number | null
+          claude_raw_response?: Json | null
+          duration_seconds?: number | null
+          error_log?: Json
+          error_message?: string | null
           final_rankings?: Json
           generated_at?: string
           id?: string
+          packet_generated_at?: string | null
+          packet_include_fast_track?: boolean | null
+          packet_top_n?: number | null
+          packet_url?: string | null
           pool_summary?: string | null
           role_id?: string
+          status?: Database["public"]["Enums"]["ts_final_review_status"]
+          step_progress?: Json
           triggered_by?: string | null
         }
         Relationships: [
@@ -693,6 +728,10 @@ export type Database = {
           completed_at: string | null
           created_by: string | null
           id: string
+          packet_generated_at: string | null
+          packet_include_fast_track: boolean | null
+          packet_top_n: number | null
+          packet_url: string | null
           pending_candidates: Json
           processed_count: number
           pulled_from: string | null
@@ -710,6 +749,10 @@ export type Database = {
           completed_at?: string | null
           created_by?: string | null
           id?: string
+          packet_generated_at?: string | null
+          packet_include_fast_track?: boolean | null
+          packet_top_n?: number | null
+          packet_url?: string | null
           pending_candidates?: Json
           processed_count?: number
           pulled_from?: string | null
@@ -727,6 +770,10 @@ export type Database = {
           completed_at?: string | null
           created_by?: string | null
           id?: string
+          packet_generated_at?: string | null
+          packet_include_fast_track?: boolean | null
+          packet_top_n?: number | null
+          packet_url?: string | null
           pending_candidates?: Json
           processed_count?: number
           pulled_from?: string | null
@@ -1343,6 +1390,7 @@ export type Database = {
         | "reject"
         | "fast_track"
         | "auto_rejected"
+      ts_final_review_status: "generating" | "complete" | "failed"
       ts_pull_round_status: "running" | "complete" | "failed" | "stalled"
       ts_pull_round_triggered_by: "manual" | "scheduled"
       ts_role_auto_pull_schedule: "off" | "daily" | "every_3_days" | "weekly"
@@ -1515,6 +1563,7 @@ export const Constants = {
         "fast_track",
         "auto_rejected",
       ],
+      ts_final_review_status: ["generating", "complete", "failed"],
       ts_pull_round_status: ["running", "complete", "failed", "stalled"],
       ts_pull_round_triggered_by: ["manual", "scheduled"],
       ts_role_auto_pull_schedule: ["off", "daily", "every_3_days", "weekly"],
@@ -1527,6 +1576,3 @@ export const Constants = {
     },
   },
 } as const
-<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
-A new version of Supabase CLI is available: v2.98.2 (currently installed v2.98.1)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

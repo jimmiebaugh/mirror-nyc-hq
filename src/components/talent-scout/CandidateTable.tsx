@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowDown,
@@ -18,7 +18,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { ScoreBar } from "@/components/talent-scout/ScoreBar";
+import { unwrapSecurityWrapper } from "@/lib/unwrapUrl";
+import { ScoreInline } from "@/components/talent-scout/ScoreInline";
 import { StatusDropdown } from "@/components/talent-scout/StatusDropdown";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -70,9 +71,10 @@ function compareBy(key: SortKey, dir: SortDir) {
   };
 }
 
-// Checkbox moved to the far right (last column).
+// Phase 3.6.11: another +15px breathing room between Portfolio and Quick
+// Overview. R+P cell 170 → 185, with pr-[25px] inside (was 10).
 const GRID_COLS =
-  "grid-cols-[minmax(220px,1fr)_104px_60px_minmax(0,2fr)_180px_24px_36px]";
+  "grid-cols-[minmax(260px,1fr)_185px_minmax(0,2.4fr)_132px_36px]";
 
 function SortHeader({
   label,
@@ -131,6 +133,12 @@ function RowCheckbox({
   );
 }
 
+// Phase 3.6.8: icon-button bg lifted off the row tint via surface-raised
+// + stronger border so the buttons read as clearly clickable affordances
+// against the column-tint diagnostic AND the final dark-on-dark layout.
+const ICON_BUTTON_CLS =
+  "inline-flex h-9 w-9 items-center justify-center rounded-sm border border-border-strong bg-surface-raised text-foreground hover:bg-accent hover:border-foreground transition-colors";
+
 function PortfolioCell({ c, onPathOpen }: { c: CandidateRow; onPathOpen: (path: string) => void }) {
   if (c.portfolio_type === "file" && c.portfolio_path_or_url) {
     const path = c.portfolio_path_or_url;
@@ -142,21 +150,22 @@ function PortfolioCell({ c, onPathOpen }: { c: CandidateRow; onPathOpen: (path: 
           onPathOpen(path);
         }}
         title={path.split("/").pop() ?? "Portfolio (file)"}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+        className={ICON_BUTTON_CLS}
       >
         <FileText className="h-4 w-4" />
       </button>
     );
   }
   if (c.portfolio_type === "url" && c.portfolio_path_or_url) {
+    const unwrapped = unwrapSecurityWrapper(c.portfolio_path_or_url);
     return (
       <a
-        href={c.portfolio_path_or_url}
+        href={unwrapped}
         target="_blank"
         rel="noreferrer"
         onClick={(e) => e.stopPropagation()}
-        title={c.portfolio_path_or_url}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+        title={unwrapped}
+        className={ICON_BUTTON_CLS}
       >
         <ExternalLink className="h-4 w-4" />
       </a>
@@ -184,10 +193,19 @@ export function CandidateTable({
   candidates,
   emptyMessage = "No candidates yet.",
   onChanged,
+  search,
+  onSearchChange,
+  searchPlaceholder = "Search candidates by name, email, location…",
 }: {
   candidates: CandidateRow[];
   emptyMessage?: string;
   onChanged?: () => void | Promise<void>;
+  /** Phase 3.6.7: when both provided, the search input renders inside the
+      bulk-action bar's left side. Parents that pass these stop rendering
+      their own CandidateSearch above the table. */
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
 }) {
   const nav = useNavigate();
   const { user } = useAuth();
@@ -197,6 +215,33 @@ export function CandidateTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const lastClickedId = useRef<string | null>(null);
+
+  // Resume path per candidate. Bulk-fetched once whenever the candidates
+  // list identity changes; rows just look up the path. The Resume cell
+  // creates a signed URL on click (lazy — TTLs are short, ~1 min).
+  const [resumePathByCand, setResumePathByCand] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let active = true;
+    const ids = candidates.map((c) => c.id);
+    if (ids.length === 0) { setResumePathByCand({}); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("ts_candidate_attachments")
+        .select("candidate_id,attachment_type,file_name,file_path")
+        .in("candidate_id", ids);
+      if (!active) return;
+      const map: Record<string, string> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data ?? []).forEach((a: any) => {
+        if (map[a.candidate_id]) return;
+        if (a.attachment_type === "resume" || /resume|cv/i.test(a.file_name ?? "")) {
+          map[a.candidate_id] = a.file_path;
+        }
+      });
+      setResumePathByCand(map);
+    })();
+    return () => { active = false; };
+  }, [candidates]);
 
   const onSort = (col: SortKey) => {
     if (sortKey === col) {
@@ -335,51 +380,74 @@ export function CandidateTable({
 
   return (
     <Card className="overflow-hidden">
-      {/* Bulk action bar — slide-in when selection > 0. */}
-      {selCount > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-primary/10 px-5 py-2.5">
-          <div className="flex items-center gap-3">
-            <span className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-              {selCount} selected
-            </span>
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={bulkBusy}>
-              Clear
-            </Button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Phase 3.5b: 500-shade text matches StatusDropdown's
-                 source-aligned status colors. */}
-            <BulkStatusButton
-              label="Reject"
-              colorClass="bg-red-500/10 text-red-500 border-red-500/30 hover:bg-red-500/20"
-              onClick={() => setStatusBulk("reject")}
-              disabled={bulkBusy}
+      {/* Bulk action bar — Phase 3.6.8 layout:
+            [ search ─ flex grow ] [ bulk_buttons N_selected ]
+          Search input always present on the left; bulk buttons + 'N
+          selected' grouped together on the right (buttons immediately
+          left of the count), opacity-on when selection > 0. Clear
+          button removed (Jimmie's call). The right-side block reserves
+          its slot via opacity rather than removing from layout, so the
+          row height stays constant when selection toggles. */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-border bg-secondary/40 px-3 py-2.5">
+        {/* Left: search */}
+        <div className="min-w-[220px] max-w-[360px] flex-1">
+          {onSearchChange ? (
+            <input
+              type="search"
+              value={search ?? ""}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="h-10 w-full rounded-sm border border-border bg-background px-3 text-[13px] outline-none placeholder:text-muted-foreground focus:border-primary"
             />
-            <BulkStatusButton
-              label="Consider"
-              colorClass="bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500/20"
-              onClick={() => setStatusBulk("consider")}
-              disabled={bulkBusy}
-            />
-            <BulkStatusButton
-              label="Fast-Track"
-              colorClass="bg-purple-500/10 text-purple-500 border-purple-500/30 hover:bg-purple-500/20"
-              onClick={() => setStatusBulk("fast_track")}
-              disabled={bulkBusy}
-            />
-            <BulkStatusButton
-              label="Interview"
-              colorClass="bg-cyan-500/10 text-cyan-500 border-cyan-500/30 hover:bg-cyan-500/20"
-              onClick={() => setStatusBulk("interview")}
-              disabled={bulkBusy}
-            />
-            <Button size="sm" variant="outline" onClick={reevalSelected} disabled={bulkBusy}>
-              <RefreshCw className={cn("mr-2 h-3.5 w-3.5", bulkBusy && "animate-spin")} />
-              {bulkBusy ? "Working…" : "Re-evaluate"}
-            </Button>
-          </div>
+          ) : null}
         </div>
-      )}
+
+        {/* Right group: bulk action buttons + 'N selected' caption,
+            opacity-toggled together so the bar reserves its full width. */}
+        <div
+          aria-hidden={selCount === 0}
+          className={cn(
+            "ml-auto flex flex-wrap items-center gap-2 transition-opacity",
+            selCount > 0 ? "opacity-100" : "pointer-events-none opacity-0",
+          )}
+        >
+          <BulkStatusButton
+            label="Reject"
+            colorClass="bg-red-500/10 text-red-500 border-red-500/30 hover:bg-red-500/20"
+            onClick={() => setStatusBulk("reject")}
+            disabled={bulkBusy}
+          />
+          <BulkStatusButton
+            label="Consider"
+            colorClass="bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500/20"
+            onClick={() => setStatusBulk("consider")}
+            disabled={bulkBusy}
+          />
+          <BulkStatusButton
+            label="Fast-Track"
+            colorClass="bg-purple-500/10 text-purple-500 border-purple-500/30 hover:bg-purple-500/20"
+            onClick={() => setStatusBulk("fast_track")}
+            disabled={bulkBusy}
+          />
+          <BulkStatusButton
+            label="Interview"
+            colorClass="bg-cyan-500/10 text-cyan-500 border-cyan-500/30 hover:bg-cyan-500/20"
+            onClick={() => setStatusBulk("interview")}
+            disabled={bulkBusy}
+          />
+          <button
+            type="button"
+            onClick={reevalSelected}
+            disabled={bulkBusy}
+            className="inline-flex h-9 items-center rounded-md border border-border-strong px-3 text-[12px] font-mono font-bold uppercase tracking-wider transition-colors hover:bg-white/5 disabled:opacity-50"
+          >
+            {bulkBusy ? "Working…" : "Re-evaluate"}
+          </button>
+          <span className="ml-2 text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
+            {selCount} selected
+          </span>
+        </div>
+      </div>
 
       {/* Sticky header */}
       <div
@@ -389,16 +457,20 @@ export function CandidateTable({
           "gap-4 border-b border-border bg-secondary/80 px-5 py-3 text-[13px] font-mono font-bold uppercase tracking-wider backdrop-blur",
         )}
       >
+        {/* Diagnostic tints stripped (Phase 3.6.9). */}
         <div>
           <SortHeader label="Candidate" column="name" active={sortKey} dir={sortDir} onClick={onSort} />
         </div>
-        <div className="text-center">
-          <SortHeader label="Score" column="score" active={sortKey} dir={sortDir} onClick={onSort} />
+        {/* Resume + Portfolio header: split into two equal halves so each
+             label sits centered DIRECTLY above its icon in the body row.
+             pr-[25px] (Phase 3.6.10) gives Quick Overview's column header
+             extra breathing room from the Portfolio side. */}
+        <div className="flex items-center pr-[25px]">
+          <div className="flex flex-1 justify-center">Resume</div>
+          <div className="flex flex-1 justify-center">Portfolio</div>
         </div>
-        <div className="text-center">Portfolio</div>
         <div>Quick Overview</div>
-        <div className="text-center">Status</div>
-        <div />
+        <div className="flex items-center justify-center">Status</div>
         <div className="flex items-center justify-center">
           <Checkbox
             checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
@@ -418,6 +490,7 @@ export function CandidateTable({
         <Row
           key={c.id}
           c={c}
+          resumePath={resumePathByCand[c.id] ?? null}
           checked={effectiveSelection.has(c.id)}
           onCheckboxClick={(e) => handleRowToggle(c.id, e.shiftKey)}
           onRowClick={() => nav(`/talent-scout/candidates/${c.id}`)}
@@ -444,6 +517,7 @@ export function CandidateTable({
           <Row
             key={c.id}
             c={c}
+            resumePath={resumePathByCand[c.id] ?? null}
             checked={effectiveSelection.has(c.id)}
             onCheckboxClick={(e) => handleRowToggle(c.id, e.shiftKey)}
             onRowClick={() => nav(`/talent-scout/candidates/${c.id}`)}
@@ -472,7 +546,7 @@ function BulkStatusButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex h-8 items-center rounded-md border px-3 text-[13px] font-mono font-bold uppercase tracking-wider transition-colors disabled:opacity-50",
+        "inline-flex h-9 items-center rounded-md border px-3 text-[12px] font-mono font-bold uppercase tracking-wider transition-colors disabled:opacity-50",
         colorClass,
       )}
     >
@@ -483,6 +557,7 @@ function BulkStatusButton({
 
 function Row({
   c,
+  resumePath,
   checked,
   onCheckboxClick,
   onRowClick,
@@ -490,6 +565,8 @@ function Row({
   dim,
 }: {
   c: CandidateRow;
+  /** Path to the candidate's resume in candidate_attachments, or null. */
+  resumePath: string | null;
   checked: boolean;
   onCheckboxClick: (e: React.MouseEvent) => void;
   onRowClick: () => void;
@@ -508,29 +585,46 @@ function Row({
         checked && "bg-primary/5",
       )}
     >
-      {/* Candidate (name + email + applied stacked; location lives on the detail page) */}
-      <div className="min-w-0">
-        <div className="truncate text-[15px] font-bold leading-tight">{c.name ?? "—"}</div>
-        <div className="mt-0.5 truncate text-xs text-muted-foreground">{c.email ?? ""}</div>
+      {/* Candidate stack — diagnostic tint removed (Phase 3.6.9). */}
+      <div className="min-w-0 pr-2">
+        <div className="truncate text-[16px] font-bold leading-tight">{c.name ?? "—"}</div>
+        <div className="mt-1 truncate text-[12px] text-muted-foreground">{c.email ?? ""}</div>
         <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
           {c.applied_date
             ? `Applied ${new Date(c.applied_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
             : "—"}
         </div>
+        <div className="mt-3 flex items-center gap-2 font-mono text-[12px] uppercase tracking-wider text-muted-foreground">
+          <span>Score:</span>
+          <ScoreInline value={c.score == null ? null : Number(c.score)} size={14} barWidth={60} />
+        </div>
       </div>
 
-      {/* Score */}
-      <div className="flex justify-center">
-        <ScoreBar value={c.score == null ? null : Number(c.score)} />
+      {/* Resume + Portfolio: split halves so each icon sits centered
+          directly under its header label. pr-[25px] adds breathing
+          room before Quick Overview (Phase 3.6.10). */}
+      <div className="flex items-center pr-[25px]">
+        <div className="flex flex-1 items-center justify-center">
+          {resumePath ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openSignedFile(resumePath); }}
+              title="Open resume"
+              className={ICON_BUTTON_CLS}
+            >
+              <FileText className="h-4 w-4" />
+            </button>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </div>
+        <div className="flex flex-1 items-center justify-center">
+          <PortfolioCell c={c} onPathOpen={openSignedFile} />
+        </div>
       </div>
 
-      {/* Portfolio */}
-      <div className="flex justify-center">
-        <PortfolioCell c={c} onPathOpen={openSignedFile} />
-      </div>
-
-      {/* Quick Overview */}
-      <div className="text-xs text-muted-foreground">
+      {/* Quick Overview — text bumped 12 → 13 (Phase 3.6.9). */}
+      <div className="text-[13px] text-muted-foreground">
         {overview && overview.length > 0 ? (
           <ul className="space-y-1">
             {overview.slice(0, 5).map((b, i) => (
@@ -545,8 +639,7 @@ function Row({
         )}
       </div>
 
-      {/* Status — inline dropdown. Auto/Manual is conveyed by the status
-          itself ("Rejected" vs "Auto-Rejected"), so no extra badge needed. */}
+      {/* Status */}
       <div
         className="flex items-center justify-center"
         onClick={(e) => e.stopPropagation()}
@@ -557,11 +650,6 @@ function Row({
           onChange={() => { void onChanged?.(); }}
           size="compact"
         />
-      </div>
-
-      {/* Chevron */}
-      <div className="flex items-center justify-end text-muted-foreground">
-        <ChevronRight className="h-4 w-4" />
       </div>
 
       {/* Checkbox (far right) */}

@@ -63,11 +63,14 @@ export function StatusDropdown({
     onChange?.(next as CandidateStatus);
   };
 
-  const heightCls = size === "compact" ? "h-7 text-[11px]" : size === "large" ? "h-10 text-sm" : "h-9 text-xs";
+  // Phase 3.6.10: compact pill bumped further — h-8 → h-9, text 13 → 14.
+  // Status reads larger and clearly clickable in the candidate table row.
+  const heightCls = size === "compact" ? "h-9 text-[14px]" : size === "large" ? "h-10 text-sm" : "h-10 text-[13px]";
+  const widthCls = size === "compact" ? "min-w-[124px]" : "min-w-[120px]";
 
   return (
     <Select value={current} onValueChange={onValueChange} disabled={saving}>
-      <SelectTrigger className={cn("min-w-[140px] border font-mono font-bold uppercase tracking-wider", heightCls, opt.cls)}>
+      <SelectTrigger className={cn(widthCls, "border font-mono font-bold uppercase tracking-wider", heightCls, opt.cls)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

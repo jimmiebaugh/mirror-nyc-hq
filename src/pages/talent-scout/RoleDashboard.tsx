@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { RoleStatusPill } from "@/components/talent-scout/RoleStatusPill";
 import { RoundStatusPill } from "@/components/talent-scout/RoundStatusPill";
 import { CandidateTable, type CandidateRow } from "@/components/talent-scout/CandidateTable";
-import { CandidateSearch, matchesSearch } from "@/components/talent-scout/CandidateSearch";
+import { matchesSearch } from "@/components/talent-scout/CandidateSearch";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
@@ -54,12 +54,14 @@ export default function RoleDashboard() {
   const [search, setSearch] = useState("");
   const [showAllRounds, setShowAllRounds] = useState(false);
   const [finalTopN, setFinalTopN] = useState("");
+  // Latest complete final review id (if any) drives the Generate / View toggle.
+  const [latestFinalReviewId, setLatestFinalReviewId] = useState<string | null>(null);
 
   const runningRound = rounds.find((r) => r.status === "running") ?? null;
 
   const reload = async () => {
     if (!id) return;
-    const [{ data: r }, { data: rr }, { data: cs }] = await Promise.all([
+    const [{ data: r }, { data: rr }, { data: cs }, { data: fr }] = await Promise.all([
       supabase
         .from("ts_roles")
         .select("*, hiring_manager:users!ts_roles_hiring_manager_id_fkey(full_name, email)")
@@ -75,10 +77,19 @@ export default function RoleDashboard() {
         .select("*")
         .eq("role_id", id)
         .order("score", { ascending: false, nullsFirst: false }),
+      supabase
+        .from("ts_final_reviews")
+        .select("id")
+        .eq("role_id", id)
+        .eq("status", "complete")
+        .order("generated_at", { ascending: false })
+        .limit(1),
     ]);
     setRole((r as unknown as Role) ?? null);
     setRounds((rr as PullRoundRow[]) ?? []);
     setCandidates((cs as CandidateRow[]) ?? []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setLatestFinalReviewId(((fr as any[]) ?? [])[0]?.id ?? null);
   };
 
   useEffect(() => {
@@ -112,6 +123,28 @@ export default function RoleDashboard() {
       return;
     }
     nav(`/talent-scout/roles/${id}/pulls/${data.pull_round_id}`);
+  };
+
+  const [startingFinalReview, setStartingFinalReview] = useState(false);
+  const startFinalReview = async () => {
+    if (!id) return;
+    setStartingFinalReview(true);
+    const top_n = finalTopN ? Number(finalTopN) : undefined;
+    const { data, error } = await supabase.functions.invoke<{ final_review_id?: string; error?: string }>(
+      "ts-final-review",
+      { body: { role_id: id, top_n } },
+    );
+    setStartingFinalReview(false);
+    const errMsg = error?.message ?? data?.error ?? null;
+    if (errMsg || !data?.final_review_id) {
+      toast({
+        title: "Couldn't start final review",
+        description: errMsg ?? "No final_review_id returned",
+        variant: "destructive",
+      });
+      return;
+    }
+    nav(`/talent-scout/roles/${id}/final-review/${data.final_review_id}/generating`);
   };
 
   const stats = useMemo(() => {
@@ -204,17 +237,30 @@ export default function RoleDashboard() {
             <div className="flex shrink-0 flex-col items-stretch gap-2">
               <div className="flex items-end gap-2">
                 <div className="flex flex-col gap-2">
-                  {/* Generate Final Review — Phase 3.6. Disabled until we ship the function. */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-block">
-                        <Button variant="outline" disabled className="w-full">
-                          ▶ Generate Final Review
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>Final review lands in Phase 3.6.</TooltipContent>
-                  </Tooltip>
+                  {/* When a complete final review exists, the button becomes
+                       'View Final Review' linking to the latest. Re-generation
+                       lives on FinalReviewDetail's 'Re-Review' button. */}
+                  {latestFinalReviewId ? (
+                    <Button asChild variant="outline" className="w-full">
+                      <Link to={`/talent-scout/roles/${role.id}/final-review/${latestFinalReviewId}`}>
+                        ↗ View Final Review
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={startFinalReview}
+                      disabled={startingFinalReview || candidates.length < 3}
+                      className="w-full"
+                      title={candidates.length < 3 ? "Need at least 3 candidates to run final review." : undefined}
+                    >
+                      {startingFinalReview ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Starting…</>
+                      ) : (
+                        <>▶ Generate Final Review</>
+                      )}
+                    </Button>
+                  )}
                   {role.status === "open" &&
                     (runningRound ? (
                       <Button asChild>
@@ -231,21 +277,20 @@ export default function RoleDashboard() {
                     ))}
                 </div>
                 <div className="flex flex-col gap-2">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Input
-                        type="number"
-                        min={1}
-                        placeholder="N"
-                        value={finalTopN}
-                        onChange={(e) => setFinalTopN(e.target.value)}
-                        disabled
-                        className="w-14 text-center"
-                        title="Optional: top N candidates by score for final review."
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent>Top-N for final review · Phase 3.6.</TooltipContent>
-                  </Tooltip>
+                  {/* Top-N only relevant when GENERATING a new review. Hide
+                       it once a review exists; FinalReviewDetail's Re-Review
+                       reruns with the same scope. */}
+                  {!latestFinalReviewId && (
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="N"
+                      value={finalTopN}
+                      onChange={(e) => setFinalTopN(e.target.value)}
+                      className="w-14 text-center"
+                      title="Optional: top N candidates by score for final review (cap 50)."
+                    />
+                  )}
                   <Button asChild variant="outline" size="icon" aria-label="Role settings" className="w-14">
                     <Link to={`/talent-scout/roles/${role.id}/settings`}>
                       <SettingsIcon className="h-4 w-4" />
@@ -269,7 +314,7 @@ export default function RoleDashboard() {
       {/* Pull rounds */}
       {rounds.length > 0 && (
         <Card>
-          <CardContent className="p-6">
+          <CardContent className="p-4">
             <div className="flex items-start justify-between gap-6">
               <div className="shrink-0">
                 <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">Pull Rounds</div>
@@ -285,7 +330,7 @@ export default function RoleDashboard() {
                       key={rd.id}
                       to={`/talent-scout/roles/${role.id}/pulls/${rd.id}`}
                       className={cn(
-                        "relative min-w-0 rounded-md border bg-card p-4 transition-colors",
+                        "relative min-w-0 rounded-md border bg-card p-3 transition-colors",
                         isLatest
                           ? "border-primary/50 hover:border-primary"
                           : "border-border hover:border-foreground/40",
@@ -310,18 +355,13 @@ export default function RoleDashboard() {
                         )}
                       </div>
                       <div className="font-display text-3xl font-extrabold tabular-nums leading-none">R{rd.round_number ?? "—"}</div>
-                      <div className="mt-4 text-xs text-muted-foreground">
+                      <div className="mt-3 text-xs text-muted-foreground">
                         {rd.started_at
                           ? new Date(rd.started_at).toLocaleDateString("en-US", {
                               month: "long",
                               day: "numeric",
                               year: "numeric",
                             })
-                          : "—"}
-                      </div>
-                      <div className="mt-3 border-t border-border/60 pt-3 text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
-                        {rd.candidates_found != null
-                          ? `${rd.processed_count ?? 0} / ${rd.candidates_found} processed`
                           : "—"}
                       </div>
                     </Link>
@@ -347,28 +387,21 @@ export default function RoleDashboard() {
         </Card>
       )}
 
-      {/* Candidate search + table */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <CandidateSearch value={search} onChange={setSearch} />
-          {search && (
-            <span className="text-xs text-muted-foreground">
-              {filteredCandidates.length} of {candidates.length} match
-            </span>
-          )}
-        </div>
-        <CandidateTable
-          candidates={filteredCandidates}
-          emptyMessage={
-            candidates.length === 0
-              ? rounds.length === 0
-                ? "No candidates pulled yet — click Pull candidates to start."
-                : "Master pool is empty."
-              : `No candidates match "${search}".`
-          }
-          onChanged={reload}
-        />
-      </div>
+      {/* Candidate table — search input now lives inside the table's
+          bulk-action bar (Phase 3.6.7). */}
+      <CandidateTable
+        candidates={filteredCandidates}
+        search={search}
+        onSearchChange={setSearch}
+        emptyMessage={
+          candidates.length === 0
+            ? rounds.length === 0
+              ? "No candidates pulled yet — click Pull candidates to start."
+              : "Master pool is empty."
+            : `No candidates match "${search}".`
+        }
+        onChanged={reload}
+      />
     </div>
   );
 }
