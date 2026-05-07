@@ -19,43 +19,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Phase 3.6.14: diagnostic logging for OAuth debugging on production.
-    // Remove once OAuth is verified stable.
-    console.log("[auth] mount", {
-      url: window.location.href,
-      hasHash: !!window.location.hash,
-      hasCode: window.location.search.includes("code="),
-    });
-
-    // Phase 3.6.15: manual hash-fallback. supabase-js's detectSessionInUrl
-    // was silently failing to parse a valid implicit-flow callback on
-    // production (INITIAL_SESSION fired with no session despite a valid
-    // JWT in the hash). Do it ourselves: if the URL hash carries an
-    // access_token, parse it, call setSession explicitly, then clear
-    // the hash. setSession triggers SIGNED_IN downstream.
+    // Phase 3.6.15: manual hash-fallback. Kept as defense-in-depth after
+    // the Phase 3.6.16 publishable-key fix. supabase-js's detectSessionInUrl
+    // works again now that the API key is valid, but the manual path is
+    // cheap insurance: if the URL hash carries access_token + refresh_token,
+    // parse and call setSession ourselves, then strip the hash so a refresh
+    // doesn't re-trigger. setSession emits SIGNED_IN downstream.
     const hash = window.location.hash;
     if (hash && hash.includes("access_token=")) {
       const params = new URLSearchParams(hash.slice(1));
       const access_token = params.get("access_token");
       const refresh_token = params.get("refresh_token");
       if (access_token && refresh_token) {
-        console.log("[auth] manual hash parse: setting session from URL");
-        supabase.auth
-          .setSession({ access_token, refresh_token })
-          .then(({ data, error }) => {
-            console.log("[auth] manual setSession result", {
-              hasSession: !!data.session,
-              email: data.session?.user?.email,
-              error: error?.message,
-            });
-            // Strip the hash so a refresh doesn't re-trigger this path.
-            window.history.replaceState(null, "", window.location.pathname + window.location.search);
-          });
+        supabase.auth.setSession({ access_token, refresh_token }).then(() => {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        });
       }
     }
 
-    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log("[auth] state change", { event, hasSession: !!newSession, email: newSession?.user?.email });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (newSession?.user && !isAllowedEmail(newSession.user.email)) {
         // Belt-and-suspenders: kick non-mirrornyc accounts out immediately.
         setSession(null);
@@ -73,8 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session: existing }, error }) => {
-      console.log("[auth] getSession result", { hasSession: !!existing, error: error?.message });
+    supabase.auth.getSession().then(({ data: { session: existing } }) => {
       if (existing?.user && !isAllowedEmail(existing.user.email)) {
         supabase.auth.signOut();
         setSession(null);
