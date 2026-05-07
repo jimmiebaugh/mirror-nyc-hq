@@ -40,7 +40,7 @@ export default function AppShell() {
              dashboard but no longer cramped. */}
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-6">
           <div className="flex items-center gap-8">
-            <NavLink to="/" className="flex items-center gap-3 text-foreground">
+            <NavLink to="/" className="flex items-end gap-3 text-foreground">
               {/* Mirror M wordmark + HQ caption. The mark IS the brand, so
                   no "Mirror NYC" text — that'd be redundant. "HQ" sits to
                   the right in mono coral as the app identifier, mirroring
