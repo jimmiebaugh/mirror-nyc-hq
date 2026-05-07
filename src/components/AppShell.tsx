@@ -35,15 +35,18 @@ export default function AppShell() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-6">
+        {/* Header bumped from h-14 (56px) to h-16 (64px) to give the larger
+             logo + nav typography room to breathe. Still compact for a
+             dashboard but no longer cramped. */}
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-6">
           <div className="flex items-center gap-8">
             <NavLink to="/" className="flex items-center gap-3 text-foreground">
               {/* Mirror M wordmark + HQ caption. The mark IS the brand, so
                   no "Mirror NYC" text — that'd be redundant. "HQ" sits to
                   the right in mono coral as the app identifier, mirroring
                   the deck's "M | TALENT SCOUT" header pattern. */}
-              <MirrorMark className="h-6 w-auto" />
-              <span className="hidden sm:inline font-mono text-[12px] font-bold uppercase tracking-[0.12em] text-primary">
+              <MirrorMark className="h-8 w-auto" />
+              <span className="hidden sm:inline font-mono text-[14px] font-bold uppercase tracking-[0.12em] text-primary">
                 HQ
               </span>
             </NavLink>
@@ -54,7 +57,7 @@ export default function AppShell() {
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `rounded-sm px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em] transition-colors ${
+                    `rounded-sm px-3 py-2 font-mono text-[13px] font-bold uppercase tracking-[0.08em] transition-colors ${
                       isActive
                         ? "text-foreground bg-secondary"
                         : "text-muted-foreground hover:text-foreground"
@@ -69,13 +72,13 @@ export default function AppShell() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-9 gap-2 px-2">
-                <Avatar className="h-7 w-7">
-                  <AvatarFallback className="text-xs bg-secondary">
+              <Button variant="ghost" className="h-10 gap-2.5 px-2">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="text-[13px] bg-secondary">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                <span className="hidden sm:inline text-sm text-muted-foreground">
+                <span className="hidden sm:inline text-[13px] text-muted-foreground">
                   {email}
                 </span>
               </Button>
