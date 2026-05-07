@@ -27,6 +27,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hasCode: window.location.search.includes("code="),
     });
 
+    // Phase 3.6.15: manual hash-fallback. supabase-js's detectSessionInUrl
+    // was silently failing to parse a valid implicit-flow callback on
+    // production (INITIAL_SESSION fired with no session despite a valid
+    // JWT in the hash). Do it ourselves: if the URL hash carries an
+    // access_token, parse it, call setSession explicitly, then clear
+    // the hash. setSession triggers SIGNED_IN downstream.
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token=")) {
+      const params = new URLSearchParams(hash.slice(1));
+      const access_token = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+      if (access_token && refresh_token) {
+        console.log("[auth] manual hash parse: setting session from URL");
+        supabase.auth
+          .setSession({ access_token, refresh_token })
+          .then(({ data, error }) => {
+            console.log("[auth] manual setSession result", {
+              hasSession: !!data.session,
+              email: data.session?.user?.email,
+              error: error?.message,
+            });
+            // Strip the hash so a refresh doesn't re-trigger this path.
+            window.history.replaceState(null, "", window.location.pathname + window.location.search);
+          });
+      }
+    }
+
     const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       console.log("[auth] state change", { event, hasSession: !!newSession, email: newSession?.user?.email });
       if (newSession?.user && !isAllowedEmail(newSession.user.email)) {
