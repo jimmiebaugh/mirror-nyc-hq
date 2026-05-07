@@ -57,7 +57,11 @@ export default function AppShell() {
                   the right in mono coral as the app identifier, mirroring
                   the deck's "M | TALENT SCOUT" header pattern. */}
               <MirrorMark className="h-[42px] w-auto" />
-              <span className="hidden sm:inline font-mono text-[14px] font-bold uppercase tracking-[0.12em] text-primary">
+              {/* leading-none removes Roboto Mono's natural line-box
+                   descent space; translate-y nudges the caps down so the
+                   visible glyph bottom sits flush with the underbar of the
+                   M wordmark instead of floating ~3px above it. */}
+              <span className="hidden sm:inline font-mono text-[14px] font-bold uppercase leading-none tracking-[0.12em] text-primary translate-y-[3px]">
                 {brandCaption}
               </span>
             </NavLink>
