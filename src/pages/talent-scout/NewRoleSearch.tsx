@@ -53,7 +53,7 @@ export default function NewRoleSearch() {
     <div className="mx-auto max-w-3xl space-y-6">
       <Stepper active={2} />
       <header className="space-y-2">
-        <div className="text-xs font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
+        <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
         <h1 className="h-page">Email search</h1>
         <p className="text-sm text-muted-foreground">
           How to find applicants for this role in the jobs@mirrornyc.com inbox.

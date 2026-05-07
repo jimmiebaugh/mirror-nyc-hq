@@ -254,7 +254,7 @@ export default function PullDetail() {
     <div className="space-y-6">
       <Link
         to={`/talent-scout/roles/${roleId}`}
-        className="text-xs font-mono uppercase tracking-widest text-primary hover:underline"
+        className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline"
       >
         ← Back to role
       </Link>

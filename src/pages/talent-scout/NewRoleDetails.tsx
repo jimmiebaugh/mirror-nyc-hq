@@ -78,7 +78,7 @@ export default function NewRoleDetails() {
     <div className="mx-auto max-w-3xl space-y-6">
       <Stepper active={1} />
       <header className="space-y-2">
-        <div className="text-xs font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
+        <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
         <h1 className="h-page">Role details</h1>
         <p className="text-sm text-muted-foreground">
           Tell us about the role. We'll generate a scorecard from this in step 3.

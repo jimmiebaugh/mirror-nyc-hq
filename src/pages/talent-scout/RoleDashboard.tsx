@@ -161,7 +161,7 @@ export default function RoleDashboard() {
 
   return (
     <div className="space-y-6">
-      <Link to="/talent-scout" className="text-xs font-mono uppercase tracking-widest text-primary hover:underline">
+      <Link to="/talent-scout" className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline">
         ← Talent Scout
       </Link>
 

@@ -163,7 +163,7 @@ export default function CandidateDetail() {
     <div className="space-y-6">
       <Link
         to={cand.role_id ? `/talent-scout/roles/${cand.role_id}` : "/talent-scout"}
-        className="text-xs font-mono uppercase tracking-widest text-primary hover:underline"
+        className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline"
       >
         ← Back to {role?.title ?? "role"}
       </Link>

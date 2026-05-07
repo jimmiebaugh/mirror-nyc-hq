@@ -52,7 +52,7 @@ export default function Projects() {
   return (
     <div className="space-y-8">
       <header className="space-y-2">
-        <div className="text-xs font-mono uppercase tracking-widest text-primary">Projects</div>
+        <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Projects</div>
         <h1 className="h-page">All projects</h1>
       </header>
 

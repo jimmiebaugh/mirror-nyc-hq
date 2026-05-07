@@ -272,7 +272,7 @@ export default function TalentScoutIndex() {
     <div className="space-y-8">
       <header className="flex items-end justify-between gap-5">
         <div className="space-y-2">
-          <div className="text-xs font-mono uppercase tracking-widest text-primary">Talent Scout</div>
+          <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout</div>
           <h1 className="h-page">Open roles</h1>
           <p className="text-sm text-muted-foreground">Active hiring searches at Mirror NYC.</p>
         </div>

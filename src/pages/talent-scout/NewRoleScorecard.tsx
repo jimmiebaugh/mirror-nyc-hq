@@ -227,7 +227,7 @@ export default function NewRoleScorecard() {
 
       <div className="flex items-end justify-between gap-5">
         <div className="space-y-2">
-          <div className="text-xs font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
+          <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
           <h1 className="h-page">Review scorecard</h1>
           <p className="text-sm text-muted-foreground">
             Generated from your JD. Edit weights, add criteria, then lock it in.

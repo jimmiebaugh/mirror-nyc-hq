@@ -143,18 +143,18 @@
      per Phase 3.5b decision — uppercase buttons read too presentational
      for a working dashboard. */
 
-  /* Page-title scale stays in proportion with the bumped 13px panel labels:
-     ~3.4× ratio. Bumped from 32px in the post-review pass once panel
-     headers grew. */
+  /* Page-title sits ~3× above the 13px panel labels — middle ground
+     between the original 32px and the 44px try; 38px reads as a clear
+     hero without overpowering the dashboard's compact density. */
   .h-page {
-    @apply text-[44px] font-extrabold uppercase leading-none;
+    @apply text-[38px] font-extrabold uppercase leading-none;
     font-family: var(--font-display);
-    letter-spacing: -0.015em;
+    letter-spacing: -0.012em;
   }
   .h-section {
-    @apply text-[28px] font-extrabold uppercase leading-tight;
+    @apply text-[24px] font-extrabold uppercase leading-tight;
     font-family: var(--font-display);
-    letter-spacing: -0.01em;
+    letter-spacing: -0.008em;
   }
   /* Roboto Mono renders ~10% wider than Inter, so caption sizes that read
      "right" in Inter feel undersized in mono. The base label/eyebrow size

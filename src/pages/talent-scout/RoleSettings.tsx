@@ -169,7 +169,7 @@ export default function RoleSettings() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="space-y-2">
-        <Link to={`/talent-scout/roles/${role.id}`} className="text-xs font-mono uppercase tracking-widest text-primary hover:underline">
+        <Link to={`/talent-scout/roles/${role.id}`} className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline">
           ← Back to role
         </Link>
         <h1 className="h-page">Edit role</h1>
