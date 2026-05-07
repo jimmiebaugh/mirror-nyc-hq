@@ -19,8 +19,9 @@ The `/` route serves a stealth coming-soon landing for unauthenticated visitors 
 
 - URL: `https://amipjjmphblfxpghjnel.supabase.co`
 - Project ref ID: `amipjjmphblfxpghjnel`
-- Publishable key (client-side): `VITE_SUPABASE_PUBLISHABLE_KEY` env var (build-time inlined by Vite)
-- Secret/service role key (server-side, edge functions only): stored as Supabase secret
+- API keys: project is on the new `sb_publishable_*` / `sb_secret_*` key system (not the legacy anon/service_role JWTs — those return 401 against `/auth/v1` endpoints as of Phase 3.6.16).
+  - **Publishable key** (client-side): `sb_publishable_*`. Hardcoded in `src/integrations/supabase/client.ts` and also held in `VITE_SUPABASE_PUBLISHABLE_KEY` env var (Netlify + local `.env`). Hardcoded value wins; the env var is kept in sync but currently unused at runtime. Publishable keys are designed to be safely exposed in client bundles.
+  - **Secret key** (server-side, Edge Functions only): `sb_secret_*`, stored as a Supabase secret on the server. Never inlined client-side.
 - DB password: in Jimmie's password manager
 - Security settings: Data API enabled, Auto-expose new tables OFF, Auto-RLS ON
 
@@ -68,7 +69,7 @@ Netlify auto-deploys from GitHub `main` on every push. Per-branch preview URLs f
 - Publish dir: `dist`
 - SPA fallback redirect: `/* → /index.html` status 200 (so React Router can handle direct deep-links).
 
-Env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) live in the Netlify Dashboard, not in `netlify.toml` — Vite inlines them at build time.
+Env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) live in the Netlify Dashboard, not in `netlify.toml`. As of Phase 3.6.16 the same values are also hardcoded in `src/integrations/supabase/client.ts` (the hardcoded values are authoritative); the env vars are kept in sync but not currently used at runtime.
 
 Production URL: `hq.mirrornyc.com` → resolves to `mirrornyc-hq.netlify.app`. Subdomain hookup done in Phase 6.3.
 
