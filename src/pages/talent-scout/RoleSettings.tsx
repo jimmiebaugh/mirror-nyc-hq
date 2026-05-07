@@ -169,10 +169,10 @@ export default function RoleSettings() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="space-y-2">
-        <Link to={`/talent-scout/roles/${role.id}`} className="text-xs uppercase tracking-widest text-primary hover:underline">
+        <Link to={`/talent-scout/roles/${role.id}`} className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline">
           ← Back to role
         </Link>
-        <h1 className="text-3xl font-semibold tracking-tight">Edit role</h1>
+        <h1 className="h-page">Edit role</h1>
         <p className="text-sm text-muted-foreground">{role.title}</p>
       </header>
 
@@ -355,7 +355,7 @@ function Field({
 }) {
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-bold uppercase tracking-wider text-primary">
+      <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
         {label}
         {required && <span className="ml-1 text-primary">*</span>}
       </Label>

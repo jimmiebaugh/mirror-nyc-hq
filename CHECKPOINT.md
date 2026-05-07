@@ -3,12 +3,13 @@
 Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-06
-**Latest commit on main:** `f96e800` — Add netlify.toml: explicit Vite build config + SPA redirect fallback
-**Current phase:** Phase 3.6 (Final review + packet) — not yet started
-**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirror-nyc-hq.netlify.app`)
+**Latest commit on main:** Phase 3.5b: Visual brand pass — Mirror deck-canonical typography + dynamic brand caption (merged via FF)
+**Current phase:** Phase 3.6 (Final review + packet) — next.
+**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirror-nyc-hq.netlify.app`).
 
 ## What's live in production
 
+- **Mirror brand identity applied site-wide** (Phase 3.5b): coral `#BE4E44`, Montserrat ExtraBold display + Roboto Mono captions + Roboto body, dynamic `HQ` / `TALENT` / `VENUES` caption next to the M wordmark in the top nav based on which sub-app you're in. Brand spec lives in `docs/visual-audit/mirror-style-guide.md` with the deck-template authority (`BLANK DECK TEMPLATE (2026).pptx`).
 - Stealth coming-soon landing at `/` for unauthenticated visitors. Hidden sign-in trigger is the bottom "STRATEGY / DESIGN / PRODUCTION" line (no visible affordance, default cursor, not keyboard-focusable).
 - Authenticated users land on Dashboard. `/projects` renders the projects list. Other HQ Core pages (`/venues`, `/clients`, `/tasks`) are `<ComingSoon />` stubs.
 - Talent Scout is fully wired through Phase 3.5 for admin users:
@@ -31,11 +32,11 @@ Living-state doc. Update on every meaningful merge to `main`.
 ## Recent commits
 
 ```
+Phase 3.5b: Visual brand pass — passes 1 through 14, FF-merged from phase-3-5b-visual-brand
+495a53f  Restructure docs: split CLAUDE.md into specialized docs, add CHECKPOINT.md
 f96e800  Add netlify.toml: explicit Vite build config + SPA redirect fallback
 a427116  Use authoritative Mirror wordmark SVG; bump landing logo + text 20%; restore HQ title metadata
 568fa7a  Add coming-soon stealth landing with hidden sign-in trigger
-ab21c58  Phase 3.5: Candidate detail, ts-evaluate-candidate, ts-bulk-reevaluate, master pool restructure, eval history retention, two-tier candidate table
-1017720  Document verify_jwt=false + INTERNAL_API_SECRET pattern in auth model
 ```
 
 ## Recent migrations

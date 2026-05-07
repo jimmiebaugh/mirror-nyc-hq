@@ -13,15 +13,31 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        // Three brand families per docs/visual-audit/mirror-style-guide.md.
+        // Default `font-sans` resolves to Roboto so body prose hits the
+        // right face by default. Display (Montserrat) + mono (Roboto Mono)
+        // are explicit utilities for headlines and captions.
+        sans: ["Roboto", "ui-sans-serif", "system-ui"],
+        display: ["Montserrat", "ui-sans-serif", "system-ui"],
+        mono: ["Roboto Mono", "ui-monospace", "SF Mono", "Menlo", "monospace"],
+      },
       colors: {
         border: "hsl(var(--border))",
+        "border-strong": "hsl(var(--border-strong))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        surface: {
+          DEFAULT: "hsl(var(--surface))",
+          alt: "hsl(var(--surface-alt))",
+          raised: "hsl(var(--surface-raised))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "hsl(var(--primary-hover))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -39,6 +55,11 @@ export default {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
+        subtle: {
+          foreground: "hsl(var(--subtle-foreground))",
+        },
+        success: "hsl(var(--success))",
+        warn: "hsl(var(--warn))",
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",

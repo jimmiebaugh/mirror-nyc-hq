@@ -339,7 +339,7 @@ export function CandidateTable({
       {selCount > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-primary/10 px-5 py-2.5">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-primary">
+            <span className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
               {selCount} selected
             </span>
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={bulkBusy}>
@@ -347,27 +347,29 @@ export function CandidateTable({
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {/* Phase 3.5b: 500-shade text matches StatusDropdown's
+                 source-aligned status colors. */}
             <BulkStatusButton
               label="Reject"
-              colorClass="bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20"
+              colorClass="bg-red-500/10 text-red-500 border-red-500/30 hover:bg-red-500/20"
               onClick={() => setStatusBulk("reject")}
               disabled={bulkBusy}
             />
             <BulkStatusButton
               label="Consider"
-              colorClass="bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
+              colorClass="bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500/20"
               onClick={() => setStatusBulk("consider")}
               disabled={bulkBusy}
             />
             <BulkStatusButton
               label="Fast-Track"
-              colorClass="bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20"
+              colorClass="bg-purple-500/10 text-purple-500 border-purple-500/30 hover:bg-purple-500/20"
               onClick={() => setStatusBulk("fast_track")}
               disabled={bulkBusy}
             />
             <BulkStatusButton
               label="Interview"
-              colorClass="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/20"
+              colorClass="bg-cyan-500/10 text-cyan-500 border-cyan-500/30 hover:bg-cyan-500/20"
               onClick={() => setStatusBulk("interview")}
               disabled={bulkBusy}
             />
@@ -384,7 +386,7 @@ export function CandidateTable({
         className={cn(
           "sticky top-0 z-10 grid",
           GRID_COLS,
-          "gap-4 border-b border-border bg-secondary/80 px-5 py-3 text-[11px] font-bold uppercase tracking-wider backdrop-blur",
+          "gap-4 border-b border-border bg-secondary/80 px-5 py-3 text-[13px] font-mono font-bold uppercase tracking-wider backdrop-blur",
         )}
       >
         <div>
@@ -427,7 +429,7 @@ export function CandidateTable({
       <button
         type="button"
         onClick={() => setRejectedOpen((v) => !v)}
-        className="flex w-full items-center gap-3 border-t border-border bg-secondary/40 px-5 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:bg-secondary/60"
+        className="flex w-full items-center gap-3 border-t border-border bg-secondary/40 px-5 py-2.5 text-left text-[13px] font-mono font-bold uppercase tracking-wider text-muted-foreground hover:bg-secondary/60"
       >
         {rejectedOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         <span>
@@ -470,7 +472,7 @@ function BulkStatusButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex h-8 items-center rounded-md border px-3 text-[11px] font-bold uppercase tracking-wider transition-colors disabled:opacity-50",
+        "inline-flex h-8 items-center rounded-md border px-3 text-[13px] font-mono font-bold uppercase tracking-wider transition-colors disabled:opacity-50",
         colorClass,
       )}
     >

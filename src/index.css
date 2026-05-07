@@ -1,51 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;800&family=Roboto:wght@300;400;500&family=Roboto+Mono:wght@300;400;500;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 25% 12%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 25% 12%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 25% 12%;
-    --primary: 158 64% 52%;
-    --primary-foreground: 222 47% 8%;
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 158 64% 52%;
-    --accent-foreground: 222 47% 8%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 158 64% 52%;
-    --radius: 0.5rem;
+    /* Mirror NYC HQ — Design Tokens (HSL).
+       Brand authority: Mirror NYC blank deck template (BLANK DECK TEMPLATE
+       (2026).pptx). HQ runs dark-only; the index.html `dark` class is
+       hardcoded. The .dark block below mirrors :root so either selector
+       resolves the same values. */
+    --background: 0 0% 0%;                /* #000 */
+    --foreground: 0 0% 100%;              /* #fff */
+
+    --surface: 0 0% 4%;                   /* #0A0A0A — barely lifted off black */
+    --surface-alt: 0 0% 8%;               /* #141414 — input bg, hover */
+    --surface-raised: 0 0% 12%;           /* #1F1F1F — popovers, top elevation */
+
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 100%;
+
+    /* Mirror coral — straight from the deck slide-master XML.
+       Phase 3.5b shipped #ef5b5b (source app's coral); Mirror's actual
+       brand coral is the duskier #BE4E44 used on every section divider
+       numeral and eyebrow caption in the deck. */
+    --primary: 4 47% 51%;                 /* #BE4E44 dusty coral */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 4 53% 56%;           /* #CC5C52 +5% lightness */
+
+    --secondary: 0 0% 8%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 8%;
+    --muted-foreground: 0 0% 78%;         /* #c8c8c8 */
+    --subtle-foreground: 0 0% 54%;        /* #8a8a8a */
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;             /* #ef4444 — Tier 1, Failed, Closed */
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 76% 64%;               /* #4ade80 — Tier 3, Latest, Final */
+    --warn: 38 92% 50%;                   /* #f59e0b — Running, Stalled */
+
+    --border: 0 0% 16%;                   /* #2a2a2a hairlines */
+    --border-strong: 0 0% 23%;            /* #3a3a3a inputs / dividers */
+    --input: 0 0% 16%;
+    --ring: 4 47% 51%;                    /* matches primary */
+
+    --radius: 0.25rem;                    /* 4px corners */
+
+    /* Type stack — three families. Display + caption are the brand DNA.
+       Body keeps prose readable without leaning on the heavy display face. */
+    --font-display: 'Montserrat', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-body: 'Roboto', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'Roboto Mono', ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+
+    /* Sidebar tokens for the unused shadcn <Sidebar /> primitive. AppShell
+       doesn't render it, but the component references these vars; align
+       to the new dark palette so future use doesn't ship empty hsl(). */
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 4 47% 51%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 4 47% 51%;
   }
 
+  /* HQ runs dark-only. Mirror :root so the hardcoded `dark` class on <html>
+     resolves to the same values. */
   .dark {
-    --background: 222 28% 7%;
-    --foreground: 210 20% 92%;
-    --card: 222 25% 10%;
-    --card-foreground: 210 20% 92%;
-    --popover: 222 25% 10%;
-    --popover-foreground: 210 20% 92%;
-    --primary: 158 64% 52%;
-    --primary-foreground: 222 47% 8%;
-    --secondary: 222 20% 14%;
-    --secondary-foreground: 210 20% 92%;
-    --muted: 222 20% 14%;
-    --muted-foreground: 220 10% 60%;
-    --accent: 158 64% 52%;
-    --accent-foreground: 222 47% 8%;
-    --destructive: 0 62% 45%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 222 20% 18%;
-    --input: 222 20% 18%;
-    --ring: 158 64% 52%;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+
+    --surface: 0 0% 4%;
+    --surface-alt: 0 0% 8%;
+    --surface-raised: 0 0% 12%;
+
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 4 47% 51%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 4 53% 56%;
+
+    --secondary: 0 0% 8%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 8%;
+    --muted-foreground: 0 0% 78%;
+    --subtle-foreground: 0 0% 54%;
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 76% 64%;
+    --warn: 38 92% 50%;
+
+    --border: 0 0% 16%;
+    --border-strong: 0 0% 23%;
+    --input: 0 0% 16%;
+    --ring: 4 47% 51%;
+
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 4 47% 51%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 4 47% 51%;
   }
 }
 
@@ -56,9 +124,153 @@
   html {
     @apply dark;
   }
-  body {
-    @apply bg-background text-foreground antialiased;
-    font-family: ui-sans-serif, system-ui, -apple-system, "Inter", "Segoe UI", sans-serif;
-    font-feature-settings: "ss01", "cv11";
+  html, body, #root {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
+  body {
+    @apply antialiased;
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+}
+
+@layer components {
+  /* Mirror brand utility classes. Names follow the source app's pattern,
+     refactored to use the new font tokens (display = Montserrat,
+     mono = Roboto Mono). Buttons deliberately STAY sentence/title case
+     per Phase 3.5b decision — uppercase buttons read too presentational
+     for a working dashboard. */
+
+  .h-page {
+    @apply text-[32px] font-extrabold uppercase leading-none;
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  .h-section {
+    @apply text-[22px] font-extrabold uppercase leading-tight;
+    font-family: var(--font-display);
+    letter-spacing: -0.005em;
+  }
+  /* Roboto Mono renders ~10% wider than Inter, so caption sizes that read
+     "right" in Inter feel undersized in mono. The base label/eyebrow size
+     bumped from 11px to 13px in the post-deck-template review pass; small
+     captions (10–11px) are reserved for in-tile sub-labels and pill text. */
+  .label-section {
+    @apply text-[13px] font-bold uppercase text-foreground;
+    font-family: var(--font-mono);
+    letter-spacing: 0.06em;
+  }
+  .label-form {
+    @apply text-[13px] font-bold uppercase text-foreground;
+    font-family: var(--font-mono);
+    letter-spacing: 0.06em;
+  }
+  .crumb {
+    @apply text-[12px] font-medium uppercase;
+    font-family: var(--font-mono);
+    color: hsl(var(--primary));
+    letter-spacing: 0.08em;
+  }
+  .eyebrow {
+    @apply text-[12px] font-bold uppercase;
+    font-family: var(--font-mono);
+    color: hsl(var(--primary));
+    letter-spacing: 0.08em;
+  }
+
+  /* Buttons — height + spacing match brand template (40px / 4px radius).
+     Casing stays as-typed (NOT uppercased) per Jimmie's review feedback;
+     all-caps buttons read too "presentational" for a working app. */
+  .btn-base {
+    @apply inline-flex items-center justify-center gap-2 h-10 px-5 rounded-[4px] text-[13px] font-medium whitespace-nowrap transition-colors;
+    font-family: var(--font-body);
+  }
+  .btn-primary {
+    @apply btn-base text-primary-foreground;
+    background: hsl(var(--primary));
+  }
+  .btn-primary:hover { background: hsl(var(--primary-hover)); }
+  .btn-ghost {
+    @apply btn-base bg-transparent text-foreground border;
+    border-color: hsl(var(--border-strong));
+  }
+  .btn-ghost:hover {
+    @apply bg-white/5;
+    border-color: hsl(var(--foreground));
+  }
+  .btn-light { @apply btn-base bg-white text-black; }
+  .btn-light:hover { @apply bg-white/85; }
+
+  .input-base {
+    @apply w-full h-11 px-3 rounded-[4px] text-[14px] text-foreground border outline-none transition-shadow;
+    font-family: var(--font-body);
+    background: hsl(var(--surface-alt));
+    border-color: hsl(var(--border-strong));
+  }
+  .input-base:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
+  }
+  .textarea-base { @apply input-base h-auto py-3 min-h-[80px] resize-y leading-normal; }
+  .input-filled {
+    background: hsl(var(--surface-raised));
+    border-left: 2px solid hsl(var(--primary));
+  }
+
+  .tier-badge {
+    @apply inline-flex items-center gap-[6px] px-[10px] py-[4px] rounded-[3px] text-[10.5px] font-bold uppercase border w-fit;
+    font-family: var(--font-mono);
+    letter-spacing: 0.06em;
+  }
+  .tier-badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+  }
+  .tier-badge--1 { background: rgba(239, 68, 68, 0.12); color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
+  .tier-badge--2 { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+  .tier-badge--3 { background: rgba(74, 222, 128, 0.10); color: #4ade80; border-color: rgba(74, 222, 128, 0.3); }
+  /* Bonus tier uses the Mirror coral (deck primary). RGBA derived from
+     #BE4E44 = rgb(190, 78, 68). */
+  .tier-badge--bonus { background: rgba(190, 78, 68, 0.15); color: hsl(var(--primary)); border-color: rgba(190, 78, 68, 0.4); }
+
+  .manual-tag {
+    @apply inline-block text-[9.5px] font-bold uppercase px-[6px] py-[2px] rounded-[3px] ml-2 align-middle;
+    font-family: var(--font-mono);
+    letter-spacing: 0.06em;
+    color: hsl(var(--primary));
+    background: rgba(190, 78, 68, 0.12);
+  }
+
+  .surface {
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+  }
+  .surface-alt { background: hsl(var(--surface-alt)); }
+
+  .status-pill {
+    @apply inline-flex items-center gap-[6px] px-[9px] py-[4px] rounded-[3px] text-[10.5px] font-bold uppercase border w-fit;
+    font-family: var(--font-mono);
+    letter-spacing: 0.06em;
+    background: hsl(var(--surface-alt));
+    color: hsl(var(--muted-foreground));
+    border-color: hsl(var(--border));
+  }
+  .status-pill::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+  }
+  .status-pill--active { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+  .status-pill--complete { background: rgba(74, 222, 128, 0.10); color: #4ade80; border-color: rgba(74, 222, 128, 0.3); }
+  .status-pill--new { background: hsl(var(--surface-alt)); color: hsl(var(--muted-foreground)); border-color: hsl(var(--border)); }
 }

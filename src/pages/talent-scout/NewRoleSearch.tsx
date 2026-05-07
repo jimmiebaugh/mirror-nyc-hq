@@ -53,8 +53,8 @@ export default function NewRoleSearch() {
     <div className="mx-auto max-w-3xl space-y-6">
       <Stepper active={2} />
       <header className="space-y-2">
-        <div className="text-xs uppercase tracking-widest text-primary">Talent Scout · New Role</div>
-        <h1 className="text-3xl font-semibold tracking-tight">Email search</h1>
+        <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
+        <h1 className="h-page">Email search</h1>
         <p className="text-sm text-muted-foreground">
           How to find applicants for this role in the jobs@mirrornyc.com inbox.
         </p>
@@ -63,7 +63,7 @@ export default function NewRoleSearch() {
       <Card>
         <CardContent className="space-y-6 p-6">
           <div className="space-y-2">
-            <Label className="text-xs font-bold uppercase tracking-wider text-primary">
+            <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
               Subject line keywords
               <span className="ml-2 text-[11px] font-normal normal-case tracking-normal text-muted-foreground">
                 Add every variant you want to catch · press Enter
@@ -82,7 +82,7 @@ export default function NewRoleSearch() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-primary">
+              <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
                 Start pulling from
               </Label>
               <Input
@@ -96,7 +96,7 @@ export default function NewRoleSearch() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-bold uppercase tracking-wider text-primary">
+              <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
                 Scheduled auto-pull
                 <span className="ml-2 text-[11px] font-normal normal-case tracking-normal text-muted-foreground">Optional</span>
               </Label>
