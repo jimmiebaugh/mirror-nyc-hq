@@ -1,6 +1,91 @@
 # Audit trail: every change made in Phase 3.5b
 
-Granular log of every file touched in the visual brand pass, with the before/after values. Use this to walk through HQ in your browser and verify each fix landed correctly. Pair with `token-diff.md` (what changed at the token level) and `screenshot-decision.md` (why no live screenshots).
+Granular log of every file touched in the visual brand pass. Use this to walk through HQ in your browser and verify each fix landed correctly. Pair with `mirror-style-guide.md` (the spec this implements), `hq-vs-source-diff.md` (where HQ drifted), `token-diff.md` (token-level history), and `screenshot-decision.md` (why no live screenshots).
+
+## Pass 2 (post-deck-template review): Mirror-canonical brand applied
+
+After Jimmie reviewed the first pass and supplied the brand-authoritative deck template (`BLANK DECK TEMPLATE (2026).pptx`), the entire token + font foundation was re-aligned to deck values. Locked answers from `mirror-style-guide.md` § 5:
+
+- Coral hex: `#BE4E44` (deck-canonical, NOT source's `#ef5b5b`)
+- Display font: **Montserrat ExtraBold** (+ Montserrat regular)
+- Caption / label font: **Roboto Mono**
+- Body font: **Roboto** (proportional, replaces Inter)
+- Page titles: ALL CAPS in Montserrat ExtraBold
+- Button labels: stay sentence/title case (uppercase reads too presentational)
+- Side rail pattern: not on Talent Scout for now (revisit for HQ Core)
+- Coral frequency: keep current usage on CTAs / eyebrows / R-pills
+
+### `src/index.css` — wholesale Pass-2 rewrite
+- Google Fonts import flipped from Inter to Montserrat (400, 800) + Roboto (300, 400, 500) + Roboto Mono (300, 400, 500, 700).
+- `--primary` flipped from `0 83% 65%` (#ef5b5b) → `4 47% 51%` (#BE4E44 dusty coral).
+- `--primary-hover` from `0 86% 71%` (#f47373) → `4 53% 56%` (#CC5C52, +5% lightness).
+- `--ring` mirrors new `--primary`.
+- New CSS vars: `--font-display` (Montserrat), `--font-body` (Roboto), `--font-mono` (Roboto Mono).
+- Body font-family swapped to `var(--font-body)` (Roboto) at 15px.
+- `--surface` lifted from `0 0% 8%` to `0 0% 4%` (#0A0A0A — barely off black, deck-aligned).
+- `--surface-alt` from `0 0% 11%` to `0 0% 8%` (#141414).
+- `--surface-raised` from `0 0% 14%` to `0 0% 12%` (#1F1F1F).
+- `--popover` updated to surface-raised (12% — was 8%).
+- Sidebar tokens updated to match new dark palette.
+- Component utilities (`.h-page`, `.label-section`, `.crumb`, `.btn-base`, etc.) refactored to reference `var(--font-display)` / `var(--font-mono)` / `var(--font-body)`. New `.h-section` and `.eyebrow` utilities.
+- `.btn-base` casing left case-as-typed (no auto-uppercase) per Q6 review.
+- `.tier-badge--bonus` and `.manual-tag` background rgba updated to `190, 78, 68` (#BE4E44 components).
+
+### `tailwind.config.ts`
+- `fontFamily.sans` from `["Inter", ...]` to `["Roboto", ...]` so default `font-sans` resolves to Roboto.
+- Added `fontFamily.display: ["Montserrat", ...]`.
+- Added `fontFamily.mono: ["Roboto Mono", ...]`.
+
+### Page titles → `.h-page` utility (10 files)
+Every `<h1 className="text-3xl font-semibold tracking-tight">` swapped to `<h1 className="h-page">` so titles render in Montserrat ExtraBold uppercase 32px:
+- `src/pages/talent-scout/Index.tsx` ("Open roles")
+- `src/pages/talent-scout/RoleDashboard.tsx` (role title)
+- `src/pages/talent-scout/PullDetail.tsx` (role title)
+- `src/pages/talent-scout/CandidateDetail.tsx` (candidate name)
+- `src/pages/talent-scout/NewRoleDetails.tsx` ("Role details")
+- `src/pages/talent-scout/NewRoleSearch.tsx` ("Email search")
+- `src/pages/talent-scout/NewRoleScorecard.tsx` ("Review scorecard")
+- `src/pages/talent-scout/RoleSettings.tsx` ("Edit role")
+- `src/pages/Dashboard.tsx`
+- `src/pages/Projects.tsx` ("All projects")
+
+### Caption / label patterns → `font-mono`
+Bulk-added `font-mono` to two label patterns across `src/pages/talent-scout/` and `src/components/talent-scout/`:
+- `font-bold uppercase tracking-wider` → `font-mono font-bold uppercase tracking-wider` (every label, pill text, table header, stat tile label, badge text)
+- `uppercase tracking-widest` → `font-mono uppercase tracking-widest` (eyebrow captions like "Talent Scout · New Role")
+
+50+ inline class strings updated; all label-style usage now renders in Roboto Mono. Body text and table cells (which don't carry these tokens) stay on Roboto.
+
+### Stat tile numbers → Montserrat ExtraBold
+`text-3xl font-black` and `text-4xl font-black` patterns swapped to `font-display text-(3xl|4xl) font-extrabold` in:
+- `src/pages/talent-scout/CandidateDetail.tsx` (the giant 72/105 score readout, total score)
+- `src/pages/talent-scout/RoleDashboard.tsx` (R{n} round numbers, stat tile values)
+- `src/pages/talent-scout/PullDetail.tsx` (stat tile values)
+
+These big tabular numbers now hit Montserrat ExtraBold to match the deck's display weight.
+
+### `src/components/talent-scout/Stepper.tsx`
+- Step label className: `text-xs font-semibold uppercase tracking-wider` → `font-mono text-xs font-bold uppercase tracking-wider`. The "1 ROLE DETAILS / 2 SEARCH SETUP / 3 SCORECARD" stepper now reads in Roboto Mono.
+
+### `src/components/AppShell.tsx`
+- Brand wordmark "Mirror NYC HQ": `text-sm font-semibold tracking-tight` → `font-display text-[15px] font-extrabold uppercase tracking-tight`. The brand mark now reads as a Montserrat ExtraBold caps wordmark, with the "HQ" suffix in coral.
+- Nav links: `rounded-md px-3 py-1.5 text-sm` → `rounded-sm px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em]`. Top nav now reads as deck-style mono caps captions.
+
+### `src/pages/Landing.tsx`
+- Hidden "STRATEGY / DESIGN / PRODUCTION" sign-in trigger: added `font-mono` so it matches the deck cover slide's footer treatment exactly (where it appears in Roboto Mono on pure black).
+
+### Pass-1 survivors (kept as-is)
+Pass-1 changes still in effect after Pass-2 layered on top:
+- StatusDropdown: cyan/purple/amber/red text colors at 500-shade. Still correct — these aren't deck colors but match source's StatusDropdown pattern, and the deck doesn't dictate dropdown affordances.
+- CandidateTable bulk action buttons: 500-shade text colors. Same reasoning.
+- Tier T3 + Final Report + Latest + Scheduled: `green-400` (#4ADE80) instead of emerald. Matches source AND maps to the success token.
+- Tier T1 + Closed + Failed: red-500. Tier T2 + Stalled + Running: amber-500. Bonus tier: coral primary (now #BE4E44 via the new token).
+
+## Pass 1 (initial Phase 3.5b — pre-deck-review)
+
+The original "match HQ to source" pass. Most of these changes still stand; the coral hex and font choices were superseded by Pass 2 above. Kept here for history.
+
+
 
 ## A. Token files (the wholesale brand swap)
 

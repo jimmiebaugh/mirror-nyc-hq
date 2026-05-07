@@ -78,8 +78,8 @@ export default function NewRoleDetails() {
     <div className="mx-auto max-w-3xl space-y-6">
       <Stepper active={1} />
       <header className="space-y-2">
-        <div className="text-xs uppercase tracking-widest text-primary">Talent Scout · New Role</div>
-        <h1 className="text-3xl font-semibold tracking-tight">Role details</h1>
+        <div className="text-xs font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
+        <h1 className="h-page">Role details</h1>
         <p className="text-sm text-muted-foreground">
           Tell us about the role. We'll generate a scorecard from this in step 3.
         </p>
@@ -216,7 +216,7 @@ function Field({
 }) {
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-bold uppercase tracking-wider text-primary">
+      <Label className="text-xs font-mono font-bold uppercase tracking-wider text-primary">
         {label}
         {required && <span className="ml-1 text-primary">*</span>}
         {hint && <span className="ml-2 text-[11px] font-normal normal-case tracking-normal text-muted-foreground">{hint}</span>}

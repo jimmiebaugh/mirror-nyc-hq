@@ -67,7 +67,7 @@ export function StatusDropdown({
 
   return (
     <Select value={current} onValueChange={onValueChange} disabled={saving}>
-      <SelectTrigger className={cn("min-w-[140px] border font-bold uppercase tracking-wider", heightCls, opt.cls)}>
+      <SelectTrigger className={cn("min-w-[140px] border font-mono font-bold uppercase tracking-wider", heightCls, opt.cls)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

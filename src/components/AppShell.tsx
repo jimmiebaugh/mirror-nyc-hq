@@ -37,7 +37,10 @@ export default function AppShell() {
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-6">
           <div className="flex items-center gap-8">
             <NavLink to="/" className="flex items-center gap-2">
-              <span className="text-sm font-semibold tracking-tight">
+              {/* Mirror brand mark — Montserrat ExtraBold uppercase per the
+                  deck template's display treatment. The "HQ" suffix stays
+                  coral as the brand accent. */}
+              <span className="font-display text-[15px] font-extrabold uppercase tracking-tight">
                 Mirror NYC <span className="text-primary">HQ</span>
               </span>
             </NavLink>
@@ -48,7 +51,7 @@ export default function AppShell() {
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    `rounded-sm px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.08em] transition-colors ${
                       isActive
                         ? "text-foreground bg-secondary"
                         : "text-muted-foreground hover:text-foreground"

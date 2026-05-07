@@ -14,7 +14,13 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui"],
+        // Three brand families per docs/visual-audit/mirror-style-guide.md.
+        // Default `font-sans` resolves to Roboto so body prose hits the
+        // right face by default. Display (Montserrat) + mono (Roboto Mono)
+        // are explicit utilities for headlines and captions.
+        sans: ["Roboto", "ui-sans-serif", "system-ui"],
+        display: ["Montserrat", "ui-sans-serif", "system-ui"],
+        mono: ["Roboto Mono", "ui-monospace", "SF Mono", "Menlo", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",

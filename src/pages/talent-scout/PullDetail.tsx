@@ -254,7 +254,7 @@ export default function PullDetail() {
     <div className="space-y-6">
       <Link
         to={`/talent-scout/roles/${roleId}`}
-        className="text-xs uppercase tracking-widest text-primary hover:underline"
+        className="text-xs font-mono uppercase tracking-widest text-primary hover:underline"
       >
         ← Back to role
       </Link>
@@ -289,16 +289,16 @@ export default function PullDetail() {
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-semibold tracking-tight">{roleTitle || "Role"}</h1>
+                <h1 className="h-page">{roleTitle || "Role"}</h1>
                 {round.round_number != null && (
-                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/15 px-3 py-1.5 text-[13px] font-bold uppercase tracking-wider text-primary">
+                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/15 px-3 py-1.5 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
                     R{round.round_number}
                   </span>
                 )}
                 <RoundStatusPill status={round.status} />
                 {isLatest && (
-                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-green-400/40 bg-green-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-400">
+                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-green-400/40 bg-green-400/10 px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider text-green-400">
                     <span className="h-1 w-1 rounded-full bg-current" />
                     Latest
                   </span>
@@ -502,7 +502,7 @@ export default function PullDetail() {
               reevalCancelRef.current = true;
               setReevalState((s) => ({ ...s, running: false }));
             }}
-            className="ml-2 text-[11px] font-bold uppercase tracking-wider underline opacity-90 hover:opacity-100"
+            className="ml-2 text-[11px] font-mono font-bold uppercase tracking-wider underline opacity-90 hover:opacity-100"
           >
             Cancel
           </button>
@@ -515,10 +515,10 @@ export default function PullDetail() {
 function StatTile({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
       <div
         className={cn(
-          "mt-1.5 text-3xl font-black tabular-nums leading-none",
+          "mt-1.5 font-display text-3xl font-extrabold tabular-nums leading-none",
           accent && "text-amber-400",
         )}
       >

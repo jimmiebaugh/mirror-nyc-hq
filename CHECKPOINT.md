@@ -32,11 +32,11 @@ Living-state doc. Update on every meaningful merge to `main`.
 ## Recent commits
 
 ```
+phase-3-5b-visual-brand: Phase 3.5b pass 2: Mirror brand applied per deck template  (NOT MERGED)
 phase-3-5b-visual-brand: Phase 3.5b: Visual brand pass, colors and typography aligned with source  (NOT MERGED)
 495a53f  Restructure docs: split CLAUDE.md into specialized docs, add CHECKPOINT.md
 f96e800  Add netlify.toml: explicit Vite build config + SPA redirect fallback
 a427116  Use authoritative Mirror wordmark SVG; bump landing logo + text 20%; restore HQ title metadata
-568fa7a  Add coming-soon stealth landing with hidden sign-in trigger
 ```
 
 ## Recent migrations

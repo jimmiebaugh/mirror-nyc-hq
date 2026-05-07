@@ -161,7 +161,7 @@ export default function RoleDashboard() {
 
   return (
     <div className="space-y-6">
-      <Link to="/talent-scout" className="text-xs uppercase tracking-widest text-primary hover:underline">
+      <Link to="/talent-scout" className="text-xs font-mono uppercase tracking-widest text-primary hover:underline">
         ← Talent Scout
       </Link>
 
@@ -171,7 +171,7 @@ export default function RoleDashboard() {
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-semibold tracking-tight">{role.title}</h1>
+                <h1 className="h-page">{role.title}</h1>
                 <RoleStatusPill status={role.status} latestRound={latestRoundNumber} size="lg" />
                 {rounds[0] && <RoundStatusPill status={rounds[0].status} />}
               </div>
@@ -188,7 +188,7 @@ export default function RoleDashboard() {
                 </span>
                 <span
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-sm border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                    "inline-flex items-center gap-2 rounded-sm border px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider",
                     scheduleOn
                       ? "border-green-400/30 bg-green-400/10 text-green-400"
                       : "border-border bg-secondary text-muted-foreground",
@@ -272,7 +272,7 @@ export default function RoleDashboard() {
           <CardContent className="p-6">
             <div className="flex items-start justify-between gap-6">
               <div className="shrink-0">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-primary">Pull Rounds</div>
+                <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary">Pull Rounds</div>
                 <div className="mt-1 text-xs text-muted-foreground">Each pull is reviewed as its own batch</div>
               </div>
               <div className="grid min-w-0 flex-1 grid-cols-3 gap-3">
@@ -293,23 +293,23 @@ export default function RoleDashboard() {
                     >
                       <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
                         {isLatest && (
-                          <span className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">
+                          <span className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/15 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-primary">
                             <span className="h-1 w-1 rounded-full bg-current" />
                             Latest
                           </span>
                         )}
                         {isFailed && (
-                          <span className="inline-flex items-center rounded-sm border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-500">
+                          <span className="inline-flex items-center rounded-sm border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-red-500">
                             Failed
                           </span>
                         )}
                         {isStalled && (
-                          <span className="inline-flex items-center rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-500">
+                          <span className="inline-flex items-center rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-amber-500">
                             Stalled
                           </span>
                         )}
                       </div>
-                      <div className="text-3xl font-black tabular-nums leading-none">R{rd.round_number ?? "—"}</div>
+                      <div className="font-display text-3xl font-extrabold tabular-nums leading-none">R{rd.round_number ?? "—"}</div>
                       <div className="mt-4 text-xs text-muted-foreground">
                         {rd.started_at
                           ? new Date(rd.started_at).toLocaleDateString("en-US", {
@@ -319,7 +319,7 @@ export default function RoleDashboard() {
                             })
                           : "—"}
                       </div>
-                      <div className="mt-3 border-t border-border/60 pt-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <div className="mt-3 border-t border-border/60 pt-3 text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
                         {rd.candidates_found != null
                           ? `${rd.processed_count ?? 0} / ${rd.candidates_found} processed`
                           : "—"}
@@ -336,7 +336,7 @@ export default function RoleDashboard() {
                   <button
                     type="button"
                     onClick={() => setShowAllRounds((s) => !s)}
-                    className="text-xs font-bold uppercase tracking-wider text-primary underline hover:opacity-80"
+                    className="text-xs font-mono font-bold uppercase tracking-wider text-primary underline hover:opacity-80"
                   >
                     {showAllRounds ? "Show fewer" : `Show all (${rounds.length})`}
                   </button>
@@ -376,10 +376,10 @@ export default function RoleDashboard() {
 function StatTile({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
       <div
         className={cn(
-          "mt-1.5 text-3xl font-black tabular-nums leading-none",
+          "mt-1.5 font-display text-3xl font-extrabold tabular-nums leading-none",
           accent && "text-amber-400",
         )}
       >

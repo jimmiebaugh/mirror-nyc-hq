@@ -53,7 +53,7 @@ export default function Projects() {
     <div className="space-y-8">
       <header className="space-y-2">
         <div className="text-xs uppercase tracking-widest text-primary">Projects</div>
-        <h1 className="text-3xl font-semibold tracking-tight">All projects</h1>
+        <h1 className="h-page">All projects</h1>
       </header>
 
       {loading ? (

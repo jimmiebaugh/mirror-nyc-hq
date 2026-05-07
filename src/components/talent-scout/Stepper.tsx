@@ -17,7 +17,7 @@ export function Stepper({ active }: { active: 1 | 2 | 3 }) {
           <div key={s.num} className="flex items-center gap-3">
             <div
               className={cn(
-                "flex items-center gap-2 text-xs font-semibold uppercase tracking-wider",
+                "flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider",
                 done || isActive ? "text-foreground" : "text-muted-foreground",
               )}
             >

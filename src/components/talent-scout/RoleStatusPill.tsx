@@ -35,7 +35,7 @@ export function RoleStatusPill({ status, latestRound, hasFinalReport, size = "de
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm border font-bold uppercase tracking-wider",
+        "inline-flex items-center gap-1.5 rounded-sm border font-mono font-bold uppercase tracking-wider",
         sizeCls,
         cls,
       )}

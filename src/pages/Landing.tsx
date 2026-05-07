@@ -30,7 +30,7 @@ export default function Landing() {
         // pointer-events visual indication regardless of global CSS.
         style={{ cursor: "default", userSelect: "none" }}
         tabIndex={-1}
-        className="select-none text-[14.4px] font-normal uppercase text-white"
+        className="select-none font-mono text-[14.4px] font-normal uppercase text-white"
       >
         <span style={{ letterSpacing: "0.18em" }}>
           STRATEGY&nbsp;&nbsp;/&nbsp;&nbsp;DESIGN&nbsp;&nbsp;/&nbsp;&nbsp;PRODUCTION
