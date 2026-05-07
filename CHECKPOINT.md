@@ -6,7 +6,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 **Latest commit on main:** Phase 3.6: Final Review + Packet generation (squash-merged from `phase-3-6-final-review-packet`)
 **Active feature branch:** none — Phase 3.6 merged. Phase 3.7 branch not yet cut.
 **Current phase:** Phase 3.7 (Cron + watchdogs) — next up.
-**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirror-nyc-hq.netlify.app`).
+**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`).
 
 ## What's live in production
 

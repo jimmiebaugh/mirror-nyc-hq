@@ -51,10 +51,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithGoogle = async () => {
+    // Force HTTPS on the production origin in case the user landed via
+    // http:// somehow (browser autocomplete, old bookmark). Local dev
+    // (localhost / 127.0.0.1) stays as-is so dev sign-in keeps working.
+    const origin = window.location.origin;
+    const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    const safeOrigin = isLocal ? origin : origin.replace(/^http:\/\//, "https://");
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: `${safeOrigin}/`,
         queryParams: {
           hd: "mirrornyc.com",
           prompt: "select_account",

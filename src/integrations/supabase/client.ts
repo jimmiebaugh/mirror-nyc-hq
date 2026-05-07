@@ -8,10 +8,19 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Phase 3.6.13: explicit PKCE + detectSessionInUrl. PKCE returns the auth
+// payload as a `?code=...` query param instead of `#access_token=...` in
+// the URL fragment. Query strings survive HTTP→HTTPS scheme upgrades and
+// page reloads; fragments don't (browsers strip them on cross-scheme
+// 301s for security). This was breaking OAuth on hq.mirrornyc.com — users
+// were redirected back to the landing page because the access_token in
+// the hash got dropped before the React app could parse it.
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: "pkce",
   }
 });

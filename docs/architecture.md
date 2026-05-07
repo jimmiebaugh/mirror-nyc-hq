@@ -70,7 +70,7 @@ Netlify auto-deploys from GitHub `main` on every push. Per-branch preview URLs f
 
 Env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) live in the Netlify Dashboard, not in `netlify.toml` — Vite inlines them at build time.
 
-Production URL: `hq.mirrornyc.com` → resolves to `mirror-nyc-hq.netlify.app`. Subdomain hookup done in Phase 6.3.
+Production URL: `hq.mirrornyc.com` → resolves to `mirrornyc-hq.netlify.app`. Subdomain hookup done in Phase 6.3.
 
 ## Where things live
 
