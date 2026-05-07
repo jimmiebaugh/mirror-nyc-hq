@@ -576,11 +576,12 @@ function Row({
   const overview = (c.quick_overview as string[] | null) ?? null;
   // Phase 3.7.1: row gets a left-border in the candidate's status color, same
   // pattern as FinalReviewDetail's rationale cell (inline borderColor hex).
+  // Phase 3.7.1.1: 3px → 2.5px (slightly lighter visual weight).
   const rowAccent = statusStyle(c.status).colorHex;
   return (
     <div
       onClick={onRowClick}
-      style={{ borderLeft: `3px solid ${rowAccent}` }}
+      style={{ borderLeft: `2.5px solid ${rowAccent}` }}
       className={cn(
         "grid",
         GRID_COLS,
@@ -592,13 +593,12 @@ function Row({
       {/* Candidate stack — diagnostic tint removed (Phase 3.6.9). */}
       <div className="min-w-0 pr-2">
         <div className="truncate text-[16px] font-bold leading-tight">{c.name ?? "—"}</div>
-        {/* Phase 3.7.1: email is a mailto link. stopPropagation prevents
-            the row's onRowClick from firing when clicking the email. */}
+        {/* Phase 3.7.1.1: email is a mailto link, slightly muted coral. */}
         {c.email ? (
           <a
             href={`mailto:${c.email}`}
             onClick={(e) => e.stopPropagation()}
-            className="mt-1 block truncate text-[12px] text-muted-foreground hover:text-foreground hover:underline"
+            className="mt-1 block truncate text-[12px] text-primary/80 hover:text-primary hover:underline"
           >
             {c.email}
           </a>

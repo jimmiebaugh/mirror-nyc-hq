@@ -173,9 +173,9 @@ export default function CandidateDetail() {
         <div className="min-w-0 space-y-2">
           <h1 className="h-page">{cand.name ?? "Unnamed candidate"}</h1>
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            {/* Phase 3.7.1: mailto link. */}
+            {/* Phase 3.7.1.1: mailto link, muted coral. */}
             {cand.email ? (
-              <a href={`mailto:${cand.email}`} className="hover:text-foreground hover:underline">
+              <a href={`mailto:${cand.email}`} className="text-primary/80 hover:text-primary hover:underline">
                 {cand.email}
               </a>
             ) : (

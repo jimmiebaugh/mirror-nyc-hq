@@ -63,10 +63,11 @@ export function StatusDropdown({
     onChange?.(next as CandidateStatus);
   };
 
-  // Phase 3.6.10: compact pill bumped further — h-8 → h-9, text 13 → 14.
-  // Status reads larger and clearly clickable in the candidate table row.
-  const heightCls = size === "compact" ? "h-9 text-[14px]" : size === "large" ? "h-10 text-sm" : "h-10 text-[13px]";
-  const widthCls = size === "compact" ? "min-w-[124px]" : "min-w-[120px]";
+  // Phase 3.7.1.1: compact pill scaled back — h-9/14 was too big and
+  // FAST-TRACK was overflowing. Back to h-8/12 with a touch more
+  // min-width to give FAST-TRACK breathing room.
+  const heightCls = size === "compact" ? "h-8 text-[12px]" : size === "large" ? "h-10 text-sm" : "h-10 text-[13px]";
+  const widthCls = size === "compact" ? "min-w-[128px]" : "min-w-[120px]";
 
   return (
     <Select value={current} onValueChange={onValueChange} disabled={saving}>
