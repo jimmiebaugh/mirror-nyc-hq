@@ -61,7 +61,17 @@ export default function AppShell() {
                    descent space; translate-y nudges the caps down so the
                    visible glyph bottom sits flush with the underbar of the
                    M wordmark instead of floating ~3px above it. */}
-              <span className="hidden sm:inline font-mono text-[16px] font-bold uppercase leading-none tracking-[0.12em] text-primary translate-y-[2px]">
+              {/* HQ rides slightly larger than the sub-app captions because
+                  it's two letters and reads small at 16px next to the
+                  42px wordmark. TALENT / VENUES are longer so 16px keeps
+                  them from crowding the nav. */}
+              <span
+                className={`hidden sm:inline font-mono font-bold uppercase leading-none tracking-[0.12em] text-primary ${
+                  brandCaption === "HQ"
+                    ? "text-[20px] translate-y-[3px]"
+                    : "text-[16px] translate-y-[2px]"
+                }`}
+              >
                 {brandCaption}
               </span>
             </NavLink>
