@@ -71,9 +71,19 @@ Auto-deploys on push to `main`. Build status visible in Netlify Dashboard → De
 If a deploy fails:
 1. Check Netlify Deploys page for the failed build's logs.
 2. Common causes:
-   - Missing env var (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) in the Site → Environment settings.
+   - Missing env var (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) in the Site → Environment settings. Note: `client.ts` carries the same values as a hardcoded fallback (Phase 3.6.18), so a missing env var won't break the app — but if the env var is set to a stale value (e.g. the legacy JWT anon key), Vite inlines that and overrides the fallback. The legacy JWT anon key returns 401 against `/auth/v1`.
    - GitHub deploy key expired (`Host key verification failed` in the prep stage). Fix by re-linking the repo in Netlify Dashboard → Site settings → Build & deploy → Repository.
    - TypeScript errors. Run `npm run build` locally to reproduce.
+
+If sign-in is broken on a deploy that built clean:
+1. Open DevTools → Console on the production site, attempt to sign in.
+2. If you see `Invalid API key` from a `setSession` or `/auth/v1/token` call, the publishable key in the bundle is wrong or the legacy JWT is being used. Verify with curl:
+   ```
+   curl -s -o /dev/null -w "%{http_code}\n" \
+     -H "apikey: <key>" https://amipjjmphblfxpghjnel.supabase.co/auth/v1/settings
+   ```
+   New `sb_publishable_*` returns 200; legacy JWT anon key now returns 401.
+3. If keys aren't the issue, see Phase 3.6.14–3.6.16 commits for the full diagnosis path.
 
 ## Service account
 

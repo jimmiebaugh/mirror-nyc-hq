@@ -20,11 +20,19 @@ PullDetail's "Re-Evaluate Pool" (round-scoped) uses a different pattern: paralle
 ### `ts-generate-scorecard(title, job_description, hiring_priorities)`
 Drafts a tiered scorecard via Claude. Called from the new-role wizard's step-3 page. One-shot, user-invoked, default `verify_jwt = true`.
 
-### `ts-final-review(role_id, candidate_count_limit?)` — Phase 3.6
-Comparative final review across the master pool. Produces a pool summary + `final_rankings` jsonb, writes to `ts_final_reviews`. Will self-invoke for long runs → `verify_jwt = false`.
+### `ts-final-review(role_id, top_n?, triggered_by?)`
+Comparative final review across the master pool. Returns `{ final_review_id }` immediately; AI work runs in the background via `EdgeRuntime.waitUntil` and streams progress through `ts_final_reviews.step_progress` (Realtime — FinalReviewLoading subscribes). Produces `final_rankings` jsonb (`[{candidate_id, final_rank, final_tier, rationale, recruiter_note, final_overview}]`) + `pool_summary` text. Min 3 candidates; HARD_CAP=50 by total_score for context-window safety. Two-attempt JSON parse retry. Hyphen-tolerant candidate_id matching. Uses `callClaude('talent_scout', ...)`. `verify_jwt = false`.
 
-### `ts-packet-generate(role_id, pull_round_id?, candidate_count?)` — Phase 3.6
-Builds packet PDF and emails to hiring manager. Talks to Google Slides + Drive APIs via the service account (template in `_shared/gmailServiceAccount.ts`). **Q5 reminder**: read source's `generate-packet` (832 lines) vs `generate-final-review-packet` (767 lines) before implementing to confirm whether they're two distinct flows or one is dead code.
+### `ts-packet-generate(pull_round_id, top_n?, include_fast_track?)`
+Round-scoped candidate review packet. Renders cover (Pulled / In Pool / Auto-Rejected / Fast-Track stats) + NYC-only top-15 comparison matrix + Fast-Track / Borderline / Other Recommended writeup pages + per-candidate title + email + attachment merge. Uploads merged PDF to the `packets` Storage bucket, updates `ts_pull_rounds.packet_*`, emails the role's hiring manager from `jobs@mirrornyc.com`. Tier subtotals render `—` when `score_breakdown` is empty (Phase 3.6 Q4). `verify_jwt = false`.
+
+### `ts-final-review-packet(final_review_id, top_n?, include_fast_track?, include_all?)`
+Review-scoped packet for a completed `ts_final_reviews` row. Renders cover (Pool Size / Top Recs / Strong / Backup) + Pool Summary + full Rankings table + Top / Strong / Backup writeup pages with Not Recommended footnote + per-candidate pages. Uploads to `packets`, updates `ts_final_reviews.packet_*`, emails the hiring manager. Defaults `include_all=true` from the FinalReviewDetail UI; FinalReviewDetail's "Include Fast-Track pages" toggle controls `include_fast_track`. `verify_jwt = false`.
+
+#### Shared infrastructure: `_shared/packetRender.ts`
+~50% of source's two packet generators (CloudConvert HTML→PDF / DOCX→PDF, BASE_CSS, htmlDoc, MIRROR_LOGO_SVG, candidate title + email + packet divider renderers, Storage attachment fetcher, pdf-lib upload helper, Gmail send-with-attachment helper) lives here. HQ-specific: attachment bytes come from the `candidate_attachments` Storage bucket (Phase 3.4 persists everything on initial pull) — no Gmail re-fetch at packet time. Email send uses the service account's `gmail.send` scope (added to `gmailServiceAccount.ts` SCOPES list in 3.6).
+
+External dependency: `CLOUDCONVERT_API_KEY` Supabase secret (paid service). Packet volume is low (5-20/month) so the spend is negligible.
 
 ### `ts-send-pull-notification(role_id, pull_round_id)` — Phase 3.8
 Emails the hiring manager when a pull completes. Standalone in 3.8 to ship Talent Scout cleanly; folds into `notifications-dispatch` in Phase 5.

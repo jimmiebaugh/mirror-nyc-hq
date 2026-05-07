@@ -2,6 +2,67 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 3.6 (Final review + packet)
+
+### Q5: split into two edge functions, share via `_shared/packetRender.ts`
+
+Source ships two ~800-line packet generators (`generate-packet` round-scoped, `generate-final-review-packet` review-scoped) that share ~50% of their code (CloudConvert helper, Gmail/Storage attachment fetch, candidate title/email pages, packet divider, BASE_CSS, htmlDoc wrapper, helpers). Consolidating into one function would mean a 200-line if/else inside the renderer because the cover, body table (matrix vs rankings), writeup categories, and classification semantics are all different and pull from different DB tables (`ts_pull_rounds` vs `ts_final_reviews`).
+
+Split into `ts-packet-generate` + `ts-final-review-packet`, lift the shared infrastructure into `supabase/functions/_shared/packetRender.ts`. Net: each domain function ~250 lines, shared module ~400 lines, ~44% smaller than source's 1,599 lines combined.
+
+### `final_overview` field on each `ts_final_reviews.final_rankings` entry
+
+Source had no equivalent. Hiring managers reviewing the final pool need a comparative angle that the per-candidate `quick_overview` (generated during pull-time) doesn't provide — quick_overview is "what's in this candidate's materials"; final_overview is "what unique strengths or angles this candidate brings to Mirror NYC that distinguish them within this final pool."
+
+The AI generates 4-6 short headlines per candidate, framed as positives about the candidate (never by direct comparison to others — the comparative reading is what the hiring manager does, not the AI). Stored on the `final_rankings` jsonb entry. Surfaced in `FinalReviewDetail`'s candidate table where the dashboard CandidateTable would otherwise show Quick Overview.
+
+Final entry shape: `{candidate_id, final_rank, final_tier, rationale, recruiter_note, final_overview}`. `final_rank` kept (despite not being in Jimmie's literal spec) because deriving rank from tier + secondary sort is brittle; source's reasoning still applies.
+
+### Field renames vs source: `final_tier` (was `recommendation_tier`), `rationale` (was `narrative`)
+
+HQ's naming is more direct. Source's field names came from an earlier iteration; this rename happens as part of the port and won't ripple back.
+
+### `unwrapSecurityWrapper` ported and applied broadly
+
+Email-security services (Outlook safelinks, Mimecast, Proofpoint URLDefense, Cuda LinkProtect, EdgePilot) wrap outgoing links so clicks route through their redirect first. When candidates send portfolio links from a corporate email account, those wrappers leak into HQ via Gmail ingestion. Source had `lib/unwrapUrl.ts` to strip the wrapper before opening the actual URL.
+
+Phase 3.6 ports the helper to `src/lib/unwrapUrl.ts` and applies it everywhere a portfolio URL is rendered:
+- `CandidateTable` (portfolio cell button on the dashboard table)
+- `CandidateDetail` (portfolio web link + every detected_links row)
+- `FinalReviewDetail` (rankings table portfolio cell)
+
+Cheap insurance; prevents click-through routing through Google/Outlook/Mimecast redirects when the user wants the actual portfolio site.
+
+### `include_fast_track` toggle on FinalReviewDetail
+
+Source had a checkbox; HQ surfaces the same toggle. Default `true` (full coverage — packet includes every fast-tracked candidate's pages even if they're outside the top-N tier). Hiring managers occasionally want a tighter top-tier-only packet; the toggle gives them that escape. Seeded from the review row's `packet_include_fast_track` if a packet has been generated before, so re-generation defaults to the previous preference.
+
+### Tier subtotals in the packet matrix render `—` instead of `0` when score_breakdown is empty
+
+When a candidate's `score_breakdown` jsonb is empty (legacy candidate, or a candidate where the AI returned no per-criterion breakdown), the matrix used to show T1=0 / T2=0 / T3=0 / Bonus=total. That reads as "candidate scored zero on Tier 1" rather than "we don't have the breakdown." Misleading zeros are worse than honest missing data. Now renders `—` per missing tier; total still renders correctly (it lives on `ts_candidates.score`).
+
+Applies to the round packet's Top Candidate Comparison Matrix. Per-criterion display in CandidateDetail's score breakdown panel keeps existing "0 / X" behavior since each criterion has its own line item — viewer can tell at a glance whether the breakdown was populated.
+
+### Cron watchdog for stalled `ts_final_reviews` deferred to Phase 3.7
+
+Phase 3.7 is the dedicated cron + watchdog phase (`ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-storage-cleanup`). `ts-cron-final-review-watchdog` joins that batch — same pattern as the others (heartbeat detection, status flip to `failed` on stall, no auto-restart). Not bolted onto 3.6.
+
+### HQ-specific: skip Gmail re-fetch at packet time, read attachments from Storage
+
+Source's packet generators re-fetch attachments from Gmail using OAuth refresh tokens. Phase 3.4 already persists every attachment to the `candidate_attachments` Storage bucket on initial pull, so HQ doesn't need that round-trip. `_shared/packetRender.ts` reads bytes from Storage instead. Cleaner code path, no Gmail dependency at packet time, faster (no token mint).
+
+### HQ-specific: email packet to hiring manager via Gmail service account
+
+Source's packet generators return a download URL only — the user manually shares the PDF afterward. HQ adds an email step: after upload, the function sends the packet PDF to the role's hiring manager from `jobs@mirrornyc.com` via the service account's `gmail.send` scope (added to `_shared/gmailServiceAccount.ts` SCOPES list in this phase). Best-effort: failures don't fail the overall request — the user still gets the download URL. Hiring manager email is read from `users` joined on `ts_roles.hiring_manager_id`.
+
+### HQ-specific: PDF coral stays at source's `#ef5b5b`, not deck-canonical `#BE4E44`
+
+The Phase 3.5b brand pass moved HQ's UI coral to `#BE4E44` (deck-canonical). Inside packet PDFs, BASE_CSS keeps `#ef5b5b` because the dustier coral reads dim on paper print and on screen-share PDF previews. Same brand identity, different surface (screen UI vs paper artifact).
+
+### `ts_candidates.email_body_text` column added; packet email page skipped when null
+
+Source's packet shows the candidate's original application email as a white "doc-slot" page inside their per-candidate section. HQ didn't persist email body text in Phase 3.4. This phase adds `email_body_text text` (nullable) and updates `ts-pull-candidates` to populate it (trimmed at 30k chars). The packet renders the email page only when the column is non-null — pre-3.6 candidates won't have it, but their title page + attachments still render correctly.
+
 ## Talent Scout port (Phase 3) — locked Q1–Q6
 
 Resolutions to the six open questions in `docs/talent-scout-port-plan.md` § 8.

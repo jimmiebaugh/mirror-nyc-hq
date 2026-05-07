@@ -70,7 +70,7 @@ Sequential, not parallel — Talent Scout fully working before Venue Scout start
 
 - 6.1 Final QA pass against the full spec, every flow as each role.
 - 6.2 Talent Scout data preservation. Approach: re-create active/open roles in new HQ (re-pulling candidates from Gmail reproduces the structured data). Manually copy bucket decisions and internal notes for in-flight candidates. Export packet PDFs from Lovable for closed roles, preserve as historical archive in HQ file storage.
-- 6.3 Production deploy on Netlify. Launch on `mirror-nyc-hq.netlify.app` default URL. Hook up `hq.mirrornyc.com` once Workspace admin grants the subdomain.
+- 6.3 Production deploy on Netlify. Launch on `mirrornyc-hq.netlify.app` default URL. Hook up `hq.mirrornyc.com` once Workspace admin grants the subdomain.
 - 6.4 Onboard team. Send link, verify accounts created with `member` role, promote producers and admins via admin UI. Run cross-user RLS violation test deferred from Phase 2.4.
 - 6.5 Sunset Lovable. Shut down all three Lovable projects, cancel subscription, archive credentials.
 

@@ -101,6 +101,8 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 - `candidates_found`, `processed_count`, `attempt` (int): operational counters used by progress UI and watchdog.
 - `pending_candidates` (jsonb, default `[]`): queue of Gmail message IDs the chunked pull pipeline batches in groups of 8 across self-invocations.
 - `reeval_last_progress_at` (timestamptz, nullable): legacy column from Phase 3.2 spec. Phase 3.5 moved bulk-re-eval state to `ts_roles` (role-scoped, not round-scoped); this column is unused and can be dropped in a future cleanup migration.
+- `packet_url` (text, nullable): Storage path for the most recent round packet PDF.
+- `packet_top_n` (int), `packet_include_fast_track` (bool), `packet_generated_at` (timestamptz): metadata for the most recent packet generation. Updated by `ts-packet-generate` on success.
 - Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` so PullDetail's `postgres_changes` UPDATE subscription receives the full new row.
 
 ### ts_evaluations (history table; one row per evaluation)
@@ -127,6 +129,7 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 - `tier` (text), `internal_notes` (text)
 - `portfolio_type` (enum: `file`, `url`, `none`), `portfolio_path_or_url` (text)
 - `detected_links` (jsonb, default `[]`): array of `{url, type}` for every URL extracted from email body + attachments + bare-domain mentions, classified into `vimeo_reel | drive_folder | portfolio_site | other`. Surfaced in CandidateDetail's Files & Materials section.
+- `email_body_text` (text, nullable; Phase 3.6): plain-text application email body, trimmed at 30k chars. Populated by `ts-pull-candidates`. Used by `ts-packet-generate` / `ts-final-review-packet` to render each candidate's email page inside the packet PDF; pages are skipped when this column is null (pre-3.6 candidates).
 - `last_evaluated_at`, `created_at`, `updated_at`
 
 ### ts_candidate_attachments
@@ -137,9 +140,18 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 
 ### ts_final_reviews
 - `id`, `role_id` (FK), `candidate_count_limit` (int, nullable)
+- `status` (enum `ts_final_review_status`: `generating`, `complete`, `failed`; default `generating`)
+- `step_progress` (jsonb): drives FinalReviewLoading's 3-step list. Keys: `aggregate`, `build`, `rank`. Each value: `{status: pending|active|done, count?, label?}`.
+- `candidate_count` (int): resolved Master Pool size at generation time.
 - `pool_summary` (text)
-- `final_rankings` (jsonb: `[{candidate_id, final_tier, rationale}]`)
+- `final_rankings` (jsonb): `[{candidate_id, final_rank, final_tier, rationale, recruiter_note, final_overview}]` where `final_overview` is a `string[]` of 4-6 short headlines per candidate. See `docs/decisions.md` § Phase 3.6.
+- `duration_seconds` (int): wall-clock for the AI call. Surfaced in the history list.
+- `error_message` (text), `error_log` (jsonb, default `[]`): set when `status = 'failed'`.
+- `claude_raw_response` (jsonb, nullable): kept for debugging.
+- `packet_url` (text, nullable), `packet_top_n` (int), `packet_include_fast_track` (bool), `packet_generated_at` (timestamptz): metadata for the most recent final-review packet. Updated by `ts-final-review-packet`.
 - `triggered_by` (FK), `generated_at`
+- Index on `(role_id, status, generated_at DESC)` for the FinalReviewDetail "load latest complete review" query and the history list.
+- Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` so FinalReviewLoading's `postgres_changes` UPDATE subscription on `step_progress` receives the full new row.
 
 ## Venue Scout (linked to HQ)
 

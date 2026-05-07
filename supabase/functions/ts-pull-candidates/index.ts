@@ -505,6 +505,10 @@ async function processOne(
       portfolio_type,
       portfolio_path_or_url,
       detected_links: classifyDetectedUrls(urls),
+      // Phase 3.6: persist plain-text email body so the packet's per-candidate
+      // email page can render with the original application text. Trimmed at
+      // 30k chars so it can never explode a row.
+      email_body_text: (bodyText || "").slice(0, 30000) || null,
       last_evaluated_at: new Date().toISOString(),
     }).select("id").single();
     if (candErr) { errors.push({ step: "save", messageId: id, error: String(candErr) }); return "failed"; }

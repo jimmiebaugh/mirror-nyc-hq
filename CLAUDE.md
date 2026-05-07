@@ -38,7 +38,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 
 - **Monolith.** One repo, one app, one DB. Talent Scout and Venue Scout are routes inside HQ, not separate apps.
 - **Stack:** React + Vite + TS + Tailwind + shadcn/ui (frontend), Supabase Postgres + Edge Functions + Storage + Realtime (backend), Netlify (hosting), Anthropic API + Google Workspace via service account (integrations).
-- **Production URL:** `hq.mirrornyc.com` → `mirror-nyc-hq.netlify.app`.
+- **Production URL:** `hq.mirrornyc.com` → `mirrornyc-hq.netlify.app`.
 - **Supabase project ref:** `amipjjmphblfxpghjnel`.
 - **Service account:** `mirror-ny-hq-backend@mirror-nyc-hq.iam.gserviceaccount.com` with domain-wide delegation across `gmail.readonly`, `gmail.send`, `drive`, `presentations`.
 

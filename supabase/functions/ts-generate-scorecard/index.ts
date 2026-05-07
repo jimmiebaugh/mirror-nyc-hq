@@ -13,6 +13,7 @@
 
 import { parseClaudeJson, JSON_ONLY_INSTRUCTION } from "../_shared/parseClaudeJson.ts";
 import { callClaude } from "../_shared/anthropic.ts";
+import { scorecardGenerationPrompt } from "../_shared/prompts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,36 +45,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const prompt = `You are a senior talent acquisition specialist with deep expertise in staffing creative, experiential, and brand activation agencies. You evaluate talent across the full range of agency roles — production, design, project management, account management, strategy, and operations — and tailor your criteria to the specific role at hand based on the job description provided.
-
-You are conducting a full candidate review on behalf of Mirror NYC for the role of ${role_title}.
-
-Job Description: ${jd}
-Hiring Priorities: ${hiring_priorities || "(none provided)"}
-Location: ${location} · Type: ${employment_type} · Comp: ${comp || "(not specified)"}
-
-Generate a weighted scorecard with 8-12 criteria across 3 tiers:
-- Tier 1 (Must-Haves): disqualifying if absent
-- Tier 2 (Strong Differentiators): meaningfully elevates a candidate
-- Tier 3 (Nice-to-Haves): bonus value
-
-Total weights = 100 points. Weight distribution should reflect seniority and the concept-led nature of the role.
-
-Return ONLY valid JSON matching this schema:
-{
-  "criteria": [
-    {
-      "name": "string",
-      "tier": 1 | 2 | 3,
-      "weight": <int>,
-      "is_disqualifier": <bool>,
-      "full_points_rubric": "string",
-      "partial_points_rubric": "string"
-    }
-  ]
-}
-
-${JSON_ONLY_INSTRUCTION}`;
+    const prompt = scorecardGenerationPrompt({
+      role_title,
+      jd,
+      hiring_priorities,
+      location,
+      employment_type,
+      comp,
+      jsonOnlyInstruction: JSON_ONLY_INSTRUCTION,
+    });
 
     const result = await callClaude(
       "talent_scout",

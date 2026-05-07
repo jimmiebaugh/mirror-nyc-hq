@@ -160,7 +160,7 @@ export default function TalentScoutIndex() {
     }
     const list = (rs as unknown as Role[]) ?? [];
     const ids = list.map((r) => r.id);
-    const [{ data: cs }, { data: rr }] = await Promise.all([
+    const [{ data: cs }, { data: rr }, { data: fr }] = await Promise.all([
       ids.length
         ? supabase.from("ts_candidates").select("role_id, status").in("role_id", ids)
         : Promise.resolve({ data: [] as { role_id: string; status: string }[] }),
@@ -170,7 +170,16 @@ export default function TalentScoutIndex() {
             .select("role_id, round_number, started_at, status")
             .in("role_id", ids)
         : Promise.resolve({ data: [] as { role_id: string; round_number: number | null; started_at: string; status: string }[] }),
+      ids.length
+        ? supabase
+            .from("ts_final_reviews")
+            .select("role_id")
+            .in("role_id", ids)
+            .eq("status", "complete")
+        : Promise.resolve({ data: [] as { role_id: string }[] }),
     ]);
+    const finalReportByRole: Record<string, boolean> = {};
+    for (const r of (fr ?? [])) finalReportByRole[r.role_id] = true;
     const reviewedByRole: Record<string, number> = {};
     const inPoolByRole: Record<string, number> = {};
     for (const c of (cs ?? [])) {
@@ -194,8 +203,7 @@ export default function TalentScoutIndex() {
         in_pool: inPoolByRole[r.id] ?? 0,
         last_pull_at: lastPullByRole[r.id] ?? null,
         latest_round_number: latestRoundByRole[r.id] ?? null,
-        // Final reviews come in Phase 3.6; placeholder for the pill.
-        has_final_report: false,
+        has_final_report: !!finalReportByRole[r.id],
       })),
     );
   };

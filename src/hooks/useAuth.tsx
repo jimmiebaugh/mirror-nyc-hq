@@ -19,6 +19,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Phase 3.6.15: manual hash-fallback. Kept as defense-in-depth after
+    // the Phase 3.6.16 publishable-key fix. supabase-js's detectSessionInUrl
+    // works again now that the API key is valid, but the manual path is
+    // cheap insurance: if the URL hash carries access_token + refresh_token,
+    // parse and call setSession ourselves, then strip the hash so a refresh
+    // doesn't re-trigger. setSession emits SIGNED_IN downstream.
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token=")) {
+      const params = new URLSearchParams(hash.slice(1));
+      const access_token = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+      if (access_token && refresh_token) {
+        supabase.auth.setSession({ access_token, refresh_token }).then(() => {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        });
+      }
+    }
+
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (newSession?.user && !isAllowedEmail(newSession.user.email)) {
         // Belt-and-suspenders: kick non-mirrornyc accounts out immediately.
@@ -51,10 +69,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithGoogle = async () => {
+    // Force HTTPS on the production origin in case the user landed via
+    // http:// somehow (browser autocomplete, old bookmark). Local dev
+    // (localhost / 127.0.0.1) stays as-is so dev sign-in keeps working.
+    const origin = window.location.origin;
+    const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    const safeOrigin = isLocal ? origin : origin.replace(/^http:\/\//, "https://");
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: `${safeOrigin}/`,
         queryParams: {
           hd: "mirrornyc.com",
           prompt: "select_account",

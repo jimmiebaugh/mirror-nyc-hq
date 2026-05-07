@@ -19,8 +19,9 @@ The `/` route serves a stealth coming-soon landing for unauthenticated visitors 
 
 - URL: `https://amipjjmphblfxpghjnel.supabase.co`
 - Project ref ID: `amipjjmphblfxpghjnel`
-- Publishable key (client-side): `VITE_SUPABASE_PUBLISHABLE_KEY` env var (build-time inlined by Vite)
-- Secret/service role key (server-side, edge functions only): stored as Supabase secret
+- API keys: project is on the new `sb_publishable_*` / `sb_secret_*` key system (not the legacy anon/service_role JWTs — those return 401 against `/auth/v1` endpoints as of Phase 3.6.16).
+  - **Publishable key** (client-side): `sb_publishable_*`. Read at build time from `VITE_SUPABASE_PUBLISHABLE_KEY` (Netlify + local `.env`) with a hardcoded fallback in `src/integrations/supabase/client.ts` so a missing env var doesn't break the app. Publishable keys are designed to be safely exposed in client bundles.
+  - **Secret key** (server-side, Edge Functions only): `sb_secret_*`, stored as a Supabase secret on the server. Never inlined client-side.
 - DB password: in Jimmie's password manager
 - Security settings: Data API enabled, Auto-expose new tables OFF, Auto-RLS ON
 
@@ -49,8 +50,9 @@ Currently published: `ts_pull_rounds` (PullDetail subscribes for pull-progress U
 
 ## Storage
 
-Five private buckets, all behind RLS:
+Six private buckets, all behind RLS:
 - `candidate_attachments` (admin only, Talent Scout)
+- `packets` (admin only, Talent Scout — round + final-review packet PDFs, Phase 3.6)
 - `briefs` (producer+, Venue Scout)
 - `sourcing_sheets` (producer+, Venue Scout)
 - `venue_photos` (read auth, write producer+, HQ + Venue Scout)
@@ -67,9 +69,9 @@ Netlify auto-deploys from GitHub `main` on every push. Per-branch preview URLs f
 - Publish dir: `dist`
 - SPA fallback redirect: `/* → /index.html` status 200 (so React Router can handle direct deep-links).
 
-Env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) live in the Netlify Dashboard, not in `netlify.toml` — Vite inlines them at build time.
+Env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) live in the Netlify Dashboard, not in `netlify.toml`. Vite reads them at build time. `src/integrations/supabase/client.ts` carries the same values as a hardcoded fallback so a missing env var won't break the app.
 
-Production URL: `hq.mirrornyc.com` → resolves to `mirror-nyc-hq.netlify.app`. Subdomain hookup done in Phase 6.3.
+Production URL: `hq.mirrornyc.com` → resolves to `mirrornyc-hq.netlify.app`. Subdomain hookup done in Phase 6.3.
 
 ## Where things live
 

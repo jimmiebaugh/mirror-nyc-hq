@@ -42,6 +42,7 @@ Admin checks are done via a SECURITY DEFINER function that reads `permission_rol
 ## Storage buckets
 
 - `candidate_attachments`: admin only (Talent Scout)
+- `packets`: admin only (Talent Scout — round + final-review packet PDFs, Phase 3.6)
 - `briefs`, `sourcing_sheets`: producer or admin (Venue Scout)
 - `venue_photos`: any auth read; producer or admin write
 - `profile_avatars`: any auth read; user writes only to their own folder (`{user_id}/...` path prefix)
