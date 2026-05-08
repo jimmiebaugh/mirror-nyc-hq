@@ -34,21 +34,17 @@ CandidateDetail page (recruiter overview, files & materials, top strengths / key
 ### 3.6 Final review + packet — DONE
 Comparative final review (`ts-final-review`) writes ranked `final_rankings` jsonb to `ts_final_reviews`. Per-candidate shape: `{candidate_id, final_rank, final_tier, rationale, recruiter_note}`, where `recruiter_note` is `string[]` (max 3 bullets). Streams `step_progress` via Realtime; FinalReviewLoading + FinalReviewDetail pages render it. Three Talent Scout Claude prompts consolidated in `_shared/prompts.ts`. Packet generation deployed (`ts-packet-generate`, `ts-final-review-packet`, pure pdf-lib in `_shared/packetRender.ts`, signed-URL email body to dodge WORKER_RESOURCE_LIMIT) but UI gated behind `PACKET_FEATURE_ENABLED` flags pending end-to-end verification. OAuth fixed end-of-phase (Phase 3.6.16) by switching to the new `sb_publishable_*` API key.
 
-### 3.7 Candidates UX + referral ingestion — NEXT (you're picking up here)
+### 3.7 Candidates UX + referral ingestion — DONE
+Squash-merged at `2ab37c3` (2026-05-08). Manual-reviewed flag with auto/manual pill + one-way flip + re-eval gate; CandidateDetail layout reorg with header cluster (Re-evaluate full-height + status stack), Score Breakdown with tier dividers; scorecard 100-point cap normalizer; Global Settings page with editable competitor list (Postgres `text[]`, default 19-entry list seeded); referral ingestion that detects `*@mirrornyc.com` forwards to jobs@, walks every chain segment for original applicant + manager commentary, captures every Mirror manager's commentary along the chain into `internal_notes` (Mirror sigs stripped), feeds it into the FIRST eval via the `HIRING MANAGER NOTES:` block, blocks `mirrornyc.com` from portfolio URL extraction; pull running state shows a 4-step checklist driven by the existing `candidates_found` / `processed_count` signals; brand restyling pass (top nav reduced to Dashboard + Talent Scout, Mirror grey card surfaces, score bar visibility fix on `bg-input` track, coral toasts site-wide). Six migrations applied to remote.
 
-Five passes:
-
-1. **3.7.1 — Quick UX wins.** Email cells become `mailto:` links across CandidateTable, CandidateDetail, FinalReviewDetail. Each candidate row in CandidateTable gets a 3px left-border in the candidate's status color (same pattern as FinalReviewDetail's rationale cell).
-2. **3.7.2 — `manually_reviewed` field.** New boolean column on `ts_candidates`, default false. AI eval / re-eval sets/leaves false. User actions flip it to true (one-way, no revert): status-dropdown change, status-dropdown re-select-same, click on the small grey `auto` pill directly, or being included in a bulk action. Re-Evaluate on `manually_reviewed=true` candidates updates score/breakdown/strengths/gaps/overview but does NOT touch status. CandidateTable: small grey `auto` / `manual` pill stacks under the status dropdown; rows with `auto` get a slightly lighter background tint. CandidateDetail: same pill stacks under the status dropdown.
-3. **3.7.3 — CandidateDetail card layout.** Reorganize into 3×2 grid: R1 Files & Materials | Recruiter Overview, R2 Top Strengths | Key Gaps, R3 Internal Notes | Score Breakdown. CSS Grid row-default alignment so each row's cards top-align even when heights differ.
-4. **3.7.4 — Scorecard 100-point cap.** `ts-generate-scorecard` post-Claude normalizer ensures `sum(weights) === 100` (round each, fix delta on the largest). Prompt tightened with the same constraint.
-5. **3.7.5 — Referral ingestion.** Managers forward candidate emails (jobs@... aren't the only path). New columns on `ts_candidates`: `is_referral boolean` and `referrer_email text`. `ts-pull-candidates` detects forwards: sender matches `*@mirrornyc.com` AND subject matches the role's existing search settings; unwrap the forwarded body to extract the original applicant email + body + attachments. Eval is blind to referral status (same prompt). UI: an electric-blue `referral` pill renders inline with the auto/manual pill under the status dropdown. When both pills are present, each is ~50% of the status column width.
-
-### 3.8 Cron jobs + watchdogs — TODO
-Wire `ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-storage-cleanup` via `pg_cron` migrations. Watchdogs detect-and-flag (set status to `stalled` / `failed`); never auto-restart.
+### 3.8 Cron jobs + watchdogs — NEXT (you're picking up here)
+Wire `ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-final-review-watchdog`, `ts-cron-storage-cleanup` via `pg_cron` migrations. Watchdogs detect-and-flag (set status to `stalled` / `failed`); never auto-restart. Plus: `monthly-spend-reset` cron for `cap_alert_sent_this_month`. Cut a fresh `phase-3-8-cron-watchdogs` branch — same deploy policy (no commits / no origin pushes without `[skip netlify]`; squash-merge is the single Netlify-deploy event).
 
 ### 3.9 Notifications + spend alerts — TODO
 `ts-send-pull-notification` standalone (folds into `notifications-dispatch` in Phase 5). Wire real-email path on `callClaude` cap alert (currently a console-log stub). Verify packet email path uses the service account's `gmail.send` from `jobs@mirrornyc.com`. Plus: verify `ts-final-review-packet` end-to-end (post WORKER_RESOURCE_LIMIT fix) and flip `PACKET_FEATURE_ENABLED` back to `true` in `PullDetail.tsx` + `FinalReviewDetail.tsx`.
+
+### 3.X cleanup queued
+Drop dead `ts_pull_rounds.reeval_last_progress_at` column. Cleanup of deprecated `auto_rejected` enum value requires enum rebuild — not worth it now.
 
 ## Phase 4: Venue Scout — TODO
 

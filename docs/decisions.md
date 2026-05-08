@@ -2,6 +2,52 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 3.7 (Candidates UX + referral ingestion)
+
+### `manually_reviewed` boolean as one-way flip; `auto_rejected` enum value deprecated
+
+Hiring managers needed a way to lock candidate decisions against future re-evals. Adding a per-candidate `manually_reviewed` (default false) on `ts_candidates` is the cleanest split: AI eval / re-eval leaves it false; user actions (status-dropdown change, re-select-same, AUTO-pill click, bulk action) flip it to true. Re-eval respects the flag — when true, score / strengths / gaps / overview update but status doesn't. Bulk re-eval defaults to `not_manually_rejected` (`status.neq.reject,manually_reviewed.eq.false`) so manually-rejected candidates aren't reconsidered.
+
+The `auto_rejected` enum value (originally distinguishing AI-confirmed rejections from human ones) became redundant once `manually_reviewed=false + status=reject` carries the same semantics. Backfilled all existing `auto_rejected` rows in migration `20260507092912`. Enum value kept in place — dropping it requires a full enum rebuild, not worth it. New writes never use it.
+
+### Referral identity = original applicant; `referrer_email` captures the manager
+
+When a Mirror manager forwards a candidate to jobs@, the candidate row's identity is the **original applicant's** name + email — not the manager's. The manager's email goes on a separate `referrer_email` column, paired with `is_referral=true`. Eval is **blind** to referral status (same prompt). Referrals get a UI affordance (electric-blue ReferralPill) but no scoring lift. This keeps the dashboard's master-pool ordering meaningful regardless of source path.
+
+Tried `referral` as a status enum value first; rejected because referral isn't an outcome state, it's a source flag. A referred candidate can still be in any status.
+
+### Forward parser walks every chain segment, picks deepest non-Mirror
+
+A single regex looking for the FIRST `From:` header would lock onto the manager (who's `@mirrornyc.com`) instead of the original applicant. So the parser collects every `From:` header AND every `On <date> <Name> <<email>> wrote:` reply-quote attribution into a positions-sorted hits list, then walks in reverse to pick the deepest sender whose email isn't `@mirrornyc.com`. When every hit is `@mirrornyc.com`, returns null and the message is skipped (better to skip than misattribute). Apple Mail iPhone forwards (which represent the original applicant as a quoted reply rather than a re-headered forward) covered by the wrote-attribution branch.
+
+### Capture every `@mirrornyc.com` manager's commentary into `internal_notes`
+
+Phase 3.7.8.16: managers often forward with their own context ("strong fit, schedule a call" / "borderline, lmk what you think"). When that commentary lands in jobs@'s body, it's the most reliable signal we have about the candidate. `extractManagerNote` walks every explicit-forward segment in the chain (Gmail's `---------- Forwarded message ---------` and Apple Mail's `Begin forwarded message:`), parses each segment's `From:` header, and for any `@mirrornyc.com` sender captures the body with Mirror signatures stripped (bolded-name + brand-marker heuristic) and "from-mobile" Apple Mail tags filtered. Multi-manager chains attribute each note with `Note from <email>:`. Folded into the FIRST eval via the `HIRING MANAGER NOTES:` block in the candidate bundle (the eval prompt already treats that block as verified context that supersedes resume / cover-letter inferences).
+
+### `mirrornyc.com` blocked from portfolio URL extraction
+
+Manager email signatures embed `http://www.mirrornyc.com/` and `@mirror_nyc`. The portfolio scorer was promoting those as the candidate's portfolio. `mirrornyc.com` added to `BLOCKED_PORTFOLIO_DOMAINS` in `_shared/unwrapUrl.ts` so it's filtered at extraction time — never enters `detected_links`, never becomes `portfolio_path_or_url`.
+
+### Global competitor list as `text[]` on `global_settings`; per-role override on `ts_roles.competitor_bonus`
+
+Mirror has a canonical 19-entry list of competitor agencies that should bonus-credit candidate experience across every role. Stored as Postgres `text[]` on `global_settings` (flat array, simple membership check). Per-role override stays on `ts_roles.competitor_bonus` (jsonb, carries a `bonus_points` scalar alongside the array). Seeded via two migrations (conditional UPDATE + idempotent DO block) so the canonical list is enforceable on existing rows AND new installs.
+
+### Stepped pull-running checklist driven by existing signals, not new step_progress writes
+
+Source repo writes per-step state to a `step_progress` jsonb column on `pull_rounds`. HQ's port intentionally dropped that ornamentation in Phase 3.4 to keep `ts-pull-candidates` simple. For the stepped UI in 3.7.8.6, kept the simpler approach — derived a 4-step checklist (search / dedupe / process / save) from the existing `candidates_found` + `processed_count` + `status` columns. Less granular than the source's 6-step view but covers the practical UX (most of the running window is "processing X of N"), and avoided re-adding per-substep writes across the entire pull pipeline.
+
+### Toasts default to Mirror coral; ReferralPill stays electric blue
+
+Toasts site-wide flipped from black/red destructive variant to solid Mirror coral with white bold text — coral is the brand attention color. ReferralPill briefly tried coral too (3.7.8.8), reverted in 3.7.8.13 because too many other coral surfaces (Master Pool header, primary buttons, toasts) made the referral signal disappear. Back to the original electric blue, which stands cleanly apart from the muted-grey AUTO/MANUAL pill it sits beside.
+
+### Slider track + score bar track use `bg-input` on Mirror-grey card surfaces
+
+Phase 3.7.6 moved many cards to `bg-surface-alt` (#141414, Mirror grey). The shadcn slider track and `ScoreInline` bar track used `bg-secondary` (#141414) — same color, invisible against the new card surfaces. Made the empty portion of every slider and the unfilled portion of every score bar disappear. Flipped both to `bg-input` (#292929) so the track always reads against any card surface.
+
+### Top nav reduced to Dashboard + Talent Scout
+
+Projects / Venues / Clients / Tasks reachable by drilling in from the Dashboard tile grid. Top nav's job is high-level orientation, not "every route in HQ". Routes still work; they just don't have nav slots.
+
 ## Phase 3.6 (Final review + packet)
 
 ### Q5: split into two edge functions, share via `_shared/packetRender.ts`
