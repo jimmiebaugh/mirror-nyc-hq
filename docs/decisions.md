@@ -2,6 +2,21 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 3.11 (Scorecard substance restoration + summary field)
+
+### Restored substantive `full_points_rubric` and added separate `summary` field
+
+The Phase 3.7 squash-merge (`2ab37c3`) added a "≤ 12 words, one sentence" cap to `full_points_rubric` in `scorecardGenerationPrompt`. The intent was good — block tiered point breakdowns inline like "10 pts: 5+ yrs · 5 pts: 2-4 yrs" — but the cap was over-aggressive and stripped concrete-signal evidence the per-candidate evaluator actually relies on. Recently-generated scorecards came back thin and abstract ("Strong portfolio") instead of rich and actionable ("5+ years of professional experience in graphic design with meaningful exposure to environmental, experiential, or spatial design contexts. Portfolio includes spatial graphics, signage systems, or large-scale environmental work.").
+
+Phase 3.11 fixes this additively, the way it should have been done in 3.7:
+
+1. **`full_points_rubric` restored to the substantive form** — 1-3 sentences (typically 25-60 words) of concrete signals: years expected, named tools, types of work / clients, where the signal lives in the candidate's materials. The per-candidate evaluator reads this field. Bad-example block keeps the "no tiered point breakdowns" prohibition since that was a real design constraint.
+2. **New `summary` field** — short (≤ 14 words) condensed recap used in compact UI surfaces (candidate detail score breakdown, packet matrix headers, recap views). Generated alongside `full_points_rubric` in the same Claude pass, never replaces it. The evaluator never reads `summary`.
+
+Both fields are stored on the criterion (jsonb scorecard, no migration needed). Existing roles have only `full_points_rubric` populated (the post-3.7 short version); UI surfaces that want compact display fall back to truncating it when `summary` is empty. Re-running scorecard generation OR clicking "Process scorecard" on the wizard / Edit Role page (Phase 3.10) re-populates both fields with the new substantive shape.
+
+The defense-in-depth merge in `ts-refine-scorecard` was extended: model is trusted for `name` / `full_points_rubric` / `summary`; everything else (tier, weight, is_disqualifier, is_manual) is restored from user input regardless of model output.
+
 ## Phase 3.10 (Scorecard refinement step)
 
 ### Refinement is a separate manual step, not auto-triggered on edit
