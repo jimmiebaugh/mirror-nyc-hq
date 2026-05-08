@@ -749,7 +749,6 @@ export type Database = {
           processed_count: number
           pulled_from: string | null
           pulled_to: string | null
-          reeval_last_progress_at: string | null
           role_id: string
           round_number: number | null
           started_at: string
@@ -770,7 +769,6 @@ export type Database = {
           processed_count?: number
           pulled_from?: string | null
           pulled_to?: string | null
-          reeval_last_progress_at?: string | null
           role_id: string
           round_number?: number | null
           started_at?: string
@@ -791,7 +789,6 @@ export type Database = {
           processed_count?: number
           pulled_from?: string | null
           pulled_to?: string | null
-          reeval_last_progress_at?: string | null
           role_id?: string
           round_number?: number | null
           started_at?: string
@@ -1368,6 +1365,10 @@ export type Database = {
       current_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["permission_role"]
+      }
+      invoke_edge_function: {
+        Args: { body?: Json; fn_name: string }
+        Returns: number
       }
       is_admin: { Args: never; Returns: boolean }
       is_producer_or_admin: { Args: never; Returns: boolean }
