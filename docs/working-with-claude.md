@@ -481,7 +481,7 @@ Each gets a Cowork-drafted spec before any code. The spec-driven workflow above 
 
 ## 6. Templates worth creating in Cowork
 
-Save these to `~/Documents/Claude Cowork/TEMPLATES/`:
+These belong in your **master Cowork folder** (single folder per person, not per project — see §2 for setup). Save under `<master-folder>/TEMPLATES/HQ/` if you want HQ-specific templates separated from cross-project ones, or flat in `TEMPLATES/` if you'd rather accumulate everything together. The folder name itself is whatever you chose for the master Cowork folder; the article's `Claude Cowork` is just an example.
 
 **`new-phase-kickoff.md`** — paste this at the start of a new phase Code session:
 ```
