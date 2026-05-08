@@ -5,11 +5,15 @@ import Landing from "@/pages/Landing";
 /**
  * Auth gate for the AppShell layout. When unauthenticated:
  *   - at /     → render the stealth Landing inline (full-screen, no shell)
- *   - elsewhere → redirect to / (which then renders Landing)
+ *   - elsewhere → save the intended URL to sessionStorage (so the OAuth
+ *     redirectTo can land the user back on it after sign-in) and redirect
+ *     to / which renders Landing with the hidden sign-in trigger.
  *
  * The hidden sign-in trigger lives on Landing, so there's no /login route to
  * leak. Authenticated users get the AppShell + nested Outlet as normal.
  */
+const POST_SIGNIN_REDIRECT_KEY = "post_signin_redirect";
+
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -24,6 +28,17 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!user) {
     if (location.pathname === "/") return <Landing />;
+    // Capture the intended destination so signInWithGoogle can pass it as
+    // the OAuth redirectTo. sessionStorage survives the OAuth round-trip
+    // through Google; nav state doesn't.
+    const intended = location.pathname + location.search + location.hash;
+    if (intended.startsWith("/") && !intended.startsWith("//")) {
+      try {
+        sessionStorage.setItem(POST_SIGNIN_REDIRECT_KEY, intended);
+      } catch {
+        /* private mode / quota exceeded — fall through */
+      }
+    }
     return <Navigate to="/" replace state={{ from: location }} />;
   }
 
