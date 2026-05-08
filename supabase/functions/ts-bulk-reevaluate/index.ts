@@ -33,16 +33,49 @@ const MAX_PER_BATCH = 25;
 const sb = () =>
   createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-type StatusFilter = "master_pool" | "auto_rejected" | "all";
+// Phase 3.7.2.1: 'auto_rejected' filter still accepted from clients but the
+// semantics are now "AI-rejected" — i.e. status='reject' AND
+// manually_reviewed=false. The 'reject' enum value was the legacy AI bin;
+// new writes use 'reject' + manually_reviewed=false. Unreviewed-rejected
+// is the natural retry-failed bucket.
+//
+// Phase 3.7.6: 'not_manually_rejected' added. Used by Role Settings when
+// the JD / eval prompt / scorecard changes — re-evaluates the entire pool
+// AND any AI-rejected candidates, but leaves human-confirmed rejections
+// alone (their manually_reviewed=true is the explicit "do not touch"
+// signal).
+type StatusFilter = "master_pool" | "auto_rejected" | "not_manually_rejected" | "all";
 
 function normalizeFilter(v: unknown): StatusFilter {
   if (v === "auto_rejected") return "auto_rejected";
+  if (v === "not_manually_rejected") return "not_manually_rejected";
   if (v === "all") return "all";
   return "master_pool";
 }
 
-function statusInClauseForFilter(filter: StatusFilter): { include?: string[]; exclude?: string[] } {
-  if (filter === "auto_rejected") return { include: ["auto_rejected"] };
+type FilterClause = {
+  include?: string[];
+  exclude?: string[];
+  manuallyReviewed?: boolean;
+  /** SQL-or expression applied via PostgREST .or(). Used for compound
+   *  conditions like "everything except status=reject AND manually_reviewed=true". */
+  orExpr?: string;
+};
+
+function statusInClauseForFilter(filter: StatusFilter): FilterClause {
+  // 'auto_rejected' filter = AI-rejected: status=reject AND not yet
+  // manually reviewed. Includes legacy 'auto_rejected' enum values for
+  // safety (any rows the backfill missed).
+  if (filter === "auto_rejected") {
+    return { include: ["reject", "auto_rejected"], manuallyReviewed: false };
+  }
+  // 'not_manually_rejected': everything EXCEPT rows the user explicitly
+  // rejected (status='reject' AND manually_reviewed=true). AI rejections
+  // (manually_reviewed=false) are included so prompt/JD/scorecard changes
+  // can flip them back into the pool if the new score warrants it.
+  if (filter === "not_manually_rejected") {
+    return { orExpr: "status.neq.reject,manually_reviewed.eq.false" };
+  }
   if (filter === "all") return {};
   return { exclude: ["reject", "auto_rejected"] };
 }
@@ -123,6 +156,8 @@ async function listPendingCandidates(
   const f = statusInClauseForFilter(filter);
   if (f.include) q = q.in("status", f.include);
   if (f.exclude) q = q.not("status", "in", `(${f.exclude.join(",")})`);
+  if (f.manuallyReviewed !== undefined) q = q.eq("manually_reviewed", f.manuallyReviewed);
+  if (f.orExpr) q = q.or(f.orExpr);
   const { data: cands } = await q;
   const allIds: string[] = (cands ?? []).map((c: any) => c.id);
   if (allIds.length === 0) return [];

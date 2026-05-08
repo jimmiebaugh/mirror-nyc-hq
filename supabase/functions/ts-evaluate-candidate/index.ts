@@ -242,19 +242,27 @@ Deno.serve(async (req) => {
       portfolio_path_or_url = portfolioUrl;
     }
 
-    // Status policy: re-eval only flips status if the existing status is auto_rejected
-    // (or null, which shouldn't happen). Manual statuses (consider/promote/reject/fast_track)
-    // are preserved — re-eval refreshes the score but never overrides the user's call.
+    // Status policy: preserve status whenever a human has manually confirmed
+    // it (manually_reviewed=true). Re-eval still refreshes score / breakdown /
+    // strengths / gaps / overview but never overrides the human's pick.
+    // For un-reviewed candidates (manually_reviewed=false), re-eval can
+    // reclassify based on the new score — including flipping to or away
+    // from a rejection.
+    // Phase 3.7.2.1: AI rejection now writes status='reject' with
+    // manually_reviewed=false (the AUTO pill in the UI signals it's still
+    // the AI's pick). Legacy 'auto_rejected' values are still allowed in
+    // the gate's existing-status check for safety.
     const currentStatus = cand.status as string | null;
+    const manuallyReviewed = (cand as { manually_reviewed?: boolean }).manually_reviewed === true;
     let newStatus: string = currentStatus ?? "consider";
-    if (currentStatus === "auto_rejected" || !currentStatus) {
+    if (!manuallyReviewed) {
       const threshold = role.auto_rejection_threshold ?? 60;
       let disqualified = false;
       for (const c of scorecardCriteria) {
         if (c.tier === 1 && c.is_disqualifier && (r.scores?.[c.name] ?? 0) === 0) { disqualified = true; break; }
       }
-      if (disqualified) newStatus = "auto_rejected";
-      else if ((r.total_score ?? 0) < threshold) newStatus = "auto_rejected";
+      if (disqualified) newStatus = "reject";
+      else if ((r.total_score ?? 0) < threshold) newStatus = "reject";
       else if (r.auto_classification_suggested === "fast_track") newStatus = "fast_track";
       else newStatus = "consider";
     }

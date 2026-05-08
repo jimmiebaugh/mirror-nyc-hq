@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -130,6 +131,7 @@ export type Database = {
           email_notifications_enabled: boolean
           id: string
           in_app_notifications_enabled: boolean
+          talent_scout_competitor_list: string[]
           talent_scout_packet_default_count: number
           updated_at: string
           venue_research_priority_sites: string[]
@@ -142,6 +144,7 @@ export type Database = {
           email_notifications_enabled?: boolean
           id?: string
           in_app_notifications_enabled?: boolean
+          talent_scout_competitor_list?: string[]
           talent_scout_packet_default_count?: number
           updated_at?: string
           venue_research_priority_sites?: string[]
@@ -154,6 +157,7 @@ export type Database = {
           email_notifications_enabled?: boolean
           id?: string
           in_app_notifications_enabled?: boolean
+          talent_scout_competitor_list?: string[]
           talent_scout_packet_default_count?: number
           updated_at?: string
           venue_research_priority_sites?: string[]
@@ -484,15 +488,18 @@ export type Database = {
           gmail_message_id: string | null
           id: string
           internal_notes: string | null
+          is_referral: boolean
           key_gaps: Json
           last_evaluated_at: string | null
           location: string | null
+          manually_reviewed: boolean
           name: string | null
           portfolio_path_or_url: string | null
           portfolio_type: Database["public"]["Enums"]["ts_candidate_portfolio_type"]
           pull_round_id: string
           quick_overview: Json
           recruiter_overview: string | null
+          referrer_email: string | null
           role_id: string
           score: number | null
           score_breakdown: Json
@@ -510,15 +517,18 @@ export type Database = {
           gmail_message_id?: string | null
           id?: string
           internal_notes?: string | null
+          is_referral?: boolean
           key_gaps?: Json
           last_evaluated_at?: string | null
           location?: string | null
+          manually_reviewed?: boolean
           name?: string | null
           portfolio_path_or_url?: string | null
           portfolio_type?: Database["public"]["Enums"]["ts_candidate_portfolio_type"]
           pull_round_id: string
           quick_overview?: Json
           recruiter_overview?: string | null
+          referrer_email?: string | null
           role_id: string
           score?: number | null
           score_breakdown?: Json
@@ -536,15 +546,18 @@ export type Database = {
           gmail_message_id?: string | null
           id?: string
           internal_notes?: string | null
+          is_referral?: boolean
           key_gaps?: Json
           last_evaluated_at?: string | null
           location?: string | null
+          manually_reviewed?: boolean
           name?: string | null
           portfolio_path_or_url?: string | null
           portfolio_type?: Database["public"]["Enums"]["ts_candidate_portfolio_type"]
           pull_round_id?: string
           quick_overview?: Json
           recruiter_overview?: string | null
+          referrer_email?: string | null
           role_id?: string
           score?: number | null
           score_breakdown?: Json
@@ -1576,3 +1589,6 @@ export const Constants = {
     },
   },
 } as const
+<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
+A new version of Supabase CLI is available: v2.98.2 (currently installed v2.98.1)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

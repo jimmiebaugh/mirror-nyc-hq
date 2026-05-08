@@ -48,7 +48,7 @@ You will receive in the user message:
 2. Candidate Materials: email body, parsed attachments, and pre-extracted non-LinkedIn URLs.
 
 # COMPETITOR BONUS RULES
-1-2 yrs at competitor = 5pts, 3+ yrs = 10pts, +2pts if leadership role at competitor.
+1-2 yrs at competitor = 3pts, 3-4 yrs = 5pts, 5+ yrs = 8pts, +2pts if leadership role at competitor.
 
 # EVALUATION RULES
 

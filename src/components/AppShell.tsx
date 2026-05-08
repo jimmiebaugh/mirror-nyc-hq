@@ -16,18 +16,22 @@ import { LogOut } from "lucide-react";
 
 type NavItem = { to: string; label: string; end?: boolean; adminOnly?: boolean };
 
+// Phase 3.7.8: Projects / Venues / Clients dropped from the top nav.
+// Those surfaces are reachable by drilling in from the Dashboard tile
+// grid, so they don't need their own nav slot.
+// Phase 3.7.8.12: Tasks also dropped from the top nav. Tasks live
+// inside the Dashboard surface alongside Projects / Venues / Clients.
+// Talent Scout stays as the cross-cutting admin destination.
 const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", end: true },
-  { to: "/projects", label: "Projects" },
-  { to: "/venues", label: "Venues" },
-  { to: "/clients", label: "Clients" },
-  { to: "/tasks", label: "Tasks" },
   { to: "/talent-scout", label: "Talent Scout", adminOnly: true },
 ];
 
 // Brand caption next to the M wordmark — reflects which app surface
 // the user is currently inside. Defaults to HQ for the core dashboard
-// surfaces (/, /projects, /venues, /clients, /tasks).
+// surfaces (/, /projects, /venues, /clients, /tasks). The latter three
+// no longer have top-nav slots but the routes still exist (drilled into
+// from the Dashboard).
 function brandCaptionFor(pathname: string) {
   if (pathname.startsWith("/talent-scout")) return "TALENT";
   if (pathname.startsWith("/venue-scout")) return "VENUES";
@@ -95,31 +99,47 @@ export default function AppShell() {
             </nav>
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-10 gap-2.5 px-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-[13px] bg-secondary">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="hidden sm:inline text-[13px] text-muted-foreground">
-                  {email}
-                </span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
-                <div className="text-xs text-muted-foreground">Signed in as</div>
-                <div className="truncate text-sm">{email}</div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={signOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            {/* Phase 3.7.5.1: Settings link moved over here, next to the
+                 user avatar. Still only renders inside Talent Scout for
+                 admins. */}
+            {location.pathname.startsWith("/talent-scout") && isAdmin && (
+              <NavLink
+                to="/talent-scout/settings"
+                className={({ isActive }) =>
+                  `hidden md:inline-flex rounded-sm px-3 py-2 font-mono text-[13px] font-bold uppercase tracking-[0.08em] transition-colors ${
+                    isActive
+                      ? "text-foreground bg-secondary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`
+                }
+              >
+                Settings
+              </NavLink>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-10 px-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="text-[13px] bg-secondary">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="text-xs text-muted-foreground">Signed in as</div>
+                  <div className="truncate text-sm">{email}</div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={signOut}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 

@@ -308,6 +308,11 @@ export const BLOCKED_PORTFOLIO_DOMAINS: string[] = [
   "wikipedia.org", "youtube.com", "vimeo.com", "spotify.com", "apple.com",
   "linkedin.com", "twitter.com", "x.com", "facebook.com",
   "instagram.com", "threads.net", "tiktok.com",
+  // Phase 3.7.8.15: block Mirror's own domain — referral forwards carry
+  // the manager's email signature with mirrornyc.com / @mirror_nyc, and
+  // the portfolio picker was promoting that as the candidate's
+  // portfolio link. mirrornyc.com is never a valid portfolio URL.
+  "mirrornyc.com",
 ];
 
 export function isBlockedPortfolioHost(hostname: string): boolean {

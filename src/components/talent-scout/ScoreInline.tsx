@@ -31,8 +31,15 @@ export function ScoreInline({
         {value == null ? "—" : value}
       </span>
       {value != null && (
+        // Phase 3.7.8.10: track moved from bg-secondary (#141414) to
+        // bg-input (#292929) so the unfilled portion stays visible on
+        // bg-surface-alt (#141414) row surfaces. Same fix as the slider
+        // track in 3.7.8.2 — bg-secondary disappeared against the new
+        // Mirror grey card backgrounds, making the proportional fill
+        // look like a full bar regardless of score. Track height also
+        // bumped h-1 → h-1.5 so the fill is more readable.
         <span
-          className="inline-block h-1 overflow-hidden rounded-full bg-secondary"
+          className="inline-block h-1.5 overflow-hidden rounded-full bg-input"
           style={{ width: barWidth }}
         >
           <span

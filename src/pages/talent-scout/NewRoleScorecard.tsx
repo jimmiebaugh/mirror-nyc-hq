@@ -1,27 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, RefreshCw, X } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Stepper } from "@/components/talent-scout/Stepper";
 import { TagInput } from "@/components/talent-scout/TagInput";
+import { CriterionCard } from "@/components/talent-scout/CriterionCard";
 import { wizard, type Criterion } from "@/lib/talent-scout/wizardStore";
+import { TIER_META, COMPETITOR_BONUS_POINTS } from "@/lib/talent-scout/scorecard";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-
-// Tier colors aligned with CandidateDetail / source's tier-badge--{1,2,3}.
-// T1 red-500, T2 amber-500, T3 green-400 (= source's #4ade80).
-const TIER_META = {
-  1: { label: "Tier 1 — Must-Haves", subtitle: "Disqualifying if absent", color: "bg-red-500/10 border-red-500/30 text-red-500" },
-  2: { label: "Tier 2 — Strong Differentiators", subtitle: "Meaningfully elevates a candidate", color: "bg-amber-500/10 border-amber-500/30 text-amber-500" },
-  3: { label: "Tier 3 — Nice-to-Haves", subtitle: "Bonus value · not required", color: "bg-green-400/10 border-green-400/30 text-green-400" },
-} as const;
-
-const COMPETITOR_BONUS_POINTS = 12;
 
 export default function NewRoleScorecard() {
   const navigate = useNavigate();
@@ -42,6 +31,21 @@ export default function NewRoleScorecard() {
       ranOnce.current = true;
       void generate(false);
     }
+    // Phase 3.7.5: seed the role's competitor list from the global default
+    // (Settings → Global Competitor List). Only fires when the field is
+    // still empty so we don't clobber a user's manual edits if they've
+    // already typed something in.
+    (async () => {
+      const { data } = await supabase
+        .from("global_settings")
+        .select("talent_scout_competitor_list")
+        .limit(1)
+        .maybeSingle();
+      const seed = (data?.talent_scout_competitor_list ?? []) as string[];
+      if (seed.length > 0) {
+        setCompetitors((current) => (current.length === 0 ? seed : current));
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -321,86 +325,5 @@ export default function NewRoleScorecard() {
   );
 }
 
-function CriterionCard({
-  c,
-  onChange,
-  onRemove,
-}: {
-  c: Criterion;
-  onChange: (p: Partial<Criterion>) => void;
-  onRemove: () => void;
-}) {
-  const points = Number(c.weight) || 0;
-  return (
-    <div
-      className={cn(
-        "grid items-start gap-4 rounded-md border border-border bg-card p-4",
-        c.is_manual && "border-l-2 border-l-primary",
-      )}
-      style={{ gridTemplateColumns: "1fr 90px auto auto" }}
-    >
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-2">
-          <input
-            value={c.name}
-            onChange={(e) => onChange({ name: e.target.value })}
-            className="w-full bg-transparent text-sm font-semibold outline-none focus:border-b focus:border-primary"
-          />
-          {c.is_manual && (
-            <span className="inline-block rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">
-              Manual
-            </span>
-          )}
-        </div>
-        <div className="space-y-1">
-          <input
-            value={c.full_points_rubric}
-            onChange={(e) => onChange({ full_points_rubric: e.target.value })}
-            placeholder="Full points criteria"
-            className="w-full bg-transparent text-xs text-muted-foreground outline-none focus:border-b focus:border-primary"
-          />
-          <input
-            value={c.partial_points_rubric}
-            onChange={(e) => onChange({ partial_points_rubric: e.target.value })}
-            placeholder="Partial points criteria"
-            className="w-full bg-transparent text-xs text-muted-foreground outline-none focus:border-b focus:border-primary"
-          />
-        </div>
-      </div>
-
-      <Input
-        type="number"
-        min={0}
-        value={c.weight}
-        onChange={(e) => onChange({ weight: Number(e.target.value) || 0 })}
-        className="h-9 text-center font-bold"
-      />
-
-      {c.tier === 1 ? (
-        <label className="flex max-w-[180px] cursor-pointer items-center gap-2 text-[11px] text-muted-foreground">
-          <Checkbox
-            checked={c.is_disqualifier}
-            onCheckedChange={(v) => onChange({ is_disqualifier: !!v })}
-          />
-          Disqualify if missing
-        </label>
-      ) : (
-        <div />
-      )}
-
-      <div className="flex items-center gap-3">
-        <div className="text-base font-bold">{points} pts</div>
-        {c.is_manual && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="text-muted-foreground hover:text-foreground"
-            title="Remove"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+// CriterionCard extracted to src/components/talent-scout/CriterionCard.tsx
+// (Phase 3.7.6) so RoleSettings can reuse the same row editor.

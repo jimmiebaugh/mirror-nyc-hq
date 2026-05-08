@@ -4,7 +4,6 @@ import { Loader2, MoreVertical, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -27,6 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { CandidateTable, type CandidateRow } from "@/components/talent-scout/CandidateTable";
 import { matchesSearch } from "@/components/talent-scout/CandidateSearch";
+import { PullStepsList } from "@/components/talent-scout/PullStepsList";
 import { RoundStatusPill } from "@/components/talent-scout/RoundStatusPill";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
@@ -189,14 +189,6 @@ export default function PullDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pullRoundId, round?.status]);
 
-  const progressPct = useMemo(() => {
-    if (!round) return 0;
-    const found = round.candidates_found ?? 0;
-    const done = round.processed_count ?? 0;
-    if (found <= 0) return round.status === "complete" ? 100 : 0;
-    return Math.min(100, Math.round((done / found) * 100));
-  }, [round]);
-
   const stats = useMemo(() => {
     const total = candidates.length;
     const inPool = candidates.filter((c) => POOL_STATUSES.has(c.status)).length;
@@ -348,21 +340,24 @@ export default function PullDetail() {
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
-                {/* Phase 3.6.6: R-pill moved to the LEFT of the title and
-                     scaled +25% so the surface reads as a pull round at a
-                     glance, not a role page (text-[13px] → text-[16px],
-                     px-3/py-1.5 → px-4/py-2 ≈ +25%). */}
+                {/* Phase 3.7.8.4: RX pill + round status moved to the
+                     RIGHT of the role title. Order: title → RX → round
+                     status (latest/running/failed) → "Latest" badge.
+                     Earlier (3.6.6) the RX pill sat LEFT of the title;
+                     the visual weight ended up competing with the role
+                     name and made the page feel R-pill-led rather than
+                     role-led. */}
+                <h1 className="h-page">{roleTitle || "Role"}</h1>
                 {round.round_number != null && (
                   <span className="inline-flex items-center gap-2 rounded-sm border border-primary/40 bg-primary/15 px-4 py-2 text-[16px] font-mono font-bold uppercase tracking-wider text-primary">
                     <span className="h-2 w-2 rounded-full bg-current" />
                     R{round.round_number}
                   </span>
                 )}
-                <h1 className="h-page">{roleTitle || "Role"}</h1>
-                <RoundStatusPill status={round.status} />
+                <RoundStatusPill status={round.status} size="large" />
                 {isLatest && (
-                  <span className="inline-flex items-center gap-1.5 rounded-sm border border-green-400/40 bg-green-400/10 px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider text-green-400">
-                    <span className="h-1 w-1 rounded-full bg-current" />
+                  <span className="inline-flex items-center gap-2 rounded-sm border border-green-400/40 bg-green-400/10 px-4 py-2 text-[16px] font-mono font-bold uppercase tracking-wider text-green-400">
+                    <span className="h-2 w-2 rounded-full bg-current" />
                     Latest
                   </span>
                 )}
@@ -462,23 +457,12 @@ export default function PullDetail() {
             </div>
           </div>
 
-          {/* Progress (running) */}
+          {/* Phase 3.7.8.6: stepped checklist replaces the single-line
+               spinner + progress bar. Live-updates via the realtime
+               subscription on ts_pull_rounds. */}
           {isRunning && (
-            <div className="space-y-3 border-t border-border pt-6">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                <span className="text-sm">
-                  {round.candidates_found ? (
-                    <>
-                      Processing <strong>{round.processed_count ?? 0}</strong> of{" "}
-                      <strong>{round.candidates_found}</strong> candidates…
-                    </>
-                  ) : (
-                    <>Searching Gmail…</>
-                  )}
-                </span>
-              </div>
-              {(round.candidates_found ?? 0) > 0 && <Progress value={progressPct} className="h-2" />}
+            <div className="border-t border-border pt-6">
+              <PullStepsList round={round} />
             </div>
           )}
 

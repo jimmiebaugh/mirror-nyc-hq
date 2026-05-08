@@ -7,8 +7,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  ExternalLink,
-  FileText,
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,11 +19,16 @@ import { cn } from "@/lib/utils";
 import { unwrapSecurityWrapper } from "@/lib/unwrapUrl";
 import { ScoreInline } from "@/components/talent-scout/ScoreInline";
 import { StatusDropdown, statusStyle } from "@/components/talent-scout/StatusDropdown";
+import { ReviewedPill } from "@/components/talent-scout/ReviewedPill";
+import { ReferralPill } from "@/components/talent-scout/ReferralPill";
 import type { Database } from "@/integrations/supabase/types";
 
 export type CandidateRow = Database["public"]["Tables"]["ts_candidates"]["Row"];
 type Status = CandidateRow["status"];
 
+// Phase 3.7.2.1: auto_rejected deprecated. Kept in the set for legacy rows
+// that somehow survived the backfill; new writes use status='reject' with
+// manually_reviewed=false.
 const REJECTED_STATUSES = new Set<Status>(["reject", "auto_rejected"]);
 
 type SortKey = "score" | "name" | "applied";
@@ -73,8 +76,15 @@ function compareBy(key: SortKey, dir: SortDir) {
 
 // Phase 3.6.11: another +15px breathing room between Portfolio and Quick
 // Overview. R+P cell 170 → 185, with pr-[25px] inside (was 10).
+// Phase 3.7.1.2: status column 132 → 148 to fit AUTO-REJECTED label
+// without clipping (StatusDropdown compact pill widened to 140 min).
+// Phase 3.7.8.3: candidate column 260→220 (cell content scales up but
+// no longer hogs width). R+P column 185→140: Resume + Portfolio collapse
+// from side-by-side icon halves into vertically stacked text buttons.
+// Phase 3.7.8.17: R+P column 140→150 to absorb the wider buttons
+// (110→120) needed for the bumped text size.
 const GRID_COLS =
-  "grid-cols-[minmax(260px,1fr)_185px_minmax(0,2.4fr)_132px_36px]";
+  "grid-cols-[220px_150px_minmax(0,2.4fr)_148px_36px]";
 
 function SortHeader({
   label,
@@ -133,11 +143,14 @@ function RowCheckbox({
   );
 }
 
-// Phase 3.6.8: icon-button bg lifted off the row tint via surface-raised
-// + stronger border so the buttons read as clearly clickable affordances
-// against the column-tint diagnostic AND the final dark-on-dark layout.
-const ICON_BUTTON_CLS =
-  "inline-flex h-9 w-9 items-center justify-center rounded-sm border border-border-strong bg-surface-raised text-foreground hover:bg-accent hover:border-foreground transition-colors";
+// Phase 3.7.8.3: stacked Resume / Portfolio text buttons. Replaces the
+// icon buttons (FileText / ExternalLink in 3.6.8). Same surface-raised
+// + bordered look, fixed-width so the stack reads as a tidy pair, mono
+// uppercase to match other table affordances.
+// Phase 3.7.8.17: text bumped 11→13 so the buttons read at a glance
+// without leaning in. Width 110→120 absorbs the wider glyphs.
+const TEXT_BUTTON_CLS =
+  "inline-flex h-8 w-[120px] items-center justify-center rounded-sm border border-border-strong bg-surface-raised text-[13px] font-mono font-bold uppercase tracking-wider text-foreground hover:bg-accent hover:border-foreground transition-colors";
 
 function PortfolioCell({ c, onPathOpen }: { c: CandidateRow; onPathOpen: (path: string) => void }) {
   if (c.portfolio_type === "file" && c.portfolio_path_or_url) {
@@ -150,9 +163,9 @@ function PortfolioCell({ c, onPathOpen }: { c: CandidateRow; onPathOpen: (path: 
           onPathOpen(path);
         }}
         title={path.split("/").pop() ?? "Portfolio (file)"}
-        className={ICON_BUTTON_CLS}
+        className={TEXT_BUTTON_CLS}
       >
-        <FileText className="h-4 w-4" />
+        Portfolio
       </button>
     );
   }
@@ -165,13 +178,13 @@ function PortfolioCell({ c, onPathOpen }: { c: CandidateRow; onPathOpen: (path: 
         rel="noreferrer"
         onClick={(e) => e.stopPropagation()}
         title={unwrapped}
-        className={ICON_BUTTON_CLS}
+        className={TEXT_BUTTON_CLS}
       >
-        <ExternalLink className="h-4 w-4" />
+        Portfolio
       </a>
     );
   }
-  return <span className="text-muted-foreground">—</span>;
+  return <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">—</span>;
 }
 
 async function openSignedFile(path: string) {
@@ -196,6 +209,8 @@ export function CandidateTable({
   search,
   onSearchChange,
   searchPlaceholder = "Search candidates by name, email, location…",
+  title,
+  meta,
 }: {
   candidates: CandidateRow[];
   emptyMessage?: string;
@@ -206,6 +221,12 @@ export function CandidateTable({
   search?: string;
   onSearchChange?: (value: string) => void;
   searchPlaceholder?: string;
+  /** Phase 3.7.8.7: optional in-card section header. When `title` is
+      provided, an extra row renders above the bulk-action bar with the
+      title in coral and `meta` (if any) inline-right in white. Used by
+      RoleDashboard to label the master pool. */
+  title?: string;
+  meta?: string;
 }) {
   const nav = useNavigate();
   const { user } = useAuth();
@@ -351,9 +372,11 @@ export function CandidateTable({
     const ids = Array.from(effectiveSelection);
     if (ids.length === 0 || bulkBusy) return;
     setBulkBusy(true);
+    // Phase 3.7.2: bulk status changes also flip manually_reviewed → true.
+    // Same rule as a single dropdown change — these are explicit human picks.
     const { error } = await supabase
       .from("ts_candidates")
-      .update({ status })
+      .update({ status, manually_reviewed: true })
       .in("id", ids);
     setBulkBusy(false);
     if (error) {
@@ -370,7 +393,15 @@ export function CandidateTable({
 
   if (candidates.length === 0) {
     return (
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden bg-surface-alt">
+        {title && (
+          <div className="flex items-baseline gap-3 border-b border-border px-5 py-4">
+            <h2 className="text-[18px] font-extrabold uppercase tracking-tight text-primary" style={{ fontFamily: "var(--font-display)" }}>
+              {title}
+            </h2>
+            {meta && <span className="text-[11px] text-foreground">{meta}</span>}
+          </div>
+        )}
         <div className="px-5 py-10 text-center text-sm text-muted-foreground">{emptyMessage}</div>
       </Card>
     );
@@ -379,7 +410,20 @@ export function CandidateTable({
   const selCount = effectiveSelection.size;
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden bg-surface-alt">
+      {/* Phase 3.7.8.7: optional in-card title row, sits above the
+          bulk-action bar. Title renders in coral at 18px (smaller than
+          the page-level h-section utility), meta sits inline-right in
+          white at 11px. Hidden when no title prop is passed. */}
+      {title && (
+        <div className="flex items-baseline gap-3 border-b border-border px-5 py-4">
+          <h2 className="text-[18px] font-extrabold uppercase tracking-tight text-primary" style={{ fontFamily: "var(--font-display)" }}>
+            {title}
+          </h2>
+          {meta && <span className="text-[11px] text-foreground">{meta}</span>}
+        </div>
+      )}
+
       {/* Bulk action bar — Phase 3.6.8 layout:
             [ search ─ flex grow ] [ bulk_buttons N_selected ]
           Search input always present on the left; bulk buttons + 'N
@@ -461,14 +505,11 @@ export function CandidateTable({
         <div>
           <SortHeader label="Candidate" column="name" active={sortKey} dir={sortDir} onClick={onSort} />
         </div>
-        {/* Resume + Portfolio header: split into two equal halves so each
-             label sits centered DIRECTLY above its icon in the body row.
-             pr-[25px] (Phase 3.6.10) gives Quick Overview's column header
-             extra breathing room from the Portfolio side. */}
-        <div className="flex items-center pr-[25px]">
-          <div className="flex flex-1 justify-center">Resume</div>
-          <div className="flex flex-1 justify-center">Portfolio</div>
-        </div>
+        {/* Phase 3.7.8.10: header text removed. The stacked Resume +
+             Portfolio buttons in each row are self-labeling, so the
+             column header just reserves the slot. */}
+        <div />
+
         <div>Quick Overview</div>
         <div className="flex items-center justify-center">Status</div>
         <div className="flex items-center justify-center">
@@ -574,69 +615,81 @@ function Row({
   dim?: boolean;
 }) {
   const overview = (c.quick_overview as string[] | null) ?? null;
-  // Phase 3.7.1: row gets a left-border in the candidate's status color, same
-  // pattern as FinalReviewDetail's rationale cell (inline borderColor hex).
-  // Phase 3.7.1.1: 3px → 2.5px (slightly lighter visual weight).
-  const rowAccent = statusStyle(c.status).colorHex;
+  // Phase 3.7.2.3: only AUTO rows get the grey left-border accent.
+  // Once a candidate is manually reviewed, the row drops back to the
+  // default table border — no extra weight, no color. The combination
+  // of the grey border + lighter background tint is purely a "still
+  // needs review" affordance; manual-reviewed candidates blend back in.
+  const isAuto = !c.manually_reviewed;
   return (
     <div
       onClick={onRowClick}
-      style={{ borderLeft: `2.5px solid ${rowAccent}` }}
+      style={isAuto ? { borderLeft: "1.5px solid #71717a" /* zinc-500 */ } : undefined}
       className={cn(
         "grid",
         GRID_COLS,
         "cursor-pointer items-center gap-4 border-b border-border px-5 py-4 text-sm last:border-b-0 transition-colors hover:bg-secondary/40",
+        // Phase 3.7.2.2: clearer lift on un-reviewed (auto) rows. Was
+        // bg-secondary/10 — too subtle to read. bg-foreground/[0.04] uses
+        // the foreground (light) color at low opacity so the tint reads
+        // as a distinct lighter band on the dark surface.
+        isAuto && !checked && "bg-foreground/[0.04]",
         dim && "opacity-75",
         checked && "bg-primary/5",
       )}
     >
-      {/* Candidate stack — diagnostic tint removed (Phase 3.6.9). */}
+      {/* Candidate stack — Phase 3.7.8.3: name 16→17, email 12→13,
+          applied 11→12, score 14→18 with bar 60→62. "Score:" label
+          dropped — the colored number reads as the score on its own.
+          Phase 3.7.8.17: name 17→15 (denser stack), score 18→14 with
+          bar 62→80 (number sits closer to email/applied weight, bar
+          carries more of the visual signal). */}
       <div className="min-w-0 pr-2">
-        <div className="truncate text-[16px] font-bold leading-tight">{c.name ?? "—"}</div>
-        {/* Phase 3.7.1.1: email is a mailto link, slightly muted coral. */}
+        <div className="truncate text-[15px] font-bold leading-tight">{c.name ?? "—"}</div>
+        {/* Phase 3.7.6.7: mailto only covers the visible email text, not
+             the full column. block + truncate was filling the cell width
+             so the entire column was clickable. inline-block with
+             max-w-full keeps truncation but sizes to content. */}
         {c.email ? (
-          <a
-            href={`mailto:${c.email}`}
-            onClick={(e) => e.stopPropagation()}
-            className="mt-1 block truncate text-[12px] text-primary/80 hover:text-primary hover:underline"
-          >
-            {c.email}
-          </a>
+          <div className="mt-1 max-w-full">
+            <a
+              href={`mailto:${c.email}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-block max-w-full truncate align-bottom text-[13px] text-primary/80 hover:text-primary hover:underline"
+            >
+              {c.email}
+            </a>
+          </div>
         ) : (
-          <div className="mt-1 truncate text-[12px] text-muted-foreground">—</div>
+          <div className="mt-1 truncate text-[13px] text-muted-foreground">—</div>
         )}
-        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+        <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
           {c.applied_date
             ? `Applied ${new Date(c.applied_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
             : "—"}
         </div>
-        <div className="mt-3 flex items-center gap-2 font-mono text-[12px] uppercase tracking-wider text-muted-foreground">
-          <span>Score:</span>
-          <ScoreInline value={c.score == null ? null : Number(c.score)} size={14} barWidth={60} />
+        <div className="mt-3 flex items-center">
+          <ScoreInline value={c.score == null ? null : Number(c.score)} size={14} barWidth={80} />
         </div>
       </div>
 
-      {/* Resume + Portfolio: split halves so each icon sits centered
-          directly under its header label. pr-[25px] adds breathing
-          room before Quick Overview (Phase 3.6.10). */}
-      <div className="flex items-center pr-[25px]">
-        <div className="flex flex-1 items-center justify-center">
-          {resumePath ? (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); openSignedFile(resumePath); }}
-              title="Open resume"
-              className={ICON_BUTTON_CLS}
-            >
-              <FileText className="h-4 w-4" />
-            </button>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </div>
-        <div className="flex flex-1 items-center justify-center">
-          <PortfolioCell c={c} onPathOpen={openSignedFile} />
-        </div>
+      {/* Phase 3.7.8.3: Resume + Portfolio stacked vertically. Resume
+          on top, Portfolio below, both centered horizontally. Empty
+          slots render as a muted dash so the column always lines up. */}
+      <div className="flex flex-col items-center justify-center gap-2">
+        {resumePath ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); openSignedFile(resumePath); }}
+            title="Open resume"
+            className={TEXT_BUTTON_CLS}
+          >
+            Resume
+          </button>
+        ) : (
+          <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">—</span>
+        )}
+        <PortfolioCell c={c} onPathOpen={openSignedFile} />
       </div>
 
       {/* Quick Overview — text bumped 12 → 13 (Phase 3.6.9). */}
@@ -655,9 +708,11 @@ function Row({
         )}
       </div>
 
-      {/* Status */}
+      {/* Status — dropdown on top, reviewed pill (and in Pass 5 the
+           referral pill) stacked below. Pills sit in a flex row so a
+           future referral pill can sit alongside at flex-1 50/50 split. */}
       <div
-        className="flex items-center justify-center"
+        className="flex flex-col items-stretch justify-center gap-1"
         onClick={(e) => e.stopPropagation()}
       >
         <StatusDropdown
@@ -666,6 +721,20 @@ function Row({
           onChange={() => { void onChanged?.(); }}
           size="compact"
         />
+        <div className="flex items-center gap-1">
+          <ReviewedPill
+            manuallyReviewed={c.manually_reviewed === true}
+            candidateId={c.id}
+            onChanged={onChanged}
+          />
+          {/* Phase 3.7.7: ReferralPill renders inline only when the
+               candidate was ingested via a Mirror manager forward. Both
+               pills use flex-1 so they share the column 50/50 when both
+               are present; ReviewedPill stretches full-width when alone. */}
+          {c.is_referral === true && (
+            <ReferralPill referrerEmail={c.referrer_email} />
+          )}
+        </div>
       </div>
 
       {/* Checkbox (far right) */}

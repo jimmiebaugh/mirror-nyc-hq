@@ -128,6 +128,400 @@ function parseFromHeader(v: string): { name: string; email: string } {
   return { name: "", email: v.trim().toLowerCase() };
 }
 
+/**
+ * Phase 3.7.7: detect a forwarded email and return the ORIGINAL sender's
+ * identity + body. Used when a Mirror manager forwards a candidate's
+ * application from their own inbox to jobs@mirrornyc.com.
+ *
+ * Phase 3.7.7.1: now handles nested forwards (manager A forwarded to
+ * manager B forwarded to jobs@). Walks ALL "From: …" lines in the body
+ * in reverse order and picks the DEEPEST one whose email isn't
+ * @mirrornyc.com — that's the original applicant at the bottom of the
+ * chain. Top-down iteration would lock onto the intermediate manager(s).
+ *
+ * Marker check (Gmail / Apple Mail / Outlook patterns) gates whether
+ * we treat the message as a forward at all. Without any marker AND
+ * without any "From: …" line in the body, returns null (probably an
+ * internal Mirror email that happened to match the role's keyword).
+ */
+/**
+ * Phase 3.7.7.3: convert HTML body to plain text while preserving line
+ * structure. Used as a forward-parse fallback when text/plain comes back
+ * empty or signature-only. Mirrors the conversion in walkParts but is
+ * exported so parseForwardedEmail can reach for it.
+ */
+function htmlBodyToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6]|tr|blockquote)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+/**
+ * Phase 3.7.7.5: best-effort name extraction from the "On <date>... <Name>"
+ * prefix of a reply-quote attribution. Strips the date portion (AM/PM marker
+ * with greedy match, or last comma after a digit run, or leading time-like
+ * punctuation) and returns whatever's left. If extraction leaves digits in
+ * the result, returns "" so downstream cleanCandidateName isn't fed a
+ * mangled date string.
+ */
+function extractNameFromOnPrefix(prefix: string): string {
+  let s = prefix.trim();
+  // English AM/PM (Gmail / Apple Mail mobile most common). [\s\S] because
+  // the prefix may contain a soft-wrapped newline.
+  const ampmMatch = s.match(/^[\s\S]*\b(?:AM|PM)[\s,]*/i);
+  if (ampmMatch) {
+    s = s.slice(ampmMatch[0].length);
+  } else {
+    const lastComma = s.lastIndexOf(",");
+    if (lastComma > 0 && /\d/.test(s.slice(0, lastComma))) {
+      s = s.slice(lastComma + 1);
+    }
+    s = s.replace(/^[\s\d:.\/-]+/, "");
+  }
+  s = s.trim().replace(/[<>"']/g, "");
+  if (/\d/.test(s)) return "";
+  return s;
+}
+
+function parseForwardedFromString(rawBody: string): {
+  name: string;
+  email: string;
+  bodyText: string;
+} | null {
+  if (!rawBody) return null;
+  // Phase 3.7.7.2: regexes loosened to handle real-world forward chains.
+  // Phase 3.7.7.3: also strip leading "> " quote markers via [^>\n]
+  // tolerance and normalize the "<email>" capture so HTML entities like
+  // &lt; / &gt; aren't required (the htmlBodyToText pass already did
+  // entity decoding before we get here, but the bare path keeps working).
+  // Phase 3.7.7.5: also collect "On <date> <Name> <<email>> wrote:"
+  // reply-quote attributions. Apple Mail iPhone forwards (and any "Reply"
+  // mistakenly used as a forward) carry the original applicant's identity
+  // in this shape, NOT as a From: header. Without this rule, every From:
+  // in such a chain is @mirrornyc.com and we incorrectly skip.
+  const FROM_LINE = /From:\s*"?([^"<\n]{0,200}?)"?\s*<([^>\s]+@[^>\s]+)>/gi;
+  const FROM_BARE = /From:\s*([^\s<\n]+@[^\s<\n]+)/gi;
+  const ON_WROTE_LINE = /\bOn\b([^<]{1,300}?)<\s*([\w.+\-]+@[\w.\-]+)\s*>\s*wrote\s*:/gi;
+  type FromHit = { name: string; email: string; startIdx: number; afterIdx: number };
+  const hits: FromHit[] = [];
+  for (const m of rawBody.matchAll(FROM_LINE)) {
+    if (typeof m.index !== "number") continue;
+    hits.push({
+      name: m[1].trim().replace(/[<>"']/g, ""),
+      email: m[2].trim().toLowerCase(),
+      startIdx: m.index,
+      afterIdx: m.index + m[0].length,
+    });
+  }
+  for (const m of rawBody.matchAll(ON_WROTE_LINE)) {
+    if (typeof m.index !== "number") continue;
+    hits.push({
+      name: extractNameFromOnPrefix(m[1]),
+      email: m[2].trim().toLowerCase(),
+      startIdx: m.index,
+      afterIdx: m.index + m[0].length,
+    });
+  }
+  if (hits.length === 0) {
+    for (const m of rawBody.matchAll(FROM_BARE)) {
+      if (typeof m.index !== "number") continue;
+      hits.push({
+        name: "",
+        email: m[1].trim().toLowerCase(),
+        startIdx: m.index,
+        afterIdx: m.index + m[0].length,
+      });
+    }
+  }
+  if (hits.length === 0) return null;
+
+  // Sort by document position so "deepest" is reliably last regardless of
+  // which pattern matched it (From: vs On...wrote: hits get interleaved).
+  hits.sort((a, b) => a.startIdx - b.startIdx);
+
+  // Walk hits in reverse (deepest first) and pick the first non-Mirror
+  // sender. That's the original applicant. If every hit in the chain
+  // is @mirrornyc.com, return null instead of falling back — better to
+  // skip than misattribute the manager as the candidate.
+  let chosen: FromHit | undefined;
+  for (let i = hits.length - 1; i >= 0; i--) {
+    if (!hits[i].email.endsWith("@mirrornyc.com")) {
+      chosen = hits[i];
+      break;
+    }
+  }
+  if (!chosen) return null;
+
+  const tail = rawBody.slice(chosen.afterIdx);
+  const blank = tail.match(/\r?\n\s*\r?\n/);
+  let bodyText =
+    blank && typeof blank.index === "number"
+      ? tail.slice(blank.index + blank[0].length)
+      : tail;
+  // Phase 3.7.7.5: strip leading "> " quote markers. Apple Mail mobile
+  // and reply-style forwards carry the original message as quoted text.
+  bodyText = bodyText.replace(/^>\s?/gm, "").trim();
+  return { name: chosen.name, email: chosen.email, bodyText };
+}
+
+/**
+ * Phase 3.7.8.15: strip a Mirror NYC signature block from the end of a
+ * note. Mirror sigs follow a strict template: a bolded name line
+ * "*Firstname Lastname*" followed within ~12 lines by one of the brand
+ * markers ("M I R R O R", "mirrornyc.com", "@mirror_*",
+ * "STRATEGY / DESIGN / PRODUCTION"). When that pattern hits, truncate
+ * everything from the bolded-name line on. Also strips trailing
+ * "Sent from <device>" lines (Apple Mail mobile / Mirrornyc Mobile).
+ */
+function stripMirrorSignature(text: string): string {
+  if (!text) return "";
+  const lines = text.split(/\r?\n/);
+  let cutIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i].trim();
+    // Bolded name pattern: *Firstname Lastname* on its own line.
+    if (/^\*[A-Z][A-Za-z'\-\.\s]{1,60}\*\s*$/.test(ln)) {
+      const window = lines
+        .slice(i, Math.min(lines.length, i + 14))
+        .join("\n");
+      if (
+        /M\s+I\s+R\s+R\s+O\s+R/i.test(window) ||
+        /mirrornyc\.com/i.test(window) ||
+        /@mirror_/i.test(window) ||
+        /STRATEGY\s*\/\s*DESIGN\s*\/\s*PRODUCTION/i.test(window)
+      ) {
+        cutIdx = i;
+        break;
+      }
+    }
+  }
+  let out = cutIdx >= 0 ? lines.slice(0, cutIdx).join("\n") : text;
+  // Strip trailing "Sent from <device>" lines and standalone signoffs.
+  out = out.replace(/^.*Sent from .*$/gim, "");
+  return out.trim();
+}
+
+/**
+ * Phase 3.7.8.16: locate every explicit-forward marker in the body and
+ * return their {start, end} positions sorted by document order.
+ * "Explicit forward" = "---------- Forwarded message ----------" (Gmail)
+ * or "Begin forwarded message:" (Apple Mail). These mark the boundary
+ * between one chain segment and the next, and each segment that
+ * follows them starts with a From:/Date:/Subject: header block of the
+ * next-up sender.
+ *
+ * Reply-quote attributions ("On X wrote:") are NOT treated as segment
+ * boundaries by this scanner — they're a sub-shape inside a single
+ * segment, and the segment-body extractor truncates at them
+ * separately.
+ */
+function findExplicitForwardMarkers(text: string): { idx: number; len: number }[] {
+  if (!text) return [];
+  const markers: { idx: number; len: number }[] = [];
+  const patterns: RegExp[] = [
+    /-{2,}\s*Forwarded message\s*-{2,}/gi,
+    /Begin forwarded message:/gi,
+  ];
+  for (const re of patterns) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      markers.push({ idx: m.index, len: m[0].length });
+    }
+  }
+  markers.sort((a, b) => a.idx - b.idx);
+  return markers;
+}
+
+/**
+ * Phase 3.7.8.16: extract the body text from one forwarded-segment.
+ * The segment text starts right after a "Forwarded message" marker,
+ * so the first chunk is the inner forward's header block (From: /
+ * Date: / Subject: / To:). Skip past the first blank line to land on
+ * the actual body, then truncate at any "On X wrote:" attribution
+ * since that's a quoted reply, not the manager's commentary.
+ *
+ * Strip leading blank lines first so the blank-line search picks the
+ * gap BETWEEN headers and body, not the leading gap right after the
+ * marker (Apple Mail wraps with an extra newline).
+ */
+function extractSegmentBody(segment: string): string {
+  let body = segment.replace(/^[\s\n]+/, "");
+  const blankMatch = body.match(/\r?\n\s*\r?\n/);
+  if (blankMatch && typeof blankMatch.index === "number") {
+    body = body.slice(blankMatch.index + blankMatch[0].length);
+  }
+  const wroteMatch = body.match(
+    /\bOn\b[^<]{1,300}?<\s*[\w.+\-]+@[\w.\-]+\s*>\s*wrote\s*:/i,
+  );
+  if (wroteMatch && typeof wroteMatch.index === "number") {
+    body = body.slice(0, wroteMatch.index);
+  }
+  return body;
+}
+
+/**
+ * Phase 3.7.8.16: catch captures that are mostly a Mirror manager's
+ * "from-mobile" signature (Apple Mail style) which the strict
+ * bolded-name stripper misses. Pattern: 1-4 short lines containing
+ * "Mirrornyc" / "mirrornyc.com" / "@mirror_*" / "Mobile. <digits>" /
+ * "m: <digits>". When a capture looks like signature-only and has no
+ * substantial commentary, drop it.
+ */
+function looksLikeSignatureOnly(text: string): boolean {
+  if (!text) return true;
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return true;
+  if (lines.length > 4) return false;
+  const joined = lines.join(" ");
+  return (
+    /\bMirrornyc\b/i.test(joined) ||
+    /mirrornyc\.com/i.test(joined) ||
+    /@mirror_/i.test(joined) ||
+    /Mobile\.\s*\d/i.test(joined) ||
+    /\bm:\s*\d{3}/i.test(joined)
+  );
+}
+
+/**
+ * Phase 3.7.8.16: parse the segment's "From:" header to find the
+ * sender's email. Apple Mail wraps headers with asterisks
+ * (*From: *Andrew Hurewitz <andrew@x.com>) — the loose "From:" regex
+ * tolerates that. Returns null when no parseable From line is found
+ * (segment is malformed or doesn't start with a header block).
+ */
+function extractSegmentSenderEmail(segment: string): string | null {
+  const m = segment.match(
+    /From:\s*"?[^"<\n]{0,200}?"?\s*<([^>\s]+@[^>\s]+)>/i,
+  );
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * Phase 3.7.8.16: extract commentary from EVERY @mirrornyc.com manager
+ * in the forward chain, not just the outermost forwarder.
+ *
+ * For "A (manager) → B (manager) → jobs@":
+ * - Segment 0 (before first marker) = B's content. Sender is the
+ *   outer email's From, passed in via outerSenderEmail.
+ * - Segment 1 (between first and second marker) = A's content. Sender
+ *   parsed from the segment's own From: header.
+ * - Segment 2 (after second marker, when present) = the original
+ *   applicant's content. Skipped unless From: is also @mirrornyc.com.
+ *
+ * For each segment whose sender is @mirrornyc.com, strip Mirror
+ * signatures and capture the commentary. Combine into a single
+ * attributed note block. Empty when no manager added any commentary
+ * (e.g., a bare forward-with-default-signature only chain).
+ *
+ * Used to populate ts_candidates.internal_notes on referral ingestion
+ * so manager context ("strong pick, schedule a call" / "borderline,
+ * lmk what you think") factors into the FIRST evaluation via the
+ * HIRING MANAGER NOTES block in the candidate bundle.
+ */
+export function extractManagerNote(
+  rawBodyText: string,
+  outerSenderEmail?: string | null,
+): string {
+  if (!rawBodyText) return "";
+  const markers = findExplicitForwardMarkers(rawBodyText);
+  const captured: { sender: string; note: string }[] = [];
+
+  // Segment 0: text before the first marker (or the whole body if no
+  // markers found). Sender = outer email's From.
+  const seg0End = markers[0]?.idx ?? rawBodyText.length;
+  let seg0 = rawBodyText.slice(0, seg0End);
+  // Defensive: if seg 0 contains an "On X wrote:" attribution
+  // (no explicit forward marker but a reply-quote pattern), truncate
+  // at it so the quoted body isn't picked up as the manager's note.
+  const seg0Wrote = seg0.match(
+    /\bOn\b[^<]{1,300}?<\s*[\w.+\-]+@[\w.\-]+\s*>\s*wrote\s*:/i,
+  );
+  if (seg0Wrote && typeof seg0Wrote.index === "number") {
+    seg0 = seg0.slice(0, seg0Wrote.index);
+  }
+  if (
+    outerSenderEmail &&
+    outerSenderEmail.toLowerCase().endsWith("@mirrornyc.com")
+  ) {
+    const note = stripMirrorSignature(seg0).replace(/\n{3,}/g, "\n\n").trim();
+    if (note && !looksLikeSignatureOnly(note)) {
+      captured.push({ sender: outerSenderEmail.toLowerCase(), note });
+    }
+  }
+
+  // Segments 1..N: text between markers. Each starts with the inner
+  // forward's header block (From / Date / Subject / To).
+  for (let i = 0; i < markers.length; i++) {
+    const start = markers[i].idx + markers[i].len;
+    const end = markers[i + 1]?.idx ?? rawBodyText.length;
+    const segText = rawBodyText.slice(start, end);
+
+    const sender = extractSegmentSenderEmail(segText);
+    if (!sender || !sender.endsWith("@mirrornyc.com")) continue;
+    // Skip if this segment's sender already showed up earlier in the
+    // walk (paranoia against duplicate captures from weird wrapper
+    // chains).
+    if (captured.some((c) => c.sender === sender)) continue;
+
+    const body = extractSegmentBody(segText);
+    const note = stripMirrorSignature(body).replace(/\n{3,}/g, "\n\n").trim();
+    if (note && !looksLikeSignatureOnly(note)) {
+      captured.push({ sender, note });
+    }
+  }
+
+  if (captured.length === 0) return "";
+  // Single note: drop the "Note from <email>:" attribution prefix —
+  // the referrer email is already stored on the candidate row, so the
+  // note reads cleaner without a redundant header.
+  if (captured.length === 1) return captured[0].note;
+  // Multiple notes: attribute each so the eval can read who said what.
+  return captured
+    .map((c) => `Note from ${c.sender}:\n${c.note}`)
+    .join("\n\n---\n\n");
+}
+
+/**
+ * Phase 3.7.7: detect a forwarded email and return the ORIGINAL sender's
+ * identity + body. Used when a Mirror manager forwards a candidate's
+ * application from their own inbox to jobs@mirrornyc.com.
+ *
+ * Phase 3.7.7.3: tries text/plain first (fast path, original behavior).
+ * If that yields no original-applicant hit, retries against an
+ * HTML→text conversion of the message's text/html part. Gmail's
+ * auto-generated text/plain often contains only the manager's wrapper
+ * note and signature, with the actual forward chain living only in
+ * the HTML body. The fallback catches that.
+ *
+ * Phase 3.7.7.5: parseForwardedFromString now collects both From: headers
+ * AND "On <date>... <<email>> wrote:" reply-quote attributions. Covers
+ * Apple Mail iPhone forwards (which represent the original applicant as
+ * a quoted reply rather than a re-headered forward) and any case where a
+ * manager hit Reply instead of Forward.
+ */
+export function parseForwardedEmail(
+  bodyText: string,
+  bodyHtml?: string,
+): { name: string; email: string; bodyText: string } | null {
+  const fromText = parseForwardedFromString(bodyText);
+  if (fromText) return fromText;
+  if (bodyHtml && bodyHtml.length > 0) {
+    return parseForwardedFromString(htmlBodyToText(bodyHtml));
+  }
+  return null;
+}
+
 async function extractPdfText(bytes: Uint8Array): Promise<string> {
   let pdf: any = null;
   try {
@@ -270,6 +664,17 @@ async function processOne(
   let bodyHtml = "";
   let attachments: { id: string; filename: string; mimeType: string; size: number | null; storage_path?: string | null }[] = [];
   let name = "", email = "", date = new Date().toISOString();
+  // Phase 3.7.7: when the sender is a Mirror manager forwarding to jobs@,
+  // these get filled in; the candidate identity below shifts to the
+  // original applicant parsed out of the forwarded body.
+  let isReferral = false;
+  let referrerEmail: string | null = null;
+  // Phase 3.7.8.15: manager's commentary text captured from the forward
+  // body (anything before the first chain marker, with Mirror sigs
+  // stripped). Persisted to ts_candidates.internal_notes and folded
+  // into the candidate bundle so the FIRST eval sees it as
+  // "HIRING MANAGER NOTES:".
+  let internalNotes: string | null = null;
   try {
     msg = await gmailFetch(accessToken, `/messages/${id}?format=full`);
     const headers: any[] = msg.payload?.headers ?? [];
@@ -284,6 +689,137 @@ async function processOne(
       return "skipped";
     }
 
+    // Walk MIME parts FIRST so we have bodyText available for forward
+    // detection below. Dedupe check moved AFTER referral parse since
+    // the candidate identity (email) can change for referrals.
+    const parts = walkParts(msg.payload);
+    // Phase 3.7.7.4: log the part tree for forward-detection debugging.
+    // Each entry shows mimeType + size hint so log tailers can see when
+    // a message/rfc822 attachment is in play (forward-as-attachment).
+    console.log(
+      `[ts-pull-candidates] ${id} parts: ${
+        parts.map((p: any) => `${p.mimeType ?? "?"}(${p.body?.size ?? p.body?.data?.length ?? "0"})`).join(", ")
+      }`,
+    );
+    for (const p of parts) {
+      if (p.mimeType === "text/plain" && p.body?.data) {
+        bodyText += new TextDecoder().decode(decodeBase64Url(p.body.data));
+      } else if (p.mimeType === "text/html" && p.body?.data) {
+        const html = new TextDecoder().decode(decodeBase64Url(p.body.data));
+        bodyHtml += html;
+        if (!bodyText) {
+          // Phase 3.7.7.2: preserve line structure when falling back from
+          // HTML to text. Map block-end tags + <br> to newlines BEFORE
+          // stripping the rest, then only collapse runs of horizontal
+          // whitespace.
+          bodyText = html
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<\/(p|div|li|h[1-6]|tr)>/gi, "\n")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/[ \t]+/g, " ")
+            .replace(/\n[ \t]+/g, "\n")
+            .replace(/\n{3,}/g, "\n\n");
+        }
+      } else if (p.mimeType === "message/rfc822") {
+        // Phase 3.7.7.4: forward-as-attachment. Gmail represents an
+        // attached email as a message/rfc822 part. The raw RFC 822
+        // content (headers + body) carries the forwarded chain — that's
+        // where the original applicant's From: header lives when the
+        // outer body is just the manager's wrapper + signature.
+        //
+        // body.data is base64url-encoded raw RFC 822 (small attachments).
+        // body.attachmentId is a token to fetch separately (typical for
+        // larger ones). Append the decoded raw text to bodyText so
+        // parseForwardedEmail's regex finds the From: lines and original
+        // body. Recursive forward chains (manager A → manager B → applicant
+        // as attachments) all collapse into one big bodyText string —
+        // parseForwardedEmail picks the deepest non-Mirror sender.
+        let raw = "";
+        if (p.body?.data) {
+          raw = new TextDecoder().decode(decodeBase64Url(p.body.data));
+        } else if (p.body?.attachmentId) {
+          try {
+            const att = await gmailFetch(
+              accessToken,
+              `/messages/${id}/attachments/${p.body.attachmentId}`,
+            );
+            if (att?.data) {
+              raw = new TextDecoder().decode(decodeBase64Url(att.data));
+            }
+          } catch (e) {
+            console.error(`[ts-pull-candidates] failed to fetch rfc822 attachment ${p.body.attachmentId}:`, e);
+          }
+        }
+        if (raw) {
+          bodyText += "\n\n[Forwarded attachment]\n" + raw;
+        }
+      }
+      if (p.filename && p.body?.attachmentId) {
+        attachments.push({
+          id: p.body.attachmentId,
+          filename: p.filename,
+          mimeType: p.mimeType,
+          size: typeof p.body.size === "number" ? p.body.size : null,
+        });
+      }
+    }
+    msg = null;
+
+    // Phase 3.7.7: referral detection. If the sender is a Mirror manager
+    // (any @mirrornyc.com that isn't the jobs@ inbox), unwrap the
+    // forwarded body to find the ORIGINAL applicant's identity. Use that
+    // identity for the candidate row; flag is_referral=true and capture
+    // the manager's email as referrer_email. If the forward markers
+    // aren't found, the message is just internal Mirror traffic that
+    // happened to match the role's keyword filter — skip it.
+    const senderEmail = email;
+    const isMirrorForward =
+      !!senderEmail &&
+      senderEmail.endsWith("@mirrornyc.com") &&
+      senderEmail !== IMPERSONATED_GMAIL;
+    if (isMirrorForward) {
+      // Phase 3.7.7.3: pass bodyHtml as a fallback. text/plain often only
+      // carries the manager's wrapper + signature; the actual forward
+      // chain (with its From: headers) lives in the HTML body.
+      const fwd = parseForwardedEmail(bodyText, bodyHtml);
+      if (!fwd || !fwd.email) {
+        const textPreview = (bodyText || "").slice(0, 300).replace(/\s+/g, " ");
+        const htmlPreview = (bodyHtml || "").slice(0, 300).replace(/\s+/g, " ");
+        console.log(
+          `[ts-pull-candidates] Mirror sender ${senderEmail} but no original applicant resolved — skipping. ` +
+            `bodyText.length=${(bodyText || "").length} bodyHtml.length=${(bodyHtml || "").length} ` +
+            `text[0..300]="${textPreview}" html[0..300]="${htmlPreview}"`,
+        );
+        return "skipped";
+      }
+      console.log(`[ts-pull-candidates] Referral: ${senderEmail} forwarded ${fwd.email}`);
+      // Phase 3.7.8.15: capture the manager's commentary BEFORE we
+      // overwrite bodyText with the original applicant's body. Try
+      // text/plain first, then HTML→text if plain came up empty
+      // (Gmail's auto-generated text/plain can be signature-only).
+      // Phase 3.7.8.16: extractManagerNote now walks every segment in
+      // the chain, not just the outermost. Captures commentary from
+      // ANY @mirrornyc.com sender along A → B → jobs@.
+      let note = extractManagerNote(bodyText, senderEmail);
+      if (!note && bodyHtml) {
+        note = extractManagerNote(htmlBodyToText(bodyHtml), senderEmail);
+      }
+      if (note) {
+        internalNotes = note.slice(0, 4000);
+        console.log(
+          `[ts-pull-candidates] Captured manager note (${internalNotes.length} chars) from ${senderEmail}`,
+        );
+      }
+      name = fwd.name || name;
+      email = fwd.email;
+      bodyText = fwd.bodyText || bodyText;
+      isReferral = true;
+      referrerEmail = senderEmail;
+    }
+
+    // Dedupe AFTER referral resolution. Two managers forwarding the same
+    // applicant — or a direct application that arrived first — will all
+    // collapse to the first-ingested row.
     if (email) {
       const { data: existing } = await supabase
         .from("ts_candidates")
@@ -296,25 +832,6 @@ async function processOne(
         return "skipped";
       }
     }
-    const parts = walkParts(msg.payload);
-    for (const p of parts) {
-      if (p.mimeType === "text/plain" && p.body?.data) {
-        bodyText += new TextDecoder().decode(decodeBase64Url(p.body.data));
-      } else if (p.mimeType === "text/html" && p.body?.data) {
-        const html = new TextDecoder().decode(decodeBase64Url(p.body.data));
-        bodyHtml += html;
-        if (!bodyText) bodyText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-      }
-      if (p.filename && p.body?.attachmentId) {
-        attachments.push({
-          id: p.body.attachmentId,
-          filename: p.filename,
-          mimeType: p.mimeType,
-          size: typeof p.body.size === "number" ? p.body.size : null,
-        });
-      }
-    }
-    msg = null;
   } catch (e) {
     errors.push({ step: "extract", messageId: id, error: String(e) });
     return "failed";
@@ -391,7 +908,15 @@ async function processOne(
     }
   }
 
-  let bundle: string | null = `From: ${name} <${email}>\nDate: ${date}\n\nEmail Body:\n${bodyText}\n\nAttachments:${attachText || " (none)"}`;
+  // Phase 3.7.8.15: when the candidate came in as a referral and the
+  // manager left commentary, prepend a "HIRING MANAGER NOTES:" block
+  // to the bundle. The eval prompt explicitly looks for this label and
+  // treats the contents as verified context that supersedes inferences
+  // drawn from resume / cover letter.
+  const notesBlock = internalNotes
+    ? `HIRING MANAGER NOTES:\n${internalNotes}\n\n`
+    : "";
+  let bundle: string | null = `${notesBlock}From: ${name} <${email}>\nDate: ${date}\n\nEmail Body:\n${bodyText}\n\nAttachments:${attachText || " (none)"}`;
   bundle = bundle.slice(0, 60000);
 
   const cleanedName = cleanCandidateName(name) || email;
@@ -468,9 +993,12 @@ async function processOne(
   for (const c of criteriaList) {
     if (c.tier === 1 && c.is_disqualifier && (r.scores?.[c.name] ?? 0) === 0) { disqualified = true; break; }
   }
-  let status: "consider" | "fast_track" | "auto_rejected";
-  if (disqualified) status = "auto_rejected";
-  else if ((r.total_score ?? 0) < threshold) status = "auto_rejected";
+  // Phase 3.7.2.1: AI rejection writes status='reject' with manually_reviewed
+  // false (default on insert). The AUTO pill in the UI flags it as the AI's
+  // call. Reviewer flips to MANUAL by clicking, changing, or re-selecting.
+  let status: "consider" | "fast_track" | "reject";
+  if (disqualified) status = "reject";
+  else if ((r.total_score ?? 0) < threshold) status = "reject";
   else if (r.auto_classification_suggested === "fast_track") status = "fast_track";
   else status = "consider";
 
@@ -509,6 +1037,16 @@ async function processOne(
       // email page can render with the original application text. Trimmed at
       // 30k chars so it can never explode a row.
       email_body_text: (bodyText || "").slice(0, 30000) || null,
+      // Phase 3.7.7: referral fields. is_referral=true means a Mirror
+      // manager forwarded this candidate's email; referrer_email is that
+      // manager. Defaults are false/null for direct-to-jobs@ applicants.
+      is_referral: isReferral,
+      referrer_email: referrerEmail,
+      // Phase 3.7.8.15: persist the manager's commentary so it appears
+      // in the candidate detail's Internal Notes field AND so future
+      // re-evals (which read internal_notes from the row) keep folding
+      // it in. Null when no note was captured.
+      internal_notes: internalNotes,
       last_evaluated_at: new Date().toISOString(),
     }).select("id").single();
     if (candErr) { errors.push({ step: "save", messageId: id, error: String(candErr) }); return "failed"; }
@@ -526,6 +1064,11 @@ async function processOne(
       top_strengths: r.top_strengths ?? [],
       key_gaps: r.key_gaps ?? [],
       tier: r.recommendation_tier ?? null,
+      // Phase 3.7.8.15: snapshot the manager note that fed into this
+      // first eval. Mirrors what ts-evaluate-candidate writes on
+      // re-eval, so the history table reads consistently across all
+      // entries for a candidate.
+      internal_notes_at_time: internalNotes,
       evaluated_at: new Date().toISOString(),
     });
     if (evalErr) errors.push({ step: "save_eval", messageId: id, error: String(evalErr) });
@@ -557,7 +1100,8 @@ async function processOne(
     void LARGE_ATTACHMENT_THRESHOLD_BYTES;
   }
 
-  if (status === "auto_rejected") return "rejected";
+  // Phase 3.7.2.1: AI rejection now uses 'reject' (was 'auto_rejected').
+  if (status === "reject") return "rejected";
   if (status === "fast_track") return "fast_track";
   return "promoted";
 }
