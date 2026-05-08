@@ -87,7 +87,9 @@ The HQ repo already has a strong CLAUDE.md and docs structure. The gaps below ar
 
 ### What to add (recommendations, prioritized)
 
-#### 3a. Subagents (`.claude/agents/*.md`)
+#### 3a. Subagents — one `.md` file per agent inside `.claude/agents/`
+
+Folder is `.claude/agents/`. The `*.md` shorthand below means "create individual `.md` files inside that folder" — `.claude/agents/code-reviewer.md`, `.claude/agents/security-auditor.md`, etc. The glob isn't literal.
 
 Per the playbook: subagents run in isolated context windows, return summaries, and are how you keep the main session clean. Worth defining for HQ:
 
@@ -233,7 +235,7 @@ Check:
 Output: MUST FIX (blocks push), SHOULD FIX (post-push cleanup), CONSIDER.
 ```
 
-#### 3b. Skills (`.claude/skills/*.md`)
+#### 3b. Skills — one `.md` file per skill inside `.claude/skills/`
 
 Skills codify recurring HQ workflows so I don't reinvent them each phase.
 
@@ -340,7 +342,7 @@ POST-MERGE:
 
 These hooks aren't strictly necessary (the harness sandbox already catches most of this) but they document intent and run regardless of model judgment.
 
-#### 3d. Custom slash commands (`.claude/commands/*.md`)
+#### 3d. Custom slash commands — one `.md` file per command inside `.claude/commands/`
 
 **`/ship`** — run the pre-merge checklist + report. Equivalent of "before I squash-merge, what's not clean?"
 
