@@ -50,7 +50,7 @@ All six are scheduled via `pg_cron` in `20260508120000_phase_3_8_cron_extensions
 Walks every `ts_roles.status='open'` AND `auto_pull_schedule != 'off'` row, computes hours-since-last-pull from `max(ts_pull_rounds.started_at)`, and self-invokes `ts-pull-candidates` for any role past its interval. Skips roles with an in-flight `running` round. Per-role failure logs but doesn't abort the loop.
 
 ### `ts-cron-pull-watchdog`
-60-minute stall threshold. Reads `ts_pull_rounds` rows with `status='running'` AND `updated_at < now()-60m`, updates to `status='stalled'` with a CAS guard (`.eq('status','running')`) so a late completion isn't overwritten.
+5-minute stall threshold (Phase 3.11.1, was 60). Reads `ts_pull_rounds` rows with `status='running'` AND `updated_at < now()-5m`, updates to `status='failed'` with a CAS guard (`.eq('status','running')`) so a late completion isn't overwritten. The pipeline's per-candidate row update means `updated_at` = "last candidate completed at"; a single candidate hanging >5 min is always a stall regardless of total pool size. Cron cadence bumped from every 5 min to every 2 min so detection lands within 5-7 min of stall onset.
 
 ### `ts-cron-reeval-watchdog`
 30-minute stall threshold. Reads `ts_roles` rows with `reeval_status='running'` AND `reeval_last_progress_at < now()-30m`, updates to `reeval_status='failed'`.
