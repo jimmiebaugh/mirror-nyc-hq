@@ -43,6 +43,9 @@ Squash-merged at `2ab37c3` (2026-05-08). Manual-reviewed flag with auto/manual p
 ### 3.9 Pull notification — DONE
 `ts-send-pull-notification` standalone deployed; `ts-pull-candidates` fires it fire-and-forget on every `status='complete'` write (chunked finalize, dedupe-clears-pending-to-zero, zero-results paths). Tallies per-status counts and emails the role's hiring manager from `jobs@mirrornyc.com` with a deep link to PullDetail. Folds into `notifications-dispatch` in Phase 5.
 
+### 3.10 Scorecard refinement step — NEXT (in flight on `phase-3-10-scorecard-refine`)
+New `ts-refine-scorecard` edge function plus a Process / Save button morph on both scorecard edit surfaces (wizard step-3 AND the Edit Role page). After any user edit (revise existing criterion, add manual, remove manual) the bottom-bar action becomes **Process scorecard**; clicking sends the current criteria + role context through Claude, which standardizes `name` and `full_points_rubric` while preserving every concept the user provided. Two server-side guarantees: (1) dead criteria — `weight=0` OR empty `name`+`full_points_rubric` — are dropped before the prompt runs (the count is surfaced in the success toast); (2) defense-in-depth merge restores `tier`, `weight`, `is_disqualifier`, `is_manual` from the user's input regardless of model output. Each tier is re-sorted highest-weight first after refine. On the wizard, the action flips to **Approve & lock scorecard** once clean. On Edit Role, the action flips back to **Save changes** which runs the existing confirm-and-trigger-bulk-reeval flow.
+
 ### 3.X queued for runtime validation
 - Verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix; flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`. Hands-on test, not a code change.
 - Real-cron test: trigger a manual `ts-cron-scheduled-pulls` invocation in production, watch the watchdog detect a fake stall.

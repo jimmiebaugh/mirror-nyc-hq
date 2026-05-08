@@ -2,6 +2,38 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 3.10 (Scorecard refinement step)
+
+### Refinement is a separate manual step, not auto-triggered on edit
+
+When the user edits or adds criteria on the wizard step-3 page, the refine pass doesn't fire automatically. The bottom-bar button morphs from **Approve & lock** to **Process scorecard**, and the user has to actively click it. Two reasons:
+
+1. The user is often making one edit in a stream of edits (typing a describer, then adjusting a weight, then adding another criterion). Auto-firing refine on every change would burn Anthropic spend and force a UI redraw mid-edit. A manual step lets them queue up everything they want to revise, then commit to a single Claude pass.
+2. The refinement is a non-trivial AI call (a few seconds, a few cents). Making it explicit means the cost is tied to a clear intent ("I'm done editing for now"), not to keystrokes.
+
+### Refinement preserves user scoring decisions via post-Claude merge, not prompt discipline alone
+
+The prompt asks Claude to leave `tier`, `weight`, `is_disqualifier`, and `is_manual` untouched, but the edge function's `mergeRefinedIntoOriginal` re-applies the user's input values for all four fields regardless of what the model returned. Belt + suspenders. The model is only trusted for `name` and `full_points_rubric`. A model that ignores the prompt and tries to "improve" weights (or add/remove criteria) can't break the user's intent — the merge silently restores the user values. Output count is also enforced at the same length as input.
+
+This pattern is worth lifting if we ever build other "refine user input via Claude" features: trust the model for the field you're asking it to refine, mechanically restore the rest from input.
+
+### Dead-criterion drop is server-side, before the prompt
+
+Criteria with `weight=0` OR with both `name` and `full_points_rubric` empty/whitespace get dropped before `scorecardRefinementPrompt` ever sees them. Two reasons:
+
+1. The prompt is told to preserve every entry. Asking it to also "drop dead ones" is conflicting guidance — the model would either silently leave them in or aggressively remove things the user wanted to keep. Better to handle removal mechanically before the model is even asked.
+2. Burning tokens to refine an empty entry is waste.
+
+The response includes `removed_count` so the wizard / RoleSettings toast can surface it. If a user has every criterion zeroed or empty, the function returns 400 ("nothing to refine") rather than crashing — the user fixes the input and re-tries.
+
+### Same edge function powers both scorecard surfaces
+
+`ts-refine-scorecard` is called by the wizard step-3 page (`NewRoleScorecard.tsx`) AND the Edit Role page (`RoleSettings.tsx`). Both surfaces share the wizard's "scorecard edited since last refine → Process button" pattern; on the Edit Role page, post-refine the button flips back to the existing **Save changes** flow that fires `ts-bulk-reevaluate`. One function, two call sites — no duplicated prompt or merge logic.
+
+### Tier re-sort happens client-side, not in the prompt
+
+After every refine, the frontend re-sorts each tier highest-weight first. The prompt is told to preserve order, but the visual reorganization is the client's job. Reasoning: the model's order discipline is unreliable and we want a predictable display contract regardless of what came back. Client-side sort is cheap and idempotent (no-op if weights didn't change).
+
 ## Phase 3.8 + 3.9 (Cron, watchdogs, pull notification)
 
 ### Watchdog stall thresholds
