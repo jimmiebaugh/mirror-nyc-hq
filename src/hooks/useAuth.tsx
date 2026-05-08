@@ -90,9 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Read the intended post-signin destination if ProtectedRoute saved one
     // (user clicked an email link to a deep route while signed-out, got
     // bounced to / for the hidden sign-in, and is now signing in). Falls
-    // back to / for cold sign-ins. Defense-in-depth path validation
-    // prevents open-redirect via a poisoned sessionStorage value.
-    let nextPath = "/";
+    // back to /talent-scout for cold sign-ins — the Dashboard surface
+    // isn't built out yet, so Talent Scout is the active landing for the
+    // team. Defense-in-depth path validation prevents open-redirect via
+    // a poisoned sessionStorage value.
+    let nextPath = "/talent-scout";
     try {
       const stored = sessionStorage.getItem("post_signin_redirect");
       if (stored && stored.startsWith("/") && !stored.startsWith("//")) {
