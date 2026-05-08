@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Stepper } from "@/components/talent-scout/Stepper";
@@ -12,11 +12,27 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
+// Phase 3.10: stable sort that puts criteria in tier-asc, weight-desc order.
+// Used after every AI pass (initial generate + refinement) so each tier reads
+// highest-points criterion first.
+function sortByTierAndWeight(cs: Criterion[]): Criterion[] {
+  return [...cs].sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    return (Number(b.weight) || 0) - (Number(a.weight) || 0);
+  });
+}
+
 export default function NewRoleScorecard() {
   const navigate = useNavigate();
   const [criteria, setCriteria] = useState<Criterion[]>(wizard.get().criteria ?? []);
   const [loading, setLoading] = useState(criteria.length === 0);
   const [saving, setSaving] = useState(false);
+  const [refining, setRefining] = useState(false);
+  // Phase 3.10: dirty = user has touched the scorecard since the last AI pass
+  // (initial generate or refinement). When dirty, the bottom button reads
+  // "Process Scorecard" and runs ts-refine-scorecard. When clean, it reads
+  // "Lock scorecard" and creates the role.
+  const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [competitors, setCompetitors] = useState<string[]>([]);
   const ranOnce = useRef(false);
@@ -99,9 +115,88 @@ export default function NewRoleScorecard() {
       ...c,
       is_manual: false,
     }));
-    const merged = [...ai, ...manual];
+    const merged = sortByTierAndWeight([...ai, ...manual]);
     setCriteria(merged);
     wizard.setCriteria(merged);
+    // Initial generate or full regen counts as a clean AI pass — clear dirty.
+    setDirty(false);
+  };
+
+  // Phase 3.10: refinement pass. Sends current criteria through Claude with
+  // instructions to retain every user-provided concept while standardizing
+  // name + describer to the shape downstream evals expect. Failure-safe: on
+  // error, the user's edits stay intact and they can try again or lock as-is.
+  const process = async () => {
+    const s = wizard.get();
+    if (!s.step1) return;
+    if (criteria.length === 0) return;
+    setRefining(true);
+    setError(null);
+    const { data, error: invokeErr } = await supabase.functions.invoke("ts-refine-scorecard", {
+      body: {
+        role_title: s.step1.title,
+        jd: s.step1.job_description,
+        hiring_priorities: s.step1.hiring_priorities,
+        location: s.step1.location,
+        employment_type: s.step1.type,
+        comp: s.step1.compensation,
+        criteria,
+      },
+    });
+    setRefining(false);
+
+    let errMsg = (data as { error?: string })?.error ?? null;
+    if (!errMsg && invokeErr) {
+      errMsg = invokeErr.message;
+      const ctx = (invokeErr as { context?: Response }).context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) errMsg = `${ctx.status}: ${body.error}`;
+        } catch {
+          try {
+            const text = await ctx.clone().text();
+            if (text) errMsg = `${ctx.status}: ${text.slice(0, 300)}`;
+          } catch {
+            /* swallow */
+          }
+        }
+      }
+    }
+    if (errMsg) {
+      // eslint-disable-next-line no-console
+      console.error("ts-refine-scorecard failed:", errMsg, invokeErr);
+      toast({ title: "Couldn't refine scorecard", description: errMsg, variant: "destructive" });
+      return;
+    }
+    const refinedRaw = ((data as { criteria?: Criterion[] })?.criteria ?? []) as Criterion[];
+    const removed = (data as { removed_count?: number })?.removed_count ?? 0;
+    // Edge function pre-filters dead criteria (weight=0 or empty name+describer)
+    // so refined.length === criteria.length - removed. Sanity check: anything
+    // else is a model output mismatch.
+    if (refinedRaw.length !== criteria.length - removed) {
+      toast({
+        title: "Refinement returned wrong shape",
+        description: `expected ${criteria.length - removed} criteria, got ${refinedRaw.length}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    // Re-sort each tier highest-weight first (per spec: "if the user changed
+    // point values, each tier should be re-organized from highest point
+    // criteria to lowest"). Idempotent if weights didn't change.
+    const refined = sortByTierAndWeight(refinedRaw);
+    setCriteria(refined);
+    wizard.setCriteria(refined);
+    setDirty(false);
+    const removedNote =
+      removed > 0
+        ? ` · ${removed} empty / zero-point criteri${removed === 1 ? "on" : "a"} removed`
+        : "";
+    toast({
+      title: "Scorecard refined",
+      description: `Review the updated criteria, then lock or edit further${removedNote}.`,
+    });
   };
 
   const update = (idx: number, patch: Partial<Criterion>) => {
@@ -110,6 +205,7 @@ export default function NewRoleScorecard() {
       wizard.setCriteria(next);
       return next;
     });
+    setDirty(true);
   };
 
   const remove = (idx: number) => {
@@ -118,6 +214,7 @@ export default function NewRoleScorecard() {
       wizard.setCriteria(next);
       return next;
     });
+    setDirty(true);
   };
 
   const addManual = (tier: 1 | 2 | 3) => {
@@ -137,6 +234,7 @@ export default function NewRoleScorecard() {
       wizard.setCriteria(next);
       return next;
     });
+    setDirty(true);
   };
 
   const total = criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0);
@@ -244,9 +342,16 @@ export default function NewRoleScorecard() {
       </div>
 
       <div className="rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-xs text-muted-foreground">
-        <span className="font-bold text-primary">✱</span> Manually-added criteria are tagged <span className="ml-1 inline-block rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">Manual</span> and persist through regenerate.
+        <span className="font-bold text-primary">✱</span> Manually-added criteria are tagged <span className="ml-1 inline-block rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">Manual</span> and persist through regenerate. After any edit, click <strong className="text-foreground">Process scorecard</strong> to refine your phrasing for evaluation use; then lock it in.
       </div>
 
+      {dirty && (
+        <div className="rounded-md border border-amber-400/40 bg-amber-400/5 px-4 py-3 text-xs text-amber-200">
+          <span className="font-bold text-amber-300">●</span> Edits pending. Run <strong>Process scorecard</strong> to refine before locking — Claude will retain every concept you added and standardize phrasing for downstream evaluations.
+        </div>
+      )}
+
+      <div className={cn(refining && "pointer-events-none opacity-60 transition-opacity")}>
       {([1, 2, 3] as const).map((tier) => {
         const items = criteria.map((c, i) => ({ c, i })).filter(({ c }) => c.tier === tier);
         const subtotal = items.reduce((s, { c }) => s + (Number(c.weight) || 0), 0);
@@ -278,6 +383,7 @@ export default function NewRoleScorecard() {
           </div>
         );
       })}
+      </div>
 
       <Card>
         <CardContent className="space-y-3 p-5">
@@ -315,9 +421,25 @@ export default function NewRoleScorecard() {
                 {total} pts + {COMPETITOR_BONUS_POINTS} bonus
               </strong>
             </span>
-            <Button onClick={onApprove} disabled={saving} size="lg">
-              {saving ? "Saving…" : "Approve & lock scorecard →"}
-            </Button>
+            {dirty ? (
+              <Button onClick={process} disabled={refining || saving} size="lg" title="Refine your edits through Claude before locking">
+                {refining ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Refining…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Process scorecard →
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button onClick={onApprove} disabled={saving || refining} size="lg">
+                {saving ? "Saving…" : "Approve & lock scorecard →"}
+              </Button>
+            )}
           </div>
         </div>
       </div>

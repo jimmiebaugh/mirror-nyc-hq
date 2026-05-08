@@ -37,14 +37,19 @@ Comparative final review (`ts-final-review`) writes ranked `final_rankings` json
 ### 3.7 Candidates UX + referral ingestion — DONE
 Squash-merged at `2ab37c3` (2026-05-08). Manual-reviewed flag with auto/manual pill + one-way flip + re-eval gate; CandidateDetail layout reorg with header cluster (Re-evaluate full-height + status stack), Score Breakdown with tier dividers; scorecard 100-point cap normalizer; Global Settings page with editable competitor list (Postgres `text[]`, default 19-entry list seeded); referral ingestion that detects `*@mirrornyc.com` forwards to jobs@, walks every chain segment for original applicant + manager commentary, captures every Mirror manager's commentary along the chain into `internal_notes` (Mirror sigs stripped), feeds it into the FIRST eval via the `HIRING MANAGER NOTES:` block, blocks `mirrornyc.com` from portfolio URL extraction; pull running state shows a 4-step checklist driven by the existing `candidates_found` / `processed_count` signals; brand restyling pass (top nav reduced to Dashboard + Talent Scout, Mirror grey card surfaces, score bar visibility fix on `bg-input` track, coral toasts site-wide). Six migrations applied to remote.
 
-### 3.8 Cron jobs + watchdogs — NEXT (you're picking up here)
-Wire `ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-final-review-watchdog`, `ts-cron-storage-cleanup` via `pg_cron` migrations. Watchdogs detect-and-flag (set status to `stalled` / `failed`); never auto-restart. Plus: `monthly-spend-reset` cron for `cap_alert_sent_this_month`. Cut a fresh `phase-3-8-cron-watchdogs` branch — same deploy policy (no commits / no origin pushes without `[skip netlify]`; squash-merge is the single Netlify-deploy event).
+### 3.8 Cron jobs + watchdogs — DONE
+`pg_cron` + `pg_net` enabled via `20260508120000_phase_3_8_cron_extensions_and_schedules.sql`. Six new edge functions deployed: `ts-cron-scheduled-pulls` (12:00 UTC daily, fires `ts-pull-candidates` per role schedule), `ts-cron-pull-watchdog` / `ts-cron-reeval-watchdog` / `ts-cron-final-review-watchdog` (every 5 min, detect-and-flag only — `stalled` / `failed` for >30min / >30min / >20min stalls), `ts-cron-storage-cleanup` (03:00 UTC daily, three-pass: rejected-candidate files >30d, closed-role files >90d, hard-delete closed roles >60d), `ts-cron-monthly-spend-reset` (1st of month 00:01 UTC, re-arms cap alert). Cap-alert email path wired in `_shared/anthropic.ts` via new `_shared/sendEmail.ts` (admin lookup with jobs@ fallback). Dead `ts_pull_rounds.reeval_last_progress_at` column dropped.
 
-### 3.9 Notifications + spend alerts — TODO
-`ts-send-pull-notification` standalone (folds into `notifications-dispatch` in Phase 5). Wire real-email path on `callClaude` cap alert (currently a console-log stub). Verify packet email path uses the service account's `gmail.send` from `jobs@mirrornyc.com`. Plus: verify `ts-final-review-packet` end-to-end (post WORKER_RESOURCE_LIMIT fix) and flip `PACKET_FEATURE_ENABLED` back to `true` in `PullDetail.tsx` + `FinalReviewDetail.tsx`.
+### 3.9 Pull notification — DONE
+`ts-send-pull-notification` standalone deployed; `ts-pull-candidates` fires it fire-and-forget on every `status='complete'` write (chunked finalize, dedupe-clears-pending-to-zero, zero-results paths). Tallies per-status counts and emails the role's hiring manager from `jobs@mirrornyc.com` with a deep link to PullDetail. Folds into `notifications-dispatch` in Phase 5.
 
-### 3.X cleanup queued
-Drop dead `ts_pull_rounds.reeval_last_progress_at` column. Cleanup of deprecated `auto_rejected` enum value requires enum rebuild — not worth it now.
+### 3.10 Scorecard refinement step — NEXT (in flight on `phase-3-10-scorecard-refine`)
+New `ts-refine-scorecard` edge function plus a Process / Save button morph on both scorecard edit surfaces (wizard step-3 AND the Edit Role page). After any user edit (revise existing criterion, add manual, remove manual) the bottom-bar action becomes **Process scorecard**; clicking sends the current criteria + role context through Claude, which standardizes `name` and `full_points_rubric` while preserving every concept the user provided. Two server-side guarantees: (1) dead criteria — `weight=0` OR empty `name`+`full_points_rubric` — are dropped before the prompt runs (the count is surfaced in the success toast); (2) defense-in-depth merge restores `tier`, `weight`, `is_disqualifier`, `is_manual` from the user's input regardless of model output. Each tier is re-sorted highest-weight first after refine. On the wizard, the action flips to **Approve & lock scorecard** once clean. On Edit Role, the action flips back to **Save changes** which runs the existing confirm-and-trigger-bulk-reeval flow.
+
+### 3.X queued for runtime validation
+- Verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix; flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`. Hands-on test, not a code change.
+- Real-cron test: trigger a manual `ts-cron-scheduled-pulls` invocation in production, watch the watchdog detect a fake stall.
+- Cleanup of deprecated `auto_rejected` enum value requires enum rebuild — not worth it now.
 
 ## Phase 4: Venue Scout — TODO
 
@@ -59,7 +64,6 @@ Sequential, not parallel — Talent Scout fully working before Venue Scout start
 - Admin pages: user role management, global settings UI.
 - Polish: HQ Core pages currently stubbed as `<ComingSoon />` (`/projects`, `/venues`, `/clients`, `/tasks`) get real implementations.
 - Fold `ts-send-pull-notification` into `notifications-dispatch`.
-- Implement `monthly-spend-reset` cron.
 
 ## Phase 6: Cutover — TODO
 

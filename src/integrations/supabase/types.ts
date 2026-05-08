@@ -749,12 +749,12 @@ export type Database = {
           processed_count: number
           pulled_from: string | null
           pulled_to: string | null
-          reeval_last_progress_at: string | null
           role_id: string
           round_number: number | null
           started_at: string
           status: Database["public"]["Enums"]["ts_pull_round_status"]
           triggered_by: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
+          updated_at: string
         }
         Insert: {
           attempt?: number
@@ -770,12 +770,12 @@ export type Database = {
           processed_count?: number
           pulled_from?: string | null
           pulled_to?: string | null
-          reeval_last_progress_at?: string | null
           role_id: string
           round_number?: number | null
           started_at?: string
           status?: Database["public"]["Enums"]["ts_pull_round_status"]
           triggered_by: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
+          updated_at?: string
         }
         Update: {
           attempt?: number
@@ -791,12 +791,12 @@ export type Database = {
           processed_count?: number
           pulled_from?: string | null
           pulled_to?: string | null
-          reeval_last_progress_at?: string | null
           role_id?: string
           round_number?: number | null
           started_at?: string
           status?: Database["public"]["Enums"]["ts_pull_round_status"]
           triggered_by?: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1368,6 +1368,10 @@ export type Database = {
       current_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["permission_role"]
+      }
+      invoke_edge_function: {
+        Args: { body?: Json; fn_name: string }
+        Returns: number
       }
       is_admin: { Args: never; Returns: boolean }
       is_producer_or_admin: { Args: never; Returns: boolean }

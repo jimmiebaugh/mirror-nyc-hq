@@ -1,6 +1,6 @@
 // All Talent Scout Claude prompts in one file.
 // ----------------------------------------------------------------------------
-// Phase 3.6.5: consolidated for ease of review/editing. Three prompts live
+// Phase 3.6.5: consolidated for ease of review/editing. Four prompts live
 // here:
 //   1. DEFAULT_EVAL_PROMPT — system block for per-candidate evaluations.
 //      Used by ts-pull-candidates and ts-evaluate-candidate via the
@@ -13,6 +13,11 @@
 //   3. scorecardGenerationPrompt() — function that builds the prompt for
 //      ts-generate-scorecard. Called from the new-role wizard's step-3 AI
 //      drafting flow.
+//   4. scorecardRefinementPrompt() — Phase 3.10. Builds the prompt for
+//      ts-refine-scorecard. Called from the wizard step-3 page after the
+//      user has edited or added criteria; refines the user's input to
+//      standardize structure for downstream evaluation use without losing
+//      any user-provided concepts/principles/rubric content.
 //
 // The frontend default (`src/lib/talent-scout/defaultEvalPrompt.ts`) MIRRORS
 // DEFAULT_EVAL_PROMPT below verbatim. The frontend file populates the
@@ -376,6 +381,103 @@ Bad examples (do not write these):
 - Anything over 12 words or that runs to two sentences.
 
 partial_points_rubric is reserved for future use. Return an empty string.
+
+${opts.jsonOnlyInstruction}`;
+}
+
+// ============================================================================
+// 4. scorecardRefinementPrompt — used by ts-refine-scorecard (Phase 3.10)
+//
+// Called after the user has edited or added criteria in wizard step 3. The
+// goal is to refine USER-TOUCHED entries (and keep AI-generated untouched
+// ones intact) so every criterion lands in the same shape the downstream
+// evaluation prompt expects: short noun-phrase `name`, 1-2 sentence concrete
+// `full_points_rubric` describer.
+//
+// HARD CONSTRAINTS for this refinement pass:
+//   - Preserve every concept, principle, requirement, signal, rubric the
+//     user wrote. Refine the PHRASING, never strip the meaning.
+//   - Do not add criteria. Do not remove criteria. (Dead-criterion drop —
+//     weight=0 or empty name+describer — happens server-side before the
+//     prompt ever sees the input, not as a model decision.)
+//   - Do not change tier, weight, or is_disqualifier (those are user-set;
+//     the refiner has no business touching scoring weights).
+//   - Preserve `is_manual` flag on every entry.
+// ============================================================================
+
+export function scorecardRefinementPrompt(opts: {
+  role_title: string;
+  jd: string;
+  hiring_priorities?: string | null;
+  location: string;
+  employment_type: string;
+  comp?: string | null;
+  // Pre-stringified JSON of the current scorecard (caller serializes it
+  // themselves so this module doesn't have to know the Criterion shape).
+  current_scorecard_json: string;
+  jsonOnlyInstruction: string;
+}): string {
+  return `${MIRROR_NYC_CONTEXT}
+
+${APP_FLOW_CONTEXT}
+
+# YOUR JOB IN THIS FLOW
+You are refining a scorecard the hiring manager has already drafted and edited. The hiring manager has either revised AI-generated criteria or added their own from scratch. Their input may be terse shorthand (e.g. "Brand awareness") or a verbose paragraph that includes a full rubric and description. Your job is to standardize each entry so it reads cleanly to the downstream candidate-evaluation prompt, WITHOUT losing any concept, signal, or requirement the user provided.
+
+# REFINEMENT RULES (HARD)
+1. PRESERVE every concept, principle, requirement, signal, rubric the user wrote. You may rephrase, but never strip meaning. If the user wrote three sentences of context, every concrete signal in those three sentences must survive in the refined describer.
+2. Do NOT add criteria. Do NOT remove criteria. Output count must match input count.
+3. Do NOT change tier, weight, or is_disqualifier on any entry. Those are user-set scoring decisions.
+4. Preserve the is_manual flag on every entry.
+5. Preserve order. Output the criteria in the same order they came in.
+
+# WHAT TO REFINE
+Two fields per criterion:
+
+a) name — Short, specific noun phrase. 5-10 words. The criterion's title.
+   Good: "Agency tenure producing brand activations"
+   Good: "Concept-first portfolio at experiential scale"
+   Bad: "Brand awareness" (too thin — expand)
+   Bad: "5+ years experience producing high-end brand activations including but not limited to fashion week pop-ups, Coachella activations, brand launches…" (too long for a name — push detail to the describer)
+
+b) full_points_rubric — The describer the candidate evaluator reads when scoring this criterion. 1-3 short sentences (≤ 50 words total). Concrete signals the evaluator should look for in the candidate's materials. NOT a tiered point breakdown. NOT abstract qualities ("strong leadership"). Concrete signals.
+   Good: "Demonstrated awareness of contemporary brand work in cultural / experiential / luxury sectors. Look for specific brand references in their cover letter, resume, or portfolio."
+   Good: "Senior production tenure at experiential or brand-activation agencies. Named clients matter more than years; portfolio + resume are the primary signals."
+   Bad: "Strong portfolio" (vague, no signal to look for)
+   Bad: "10 pts: 5+ years. 5 pts: 2-4 years." (point breakdown is not the describer's job)
+
+# EXPANSION VS CONDENSATION
+- If the user wrote SHORTHAND in name with empty / placeholder describer ("New criterion", "Full points: …"), expand into a useful evaluator-facing rubric using the role context (title, JD, hiring priorities) below. Infer their intent from the criterion name.
+- If the user wrote a VERBOSE paragraph in either field, condense to the short noun phrase in name + concrete-signals describer in full_points_rubric. Every concrete signal in the user's input must appear (in distilled form) in the refined output.
+- If the user's existing entry is ALREADY clean (short name + concrete describer), make minimal edits — just normalize phrasing for consistency with the rest of the scorecard.
+
+# ROLE CONTEXT
+Title: ${opts.role_title}
+Job description: ${opts.jd}
+Hiring priorities: ${opts.hiring_priorities || "(none provided)"}
+Location: ${opts.location} · Type: ${opts.employment_type} · Comp: ${opts.comp || "(not specified)"}
+
+# CURRENT SCORECARD (input)
+${opts.current_scorecard_json}
+
+# OUTPUT FORMAT
+Return ONLY valid JSON:
+
+{
+  "criteria": [
+    {
+      "name": "string",
+      "tier": 1 | 2 | 3,
+      "weight": <int>,
+      "is_disqualifier": <bool>,
+      "full_points_rubric": "string",
+      "partial_points_rubric": "",
+      "is_manual": <bool>
+    }
+  ]
+}
+
+Same length as input. Same order. Same tier / weight / is_disqualifier / is_manual values per index. Refine name + full_points_rubric only.
 
 ${opts.jsonOnlyInstruction}`;
 }
