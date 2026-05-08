@@ -3,7 +3,7 @@
 Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-08
-**Latest commit on main:** Phase 3.7 — Candidates UX + referral ingestion (squash-merged from `phase-3-7-candidates-ux`)
+**Latest commit on main:** `2ab37c3` Phase 3.7 — Candidates UX + referral ingestion (squash-merged from `phase-3-7-candidates-ux`)
 **Active feature branch:** none — `phase-3-7-candidates-ux` was squash-merged. Next branch is `phase-3-8-cron-watchdogs` when 3.8 work begins. Per Jimmie's deploy policy, all 3.X feature work stays on a branch (no commits / no origin pushes without `[skip netlify]`); the only Netlify-deploy event per phase is the squash-merge to `main`.
 **Current phase:** Phase 3.8 — Cron + watchdogs (queued).
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`).
@@ -47,7 +47,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 ## Recent commits (main)
 
 ```
-Phase 3.7: Candidates UX + referral ingestion (squash-merged from phase-3-7-candidates-ux)
+2ab37c3  Phase 3.7: Candidates UX + referral ingestion (squash-merged from phase-3-7-candidates-ux)
 Phase 3.6: Final Review + Packet generation (squash-merged from phase-3-6-final-review-packet)
 0302c0c  Update CHECKPOINT post-Phase-3.5b merge
 Phase 3.5b: Visual brand pass — passes 1 through 14, FF-merged from phase-3-5b-visual-brand
