@@ -42,6 +42,8 @@ type Criterion = {
   weight: number;
   is_disqualifier: boolean;
   full_points_rubric: string;
+  /** Phase 3.11: short condensed version for compact UI surfaces. */
+  summary?: string;
   partial_points_rubric: string;
   is_manual?: boolean;
 };
@@ -169,13 +171,13 @@ function isDeadCriterion(c: Criterion): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Defense-in-depth merge: take ONLY name + full_points_rubric from the model
-// output (per index), and ALWAYS preserve tier / weight / is_disqualifier /
-// is_manual from the user's (filtered) input. If the model returns fewer
-// entries than the input, we keep the input version for the missing tail.
-// If the model returns more entries, we drop the extras. This guarantees the
-// user's scoring decisions can't be silently overwritten by a bad model
-// response.
+// Defense-in-depth merge: take ONLY name / full_points_rubric / summary from
+// the model output (per index), and ALWAYS preserve tier / weight /
+// is_disqualifier / is_manual from the user's (filtered) input. If the model
+// returns fewer entries than the input, we keep the input version for the
+// missing tail. If the model returns more entries, we drop the extras. This
+// guarantees the user's scoring decisions can't be silently overwritten by a
+// bad model response.
 // ---------------------------------------------------------------------------
 function mergeRefinedIntoOriginal(
   original: Criterion[],
@@ -192,12 +194,17 @@ function mergeRefinedIntoOriginal(
       typeof r?.full_points_rubric === "string" && r.full_points_rubric.trim().length > 0
         ? r.full_points_rubric.trim()
         : orig.full_points_rubric;
+    const refinedSummary =
+      typeof r?.summary === "string" && r.summary.trim().length > 0
+        ? r.summary.trim()
+        : (orig.summary && orig.summary.trim().length > 0 ? orig.summary : undefined);
     result.push({
       name: refinedName,
       tier: orig.tier,
       weight: orig.weight,
       is_disqualifier: orig.is_disqualifier,
       full_points_rubric: refinedDescriber,
+      summary: refinedSummary,
       partial_points_rubric: "",
       is_manual: orig.is_manual,
     });

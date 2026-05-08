@@ -1,17 +1,33 @@
 // ts-cron-pull-watchdog
 //
-// Phase 3.8. Detect stalled ts_pull_rounds and flip status -> 'stalled'.
-// Detect-and-flag only — never auto-restart. Stalled pulls surface in
-// PullDetail for the admin to decide.
+// Phase 3.8 / Phase 3.11.1. Detect stalled ts_pull_rounds and flip
+// status -> 'failed'. Detect-and-flag only — never auto-restart. Failed
+// pulls surface in PullDetail for the admin to decide on retry.
 //
 // A pull is considered stalled when:
 //   - status = 'running'
 //   - updated_at older than STALL_MINUTES
 //
-// The pull pipeline updates the row at every chunked self-invocation
-// (writes to processed_count + pending_candidates), so updated_at is the
-// reliable heartbeat. STALL_MINUTES is generous (60) to cover large pools
-// where a single Anthropic batch with big resume PDFs can sit for a while.
+// The pull pipeline updates the row at every per-candidate completion
+// (writes to processed_count + pending_candidates, the updated_at_auto
+// trigger bumps updated_at). So updated_at = "last candidate completed
+// at". If a single candidate hangs (Anthropic timeout, OOM, network
+// stall on a giant resume), updated_at stops moving and we catch it
+// fast.
+//
+// Phase 3.11.1: tightened STALL_MINUTES from 60 -> 5. The earlier 60
+// was set too loose under the misconception that large pools
+// legitimately sit between heartbeats. They don't — heartbeats fire
+// per candidate, not per pool. A single candidate taking >5 min is
+// always a stall, regardless of total pool size. Cron cadence
+// also bumped from every 5 min to every 2 min so detection lands
+// within ~5-7 min of stall onset.
+//
+// Status name aligned with re-eval and final-review watchdogs which
+// also flip to 'failed' on stall. Pull-watchdog used 'stalled'
+// originally to distinguish "stuck" from "errored", but the user-
+// facing surface treats both identically (manual retry decision) so
+// the distinction wasn't earning its keep.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
@@ -21,7 +37,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-internal-secret",
 };
 
-const STALL_MINUTES = 60;
+const STALL_MINUTES = 5;
 
 function sb() {
   return createClient(
@@ -56,7 +72,7 @@ Deno.serve(async (req) => {
   for (const row of stalled ?? []) {
     const { error: updErr } = await supabase
       .from("ts_pull_rounds")
-      .update({ status: "stalled", completed_at: new Date().toISOString() })
+      .update({ status: "failed", completed_at: new Date().toISOString() })
       .eq("id", row.id)
       .eq("status", "running"); // CAS guard against a late completion
     if (updErr) {
@@ -66,7 +82,7 @@ Deno.serve(async (req) => {
     flagged.push({ id: row.id, role_id: row.role_id, updated_at: row.updated_at });
     console.warn(
       `[ts-cron-pull-watchdog] flagged round ${row.id} (role ${row.role_id}) ` +
-        `as stalled. updated_at=${row.updated_at}, processed=${row.processed_count}/${row.candidates_found}`,
+        `as failed. updated_at=${row.updated_at}, processed=${row.processed_count}/${row.candidates_found}`,
     );
   }
 

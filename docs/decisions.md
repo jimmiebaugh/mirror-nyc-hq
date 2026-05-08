@@ -2,6 +2,21 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 3.11 (Scorecard substance restoration + summary field)
+
+### Restored substantive `full_points_rubric` and added separate `summary` field
+
+The Phase 3.7 squash-merge (`2ab37c3`) added a "≤ 12 words, one sentence" cap to `full_points_rubric` in `scorecardGenerationPrompt`. The intent was good — block tiered point breakdowns inline like "10 pts: 5+ yrs · 5 pts: 2-4 yrs" — but the cap was over-aggressive and stripped concrete-signal evidence the per-candidate evaluator actually relies on. Recently-generated scorecards came back thin and abstract ("Strong portfolio") instead of rich and actionable ("5+ years of professional experience in graphic design with meaningful exposure to environmental, experiential, or spatial design contexts. Portfolio includes spatial graphics, signage systems, or large-scale environmental work.").
+
+Phase 3.11 fixes this additively, the way it should have been done in 3.7:
+
+1. **`full_points_rubric` restored to the substantive form** — 1-3 sentences (typically 25-60 words) of concrete signals: years expected, named tools, types of work / clients, where the signal lives in the candidate's materials. The per-candidate evaluator reads this field. Bad-example block keeps the "no tiered point breakdowns" prohibition since that was a real design constraint.
+2. **New `summary` field** — short (≤ 14 words) condensed recap used in compact UI surfaces (candidate detail score breakdown, packet matrix headers, recap views). Generated alongside `full_points_rubric` in the same Claude pass, never replaces it. The evaluator never reads `summary`.
+
+Both fields are stored on the criterion (jsonb scorecard, no migration needed). Existing roles have only `full_points_rubric` populated (the post-3.7 short version); UI surfaces that want compact display fall back to truncating it when `summary` is empty. Re-running scorecard generation OR clicking "Process scorecard" on the wizard / Edit Role page (Phase 3.10) re-populates both fields with the new substantive shape.
+
+The defense-in-depth merge in `ts-refine-scorecard` was extended: model is trusted for `name` / `full_points_rubric` / `summary`; everything else (tier, weight, is_disqualifier, is_manual) is restored from user input regardless of model output.
+
 ## Phase 3.10 (Scorecard refinement step)
 
 ### Refinement is a separate manual step, not auto-triggered on edit
@@ -38,11 +53,15 @@ After every refine, the frontend re-sorts each tier highest-weight first. The pr
 
 ### Watchdog stall thresholds
 
-Pull = 60 min. Re-eval = 30 min. Final review = 20 min.
+Pull = 5 min (Phase 3.11.1, was 60). Re-eval = 30 min. Final review = 20 min.
 
-These are deliberately well past the longest healthy wall-clock for each path. The pull pipeline writes `ts_pull_rounds.updated_at` at every batch boundary (every ~10s on a typical 8-candidate batch). Bulk re-eval writes `ts_roles.reeval_last_progress_at` on the same cadence. Final review is one Anthropic call wrapped in `EdgeRuntime.waitUntil` — at the HARD_CAP=50 candidate compare it lands in 5-10 minutes, so 20 minutes catches dead workers without false-positives.
+The pull pipeline updates `ts_pull_rounds.updated_at` at every per-candidate completion (the `updated_at_auto` trigger fires on each row update). So `updated_at` = "last candidate completed at" — heartbeats fire per candidate, not per pool. A single candidate hanging >5 min is always a stall, regardless of total pool size. The earlier 60-min threshold was set under the misconception that large pools legitimately sit between heartbeats; they don't.
 
-Pull was originally 30 min but bumped to 60 min after Jimmie flagged that a large pool with big resume PDFs can sit on a single Anthropic batch for a while; the watchdog catching it mid-run would force a manual restart for no reason. False-positive cost (work flagged as failed while actually still running) is high — the user would have to re-trigger work that's about to finish. So the thresholds err generous. False-negative cost is low (a real stall sits as `running` for an extra half hour before flagging).
+Bulk re-eval and final review keep the looser thresholds. Bulk re-eval writes `ts_roles.reeval_last_progress_at` per chunk completion (a slower cadence than per-candidate), so 30 min is right. Final review is one Anthropic call wrapped in `EdgeRuntime.waitUntil` — at HARD_CAP=50 it lands in 5-10 min, so 20 catches dead workers without false-positives.
+
+Pull-watchdog cadence also bumped from every 5 min to every 2 min so detection lands within 5-7 min of stall onset (vs 5-10 min before). False-positive cost is low because the threshold is the actual signal of trouble — a candidate stuck >5 min won't recover on its own.
+
+Status name aligned with the other two watchdogs: pull-watchdog now flips to `failed` (was `stalled`). The user-facing surface treats both identically (manual retry decision) so the distinction wasn't earning its keep.
 
 ### Cron cadences
 
