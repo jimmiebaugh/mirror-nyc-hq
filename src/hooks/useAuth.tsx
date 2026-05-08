@@ -52,6 +52,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       setSession(newSession);
+      // Clear post-signin redirect once a session is set — the OAuth
+      // round-trip already used it as redirectTo, so it's stale now.
+      // Leaving stale entries around could send the next manual sign-in
+      // to an irrelevant page.
+      if (newSession?.user) {
+        try {
+          sessionStorage.removeItem("post_signin_redirect");
+        } catch {
+          /* swallow */
+        }
+      }
       setLoading(false);
     });
 
@@ -76,10 +87,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
     const safeOrigin = isLocal ? origin : origin.replace(/^http:\/\//, "https://");
 
+    // Read the intended post-signin destination if ProtectedRoute saved one
+    // (user clicked an email link to a deep route while signed-out, got
+    // bounced to / for the hidden sign-in, and is now signing in). Falls
+    // back to /talent-scout for cold sign-ins — the Dashboard surface
+    // isn't built out yet, so Talent Scout is the active landing for the
+    // team. Defense-in-depth path validation prevents open-redirect via
+    // a poisoned sessionStorage value.
+    let nextPath = "/talent-scout";
+    try {
+      const stored = sessionStorage.getItem("post_signin_redirect");
+      if (stored && stored.startsWith("/") && !stored.startsWith("//")) {
+        nextPath = stored;
+      }
+    } catch {
+      /* private mode — ignore */
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${safeOrigin}/`,
+        redirectTo: `${safeOrigin}${nextPath}`,
         queryParams: {
           hd: "mirrornyc.com",
           prompt: "select_account",

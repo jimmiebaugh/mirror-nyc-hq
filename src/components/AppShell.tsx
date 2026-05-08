@@ -22,8 +22,11 @@ type NavItem = { to: string; label: string; end?: boolean; adminOnly?: boolean }
 // Phase 3.7.8.12: Tasks also dropped from the top nav. Tasks live
 // inside the Dashboard surface alongside Projects / Venues / Clients.
 // Talent Scout stays as the cross-cutting admin destination.
+// 2026-05-08 update: Dashboard nav slot hidden until that surface is
+// built out properly. Talent Scout is the only top-nav destination
+// for now. The Dashboard route still exists; the M-wordmark in the
+// header links back to / for users who land there.
 const navItems: NavItem[] = [
-  { to: "/", label: "Dashboard", end: true },
   { to: "/talent-scout", label: "Talent Scout", adminOnly: true },
 ];
 
