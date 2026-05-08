@@ -2,6 +2,8 @@
 
 A playbook for setting up Code + Cowork sessions to ship Phase 4 (Venue Scout) and Phase 5 (Cross-cutting) cleanly. Tailored to Jimmie's role (Senior Producer, not a developer) and the way we've built HQ through Phases 1 to 3.11.
 
+**Workflow change as of 2026-05-08:** Lovable is no longer used for UI scaffolding. All UX/UI design now happens directly in Claude (Cowork for wireframing + design specs, Code for implementation). The Talent Scout pattern set is the design system foundation for everything new — see `docs/design-system.md` for canonical layout, component, and behavioral references.
+
 The premise from the articles: most people use Claude as a faster autocomplete. The leverage is in treating it as **programmable infrastructure** you configure once and re-use forever. You've already done a lot of this implicitly (CLAUDE.md, layered docs, deploy policy, CHECKPOINT). This doc closes the gaps and adds the next-tier setup so the upcoming phases run smoother than 3.X did.
 
 ---
@@ -152,7 +154,7 @@ Check:
 Output: MUST FIX (security), SHOULD FIX (defense-in-depth), notes.
 ```
 
-**`design-spec-builder.md`** — Phase 5 specific. No reference repo means we have to design before we code. Use this in Cowork OR Code mode.
+**`design-spec-builder.md`** — Phase 4 + 5 specific. We design in Claude now (no Lovable), and Talent Scout is the design system foundation. Use this in Cowork OR Code mode before any new-surface implementation.
 
 ```markdown
 ---
@@ -165,24 +167,41 @@ model: claude-opus-4-6
 You're drafting a spec for a new HQ surface. The implementer (the main session)
 will follow this spec exactly, so under-specifying is worse than over-specifying.
 
-Read first:
-- docs/architecture.md, auth-model.md, schema.md, conventions.md
-- The route gate that the new surface will live behind (ProtectedRoute or AdminRoute)
-- Existing similar surfaces in src/pages/ for layout/component conventions
+Read first (in this order):
+1. docs/design-system.md — the canonical layout / component / behavioral patterns
+   for any HQ surface. The new surface MUST extend these, not invent.
+2. The §11 "Talent Scout pages as design references" table in design-system.md
+   — find the closest analog and start from its structure.
+3. The actual reference file(s) in src/pages/talent-scout/ that match the new
+   surface type.
+4. docs/architecture.md, auth-model.md, schema.md, conventions.md.
 
 Then draft a spec covering:
-1. Route + auth gate
-2. Data model: which tables read/write, columns, RLS implications
-3. UI layout: top-down section list, components used (shadcn/ui first), responsive
-   behavior, brand rules (Mirror grey bg-surface-alt cards, coral primary,
-   bg-input for slider/score tracks)
-4. State + behavior: dirty tracking, loading states, error handling, empty states
-5. Edge functions invoked (existing or new), their signatures, verify_jwt posture
-6. Migrations needed, with timestamptz / GRANTs / Realtime publication notes
-7. Re-eval / re-pull implications if the change can affect candidates
-8. Test plan (manual checklist, since we don't run automated tests)
+1. Closest Talent Scout analog (e.g. "this is a list/table page so it inherits
+   from RoleDashboard.tsx + CandidateTable.tsx structure"). State explicitly
+   what's being lifted vs. adapted vs. invented.
+2. Route + auth gate (ProtectedRoute / AdminRoute / ProducerRoute).
+3. Data model: which tables read/write, columns, RLS implications.
+4. UI layout: section-by-section, mapped to design-system.md primitives. Page
+   width (max-w-3xl / 4xl / 7xl), card surfaces (bg-surface-alt), header pattern
+   (back-link / h-page / muted description), action bar (sticky bottom for forms,
+   inline for non-form pages). Reference specific design-system.md sections.
+5. Components used: shadcn/ui primitives first, Talent-Scout-internal primitives
+   second (Stepper, TagInput, CriterionCard pattern), only invent NEW components
+   if the gap is real and the new component will be reused.
+6. State + behavior: dirty tracking, loading states, error handling, empty
+   states, confirmation dialogs. Map to design-system.md §9 behavioral patterns.
+7. Edge functions invoked (existing or new), their signatures, verify_jwt posture.
+8. Migrations needed, with timestamptz / GRANTs / Realtime publication notes.
+9. Re-eval / re-pull implications if the change can affect existing candidates.
+10. Test plan (manual checklist, since we don't run automated tests).
+11. The 5-8 brand rules from design-system.md §12 that specifically apply to
+    this surface (e.g. bg-input not bg-secondary on tracks, hooks above early
+    returns, JSX names imported).
 
 Output: a markdown spec ready to paste into Code as the implementation prompt.
+The implementer should be able to build the surface from this spec without
+re-reading every Talent Scout file.
 ```
 
 **`migration-reviewer.md`** — runs before any `supabase db push --linked`.
@@ -390,39 +409,57 @@ The 14-commands article hits the high-leverage shortcuts. The ones that matter m
 
 ## 5. Phase 4 + 5 specific recommendations
 
-### Phase 4 (Venue Scout port)
+**Both phases follow the same workflow now.** Lovable is no longer in the toolchain. Cowork wireframes + drafts the spec; Code implements exactly per spec; the design system in `docs/design-system.md` is the canonical reference. The Talent Scout pages are the live design system — you read them as reference for layout, components, and behavior, not to port.
 
-You have a partial Lovable draft. Pattern from Talent Scout port:
-1. Cowork: read the Lovable draft + write `docs/venue-scout-port-plan.md` (mirroring Talent Scout's port plan format: lift / adapt / rewrite / drop)
-2. Code: cut `phase-4-venue-scout` branch, work through the sub-phases (4.1 inventory, 4.2 schema, 4.3 routes/wizard, 4.4 sourcing, 4.5 deck generation)
-3. Same deploy policy: feature branch + `[skip netlify]` per commit, squash-merge as the single Netlify-deploy event
-4. **This phase has scaffolding** — Lovable draft + spec. Phase 3 patterns transfer cleanly.
-
-### Phase 5 (Cross-cutting — the hard one)
-
-No reference repo. Notifications, Dashboard, real /projects /venues /clients /tasks pages, admin user management. Each is a small product in itself.
-
-**Workflow change for Phase 5:** spec-driven, not code-driven.
+### The standard new-surface workflow (Phase 4 + 5)
 
 ```
 For each new surface:
-  1. Cowork session: design-spec-builder subagent → docs/specs/<surface>.md
-  2. Pause. Review the spec yourself. Edit it before any code.
-  3. Code session: paste the spec, "implement exactly per docs/specs/<surface>.md;
-     ask before deviating"
-  4. After implementation: code-reviewer subagent on the diff (cold context)
+  1. Cowork session: 
+     a. Run design-spec-builder subagent (or paste the prompt manually).
+     b. Subagent reads docs/design-system.md FIRST to find the closest TS analog.
+     c. Drafts a spec mapping the new surface to existing patterns. Calls out
+        what's being lifted vs. adapted vs. invented.
+     d. Save to docs/specs/<surface>.md.
+  2. Pause. Review the spec yourself. Edit it before any code is touched.
+  3. Code session: paste the spec, "implement exactly per docs/specs/<surface>.md.
+     Reference docs/design-system.md and the closest Talent Scout component.
+     Ask before deviating."
+  4. After implementation: code-reviewer subagent on the diff with cold context.
+     Subagent verifies design-system.md adherence + checks the brand-rules-that-
+     bit-us list.
   5. Iterate fixes. Squash-merge.
 ```
 
-This adds 30-60 min of design upfront per surface but saves the "we built it wrong, let's redo" loops that are guaranteed without a reference.
+Adds 30-60 min of design upfront per surface but eliminates the "we built it inconsistent with Talent Scout, let's redo" loops.
 
-**Suggested order for Phase 5:**
-1. Notifications dispatch (the foundation; folds in `ts-send-pull-notification`)
-2. Dashboard tile grid (the main landing surface; depends on having something to link to from each tile)
-3. Real `/projects` page (highest-traffic HQ Core surface)
-4. `/venues`, `/clients`, `/tasks` pages (parallelizable once Projects pattern is set)
-5. Activity log feed (cross-cutting, hooks into project / venue / task triggers)
-6. Admin pages (user role management, global settings UI for any setting still managed via SQL)
+### Phase 4 (Venue Scout)
+
+The Venue Scout Lovable draft exists but is reference for **functional scope only**, not for design. Don't port styling or layout from it. The screen-by-screen spec Jimmie has supplies the functional requirements; design-system.md supplies the look + feel.
+
+Sub-phase pattern (mirrors Talent Scout port plan):
+1. **4.1 Inventory + spec** — write `docs/venue-scout-port-plan.md`. List every surface (brief upload, sourcing wizard, candidate venue list, venue detail, deck generation, scout dashboard). Map each to its Talent Scout analog per design-system.md §11.
+2. **4.2 Schema + edge function shells** — vs_* tables, vs-* edge functions stubbed.
+3. **4.3 Scout dashboard + brief upload** — first surface to ship. Match RoleDashboard.tsx structure.
+4. **4.4 Sourcing wizard** — match the new-role wizard pattern (3-step Stepper + wizardStore equivalent).
+5. **4.5 Candidate venue list + detail** — match CandidateTable + CandidateDetail.
+6. **4.6 Deck generation** — packet path equivalent. Reuse `_shared/packetRender.ts`.
+
+Same deploy policy: feature branch + `[skip netlify]` per commit, squash-merge as the single Netlify-deploy event.
+
+### Phase 5 (Cross-cutting — the hard one)
+
+Six new surfaces, no functional reference at all:
+1. **Notifications dispatch** (the foundation; folds in `ts-send-pull-notification`)
+2. **Dashboard tile grid** (main landing; needs something to link to from each tile)
+3. **Real `/projects` page** (highest-traffic HQ Core surface)
+4. **`/venues`, `/clients`, `/tasks` pages** (parallelizable once Projects pattern is set)
+5. **Activity log feed** (cross-cutting, hooks into project / venue / task triggers)
+6. **Admin pages** (user role management, global settings UI for any setting still managed via SQL)
+
+Each gets a Cowork-drafted spec before any code. The spec-driven workflow above is the discipline — without it, six surfaces will drift from each other AND from Talent Scout's patterns, and the cleanup pass will be expensive.
+
+**Order matters:** Dashboard depends on Projects existing first (the tile is hollow without a destination). Notifications can ship in parallel since it's an edge function + future bell UI; the bell wires up after Dashboard exists.
 
 ---
 

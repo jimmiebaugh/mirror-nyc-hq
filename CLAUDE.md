@@ -2,7 +2,7 @@
 
 You're working with **Jimmie Baugh**, Senior Producer at Mirror NYC, an experiential events agency in NYC. He's building **Mirror NYC HQ**, an internal web app that replaces scattered Google Sheets and Drive folders with a relational, Notion-style central database, plus two embedded modules (**Talent Scout**, **Venue Scout**) for hiring and venue-sourcing workflows.
 
-Jimmie is not a developer. Light HTML/CSS, fluent designing AI workflows, comfortable in Lovable. His goal is for you to do the heavy backend lifting while he uses Lovable for net-new UI scaffolding only.
+Jimmie is not a developer. Light HTML/CSS, fluent designing AI workflows. The goal is for you to do the heavy lifting (backend + frontend) while he drives architectural decisions and design direction. **As of 2026-05-08, all UX/UI work happens directly in Claude (Cowork for wireframing + design specs, Code for implementation). Lovable is no longer used.** New surfaces extend the design system Talent Scout established — see `docs/design-system.md` for canonical layout, component, and behavioral patterns.
 
 ## How to talk to Jimmie
 
@@ -28,6 +28,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 | Edge Functions | `docs/edge-functions.md` | Every `ts-*` / `vs-*` / cross-cutting function, its signature, and `verify_jwt` posture. Includes the `callClaude` wrapper. |
 | Cron jobs | `docs/cron-jobs.md` | `pg_cron` schedules, watchdog pattern, what each job does. |
 | Conventions | `docs/conventions.md` | How to write migrations, edge functions, components. Naming, tone, git. **Read before making changes.** |
+| Design system | `docs/design-system.md` | Tokens, layout, type, components, behavioral patterns. Canonical reference for any new HQ surface. **Read before designing any new page or component.** |
 | Decisions | `docs/decisions.md` | Architectural decisions with rationale, indexed by phase. Why bulk re-eval overwrites but single re-eval appends, why `promote` → `interview`, etc. |
 | Operations | `docs/operations.md` | Day-to-day commands (migrate, deploy, regen types, tail logs) + common debugging recipes. |
 | Roadmap | `docs/roadmap.md` | Phase-by-phase plan. Finished phases summarize to one line; the active phase has full detail. |
@@ -61,7 +62,6 @@ See `CHECKPOINT.md` for live state. As of this writing: **Phase 3.6 (Final revie
 ## Notes
 
 - Jimmie's git commit author email: `jimmie@jimmiebaugh.com`. His Mirror NYC email is the auth identity, not the commit identity.
-- Working pattern: Jimmie drafts Claude Code prompts with his Cowork session (separate chat).
+- Working pattern (as of 2026-05-08): Jimmie drafts wireframes + design specs in his Cowork session, then pastes the spec into Code as the implementation prompt. UI/UX no longer scaffolded in Lovable; all design happens in Claude. New surfaces extend Talent Scout's patterns per `docs/design-system.md`.
 - HQ Lovable draft was discarded; we started fresh in Phase 2.1.
-- Talent Scout source repo (`mirror-talent-scout`) is cloned locally; reference for Phase 3.
-- Venue Scout draft is in Lovable; clone when needed for Phase 4.
+- Talent Scout source repo (`mirror-talent-scout`) is cloned locally; reference for Phase 3 only. New design work for Phase 4 / 5 happens in Claude, not by porting from Lovable.
