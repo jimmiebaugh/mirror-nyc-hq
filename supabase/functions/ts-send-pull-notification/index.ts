@@ -114,7 +114,10 @@ Deno.serve(async (req) => {
   const link = `${APP_URL}/talent-scout/roles/${roleId}/pulls/${roundId}`;
   const managerName = (role as any).hiring_manager?.full_name ?? "there";
 
-  const subject = `[Mirror HQ] R${round.round_number} pull complete — ${role.title}`;
+  // ASCII-only separators — em dashes garble in some Gmail clients when the
+  // subject MIME header isn't strictly RFC 2047-encoded. Pipe + hyphen are
+  // safe across every client and align with the project's no-em-dashes rule.
+  const subject = `[Mirror HQ] R${round.round_number} pull complete | ${role.title}`;
   const bodyText = [
     `Hi ${managerName.split(" ")[0]},`,
     ``,
@@ -129,7 +132,7 @@ Deno.serve(async (req) => {
     `Open the round in HQ:`,
     `${link}`,
     ``,
-    `— Mirror HQ`,
+    `- Mirror HQ`,
   ].join("\n");
 
   const sent = await sendGmail({ to: managerEmail, subject, bodyText });
