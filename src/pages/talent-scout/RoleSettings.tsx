@@ -120,6 +120,15 @@ function scorecardTotal(criteria: Criterion[]): number {
   return criteria.reduce((s, c) => s + (Number(c.weight) || 0), 0);
 }
 
+// Phase 3.10: stable sort for the post-refine re-sort (tier asc, weight desc
+// within tier). Mirrors the wizard's helper.
+function sortByTierAndWeight(cs: Criterion[]): Criterion[] {
+  return [...cs].sort((a, b) => {
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    return (Number(b.weight) || 0) - (Number(a.weight) || 0);
+  });
+}
+
 // "Total:" coral + value coloring; sits both in the Scorecard card header
 // (right side of the title row) and at the bottom of ScorecardEditor.
 // text-[14px] = +15% over the prior text-xs (12px) per Jimmie's spec.
@@ -142,6 +151,13 @@ export default function RoleSettings() {
   const [initial, setInitial] = useState<FormState | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [refining, setRefining] = useState(false);
+  // Phase 3.10: tracks whether the user has edited the scorecard since the
+  // last refine pass (or since the page loaded if no refine has run yet).
+  // When true AND form.scorecard differs from initial.scorecard, the bottom-
+  // bar action morphs from "Save changes" to "Process scorecard". Cleared on
+  // every successful refine response. Cleared on initial load.
+  const [scorecardEditedSinceRefine, setScorecardEditedSinceRefine] = useState(false);
   const [confirmReevalOpen, setConfirmReevalOpen] = useState(false);
   // What triggered the re-eval confirm — drives the dialog body copy.
   const [confirmReason, setConfirmReason] = useState<"jd" | "priorities" | "prompt" | "scorecard" | null>(null);
@@ -263,6 +279,78 @@ export default function RoleSettings() {
     if (!form.hiring_manager_id) return "Hiring manager is required.";
     if (form.scorecard.length === 0) return "Scorecard must have at least one criterion.";
     return null;
+  };
+
+  // Phase 3.10: refine the scorecard via Claude. Same edge function as the
+  // wizard step-3 path. Drops dead criteria (weight=0 or empty name+describer)
+  // server-side, refines name + describer for the rest, preserves all
+  // scoring fields. Frontend re-sorts each tier by weight desc on success.
+  // Failure-safe: on error the user's edits stay in form, they can try again
+  // or hand-edit and save anyway.
+  const runRefine = async () => {
+    if (form.scorecard.length === 0) {
+      toast({ title: "Scorecard is empty", variant: "destructive" });
+      return;
+    }
+    setRefining(true);
+    const { data, error: invokeErr } = await supabase.functions.invoke("ts-refine-scorecard", {
+      body: {
+        role_title: form.title,
+        jd: form.job_description,
+        hiring_priorities: form.hiring_priorities,
+        location: form.location,
+        employment_type: form.type,
+        comp: form.compensation,
+        criteria: form.scorecard,
+      },
+    });
+    setRefining(false);
+
+    let errMsg = (data as { error?: string })?.error ?? null;
+    if (!errMsg && invokeErr) {
+      errMsg = invokeErr.message;
+      const ctx = (invokeErr as { context?: Response }).context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const body = await ctx.clone().json();
+          if (body?.error) errMsg = `${ctx.status}: ${body.error}`;
+        } catch {
+          try {
+            const text = await ctx.clone().text();
+            if (text) errMsg = `${ctx.status}: ${text.slice(0, 300)}`;
+          } catch {
+            /* swallow */
+          }
+        }
+      }
+    }
+    if (errMsg) {
+      // eslint-disable-next-line no-console
+      console.error("ts-refine-scorecard failed:", errMsg, invokeErr);
+      toast({ title: "Couldn't refine scorecard", description: errMsg, variant: "destructive" });
+      return;
+    }
+    const refinedRaw = ((data as { criteria?: Criterion[] })?.criteria ?? []) as Criterion[];
+    const removed = (data as { removed_count?: number })?.removed_count ?? 0;
+    if (refinedRaw.length !== form.scorecard.length - removed) {
+      toast({
+        title: "Refinement returned wrong shape",
+        description: `expected ${form.scorecard.length - removed} criteria, got ${refinedRaw.length}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    const refined = sortByTierAndWeight(refinedRaw);
+    update("scorecard", refined);
+    setScorecardEditedSinceRefine(false);
+    const removedNote =
+      removed > 0
+        ? ` · ${removed} empty / zero-point criteri${removed === 1 ? "on" : "a"} removed`
+        : "";
+    toast({
+      title: "Scorecard refined",
+      description: `Review the updated criteria, then click Save to commit + trigger re-eval${removedNote}.`,
+    });
   };
 
   const requestSave = () => {
@@ -417,18 +505,18 @@ export default function RoleSettings() {
           <Card className="bg-surface-alt">
             <CardContent className="space-y-6 p-6">
               {/* Phase 3.7.6.7: title row carries both the section label
-                   and the editable role title (coral, larger size). The
-                   "Role title" Field below is removed; the title is the
-                   single editable field in this row. */}
-              <div className="flex items-center justify-between gap-4 border-b border-border -mx-6 -mt-6 px-6 pt-6 pb-3 mb-4">
-                <div className="label-section text-[15px]">Role Details</div>
-                <input
-                  value={form.title}
-                  onChange={(e) => update("title", e.target.value)}
-                  placeholder="Role title"
-                  className="flex-1 max-w-[60%] bg-transparent text-right font-display text-[20px] font-extrabold uppercase tracking-wide text-primary outline-none focus:underline"
-                />
-              </div>
+                   and the editable role title (coral, larger size).
+                   Phase 3.10.2: title sits at the far LEFT of the column
+                   with the section label hugging its right edge.
+                   Phase 3.10.3: input width comes from a hidden sizer
+                   span that renders the title text in the same font /
+                   size / weight / case so the actual rendered width is
+                   measured (Montserrat ExtraBold uppercase is wider per
+                   glyph than the input's `size` attribute average). */}
+              <RoleTitleRow
+                title={form.title}
+                onChange={(v) => update("title", v)}
+              />
 
               {/* Location / Type / Compensation row sits directly under the title */}
               <div className="grid gap-4 md:grid-cols-3">
@@ -630,7 +718,10 @@ export default function RoleSettings() {
             <div className="min-h-0 flex-1 overflow-y-auto p-6">
               <ScorecardEditor
                 criteria={form.scorecard}
-                onChange={(c) => update("scorecard", c)}
+                onChange={(c) => {
+                  update("scorecard", c);
+                  setScorecardEditedSinceRefine(true);
+                }}
               />
             </div>
           </Card>
@@ -641,7 +732,13 @@ export default function RoleSettings() {
            always reachable on long pages without scrolling. -mx-6 lets
            the bar background extend the full viewport width even though
            the page wrapper is mx-auto max-w-7xl. backdrop-blur +
-           strong bg keeps content underneath legible. */}
+           strong bg keeps content underneath legible.
+
+           Phase 3.10: when the scorecard has unrefined edits (any change
+           since the last refine pass), the primary action morphs from
+           "Save changes" to "Process scorecard" and runs ts-refine-
+           scorecard. Once refined, the button flips back to Save and the
+           normal confirm-reeval-and-persist flow takes over. */}
       <div className="sticky bottom-0 z-10 -mx-6 mt-6 border-t-2 border-primary/40 bg-background/90 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <Button variant="ghost" onClick={() => navigateOrConfirm(`/talent-scout/roles/${role.id}`)}>
@@ -650,12 +747,18 @@ export default function RoleSettings() {
           <div className="flex items-center gap-3">
             {dirty && (
               <span className="text-xs font-mono uppercase tracking-wider text-amber-400">
-                Unsaved changes
+                {scorecardEditedSinceRefine ? "Scorecard edits pending refine" : "Unsaved changes"}
               </span>
             )}
-            <Button onClick={requestSave} disabled={saving || !dirty}>
-              {saving ? "Saving…" : "Save changes"}
-            </Button>
+            {scorecardEditedSinceRefine ? (
+              <Button onClick={runRefine} disabled={saving || refining}>
+                {refining ? "Refining…" : "Process scorecard →"}
+              </Button>
+            ) : (
+              <Button onClick={requestSave} disabled={saving || refining || !dirty}>
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -795,6 +898,29 @@ function ScorecardEditor({
         </span>
         <ScorecardTotalReadout total={total} />
       </div>
+    </div>
+  );
+}
+
+// Phase 3.10.4: editable role title sitting alone in the card header row.
+// "Role Details" section label removed — title carries the section identity
+// on its own. (Auto-sizing logic dropped along with the inline label since
+// nothing now sits to the title's right that needs the right edge measured.)
+function RoleTitleRow({
+  title,
+  onChange,
+}: {
+  title: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center border-b border-border -mx-6 -mt-6 px-6 pt-6 pb-3 mb-4">
+      <input
+        value={title}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Role title"
+        className="w-full bg-transparent font-display text-[20px] font-extrabold uppercase tracking-wide text-primary outline-none focus:underline"
+      />
     </div>
   );
 }
