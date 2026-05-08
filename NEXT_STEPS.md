@@ -1,68 +1,58 @@
 # Next Steps
 
-Ordered most-immediate first. Branch is `phase-3-6-final-review-packet`, latest commit `d6a53d6`, working tree clean.
+Ordered most-immediate first. On `main`. Working tree clean. Phase 3.7 shipped.
 
-## 1. Jimmie reviews latest visual state
+## 1. Cut the Phase 3.8 branch
 
-- **Goal:** Get sign-off (or another revision request) on the CandidateTable layout after `d6a53d6` (15px padding between Portfolio and Quick Overview).
-- **Files to look at:** `src/components/talent-scout/CandidateTable.tsx` rendered on `/talent-scout/roles/[id]` (RoleDashboard) and `/talent-scout/roles/[id]/pulls/[pullId]` (PullDetail).
-- **External dep:** Waiting on Jimmie. He may come back with another nudge or say it's done.
-- **Gotcha:** Local dev needs to be running. Use `http://127.0.0.1:8080/`, not `localhost:8080` (Vite binds IPv6, Chrome misroutes localhost).
+```
+git checkout -b phase-3-8-cron-watchdogs
+```
 
-## 2. Verify packet-generate end-to-end after the WORKER_RESOURCE_LIMIT fix
+Per the deploy policy: no commits / no origin pushes without `[skip netlify]` in HEAD. Squash-merge to main is the single Netlify-deploy event for the phase.
 
-- **Goal:** Confirm `ts-final-review-packet` actually generates a PDF, uploads to the `packets` bucket, and sends the signed-URL email. The fix landed in this conversation but the path was not retested after the change.
-- **Files involved:**
-  - `supabase/functions/ts-final-review-packet/index.ts`
-  - `supabase/functions/_shared/packetRender.ts` (`uploadPacketAndSign`, `sendPacketEmail`)
-- **How:** From the FinalReviewDetail page, click "Generate Packet". Watch Edge Function logs (`supabase functions logs ts-final-review-packet --tail`). Confirm:
-  - PDF lands in the `packets` bucket
-  - Email arrives with signed URL link in body (no MIME attachment)
-  - Signed URL opens in browser
-- **Gotcha:** Two URLs in play — 1h `signedUrl` for browser, 7d `emailUrl` for email body. If links 404 after a few hours, that's expected; not a bug.
+## 2. Phase 3.8 scope (cron + watchdogs)
 
-## 3. Confirm the Phase 3.6 migration state
+Per `docs/roadmap.md` 3.8 + 3.9. Suggested ordering:
 
-- **Goal:** Know whether `20260506213340_phase_3_6_final_review_and_packets.sql` is applied to local AND production Supabase, and whether it still includes `final_overview` if that column was added there.
-- **How:**
-  ```
-  supabase migration list --linked
-  ```
-  Compare local vs remote. If `final_overview` column exists on `ts_final_reviews` and we no longer write to it, decide: drop column in a follow-up migration, or leave it as dead column for now.
-- **Gotcha:** CHECKPOINT.md (last updated 2026-05-06) still says this migration is not yet applied. That's stale — `ts-final-review` ran successfully which means it's at least applied locally. Production status unverified from this conversation.
+### 2a. `pg_cron` enable + scheduled-pulls cron
+- Migration: ensure `pg_cron` extension is enabled in remote.
+- `ts-cron-scheduled-pulls`: reads `ts_roles.auto_pull_schedule` (already-existing column), invokes `ts-pull-candidates` for any role whose schedule fires now. Likely 15-min granularity.
+- Schedule via `cron.schedule` in a migration, not in code.
 
-## 4. Update CHECKPOINT.md before merging to main
+### 2b. Pull / re-eval / final-review watchdogs
+- `ts-cron-pull-watchdog`: detects `ts_pull_rounds` rows in `running` for > N minutes with no `processed_count` heartbeat → flip status to `stalled`. **No auto-restart.**
+- `ts-cron-reeval-watchdog`: same pattern for `ts_roles.reeval_status='running'` with no `reeval_last_progress_at` heartbeat → flip to `failed`.
+- `ts-cron-final-review-watchdog`: same for `ts_final_reviews` stuck in `generating`.
+- Detect-and-flag only. Restarts are a manual decision.
 
-- **Goal:** Bring CHECKPOINT.md current. It was last touched 2026-05-06 and predates the entire 3.6.1 → 3.6.11 iteration.
-- **What to update:**
-  - Latest commit on the active branch
-  - "What's on the active branch" section — reflect current state (CloudConvert removed, prompts consolidated, ScoreInline, etc.)
-  - "Recent commits" list
-  - Migration status (see step 3)
-- **Gotcha:** Project rule from `CLAUDE.md`: update CHECKPOINT.md on every meaningful merge to main. So this should land before the merge, not after.
+### 2c. Storage-cleanup cron
+- `ts-cron-storage-cleanup`: daily purge per the schema-doc rule (closed-role candidate files > 90 days, rejected-candidate files > 30 days). Drop both Storage objects and `ts_candidate_attachments` rows.
 
-## 5. Merge `phase-3-6-final-review-packet` to `main`
+### 2d. Spend reset cron + cap-alert email path
+- `monthly-spend-reset`: 1st-of-month cron. Resets `global_settings.anthropic_spend_current_month_usd` to 0 and `cap_alert_sent_this_month` to false.
+- Wire real email delivery on the `callClaude` cap alert. Currently a console.log stub in `_shared/anthropic.ts`. Use the same `gmailServiceAccount.ts` send path that packets already use.
 
-- **Goal:** Ship Phase 3.6 to production.
-- **Pre-merge checks:**
-  - Steps 1-4 complete
-  - `npx tsc --noEmit` clean
-  - `npm run build` clean
-  - Phase 3.6 migration applied on production via `supabase db push --linked`
-  - Updated types committed: `supabase gen types typescript --linked > /tmp/types.ts && test -s /tmp/types.ts && mv /tmp/types.ts src/integrations/supabase/types.ts`
-- **Gotcha:** Don't pipe `supabase gen types` directly into the file. Shell `>` truncates first; if the gen fails the file ends up empty (this happened mid-conversation, recovered via `git checkout`).
-- **Gotcha:** `docs/decisions.md` and `docs/schema.md` should be updated in the same commit if schema changed.
-
-## 6. Phase 3.7 — Cron + watchdogs
-
-- **Goal:** Schedule the things that currently require a manual button. Per `docs/roadmap.md` and CHECKPOINT, Phase 3.7 starts after 3.6 merges.
-- **Scope (from CHECKPOINT context, verify against `docs/roadmap.md` before starting):**
-  - Scheduled candidate pulls (currently manual)
-  - Watchdog jobs to clean up stuck rounds / stale state
-  - `monthly-spend-reset` cron for `cap_alert_sent_this_month` (currently manual SQL reset)
-- **Gotcha:** Don't start until Phase 3.6 merges. The active branch already touches some of the same surfaces (Edge Functions, Realtime publication).
-
-## Cross-cutting cleanup queued for a future migration
-
+### 2e. Cleanup queued behind 3.8
 - Drop `ts_pull_rounds.reeval_last_progress_at` (dead since Phase 3.5).
-- Possibly drop `ts_final_reviews.final_overview` if the migration added it (see step 3).
+- Verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix, then flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`.
+
+## 3. Pre-merge checklist (when 3.8 is done)
+
+Same as 3.7:
+- `npx tsc --noEmit` clean
+- `npm run build` clean
+- `supabase migration list --linked` (Local = Remote across the board)
+- All edge functions deployed at latest
+- Real-cron test: trigger a scheduled pull manually, watch the watchdog detect a fake stall
+- `CHECKPOINT.md` updated reflecting Phase 3.8 going live
+
+## 4. Phase 3.9 (after 3.8)
+
+`ts-send-pull-notification` standalone. Real-email packet path verification. Notification UI (in-app bell) deferred to Phase 5.
+
+## Gotchas to carry forward
+
+- `[skip netlify]` MUST be on the HEAD commit at push time (Netlify checks the latest commit's message). Empty marker commit + push is the safe pattern.
+- Don't pipe `supabase gen types --linked` directly into `src/integrations/supabase/types.ts`. Use `/tmp` + `test -s` + `mv`.
+- Local dev runs at `http://127.0.0.1:8080/`, not `localhost:8080`.
+- Edge function deploys + DB migrations are out-of-band — fine during feature work, no Netlify cost.

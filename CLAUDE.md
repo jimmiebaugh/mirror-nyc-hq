@@ -55,6 +55,7 @@ See `CHECKPOINT.md` for live state. As of this writing: **Phase 3.6 (Final revie
 5. **After merging to main**, update `CHECKPOINT.md` (latest commit, recent commits, known drift).
 6. **Phase boundaries** → summarize the finished phase to one line in `docs/roadmap.md`, expand the next phase with full detail.
 7. **Decisions worth preserving** → add to `docs/decisions.md` with rationale, don't bury in commit messages.
+8. **Deploy policy (Phase 3.X — active).** Netlify charges credits per deploy. All Phase 3.X feature work lives on a feature branch (e.g. `phase-3-7-candidates-ux`). Commits stay local; the only Netlify-deploy event per phase is the eventual squash-merge to `main`, and Jimmie has to explicitly approve that. Do NOT push to `main` or to any remote feature branch (origin pushes can fire deploy previews) until Jimmie says go. Edge function deploys (`supabase functions deploy`) and DB migrations (`supabase db push --linked`) are out-of-band and fine to apply during feature work — they don't burn Netlify credits.
 
 ## Notes
 

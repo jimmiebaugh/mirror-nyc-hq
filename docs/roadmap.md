@@ -31,25 +31,20 @@ Migration `20260506162543_phase_3_2_schema_augmentation.sql` added `ts_pull_roun
 ### 3.5 Candidate detail + re-eval — DONE
 CandidateDetail page (recruiter overview, files & materials, top strengths / key gaps, internal notes auto-save, score breakdown by tier, status dropdown, re-evaluate button). `ts-evaluate-candidate` for single re-eval (history INSERT) and `ts-bulk-reevaluate` for role-scoped pool re-eval; round-scoped re-eval on PullDetail uses parallel fan-out with `overwrite_history: true`. RoleDashboard restructured around master pool: 4 stat tiles, last-pull relative time, pull-round cards, CandidateSearch, CandidateTable. CandidateTable is two-tier (active above, rejected below collapsible) with status-priority sort, shift-click range select, slide-in bulk action bar, inline StatusDropdown. Schema: `promote` → `interview` enum rename, `ts_candidates.location` + `detected_links`, `ts_role_reeval_status` enum + 7 reeval columns on `ts_roles`.
 
-### 3.6 Final review + packet — NEXT (you're picking up here)
+### 3.6 Final review + packet — DONE
+Comparative final review (`ts-final-review`) writes ranked `final_rankings` jsonb to `ts_final_reviews`. Per-candidate shape: `{candidate_id, final_rank, final_tier, rationale, recruiter_note}`, where `recruiter_note` is `string[]` (max 3 bullets). Streams `step_progress` via Realtime; FinalReviewLoading + FinalReviewDetail pages render it. Three Talent Scout Claude prompts consolidated in `_shared/prompts.ts`. Packet generation deployed (`ts-packet-generate`, `ts-final-review-packet`, pure pdf-lib in `_shared/packetRender.ts`, signed-URL email body to dodge WORKER_RESOURCE_LIMIT) but UI gated behind `PACKET_FEATURE_ENABLED` flags pending end-to-end verification. OAuth fixed end-of-phase (Phase 3.6.16) by switching to the new `sb_publishable_*` API key.
 
-Build the comparative-final-review flow + packet PDF generation. Per port plan section 9 + the disabled placeholders already wired into RoleDashboard (Generate Final Review + Top-N input) and PullDetail (Generate Packet + Top-N input):
+### 3.7 Candidates UX + referral ingestion — DONE
+Squash-merged at `2ab37c3` (2026-05-08). Manual-reviewed flag with auto/manual pill + one-way flip + re-eval gate; CandidateDetail layout reorg with header cluster (Re-evaluate full-height + status stack), Score Breakdown with tier dividers; scorecard 100-point cap normalizer; Global Settings page with editable competitor list (Postgres `text[]`, default 19-entry list seeded); referral ingestion that detects `*@mirrornyc.com` forwards to jobs@, walks every chain segment for original applicant + manager commentary, captures every Mirror manager's commentary along the chain into `internal_notes` (Mirror sigs stripped), feeds it into the FIRST eval via the `HIRING MANAGER NOTES:` block, blocks `mirrornyc.com` from portfolio URL extraction; pull running state shows a 4-step checklist driven by the existing `candidates_found` / `processed_count` signals; brand restyling pass (top nav reduced to Dashboard + Talent Scout, Mirror grey card surfaces, score bar visibility fix on `bg-input` track, coral toasts site-wide). Six migrations applied to remote.
 
-- **`ts-final-review(role_id, candidate_count_limit?)`**: compares the master pool comparatively (not per-candidate), produces a pool summary + final rankings jsonb, writes to `ts_final_reviews`. Updates `ts_roles` (or final-review-aware status pill) so the "Final Report" indicator on `RoleStatusPill` lights up.
-- **`ts-packet-generate(role_id, pull_round_id?, candidate_count?)`**: build packet PDF and email to hiring manager. **Q5 follow-up first**: read source's `generate-packet` (832 lines) vs `generate-final-review-packet` (767 lines) to confirm whether they're two distinct flows or one is dead code; consolidate into one HQ function based on that read.
-- **Pages**: `FinalReviewLoading` (realtime sub on a generation status field), `FinalReviewDetail` (renders pool summary + ranked list with rationale per candidate). Wire the disabled buttons + Top-N inputs on RoleDashboard / PullDetail.
+### 3.8 Cron jobs + watchdogs — NEXT (you're picking up here)
+Wire `ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-final-review-watchdog`, `ts-cron-storage-cleanup` via `pg_cron` migrations. Watchdogs detect-and-flag (set status to `stalled` / `failed`); never auto-restart. Plus: `monthly-spend-reset` cron for `cap_alert_sent_this_month`. Cut a fresh `phase-3-8-cron-watchdogs` branch — same deploy policy (no commits / no origin pushes without `[skip netlify]`; squash-merge is the single Netlify-deploy event).
 
-Heads up:
-- Final review consumes the entire master pool's structured data → likely large prompt. Anthropic prompt caching with the role context block earns its keep here (1-hour TTL, same cache key per role).
-- Packet generation talks to Google Slides + Drive APIs (already proven via service account; scopes confirmed). Use `_shared/gmailServiceAccount.ts` as the template.
-- Both functions self-invoke for long runs → add `[functions.<name>] verify_jwt = false` per `docs/auth-model.md`.
-- New tables: explicit GRANTs to `authenticated` and `service_role`. See `docs/conventions.md`.
+### 3.9 Notifications + spend alerts — TODO
+`ts-send-pull-notification` standalone (folds into `notifications-dispatch` in Phase 5). Wire real-email path on `callClaude` cap alert (currently a console-log stub). Verify packet email path uses the service account's `gmail.send` from `jobs@mirrornyc.com`. Plus: verify `ts-final-review-packet` end-to-end (post WORKER_RESOURCE_LIMIT fix) and flip `PACKET_FEATURE_ENABLED` back to `true` in `PullDetail.tsx` + `FinalReviewDetail.tsx`.
 
-### 3.7 Cron jobs + watchdogs — TODO
-Wire `ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-storage-cleanup` via `pg_cron` migrations. Watchdogs detect-and-flag (set status to `stalled` / `failed`); never auto-restart.
-
-### 3.8 Notifications + spend alerts — TODO
-`ts-send-pull-notification` standalone (folds into `notifications-dispatch` in Phase 5). Wire real-email path on `callClaude` cap alert (currently a console-log stub). Verify packet email path uses the service account's `gmail.send` from `jobs@mirrornyc.com`.
+### 3.X cleanup queued
+Drop dead `ts_pull_rounds.reeval_last_progress_at` column. Cleanup of deprecated `auto_rejected` enum value requires enum rebuild — not worth it now.
 
 ## Phase 4: Venue Scout — TODO
 

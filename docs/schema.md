@@ -122,12 +122,15 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 - `name`, `email` (text), `applied_date` (date), `gmail_message_id` (text)
 - `location` (text, nullable): extracted by Claude from candidate materials, persisted on initial pull / re-eval.
 - `score` (numeric)
-- `status` (enum: `consider`, `interview`, `reject`, `fast_track`, `auto_rejected`). `interview` was renamed from the original spec's `promote` in Phase 3.5. `auto_rejected` is AI-only; admins pick the four manual ones via `StatusDropdown` or the bulk action bar.
+- `status` (enum: `consider`, `interview`, `reject`, `fast_track`, `auto_rejected`). `interview` was renamed from the original spec's `promote` in Phase 3.5. `auto_rejected` is **deprecated** since Phase 3.7.2.1 — backfilled to `reject` + `manually_reviewed=false` and never written by new code; the enum value is kept for safety. Admins pick the four manual statuses via `StatusDropdown` or the bulk action bar.
+- `manually_reviewed` (bool, default false; Phase 3.7.2): one-way flip from auto → manual. AI eval / re-eval leaves it false; user actions flip it to true (status-dropdown change or re-select-same, click on the AUTO pill, bulk action). When true, single + bulk re-eval update score / breakdown / strengths / gaps / overview but do NOT touch status. Bulk re-eval's default `not_manually_rejected` filter is `status.neq.reject,manually_reviewed.eq.false`.
+- `is_referral` (bool, default false; Phase 3.7.7), `referrer_email` (text, nullable; Phase 3.7.7): set by `ts-pull-candidates` when a `*@mirrornyc.com` manager forwards a candidate to jobs@. Identity on the row stays the original applicant's; `referrer_email` captures the outermost forwarder. Eval is blind to referral status.
 - `recruiter_overview` (text)
 - `top_strengths`, `key_gaps`, `quick_overview` (jsonb arrays)
 - `score_breakdown` (jsonb): `{criterion_name: int}`. Sum of values + competitor bonus = total score.
-- `tier` (text), `internal_notes` (text)
-- `portfolio_type` (enum: `file`, `url`, `none`), `portfolio_path_or_url` (text)
+- `tier` (text)
+- `internal_notes` (text): hand-edited on CandidateDetail and pre-populated on referral ingestion when a Mirror manager forwarded with commentary. Phase 3.7.8.16's `extractManagerNote` walks every forward-chain segment and captures every `@mirrornyc.com` sender's commentary (Mirror sigs stripped via the bolded-name + brand-marker heuristic; "from-mobile" sigs stripped via signature-only filter). Folded into the FIRST evaluation via the `HIRING MANAGER NOTES:` block, and re-folded on every re-eval.
+- `portfolio_type` (enum: `file`, `url`, `none`), `portfolio_path_or_url` (text). `mirrornyc.com` is in `BLOCKED_PORTFOLIO_DOMAINS` (Phase 3.7.8.15) so manager email-signature URLs never become portfolio URLs.
 - `detected_links` (jsonb, default `[]`): array of `{url, type}` for every URL extracted from email body + attachments + bare-domain mentions, classified into `vimeo_reel | drive_folder | portfolio_site | other`. Surfaced in CandidateDetail's Files & Materials section.
 - `email_body_text` (text, nullable; Phase 3.6): plain-text application email body, trimmed at 30k chars. Populated by `ts-pull-candidates`. Used by `ts-packet-generate` / `ts-final-review-packet` to render each candidate's email page inside the packet PDF; pages are skipped when this column is null (pre-3.6 candidates).
 - `last_evaluated_at`, `created_at`, `updated_at`
@@ -215,6 +218,7 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 - `default_drive_folder_for_standalone_vs_decks` (text)
 - `venue_research_priority_sites` (text[]; admin-configurable, NOT a hard restriction)
 - `talent_scout_packet_default_count` (int, default 15)
+- `talent_scout_competitor_list` (text[], Phase 3.7.5): global default competitor company list applied to every Talent Scout role unless overridden per-role on `ts_roles.competitor_bonus`. Seeded with Mirror's canonical 19-entry default; editable from `/talent-scout/settings` (admin only). Postgres `text[]` rather than jsonb because the value is a flat array — per-role `competitor_bonus` stays jsonb because it carries a `bonus_points` scalar alongside the array.
 - `email_notifications_enabled`, `in_app_notifications_enabled` (bool)
 - `updated_at`
 

@@ -13,6 +13,7 @@ import { matchesSearch } from "@/components/talent-scout/CandidateSearch";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
+import { fmtRelative } from "@/lib/talent-scout/relativeTime";
 
 type RoleRow = Database["public"]["Tables"]["ts_roles"]["Row"];
 type PullRoundRow = Database["public"]["Tables"]["ts_pull_rounds"]["Row"];
@@ -30,18 +31,8 @@ const SCHEDULE_LABEL: Record<string, string> = {
   weekly: "Weekly",
 };
 
-const fmtRelative = (iso: string | null) => {
-  if (!iso) return "Never";
-  const diff = Date.now() - new Date(iso).getTime();
-  const h = Math.floor(diff / 3_600_000);
-  if (h < 1) return "Just now";
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d === 1) return "Yesterday";
-  if (d < 30) return `${d}d ago`;
-  const m = Math.floor(d / 30);
-  return `${m}mo ago`;
-};
+// Phase 3.7.3.4: extracted to src/lib/talent-scout/relativeTime.ts so
+// CandidateDetail can use the same formatter for "Last evaluated".
 
 export default function RoleDashboard() {
   const { id } = useParams();
@@ -177,7 +168,7 @@ export default function RoleDashboard() {
   if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!role) {
     return (
-      <Card>
+      <Card className="bg-surface-alt">
         <CardContent className="space-y-3 p-8 text-center">
           <p className="text-sm">Role not found.</p>
           <Button variant="ghost" onClick={() => nav("/talent-scout")}>← Back to roles</Button>
@@ -199,7 +190,7 @@ export default function RoleDashboard() {
       </Link>
 
       {/* Top role panel */}
-      <Card>
+      <Card className="bg-surface-alt">
         <CardContent className="space-y-6 p-6">
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0 space-y-3">
@@ -313,7 +304,7 @@ export default function RoleDashboard() {
 
       {/* Pull rounds */}
       {rounds.length > 0 && (
-        <Card>
+        <Card className="bg-surface-alt">
           <CardContent className="p-4">
             <div className="flex items-start justify-between gap-6">
               <div className="shrink-0">
@@ -325,6 +316,13 @@ export default function RoleDashboard() {
                   const isLatest = i === 0;
                   const isFailed = rd.status === "failed";
                   const isStalled = rd.status === "stalled";
+                  // Phase 3.7.6.7: per-round reviewed count, surfaced as
+                  // a small "N / M" caption in the bottom-right of each
+                  // card. M = total candidates from this round; N = the
+                  // ones a human has marked manually_reviewed=true.
+                  const roundCands = candidates.filter((c) => c.pull_round_id === rd.id);
+                  const reviewed = roundCands.filter((c) => c.manually_reviewed === true).length;
+                  const totalForRound = roundCands.length;
                   return (
                     <Link
                       key={rd.id}
@@ -364,6 +362,17 @@ export default function RoleDashboard() {
                             })
                           : "—"}
                       </div>
+                      {totalForRound > 0 && (
+                        <div
+                          className="absolute right-3 bottom-3 font-mono text-[15px] font-bold tabular-nums leading-none text-muted-foreground"
+                          title={`${reviewed} of ${totalForRound} reviewed`}
+                        >
+                          <span className={reviewed === totalForRound ? "text-foreground" : "text-foreground"}>
+                            {reviewed}
+                          </span>
+                          <span className="text-muted-foreground">/{totalForRound}</span>
+                        </div>
+                      )}
                     </Link>
                   );
                 })}
@@ -387,12 +396,16 @@ export default function RoleDashboard() {
         </Card>
       )}
 
-      {/* Candidate table — search input now lives inside the table's
-          bulk-action bar (Phase 3.6.7). */}
+      {/* Phase 3.7.8.7: master-pool header moved INSIDE CandidateTable's
+          card via title + meta props. Lives in the same card as the
+          search bar / bulk actions / rows so the section reads as one
+          surface. */}
       <CandidateTable
         candidates={filteredCandidates}
         search={search}
         onSearchChange={setSearch}
+        title="Master Pool"
+        meta="from all rounds"
         emptyMessage={
           candidates.length === 0
             ? rounds.length === 0

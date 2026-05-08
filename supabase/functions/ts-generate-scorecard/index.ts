@@ -78,9 +78,16 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Phase 3.7.4: post-Claude normalizer. The prompt asks Claude to make
+    // weights sum to 100, but it occasionally drifts (especially with a lot
+    // of criteria). Normalize defensively here so the wizard always loads a
+    // 100-point scorecard, regardless of what the model returned. If
+    // sum=100 already this is a no-op.
+    const criteria = normalizeWeightsTo100(parsed.criteria ?? []);
+
     return new Response(
       JSON.stringify({
-        criteria: parsed.criteria ?? [],
+        criteria,
         cost_usd: result.cost_usd,
         tokens: { input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens },
       }),
@@ -95,3 +102,46 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3.7.4: scale criteria weights so the sum is exactly 100 integer points.
+//
+// 1. Coerce each weight to a non-negative integer (drop NaN/null to 0).
+// 2. If the total is already 100, no-op.
+// 3. Otherwise multiply each weight by (100 / total) and round.
+// 4. Rounding deltas land on the largest-weight criterion so we don't disturb
+//    smaller Tier 3 criteria proportionally more than they're worth.
+// 5. Edge case: if every weight came in as 0 (or list empty), return as-is —
+//    the wizard's UI shows zeros and the user fills them in by hand.
+// ---------------------------------------------------------------------------
+function normalizeWeightsTo100(rawCriteria: unknown[]): unknown[] {
+  // deno-lint-ignore no-explicit-any
+  const criteria = (rawCriteria as any[]).map((c) => ({
+    ...c,
+    weight: Math.max(0, Math.round(Number(c?.weight) || 0)),
+  }));
+  const sum = criteria.reduce((s, c) => s + c.weight, 0);
+  if (sum === 100 || sum === 0) {
+    if (sum !== 100) {
+      console.warn(`[ts-generate-scorecard] criteria weights summed to ${sum}; returning as-is for manual fill.`);
+    }
+    return criteria;
+  }
+  console.log(`[ts-generate-scorecard] normalizing weights from ${sum} → 100`);
+  // Scale + round.
+  const scaled = criteria.map((c) => ({
+    ...c,
+    weight: Math.round((c.weight * 100) / sum),
+  }));
+  // Absorb the rounding delta on the largest-weight criterion.
+  const newSum = scaled.reduce((s, c) => s + c.weight, 0);
+  const delta = 100 - newSum;
+  if (delta !== 0 && scaled.length > 0) {
+    let maxIdx = 0;
+    for (let i = 1; i < scaled.length; i++) {
+      if (scaled[i].weight > scaled[maxIdx].weight) maxIdx = i;
+    }
+    scaled[maxIdx].weight = Math.max(0, scaled[maxIdx].weight + delta);
+  }
+  return scaled;
+}

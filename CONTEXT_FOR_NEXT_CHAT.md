@@ -26,27 +26,45 @@ Monolith: one repo, one app, one DB. `/talent-scout` and `/venue-scout` are rout
 
 ## Where we are
 
-Active phase is **3.6 (Final Review + Packet generation)** on branch `phase-3-6-final-review-packet`, latest commit `d6a53d6`. Not merged to main yet. Production is still on pre-3.6 main.
+**Phase 3.7 (Candidates UX + referral ingestion) shipped on 2026-05-08.** Squash-merge commit `2ab37c3`, production at `0dc0ca8` after the CHECKPOINT backfill. Branch `phase-3-7-candidates-ux` deleted.
 
-For full state, read these three files in the project root before doing anything else:
+**Current phase:** Phase 3.8 (cron + watchdogs). Not started yet. Cut a fresh `phase-3-8-cron-watchdogs` branch when work begins.
 
-1. **`PROJECT_STATUS.md`** — current state, what's working, what's in progress, what's drifted.
-2. **`DECISIONS.md`** — every meaningful technical/design decision in this phase, including what we explicitly ruled out (don't re-litigate those).
-3. **`NEXT_STEPS.md`** — ordered next actions, files involved, gotchas already discovered.
+For full state, read these in order before doing anything:
+
+1. **`PROJECT_STATUS.md`** (root) — what just shipped in 3.7, edge function deploy state, known drift.
+2. **`NEXT_STEPS.md`** (root) — Phase 3.8 plan + pre-merge checklist + carried-forward gotchas.
+3. **`CHECKPOINT.md`** (root) — living-state doc, latest commit hash, recent migrations, what's live vs not.
+4. **`docs/decisions.md`** — long-lived architectural decisions with rationale (Phase 3.7 section is the most recent).
+5. **`docs/roadmap.md`** — phase-by-phase plan; Phase 3.7 is now summarized as DONE, Phase 3.8 has full detail.
+6. **`docs/schema.md`** — current DB schema, source of truth for tables/columns/enums.
 
 Also useful:
-- `CLAUDE.md` (project root) — the full project bible.
-- `CHECKPOINT.md` — living state doc. Note: as of the last session it was stale, predating Phase 3.6.1 → 3.6.11. Updating it is on the next-steps list.
-- `docs/` — `architecture.md`, `schema.md`, `auth-model.md`, `edge-functions.md`, `cron-jobs.md`, `conventions.md`, `decisions.md`, `operations.md`, `roadmap.md`, `talent-scout-port-plan.md`.
+- `CLAUDE.md` (project root) — the project bible. Item 8 is the deploy policy.
+- `docs/edge-functions.md` — every edge function and its `verify_jwt` posture.
+- `docs/architecture.md`, `docs/auth-model.md`, `docs/cron-jobs.md`, `docs/conventions.md`, `docs/operations.md`.
 
-## Things to know that bit us in the last session
+## Deploy policy (active through all of Phase 3.X)
 
-- **Don't pipe `supabase gen types --linked` directly into `src/integrations/supabase/types.ts`.** Shell `>` truncates first; if the gen fails the file is empty. Use the `/tmp` + `test -s` + `mv` pattern instead.
-- **Local dev runs at `http://127.0.0.1:8080/`, not `localhost:8080`.** Vite binds IPv6; Chrome misroutes localhost to a 404.
-- **Postgrest errors aren't `Error` instances.** Use `fmtErr` to surface real messages instead of `[object Object]`.
-- **Don't reintroduce CloudConvert.** PDF generation is pure pdf-lib in `supabase/functions/_shared/packetRender.ts`. Don't reintroduce MIME-attaching the packet either; email body carries a signed URL.
-- **Frontend can't import from `supabase/functions/_shared`.** `src/lib/talent-scout/defaultEvalPrompt.ts` is a manual mirror of the server prompt; keep both in sync.
+Captured in `CLAUDE.md` item 8.
+
+- Netlify charges credits per deploy. Feature work lives on a feature branch.
+- **No commits to main, no pushes to main, no pushes to origin feature branch** unless the HEAD commit message has `[skip netlify]`.
+- The single Netlify-deploy event per phase is the squash-merge to `main`, and only when Jimmie explicitly approves.
+- Edge function deploys (`supabase functions deploy`) and DB migrations (`supabase db push --linked`) don't touch Netlify and are fine during feature work.
+
+## Things that bit us in past sessions (worth keeping in mind)
+
+- **`useBlocker` from react-router-dom v6 throws under plain `<BrowserRouter>`.** HQ stays on plain BrowserRouter; don't reintroduce useBlocker.
+- **Always hoist hooks above any early return.** `useMemo` / `useState` below an early-return causes "Rendered more hooks than during the previous render" / black screen.
+- **TypeScript build doesn't catch every JSX-name typo.** A component used but not imported can pass `tsc` and the production build, only to crash at runtime.
+- **Don't pipe `supabase gen types --linked` directly into `src/integrations/supabase/types.ts`.** Shell `>` truncates first; if gen fails the file is empty. Use `/tmp` + `test -s` + `mv`.
+- **Local dev runs at `http://127.0.0.1:8080/`**, not `localhost:8080`. Vite binds IPv6.
+- **Mailto fix:** use `inline-block max-w-full truncate align-bottom` on the `<a>`, not `block truncate` (which makes the entire column clickable).
+- **`supabase functions logs` may not be in Jimmie's CLI** depending on version. Use the dashboard at `https://supabase.com/dashboard/project/amipjjmphblfxpghjnel/functions/<name>/logs`.
+- **Slider track + score-bar track use `bg-input`** (not `bg-secondary`) so they're visible on `bg-surface-alt` Mirror grey card surfaces.
+- **`mirrornyc.com` is in `BLOCKED_PORTFOLIO_DOMAINS`** — don't remove it; manager email signatures embed the URL and we need it filtered.
 
 ## Start here
 
-Read `PROJECT_STATUS.md`, `DECISIONS.md`, and `NEXT_STEPS.md` in that order. Then check in with me on which step from `NEXT_STEPS.md` to start on. Don't start coding until I confirm the step. Don't assume anything not stated in those three files; ask if it's missing.
+Read `PROJECT_STATUS.md`, `NEXT_STEPS.md`, and `CHECKPOINT.md` in that order. Then check in with me on whether Phase 3.8 work starts now or there's something else first.

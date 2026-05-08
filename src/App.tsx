@@ -12,6 +12,7 @@ import Projects from "./pages/Projects";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound.tsx";
 import TalentScoutIndex from "./pages/talent-scout/Index";
+import TalentScoutSettings from "./pages/talent-scout/Settings";
 import NewRoleDetails from "./pages/talent-scout/NewRoleDetails";
 import NewRoleSearch from "./pages/talent-scout/NewRoleSearch";
 import NewRoleScorecard from "./pages/talent-scout/NewRoleScorecard";
@@ -49,6 +50,14 @@ const App = () => (
                 element={
                   <AdminRoute>
                     <TalentScoutIndex />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/talent-scout/settings"
+                element={
+                  <AdminRoute>
+                    <TalentScoutSettings />
                   </AdminRoute>
                 }
               />

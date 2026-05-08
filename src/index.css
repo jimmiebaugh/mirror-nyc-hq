@@ -144,7 +144,7 @@
      for a working dashboard. */
 
   .h-page {
-    @apply text-[32px] font-extrabold uppercase leading-none;
+    @apply text-[34px] font-extrabold uppercase leading-none;
     font-family: var(--font-display);
     letter-spacing: -0.01em;
   }

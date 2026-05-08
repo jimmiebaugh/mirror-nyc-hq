@@ -136,7 +136,10 @@ Deno.serve(async (req) => {
     const scorecard: ScorecardEntry[] = Array.isArray(role.scorecard) ? role.scorecard : [];
     const { t1: t1Max, t2: t2Max, t3: t3Max } = computeTierMaxes(scorecard);
     // deno-lint-ignore no-explicit-any
-    const bonusMax = Number((role.competitor_bonus as any)?.bonus_points ?? 12);
+    // Phase 3.7.6.7: default 12 → 10 to match updated COMPETITOR_BONUS_POINTS
+    // constant. Roles still carry their own bonus_points in jsonb so older
+    // roles persist whatever value they were created with.
+    const bonusMax = Number((role.competitor_bonus as any)?.bonus_points ?? 10);
     const totalMax = (t1Max || 53) + (t2Max || 42) + (t3Max || 5) + bonusMax;
 
     // deno-lint-ignore no-explicit-any
@@ -158,8 +161,16 @@ Deno.serve(async (req) => {
     const pulled = candList.length;
     // deno-lint-ignore no-explicit-any
     const inPool = candList.filter((c: any) => ["interview", "fast_track", "consider"].includes(c.status)).length;
+    // Phase 3.7.2.1: AI-rejected count = status='reject' AND
+    // manually_reviewed=false (the AI's call, no human confirmation yet).
+    // Legacy 'auto_rejected' still counted for any rows that escaped the
+    // backfill.
     // deno-lint-ignore no-explicit-any
-    const autoRejected = candList.filter((c: any) => c.status === "auto_rejected").length;
+    const autoRejected = candList.filter(
+      (c: any) =>
+        c.status === "auto_rejected" ||
+        (c.status === "reject" && !c.manually_reviewed),
+    ).length;
     // deno-lint-ignore no-explicit-any
     const fastTrackCount = candList.filter((c: any) => c.status === "fast_track").length;
 

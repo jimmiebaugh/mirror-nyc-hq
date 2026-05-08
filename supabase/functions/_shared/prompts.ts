@@ -66,7 +66,7 @@ You will receive in the user message:
 2. Candidate Materials: email body, parsed attachments, and pre-extracted non-LinkedIn URLs.
 
 # COMPETITOR BONUS RULES
-1-2 yrs at competitor = 5pts, 3+ yrs = 10pts, +2pts if leadership role at competitor.
+1-2 yrs at competitor = 3pts, 3-4 yrs = 5pts, 5+ yrs = 8pts, +2pts if leadership role at competitor.
 
 # EVALUATION RULES
 
@@ -317,7 +317,11 @@ Generate a weighted scorecard with 8-12 criteria across 3 tiers:
 - Tier 2 (Strong Differentiators): meaningfully elevates a candidate.
 - Tier 3 (Nice-to-Haves): bonus value.
 
-Total weights = 100 points. Weight distribution should reflect seniority and the concept-led nature of the role.
+# WEIGHT BUDGET (HARD CONSTRAINT)
+The sum of weight across ALL criteria MUST equal exactly 100. This is non-negotiable.
+- Use integer weights only.
+- Before returning, sum every weight in your output and verify the total is 100. If it isn't, scale your draft proportionally so the total lands at 100, then adjust the largest weight up or down by 1-2 points to absorb any rounding delta.
+- Weight distribution should reflect seniority and the concept-led nature of the role (e.g. a senior creative role might lean Tier 1 ≈ 50, Tier 2 ≈ 35, Tier 3 ≈ 15; a junior role with more must-haves might lean Tier 1 ≈ 65, Tier 2 ≈ 25, Tier 3 ≈ 10). The split is yours to set, but the total is fixed at 100.
 
 # WHAT MAKES A GOOD CRITERION
 - Specific. "5+ years producing brand activations or experiential events at an agency" is a real criterion. "Industry experience" is not.
@@ -351,10 +355,27 @@ Return ONLY valid JSON matching this schema:
       "weight": <int>,
       "is_disqualifier": <bool>,
       "full_points_rubric": "string",
-      "partial_points_rubric": "string"
+      "partial_points_rubric": ""
     }
   ]
 }
+
+# CRITERION DESCRIBER (full_points_rubric)
+full_points_rubric is a VERY SHORT (≤ 12 words, one sentence) describer
+of what the criterion measures. NOT a score-range breakdown ("10 pts:
+5+ years…"). NOT a tiered rubric. Just one tight noun phrase or sentence.
+
+Good examples:
+- "Agency tenure producing brand activations; named clients matter more than years."
+- "Concept-first portfolio at experiential scale, original concept through production."
+- "Vendor and venue management across multiple concurrent projects."
+
+Bad examples (do not write these):
+- "10 points: 5+ years experience. 5 points: 2-4 years."
+- "Full points: strong portfolio. Partial points: some portfolio."
+- Anything over 12 words or that runs to two sentences.
+
+partial_points_rubric is reserved for future use. Return an empty string.
 
 ${opts.jsonOnlyInstruction}`;
 }

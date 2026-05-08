@@ -8,19 +8,27 @@ type Props = {
   placeholder?: string;
   /** lowercased before storing (subject keywords). */
   normalize?: boolean;
+  /**
+   * Phase 3.7.5: dedupe case-insensitively but PRESERVE the user's original
+   * casing on the stored tag. Right for competitor lists where "MATTE
+   * Projects" should not co-exist with "matte projects" but the canonical
+   * brand casing matters.
+   */
+  caseInsensitiveDedup?: boolean;
 };
 
-export function TagInput({ value, onChange, placeholder, normalize }: Props) {
+export function TagInput({ value, onChange, placeholder, normalize, caseInsensitiveDedup }: Props) {
   const [input, setInput] = useState("");
 
   const add = () => {
     const v = input.trim();
     if (!v) return;
-    const norm = normalize ? v.toLowerCase() : v;
-    const exists = normalize
-      ? value.map((x) => x.toLowerCase()).includes(norm.toLowerCase())
-      : value.includes(norm);
-    if (!exists) onChange([...value, norm]);
+    const stored = normalize ? v.toLowerCase() : v;
+    const ci = normalize || caseInsensitiveDedup;
+    const exists = ci
+      ? value.map((x) => x.toLowerCase()).includes(stored.toLowerCase())
+      : value.includes(stored);
+    if (!exists) onChange([...value, stored]);
     setInput("");
   };
 
