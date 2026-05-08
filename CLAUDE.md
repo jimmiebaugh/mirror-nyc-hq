@@ -33,6 +33,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 | Roadmap | `docs/roadmap.md` | Phase-by-phase plan. Finished phases summarize to one line; the active phase has full detail. |
 | Talent Scout port plan | `docs/talent-scout-port-plan.md` | Phase 3.1 inventory: lift/adapt/rewrite/drop, schema diff, sub-phase sequence. Drives Phase 3.2 through 3.8. |
 | Living state | `CHECKPOINT.md` | Latest commit, current phase, what's deployed, recent migrations, known drift. **Update every commit to main.** |
+| Session playbook | `docs/working-with-claude.md` | How to set up Cowork + Code sessions effectively for HQ work. Subagent definitions, hook configs, slash commands, anti-patterns to avoid. **Read at the start of any new phase.** |
 
 ## Quick orientation
 
