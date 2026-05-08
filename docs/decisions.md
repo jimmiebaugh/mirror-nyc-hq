@@ -53,11 +53,15 @@ After every refine, the frontend re-sorts each tier highest-weight first. The pr
 
 ### Watchdog stall thresholds
 
-Pull = 60 min. Re-eval = 30 min. Final review = 20 min.
+Pull = 5 min (Phase 3.11.1, was 60). Re-eval = 30 min. Final review = 20 min.
 
-These are deliberately well past the longest healthy wall-clock for each path. The pull pipeline writes `ts_pull_rounds.updated_at` at every batch boundary (every ~10s on a typical 8-candidate batch). Bulk re-eval writes `ts_roles.reeval_last_progress_at` on the same cadence. Final review is one Anthropic call wrapped in `EdgeRuntime.waitUntil` — at the HARD_CAP=50 candidate compare it lands in 5-10 minutes, so 20 minutes catches dead workers without false-positives.
+The pull pipeline updates `ts_pull_rounds.updated_at` at every per-candidate completion (the `updated_at_auto` trigger fires on each row update). So `updated_at` = "last candidate completed at" — heartbeats fire per candidate, not per pool. A single candidate hanging >5 min is always a stall, regardless of total pool size. The earlier 60-min threshold was set under the misconception that large pools legitimately sit between heartbeats; they don't.
 
-Pull was originally 30 min but bumped to 60 min after Jimmie flagged that a large pool with big resume PDFs can sit on a single Anthropic batch for a while; the watchdog catching it mid-run would force a manual restart for no reason. False-positive cost (work flagged as failed while actually still running) is high — the user would have to re-trigger work that's about to finish. So the thresholds err generous. False-negative cost is low (a real stall sits as `running` for an extra half hour before flagging).
+Bulk re-eval and final review keep the looser thresholds. Bulk re-eval writes `ts_roles.reeval_last_progress_at` per chunk completion (a slower cadence than per-candidate), so 30 min is right. Final review is one Anthropic call wrapped in `EdgeRuntime.waitUntil` — at HARD_CAP=50 it lands in 5-10 min, so 20 catches dead workers without false-positives.
+
+Pull-watchdog cadence also bumped from every 5 min to every 2 min so detection lands within 5-7 min of stall onset (vs 5-10 min before). False-positive cost is low because the threshold is the actual signal of trouble — a candidate stuck >5 min won't recover on its own.
+
+Status name aligned with the other two watchdogs: pull-watchdog now flips to `failed` (was `stalled`). The user-facing surface treats both identically (manual retry decision) so the distinction wasn't earning its keep.
 
 ### Cron cadences
 
