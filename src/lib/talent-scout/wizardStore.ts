@@ -33,6 +33,14 @@ export type Criterion = {
   weight: number;
   is_disqualifier: boolean;
   full_points_rubric: string;
+  /**
+   * Short (≤ 14 words) condensed version of full_points_rubric used in
+   * compact UI surfaces (candidate detail score breakdown, packet matrix
+   * headers, recap views). Phase 3.11 addition. Optional for legacy
+   * criteria — UI surfaces should fall back to truncating
+   * full_points_rubric when summary is empty.
+   */
+  summary?: string;
   partial_points_rubric: string;
   is_manual?: boolean;
 };

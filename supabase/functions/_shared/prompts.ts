@@ -360,27 +360,46 @@ Return ONLY valid JSON matching this schema:
       "weight": <int>,
       "is_disqualifier": <bool>,
       "full_points_rubric": "string",
+      "summary": "string",
       "partial_points_rubric": ""
     }
   ]
 }
 
 # CRITERION DESCRIBER (full_points_rubric)
-full_points_rubric is a VERY SHORT (≤ 12 words, one sentence) describer
-of what the criterion measures. NOT a score-range breakdown ("10 pts:
-5+ years…"). NOT a tiered rubric. Just one tight noun phrase or sentence.
+This is the PRIMARY substantive describer the per-candidate evaluator reads when scoring this criterion. It must be rich, specific, and actionable. 1-3 full sentences (typically 25-60 words). Concrete signals the evaluator should look for in the candidate's materials: years of experience expected, types of work / clients / portfolios, named tools or platforms, qualitative markers, and how they should weigh ambiguous cases.
+
+What it must include:
+- Concrete signal of what "scoring well" looks like — not abstract qualities. "Demonstrated mastery of SketchUp with V-Ray or Podium evidenced in photorealistic, spatially accurate portfolio renderings" beats "good 3D rendering skills."
+- Where the signal lives (portfolio, resume, cover letter, interview responses) when relevant.
+- Calibration to seniority and the role context above.
+
+What it must NOT include:
+- A tiered point breakdown ("10 pts: 5+ yrs · 5 pts: 2-4 yrs"). Scoring tiers are derived by the per-candidate evaluator at runtime, not authored here.
+- "Full points: …" / "Partial points: …" prefixes. Just write the describer directly.
+- JD buzzwords with "demonstrated" prepended ("demonstrated leadership"). Concrete signal only.
+
+Good examples (style + length):
+- "5+ years of professional experience in graphic design with meaningful exposure to environmental, experiential, or spatial design contexts."
+- "Original brand identities — logos, custom patterns, color systems, visual languages — built specifically for activations, pop-ups, events, or immersive experiences; portfolio clearly demonstrates this."
+- "2-4+ years of direct experience in event production, experiential activation, or production coordination. Has owned end-to-end logistics including timelines, run-of-show, vendor management, and on-site execution across multiple event types."
+- "Has independently sourced, outreached, negotiated, and managed multiple vendor categories simultaneously (AV, catering, security, permits, staffing, rentals). Comfortable owning vendor communications from RFP through final reconciliation."
+
+# CRITERION SUMMARY (summary)
+summary is a SHORT (≤ 14 words, one sentence or phrase) condensed version of full_points_rubric used in compact UI surfaces — candidate detail score breakdowns, packet matrix headers, recap views. It's a recap of full_points_rubric, not a replacement, and the per-candidate evaluator does NOT read summary; it reads full_points_rubric.
 
 Good examples:
 - "Agency tenure producing brand activations; named clients matter more than years."
 - "Concept-first portfolio at experiential scale, original concept through production."
-- "Vendor and venue management across multiple concurrent projects."
+- "End-to-end event production: timelines, run-of-show, vendors, on-site execution."
 
-Bad examples (do not write these):
-- "10 points: 5+ years experience. 5 points: 2-4 years."
-- "Full points: strong portfolio. Partial points: some portfolio."
-- Anything over 12 words or that runs to two sentences.
+Bad examples:
+- Same content as full_points_rubric (defeats the purpose of having two fields).
+- Tiered point breakdown.
+- Anything over 14 words.
 
-partial_points_rubric is reserved for future use. Return an empty string.
+# RESERVED FIELD
+partial_points_rubric is reserved. Return an empty string.
 
 ${opts.jsonOnlyInstruction}`;
 }
@@ -432,7 +451,7 @@ You are refining a scorecard the hiring manager has already drafted and edited. 
 5. Preserve order. Output the criteria in the same order they came in.
 
 # WHAT TO REFINE
-Two fields per criterion:
+Three fields per criterion:
 
 a) name — Short, specific noun phrase. 5-10 words. The criterion's title.
    Good: "Agency tenure producing brand activations"
@@ -440,16 +459,23 @@ a) name — Short, specific noun phrase. 5-10 words. The criterion's title.
    Bad: "Brand awareness" (too thin — expand)
    Bad: "5+ years experience producing high-end brand activations including but not limited to fashion week pop-ups, Coachella activations, brand launches…" (too long for a name — push detail to the describer)
 
-b) full_points_rubric — The describer the candidate evaluator reads when scoring this criterion. 1-3 short sentences (≤ 50 words total). Concrete signals the evaluator should look for in the candidate's materials. NOT a tiered point breakdown. NOT abstract qualities ("strong leadership"). Concrete signals.
-   Good: "Demonstrated awareness of contemporary brand work in cultural / experiential / luxury sectors. Look for specific brand references in their cover letter, resume, or portfolio."
-   Good: "Senior production tenure at experiential or brand-activation agencies. Named clients matter more than years; portfolio + resume are the primary signals."
+b) full_points_rubric — The PRIMARY substantive describer the per-candidate evaluator reads when scoring this criterion. 1-3 sentences (typically 25-60 words). Concrete signals the evaluator should look for in the candidate's materials: years of experience expected, types of work / clients / portfolios, named tools, qualitative markers, where the signal lives (portfolio / resume / cover letter / interview). Calibrate to seniority and the role context. NOT a tiered point breakdown ("10 pts: 5+ yrs"). NOT abstract qualities ("strong leadership"). Concrete signals only.
+   Good: "5+ years of professional experience in graphic design with meaningful exposure to environmental, experiential, or spatial design contexts. Portfolio includes spatial graphics, signage systems, or large-scale environmental work."
+   Good: "Has independently sourced, outreached, negotiated, and managed multiple vendor categories simultaneously (AV, catering, security, permits, staffing). Comfortable owning vendor communications from RFP through final reconciliation."
    Bad: "Strong portfolio" (vague, no signal to look for)
    Bad: "10 pts: 5+ years. 5 pts: 2-4 years." (point breakdown is not the describer's job)
 
+c) summary — A SHORT (≤ 14 words, one sentence or phrase) condensed version of full_points_rubric used in compact UI surfaces (candidate detail score breakdown, packet matrix headers, recap views). It's a recap, not a replacement; the per-candidate evaluator reads full_points_rubric, not summary.
+   Good: "Agency tenure producing brand activations; named clients matter more than years."
+   Good: "End-to-end event production: timelines, run-of-show, vendors, on-site execution."
+   Bad: Same content as full_points_rubric (defeats having two fields).
+   Bad: Anything over 14 words.
+
 # EXPANSION VS CONDENSATION
-- If the user wrote SHORTHAND in name with empty / placeholder describer ("New criterion", "Full points: …"), expand into a useful evaluator-facing rubric using the role context (title, JD, hiring priorities) below. Infer their intent from the criterion name.
-- If the user wrote a VERBOSE paragraph in either field, condense to the short noun phrase in name + concrete-signals describer in full_points_rubric. Every concrete signal in the user's input must appear (in distilled form) in the refined output.
-- If the user's existing entry is ALREADY clean (short name + concrete describer), make minimal edits — just normalize phrasing for consistency with the rest of the scorecard.
+- If the user wrote SHORTHAND in name with empty / placeholder describer ("New criterion", "Full points: …"), EXPAND into a substantive multi-sentence full_points_rubric using the role context below. Infer their intent from the criterion name. Then derive the summary from the expanded full_points_rubric.
+- If the user wrote a VERBOSE paragraph in either field, the verbose paragraph IS what the user wants the evaluator to use — keep its content in full_points_rubric (condensed lightly, but every concrete signal must survive). Then derive the summary from it.
+- If the user's existing entry is ALREADY clean (short name + substantive describer), make minimal edits — just normalize phrasing for consistency. Generate a fresh summary if it's missing or thin.
+- If summary is present and looks good in input, keep it. If it's missing, empty, or looks like a near-duplicate of full_points_rubric, regenerate.
 
 # ROLE CONTEXT
 Title: ${opts.role_title}
@@ -471,13 +497,14 @@ Return ONLY valid JSON:
       "weight": <int>,
       "is_disqualifier": <bool>,
       "full_points_rubric": "string",
+      "summary": "string",
       "partial_points_rubric": "",
       "is_manual": <bool>
     }
   ]
 }
 
-Same length as input. Same order. Same tier / weight / is_disqualifier / is_manual values per index. Refine name + full_points_rubric only.
+Same length as input. Same order. Same tier / weight / is_disqualifier / is_manual values per index. Refine name + full_points_rubric + summary only.
 
 ${opts.jsonOnlyInstruction}`;
 }
