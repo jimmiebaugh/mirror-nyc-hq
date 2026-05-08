@@ -100,7 +100,6 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 - `round_number` (int): `R1`, `R2`, ... per role. Set at insert time as `max(round_number) + 1` for the role.
 - `candidates_found`, `processed_count`, `attempt` (int): operational counters used by progress UI and watchdog.
 - `pending_candidates` (jsonb, default `[]`): queue of Gmail message IDs the chunked pull pipeline batches in groups of 8 across self-invocations.
-- `reeval_last_progress_at` (timestamptz, nullable): legacy column from Phase 3.2 spec. Phase 3.5 moved bulk-re-eval state to `ts_roles` (role-scoped, not round-scoped); this column is unused and can be dropped in a future cleanup migration.
 - `packet_url` (text, nullable): Storage path for the most recent round packet PDF.
 - `packet_top_n` (int), `packet_include_fast_track` (bool), `packet_generated_at` (timestamptz): metadata for the most recent packet generation. Updated by `ts-packet-generate` on success.
 - Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` so PullDetail's `postgres_changes` UPDATE subscription receives the full new row.
@@ -222,7 +221,7 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 - `email_notifications_enabled`, `in_app_notifications_enabled` (bool)
 - `updated_at`
 
-A monthly cron (planned, not yet implemented) resets `anthropic_spend_current_month_usd` to 0 and `cap_alert_sent_this_month` to false at the start of each calendar month.
+`ts-cron-monthly-spend-reset` (Phase 3.8) resets `anthropic_spend_current_month_usd` to 0 and `cap_alert_sent_this_month` to false on the 1st of each month at 00:01 UTC.
 
 ### activity_log
 - `id`, `entity_type` (text: `project`, `venue`, `task`, etc.)

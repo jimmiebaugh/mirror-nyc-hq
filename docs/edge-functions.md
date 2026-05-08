@@ -36,8 +36,30 @@ Review-scoped packet for a completed `ts_final_reviews` row. Renders cover (Pool
 
 External dependency: `CLOUDCONVERT_API_KEY` Supabase secret (paid service). Packet volume is low (5-20/month) so the spend is negligible.
 
-### `ts-send-pull-notification(role_id, pull_round_id)` — Phase 3.8
-Emails the hiring manager when a pull completes. Standalone in 3.8 to ship Talent Scout cleanly; folds into `notifications-dispatch` in Phase 5.
+### `ts-send-pull-notification(role_id, pull_round_id)` — Phase 3.9
+Emails the role's hiring manager when a pull completes. Tallies `ts_candidates` for the round (`fast_track`, `interview`, `consider`, `reject`), composes a plain-text body via `_shared/sendEmail.ts` and sends via the service account's `gmail.send` scope. Called fire-and-forget from `ts-pull-candidates` at every `status='complete'` write (chunked finalize, dedupe-clears-pending-to-zero, and zero-results paths). Failures are logged, not surfaced — a notification outage shouldn't fail the upstream round. Standalone in 3.9; folds into `notifications-dispatch` in Phase 5 alongside in-app bell notifications. `verify_jwt = false`.
+
+## Talent Scout cron + watchdog (Phase 3.8)
+
+All six are scheduled via `pg_cron` in `20260508120000_phase_3_8_cron_extensions_and_schedules.sql`. Each accepts an empty body and is invoked by `public.invoke_edge_function(fn_name, body)` (SECURITY DEFINER, reads `app.supabase_url` + `app.internal_api_secret` GUCs). All use `requireInternalOrUserAuth`. Cadences are in `docs/cron-jobs.md`.
+
+### `ts-cron-scheduled-pulls`
+Walks every `ts_roles.status='open'` AND `auto_pull_schedule != 'off'` row, computes hours-since-last-pull from `max(ts_pull_rounds.started_at)`, and self-invokes `ts-pull-candidates` for any role past its interval. Skips roles with an in-flight `running` round. Per-role failure logs but doesn't abort the loop.
+
+### `ts-cron-pull-watchdog`
+60-minute stall threshold. Reads `ts_pull_rounds` rows with `status='running'` AND `updated_at < now()-60m`, updates to `status='stalled'` with a CAS guard (`.eq('status','running')`) so a late completion isn't overwritten.
+
+### `ts-cron-reeval-watchdog`
+30-minute stall threshold. Reads `ts_roles` rows with `reeval_status='running'` AND `reeval_last_progress_at < now()-30m`, updates to `reeval_status='failed'`.
+
+### `ts-cron-final-review-watchdog`
+20-minute stall threshold. Reads `ts_final_reviews` rows with `status='generating'` AND `generated_at < now()-20m`, updates to `status='failed'` with an `error_message` explaining the watchdog flag.
+
+### `ts-cron-storage-cleanup`
+Three-pass cleanup per `docs/cron-jobs.md`. Uses `STORAGE_BUCKET` from `_shared/attachmentStorage.ts`. Storage `.remove()` errors log and continue — a failed Storage delete leaves an orphan file but never blocks the row delete. Cron-only; no UI trigger.
+
+### `ts-cron-monthly-spend-reset`
+Resets `global_settings.anthropic_spend_current_month_usd=0` and `cap_alert_sent_this_month=false`. Logs the previous spend value for audit.
 
 ## Venue Scout — Phase 4
 
@@ -64,7 +86,7 @@ Wraps the raw fetch to `api.anthropic.com`. `app` is `'talent_scout' | 'venue_sc
 3. Emails the admin once per cap crossing (gated by `cap_alert_sent_this_month`).
 4. **Does NOT refuse calls when over cap** — graceful degradation, not a hard failure.
 
-Email path is currently a console-log stub; Phase 3.8 wires real notifications.
+Phase 3.8 wires the real cap-alert email path via `_shared/sendEmail.ts`. Recipient lookup: first `users` row with `permission_role='admin'` (oldest by `created_at`), fallback `jobs@mirrornyc.com`. The cap-alert is gated by `cap_alert_sent_this_month` so it fires once per cap crossing; `ts-cron-monthly-spend-reset` re-arms it on the 1st.
 
 Use 1-hour prompt caching (`cache_control: { type: 'ephemeral', ttl: '1h' }`) on stable system + role-context blocks. Same cache key per role for the bulk re-eval / final-review hot path.
 
@@ -73,6 +95,9 @@ Three-path auth check for self-invoking Edge Functions. See `docs/auth-model.md`
 
 ### `gmailServiceAccount.ts`
 JWT bearer flow against Google's token endpoint with the requested scope (`gmail.readonly`, `gmail.send`, `drive`, `presentations`). Template for any service-account-authenticated Google API call.
+
+### `sendEmail.ts` — Phase 3.8
+Generic Gmail send helper for transactional notifications outside the packet path. `sendGmail({to, subject, bodyText, bodyHtml?, fromName?})` builds a MIME message (plain or `multipart/alternative`), gets a Gmail token via `gmailServiceAccount.ts`, POSTs to `users/me/messages/send`. Returns `boolean` — never throws. Also exports `getAdminEmail(sb)` which finds the oldest active admin in `public.users`. Used by `_shared/anthropic.ts` (cap alerts) and `ts-send-pull-notification`. The packet-render module keeps its own `sendPacketEmail` since it appends the signed-URL footer.
 
 ### `parseClaudeJson.ts`
 Lifted from the source repo. Strips markdown fences and parses the model's JSON response with a fallback for trailing-comma issues.

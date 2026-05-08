@@ -9,10 +9,12 @@
 //   - Pricing baked in for claude-sonnet-4-6: $3/MTok in, $15/MTok out, with
 //     prompt-cache discounts for cache_read tokens.
 //
-// The email path is currently a console-log stub; Phase 3.8 wires the real
-// notifications-dispatch function and Phase 5 may move it again.
+// Phase 3.8: real email path is wired here via _shared/sendEmail.ts. The admin
+// recipient is looked up from public.users where permission_role='admin'
+// (oldest admin by created_at), falling back to jobs@mirrornyc.com.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { getAdminEmail, sendGmail } from "./sendEmail.ts";
 
 export type AppKey = "talent_scout" | "venue_scout" | "hq";
 
@@ -103,16 +105,36 @@ function calcCost(usage: ClaudeUsage): number {
   );
 }
 
-// Stub email path. Replace with notifications-dispatch in Phase 3.8.
+// Phase 3.8: real email path. Sends from jobs@mirrornyc.com to the first
+// admin in public.users. cap_alert_sent_this_month gating ensures this fires
+// at most once per month; monthly-spend-reset cron re-arms it on the 1st.
 async function emailAdminCapCrossed(
   spentBefore: number,
   spentAfter: number,
   cap: number,
 ): Promise<void> {
-  console.log(
-    `[anthropic-spend-tracker] CAP CROSSED: $${spentBefore.toFixed(2)} -> $${spentAfter.toFixed(2)} (cap $${cap.toFixed(2)}). ` +
-      `STUB: would email admin. Real notification path lands in Phase 3.8.`,
-  );
+  try {
+    const sb = getServiceClient();
+    const to = await getAdminEmail(sb);
+    const subject = `Anthropic spend cap crossed ($${cap.toFixed(2)})`;
+    const bodyText = [
+      `Heads up: HQ's monthly Anthropic spend just crossed the configured cap.`,
+      ``,
+      `  Spent before this call: $${spentBefore.toFixed(2)}`,
+      `  Spent after this call:  $${spentAfter.toFixed(2)}`,
+      `  Monthly cap:            $${cap.toFixed(2)}`,
+      ``,
+      `Calls continue running (graceful degradation, not a hard cutoff). This`,
+      `is a single alert per cap crossing — the monthly-spend-reset cron resets`,
+      `the counter and re-arms this notification on the 1st of next month.`,
+      ``,
+      `Adjust the cap or pause heavy operations from /talent-scout/settings.`,
+    ].join("\n");
+    await sendGmail({ to, subject, bodyText });
+    console.log(`[anthropic-spend-tracker] cap-alert email dispatched to ${to}`);
+  } catch (e) {
+    console.error("[anthropic-spend-tracker] cap-alert email failed:", e);
+  }
 }
 
 async function trackSpendAndAlert(costUsd: number): Promise<void> {

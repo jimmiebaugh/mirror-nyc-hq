@@ -31,3 +31,28 @@ verify_jwt = false
 
 [functions.ts-final-review-packet]
 verify_jwt = false
+
+# Phase 3.8 cron + watchdog functions. All called by pg_cron via net.http_post
+# with x-internal-secret header. requireInternalOrUserAuth handles auth in-fn.
+[functions.ts-cron-scheduled-pulls]
+verify_jwt = false
+
+[functions.ts-cron-pull-watchdog]
+verify_jwt = false
+
+[functions.ts-cron-reeval-watchdog]
+verify_jwt = false
+
+[functions.ts-cron-final-review-watchdog]
+verify_jwt = false
+
+[functions.ts-cron-storage-cleanup]
+verify_jwt = false
+
+[functions.ts-cron-monthly-spend-reset]
+verify_jwt = false
+
+# Phase 3.9 standalone notification function. Called by ts-pull-candidates
+# self-invoke at round-completion (server-to-server with internal-secret).
+[functions.ts-send-pull-notification]
+verify_jwt = false
