@@ -3,8 +3,8 @@
 Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-08
-**Latest commit on main:** `b70f0e9` Phase 3.10 — scorecard refinement step (squash-merged from `phase-3-10-scorecard-refine`)
-**Active feature branch:** none — `phase-3-10-scorecard-refine` was squash-merged. Next branch is `phase-4-venue-scout` when Phase 4 starts. Per Jimmie's deploy policy, all 3.X / 4.X feature work stays on a branch (no commits / no origin pushes without `[skip netlify]`); the only Netlify-deploy event per phase is the squash-merge to `main`.
+**Latest commit on main:** `cb038fc` Phase 3.11 — scorecard substance restoration + summary field (squash-merged from `phase-3-11-scorecard-substance`)
+**Active feature branch:** none — `phase-3-11-scorecard-substance` was squash-merged. Next branch is `phase-4-venue-scout` when Phase 4 starts. Per Jimmie's deploy policy, all 3.X / 4.X feature work stays on a branch (no commits / no origin pushes without `[skip netlify]`); the only Netlify-deploy event per phase is the squash-merge to `main`.
 **Current phase:** Phase 4 — Venue Scout port (next).
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`).
 
@@ -27,6 +27,7 @@ Living-state doc. Update on every meaningful merge to `main`.
   - Toasts site-wide use solid Mirror coral with white text (Sonner + Radix Toast both default to coral).
 - **Phase 3.8 + 3.9 cron + watchdog infrastructure committed** (squash-merge `e855ffb`): six new edge functions (`ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-final-review-watchdog`, `ts-cron-storage-cleanup`, `ts-cron-monthly-spend-reset`), `ts-send-pull-notification` for pull-completion email, real cap-alert email path via `_shared/sendEmail.ts`, two migrations (extensions + schedules + dead-column drop). Watchdogs detect-and-flag only (pull 60min stall, re-eval 30min, final-review 20min). Production wiring still pending — see `NEXT_STEPS.md` § 2.
 - **Phase 3.10 scorecard refinement** (squash-merge `b70f0e9`): new `ts-refine-scorecard` edge function. The wizard step-3 page and Edit Role page both surface a Process / Save button morph — when scorecard has unrefined edits, the action runs the refine pass; once clean, it flips back to Lock (wizard) or Save (Edit Role, which triggers bulk re-eval). Server-side dead-criterion drop (weight=0 OR empty name+describer) plus defense-in-depth merge that restores `tier`/`weight`/`is_disqualifier`/`is_manual` from user input regardless of model output.
+- **Phase 3.11 scorecard substance restoration** (squash-merge `cb038fc`): reverted Phase 3.7's over-aggressive 12-word cap on `full_points_rubric`. Each criterion now carries TWO describer fields — `full_points_rubric` (substantive 1-3 sentences, what the per-candidate evaluator reads) and `summary` (≤ 14-word recap for compact UI surfaces). Both generated in same Claude pass. Existing roles upgrade by re-running scorecard generation OR clicking "Process scorecard" on wizard / Edit Role (Phase 3.10).
 - Netlify auto-deploys on push to `main`.
 
 ## What's NOT live yet
@@ -47,11 +48,11 @@ Living-state doc. Update on every meaningful merge to `main`.
 ## Recent commits (main)
 
 ```
+cb038fc  Phase 3.11: scorecard substance restoration + summary field (squash-merged from phase-3-11-scorecard-substance)
 b70f0e9  Phase 3.10: scorecard refinement step (squash-merged from phase-3-10-scorecard-refine)
 e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged from phase-3-8-cron-watchdogs)
 2ab37c3  Phase 3.7: Candidates UX + referral ingestion (squash-merged from phase-3-7-candidates-ux)
 Phase 3.6: Final Review + Packet generation (squash-merged from phase-3-6-final-review-packet)
-0302c0c  Update CHECKPOINT post-Phase-3.5b merge
 ```
 
 ## Recent migrations
