@@ -637,6 +637,48 @@ function selfInvokeContinue(roundId: string) {
   }
 }
 
+// Phase 3.9: fire ts-send-pull-notification once a round flips to 'complete'.
+// Fire-and-forget via EdgeRuntime.waitUntil where available — the round row is
+// already finalized; a notification outage shouldn't block the response.
+async function dispatchPullCompleteNotification(roleId: string, roundId: string): Promise<void> {
+  const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ts-send-pull-notification`;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
+        "x-internal-secret": Deno.env.get("INTERNAL_API_SECRET") ?? "",
+      },
+      body: JSON.stringify({ role_id: roleId, pull_round_id: roundId }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[ts-pull-candidates] pull-complete notification non-2xx (${res.status}): ${errText.slice(0, 200)}`);
+    }
+  } catch (err) {
+    console.warn(`[ts-pull-candidates] pull-complete notification dispatch failed:`, err);
+  }
+}
+
+function fireNotificationAsync(roleId: string, roundId: string) {
+  try {
+    // @ts-ignore EdgeRuntime is provided by Supabase Edge runtime
+    if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(dispatchPullCompleteNotification(roleId, roundId));
+      return;
+    }
+  } catch {
+    // fall through
+  }
+  dispatchPullCompleteNotification(roleId, roundId).catch((err) =>
+    console.error("[ts-pull-candidates] notification dispatch unhandled:", err)
+  );
+}
+
 // ---------- Per-candidate processing ----------
 
 async function processOne(
@@ -1162,6 +1204,7 @@ async function continueRound(supabase: any, roundId: string): Promise<Response> 
         status: "complete",
         completed_at: new Date().toISOString(),
       }).eq("id", roundId);
+      fireNotificationAsync(round.role_id, roundId);
       return new Response(JSON.stringify({ ok: true, complete: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1240,6 +1283,7 @@ async function continueRound(supabase: any, roundId: string): Promise<Response> 
     status: "complete",
     completed_at: new Date().toISOString(),
   }).eq("id", roundId);
+  fireNotificationAsync(round.role_id, roundId);
 
   return new Response(JSON.stringify({ complete: true, processed: processedInThisInvocation, errors_count: errors.length }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1332,6 +1376,7 @@ async function startPull(supabase: any, roleId: string, body: any): Promise<stri
           completed_at: new Date().toISOString(),
           candidates_found: 0,
         }).eq("id", roundId);
+        fireNotificationAsync(roleId, roundId);
         return;
       }
 

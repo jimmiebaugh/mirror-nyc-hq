@@ -2,6 +2,46 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 3.8 + 3.9 (Cron, watchdogs, pull notification)
+
+### Watchdog stall thresholds
+
+Pull = 60 min. Re-eval = 30 min. Final review = 20 min.
+
+These are deliberately well past the longest healthy wall-clock for each path. The pull pipeline writes `ts_pull_rounds.updated_at` at every batch boundary (every ~10s on a typical 8-candidate batch). Bulk re-eval writes `ts_roles.reeval_last_progress_at` on the same cadence. Final review is one Anthropic call wrapped in `EdgeRuntime.waitUntil` — at the HARD_CAP=50 candidate compare it lands in 5-10 minutes, so 20 minutes catches dead workers without false-positives.
+
+Pull was originally 30 min but bumped to 60 min after Jimmie flagged that a large pool with big resume PDFs can sit on a single Anthropic batch for a while; the watchdog catching it mid-run would force a manual restart for no reason. False-positive cost (work flagged as failed while actually still running) is high — the user would have to re-trigger work that's about to finish. So the thresholds err generous. False-negative cost is low (a real stall sits as `running` for an extra half hour before flagging).
+
+### Cron cadences
+
+Watchdogs every 5 minutes. Scheduled pulls daily at 12:00 UTC (8am ET). Storage cleanup daily 03:00 UTC. Spend reset 1st of month 00:01 UTC.
+
+5-minute watchdog cadence is fine — they're cheap (one indexed query each). Faster cadence would catch stalls a few minutes earlier but pg_net call volume scales with cron firings, and the SLA on stalled-pull recovery is "before the user notices and asks", not seconds. The 12:00-UTC schedule for `ts-cron-scheduled-pulls` is intentionally early-morning ET and accepts the EDT/EST-drift hour: this is internal hiring tooling, not customer-facing, so a 1-hour shift twice a year doesn't matter.
+
+### Cap-alert recipient lookup
+
+`getAdminEmail(sb)` returns the oldest active admin in `public.users` (ORDER BY `created_at` ASC LIMIT 1). Falls back to `jobs@mirrornyc.com` if no admin row exists.
+
+Picked oldest-admin over a hardcoded address so the alert routes correctly if Jimmie ever transfers admin ownership without anyone updating env vars. The fallback to `jobs@` means a misconfigured database (no admin user) still notifies *someone* who can act. This is one piece of plumbing that should be self-healing — the cap alert is what tells you something else is wrong.
+
+### Pull-completion notification path: standalone in 3.9, fold into `notifications-dispatch` later
+
+`ts-send-pull-notification` ships as a standalone edge function in 3.9 to unblock Talent Scout's "happy path" (manager forwards a candidate to jobs@ and gets an email back when the round completes). The unified `notifications-dispatch` (in-app bell + email + per-user prefs) is Phase 5 work that depends on the HQ Notifications system landing. Building 3.9 against the future API would gate Talent Scout shipping on Phase 5; building it standalone lets Phase 5 swap the call site later (one-line replacement in `ts-pull-candidates`'s `dispatchPullCompleteNotification`).
+
+The notification is fired fire-and-forget via `EdgeRuntime.waitUntil` so a Gmail outage never fails the upstream pull. The `ts_pull_rounds` row is already at `status='complete'` before the notification dispatch starts.
+
+### Storage cleanup is cron-only, no UI trigger
+
+`ts-cron-storage-cleanup` runs daily at 03:00 UTC with conservative retention windows (rejected attachments >30d, closed-role attachments >90d, hard-delete closed roles >60d). No Settings-page manual trigger — the daily cadence catches garbage well before it becomes a problem, and exposing a button to admins to run an aggressive out-of-cycle purge invites mistakes. If the admin ever needs to force-clean (post-recruiting-cycle Storage cleanup, etc.), the function can be invoked manually from the Supabase Functions dashboard with the cron defaults; no special API surface needed.
+
+### `pg_cron` invocation through a SECURITY DEFINER helper, not inline `net.http_post`
+
+`public.invoke_edge_function(fn_name, body)` reads two GUCs (`app.supabase_url`, `app.internal_api_secret`) at call time and POSTs to `${base_url}/functions/v1/${fn_name}` with the internal-secret header. Cron schedules call this single helper.
+
+Rationale: keeps secrets out of `cron.job` rows (which are queryable by anyone with `pg_cron` permissions). GUC values stick around in the database config but require a separate `ALTER DATABASE` to inspect. Also makes the schedule SQL readable — `SELECT public.invoke_edge_function('ts-cron-pull-watchdog')` reads as "fire pull watchdog", not as a 6-line `net.http_post(url := ..., headers := ..., body := ...)`. Adding a new cron job is one line.
+
+The GUCs are set out-of-band (Supabase SQL editor) before the migration applies in production. Without them, the helper warns and no-ops — the schedule rows still exist; they just don't actually call anything. This means the migration is safe to apply before the GUCs are populated.
+
 ## Phase 3.7 (Candidates UX + referral ingestion)
 
 ### `manually_reviewed` boolean as one-way flip; `auto_rejected` enum value deprecated
