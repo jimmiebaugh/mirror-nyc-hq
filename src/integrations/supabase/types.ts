@@ -754,6 +754,7 @@ export type Database = {
           started_at: string
           status: Database["public"]["Enums"]["ts_pull_round_status"]
           triggered_by: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
+          updated_at: string
         }
         Insert: {
           attempt?: number
@@ -774,6 +775,7 @@ export type Database = {
           started_at?: string
           status?: Database["public"]["Enums"]["ts_pull_round_status"]
           triggered_by: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
+          updated_at?: string
         }
         Update: {
           attempt?: number
@@ -794,6 +796,7 @@ export type Database = {
           started_at?: string
           status?: Database["public"]["Enums"]["ts_pull_round_status"]
           triggered_by?: Database["public"]["Enums"]["ts_pull_round_triggered_by"]
+          updated_at?: string
         }
         Relationships: [
           {
