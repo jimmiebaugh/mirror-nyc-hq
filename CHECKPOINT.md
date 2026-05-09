@@ -2,10 +2,10 @@
 
 Living-state doc. Update on every meaningful merge to `main`.
 
-**Last updated:** 2026-05-08
+**Last updated:** 2026-05-09
 **Latest commit on main:** `cb038fc` Phase 3.11 — scorecard substance restoration + summary field (squash-merged from `phase-3-11-scorecard-substance`)
-**Active feature branch:** none — `phase-3-11-scorecard-substance` was squash-merged. Next branch is `phase-4-venue-scout` when Phase 4 starts. Per Jimmie's deploy policy, all 3.X / 4.X feature work stays on a branch (no commits / no origin pushes without `[skip netlify]`); the only Netlify-deploy event per phase is the squash-merge to `main`.
-**Current phase:** Phase 4 — Venue Scout port (next).
+**Active feature branch:** `phase-4-1-scout-dashboard` — 6 commits, latest `6930ca6` (4.1.4 doc sweep). 17 files changed, +1256/-59. tsc + build clean. Branch NOT pushed to origin. Awaiting Jimmie's squash-merge approval.
+**Current phase:** Phase 4.1 — Scout Dashboard. All four sub-phases done. Squash-ready.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`).
 
 ## What's live in production
@@ -52,7 +52,17 @@ cb038fc  Phase 3.11: scorecard substance restoration + summary field (squash-mer
 b70f0e9  Phase 3.10: scorecard refinement step (squash-merged from phase-3-10-scorecard-refine)
 e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged from phase-3-8-cron-watchdogs)
 2ab37c3  Phase 3.7: Candidates UX + referral ingestion (squash-merged from phase-3-7-candidates-ux)
-Phase 3.6: Final Review + Packet generation (squash-merged from phase-3-6-final-review-packet)
+```
+
+## Recent commits (phase-4-1-scout-dashboard, NOT on main yet)
+
+```
+6930ca6  Phase 4.1.4: doc sweep — roadmap + decisions [skip netlify]
+5612e7f  Phase 4.1.4: review fixes — View All count, label-form CSS, reload useCallback [skip netlify]
+f6d1824  Phase 4.1.3.1: tighten inDeck stat to pitched && include_in_deck [skip netlify]
+5cdba51  Phase 4.1.3: ScoutDashboard.tsx + App.tsx route registration [skip netlify]
+b385924  Phase 4.1.2: Field.tsx extraction, venueTypes.ts, ScoutPhasePill / SourcingStatusPill / RankBadge [skip netlify]
+209650f  Phase 4.1.1: relax vs_* RLS to authenticated, ideal_features text→text[], vs_sourcing_rounds Realtime [skip netlify]
 ```
 
 ## Recent migrations
@@ -70,9 +80,18 @@ Phase 3.6: Final Review + Packet generation (squash-merged from phase-3-6-final-
 
 ## Next up
 
-**Production wiring for Phase 3.8.** Order: set GUCs → push migrations → regen types → deploy 12 edge functions. Then runtime validations (cron sanity, watchdogs scan-and-zero, pull-completion email round-trip). Full step-by-step in `NEXT_STEPS.md` (root).
+**Squash-merge Phase 4.1** when Jimmie gives the go. Code runs `/ship` flow (tsc / build / migration list / origin status), squashes to main (no [skip netlify] -- this IS the deploy), then a follow-up [skip netlify] commit to backfill CHECKPOINT.md post-merge.
 
-**Phase 4: Venue Scout port** after wiring + validations are clean. Cut a fresh `phase-4-venue-scout` branch when ready.
+**Three open questions before squash (from code-reviewer + test plan):**
+1. **Start Over button:** defer to Scout Settings (4.3) or add a destructive ghost button on the dashboard now?
+2. **NewRoleDetails labels:** 13px coral → 12px white from 4.1.2 Field.tsx extraction. Read it cold and decide: restore locally in NewRoleDetails, or accept the canonical alignment?
+3. **inDeck stat:** renders 0 until DeckPrep ships. Expected -- just confirm you're comfortable with it showing 0 for all of Phase 4.2-4.5.
+
+**After squash: cut `phase-4-2-scout-list` branch and start 4.2 (Scout List index page).**
+
+**Phase 4.1.4** — code-reviewer subagent, §11 manual test plan, doc sweep, squash-merge to main.
+
+**Production wiring for Phase 3.8** still pending (GUCs, db push, 12 edge function deploys). Can happen in parallel with Phase 4.1 feature work since it's all out-of-band (no Netlify). Full step-by-step in `NEXT_STEPS.md`.
 
 **Carried-forward cleanup queued:**
 - Verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix, then flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`.

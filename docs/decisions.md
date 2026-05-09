@@ -2,6 +2,87 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.1 (Scout Dashboard — first Venue Scout surface)
+
+### Venue Scout RLS: one permissive FOR ALL policy per vs_* table, no creator or role scoping
+
+All five vs_* tables (`vs_scouts`, `vs_briefs`, `vs_sourcing_rounds`, `vs_candidate_venues`, `vs_pitch_decks`) got their original four-per-table producer/admin-gated policies dropped and replaced with a single `FOR ALL TO authenticated USING (true) WITH CHECK (true)` policy each. Any authenticated HQ user can now read, create, edit, or delete any scout regardless of who created it.
+
+Rationale: Venue Scout is a collaborative, agency-wide workflow -- a scout isn't personal data owned by one producer. Every team member being able to jump into any open scout and make edits is the right operating model. Creator scoping was carried over from the initial schema as a default-safe starting point; this migration is the intentional unlock.
+
+### vs_briefs.ideal_features text → text[]
+
+Column was `text` in the initial schema. Changed to `text[]` in the same 4.1.1 migration to match the sibling `neighborhoods` column's type and the spec's tagging behavior (multiple distinct features, not a prose blob). Folded into the RLS migration since we were already touching vs_* tables and production had zero vs_briefs rows.
+
+### vs_sourcing_rounds added to supabase_realtime in 4.1.1, not deferred
+
+The migration-reviewer subagent caught that the Researching page (4.x) will subscribe to `vs_sourcing_rounds` via `postgres_changes`. Added `REPLICA IDENTITY FULL` + `ALTER PUBLICATION supabase_realtime ADD TABLE` to the 4.1.1 migration rather than deferring to the Researching page's phase -- deferring would have required a follow-up migration and a re-deploy window when that phase lands. Precedent: `ts_pull_rounds` and `ts_final_reviews` both went into Realtime in the same migration that established the table.
+
+### Spec/wireframe conflict resolutions for Scout Dashboard UI
+
+The Code session resolved several places where the spec and wireframe diverged. Final decisions, locked before 4.1.2:
+
+| Element | Decision | Source |
+|---|---|---|
+| Stat tiles | Total Found / Shortlisted / In Deck / Pitched | Spec |
+| Hero meta row | Project / event / dates / last sourcing, no icons | Spec |
+| Edit-brief link | Coral "Edit Brief →" | Wireframe |
+| Settings button | Icon button in CTA cluster below primary action | Spec |
+| Shortlist row | 38px image thumbnail included | Wireframe |
+| "+ New Round" affordance | Header link only; no dashed "+ Add Round" tile | Wireframe minus the tile |
+
+### "View All N" shortlist link count uses shortlistedCount, not totalVenues
+
+Initial implementation used `totalVenues` for the count in "View All N →". Fixed in 4.1.4 to use `shortlistedCount` -- the link routes to `/shortlist`, which only shows shortlisted venues, so showing the total candidate count was misleading. Small bug, caught by code-reviewer.
+
+### PrimaryScoutCTA "deck exists" branch is evaluated before funnel branches
+
+The 8-state decision tree checks for an existing deck before checking pitched/shortlisted counts. Rationale: once a deck exists, that's the most valuable thing to surface regardless of where the funnel stands. Burying it below the pitched/shortlisted branches would hide the deck if the producer later goes back and adjusts shortlist state.
+
+### PrimaryScoutCTA "failed" branch is narrow by design
+
+The failed branch only fires when the latest round failed AND no shortlisted venues AND no pitched venues exist. If any prior-round work exists, the producer gets the appropriate resume CTA for where they left off rather than a generic "start over." The code-reviewer flagged that a secondary "Retry sourcing" might be useful when work exists from a prior successful round -- deferred to a later phase once the full sourcing flow is in and the UX can be evaluated with real data.
+
+### inDeck stat uses pitched && include_in_deck, not include_in_deck alone
+
+Spec text said `venues.filter(v => v.include_in_deck)` but `include_in_deck` defaults to `true`, so that would show every candidate venue as "in deck" until DeckPrep ships and the user actually filters. Tightened to `pitched && include_in_deck` so the stat is meaningful from day one: it counts venues the producer has explicitly selected AND flagged for the deck. A code comment documents the deviation from spec text. Can be revisited when DeckPrep lands if the semantics need to change.
+
+### RoundTile uses "AI" / "SHEET" hero label, not "Round N"
+
+Sourcing round tiles on the Scout Dashboard show the round type (AI-researched vs. sheet-uploaded) as the dominant label rather than a sequential number. Round number is still visible in the card as secondary metadata. The type label is more useful at a glance -- "Round 2" tells you nothing about what the round was; "SHEET" tells you it was a manual upload.
+
+### Shortlist card hidden entirely when scout has zero rounds
+
+When `rounds.length === 0`, the shortlisted venues card doesn't render at all. The hero CTA already handles that state ("Start Sourcing" or "Upload Brief"), so a visible-but-empty shortlist card would be redundant noise. Once rounds exist but nothing is shortlisted, the card renders with a dashed-border empty state and a "Review Candidate Venues" CTA pointing to `/matrix`.
+
+### Venue photo thumbnails deferred to Phase 4.5
+
+Shortlisted venue rows show a literal `IMG` placeholder box in 4.1.3. Real photo plumbing (`vs_venue_photos` table + storage reads) is deferred to Phase 4.5 (Shortlist + Review Selects phase), which is the first phase where photo management is actually part of the workflow. A TODO comment is in place.
+
+### Field.tsx extracted to src/components/ui/ — canonical design-system form label
+
+Extracted a shared `Field.tsx` rather than letting each area define its own label pattern. Canonical form: 12px Roboto Mono foreground label, coral required asterisk, optional muted hint suffix. Two call sites updated in 4.1.2: `NewRoleDetails.tsx` and `RoleSettings.tsx`.
+
+Side effect: NewRoleDetails labels changed from 13px coral to 12px white. That's the correct design-system form — the old version was non-canonical. Visual change is minor but worth eyeballing in the new-role wizard at 4.1.4 before squash-merge.
+
+Rule: any future form label should use `Field.tsx`, not a local copy.
+
+### venueTypes.ts ported verbatim from VS Pro source; heuristics intentionally unchanged
+
+`CANONICAL_TYPES`, `TYPE_STYLES`, `TYPE_FALLBACK_STYLE`, `canonicalizeType()`, and `parseTypes()` were copied without modification from `mirror-nyc-venue-scout-pro/src/components/sourcing/matrix/primitives.tsx`. The canonicalization heuristics (regex patterns that map raw strings to canonical types) are intentionally preserved byte-for-byte so that AI research output from the existing VS Pro edge functions canonicalizes identically in HQ. Any future change to the heuristics needs to be coordinated across both repos until VS Pro is retired.
+
+### SourcingStatusPill returns null on "complete" — same convention as RoundStatusPill
+
+When a sourcing round's status is `complete`, no pill renders. The assumption is that a complete round's status is conveyed by context (venue counts, CTA state) rather than a redundant "done" badge. `researching` = amber + pulsing dot; `failed` = red static. This matches `RoundStatusPill`'s null-on-complete behavior in Talent Scout.
+
+### RankBadge uses bg-input track, not bg-secondary
+
+The score bar track inside `RankBadge` is `bg-input` (Mirror grey, the correct track surface on dark cards). `bg-secondary` is lighter and visually wrong on `bg-surface-alt` cards. This is the same gotcha that bit us in Talent Scout's score bars and is now codified in `src/components/talent-scout/CLAUDE.md`. Added `showBar={false}` prop for surfaces that only need the numeric digit.
+
+### Optional vs_candidate_venues columns deferred to the consuming phase
+
+Columns `key_features`, `derived_attrs`, `venue_overview`, `size_sq_ft`, `capacity`, `source`, and the `vs_venue_photos` table are not added in Phase 4.1. The Scout Dashboard doesn't render any of them. Adding columns before any code consumes them creates drift between schema and implementation. Each will be migrated in the phase that first reads or writes it.
+
 ## Phase 3.11 (Scorecard substance restoration + summary field)
 
 ### Restored substantive `full_points_rubric` and added separate `summary` field

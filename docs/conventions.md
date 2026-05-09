@@ -63,6 +63,8 @@ How we write code in this repo. Read this before adding tables, columns, edge fu
 
 - This repo's "single source of truth" docs are in `/docs/`. CLAUDE.md is a lean index pointing to them.
 - Update `docs/schema.md` in the same commit as any schema migration.
-- Update `CHECKPOINT.md` after every meaningful merge to main (latest commit hash, current phase, what's deployed).
-- Decisions worth preserving go in `docs/decisions.md` with the rationale. Don't bury them in commit messages.
-- The roadmap (`docs/roadmap.md`) summarizes finished phases to one line each; the next phase has full detail.
+- Update `docs/edge-functions.md` in the same commit as any new or modified edge function.
+- Update `CHECKPOINT.md` in the same commit as any sub-phase completion -- not deferred to end-of-phase. Required fields: latest branch commit hash, current sub-phase, what's done vs. next.
+- Decisions worth preserving go in `docs/decisions.md` with the rationale. Don't bury them in commit messages. Capture during the sub-phase, not retroactively.
+- The roadmap (`docs/roadmap.md`) gets the full sub-phase breakdown written at the START of a new phase (in the kickoff commit), not at the end. Finished sub-phases get a status + commit hash in the same commit they complete.
+- Before every commit, ask: does CHECKPOINT.md reflect what this commit did? If not, update it in the same commit.
