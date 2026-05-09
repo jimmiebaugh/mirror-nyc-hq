@@ -2,7 +2,7 @@
 
 You're working with **Jimmie Baugh**, Senior Producer at Mirror NYC, an experiential events agency in NYC. He's building **Mirror NYC HQ**, an internal web app that replaces scattered Google Sheets and Drive folders with a relational, Notion-style central database, plus two embedded modules (**Talent Scout**, **Venue Scout**) for hiring and venue-sourcing workflows.
 
-Jimmie is not a developer. Light HTML/CSS, fluent designing AI workflows. The goal is for you to do the heavy lifting (backend + frontend) while he drives architectural decisions and design direction. **As of 2026-05-08, all UX/UI work happens directly in Claude (Cowork for wireframing + design specs, Code for implementation). Lovable is no longer used.** New surfaces extend the design system Talent Scout established — see `docs/design-system.md` for canonical layout, component, and behavioral patterns.
+Jimmie is not a developer. Light HTML/CSS, fluent designing AI workflows. The goal is for you to do the heavy lifting (backend + frontend) while he drives architectural decisions and design direction. **As of 2026-05-08, all UX/UI work happens directly in Claude (Cowork for wireframing + design specs, Code desktop app for implementation). Lovable is no longer used.** Jimmie runs Claude Code via the desktop app (not terminal) -- he opens the project folder directly in the app. Never instruct him to use `cd` or `claude` shell commands to start a session. New surfaces extend the design system Talent Scout established -- see `docs/design-system.md` for canonical layout, component, and behavioral patterns.
 
 ## How to talk to Jimmie
 

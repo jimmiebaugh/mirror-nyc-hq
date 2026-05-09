@@ -14,8 +14,10 @@ You're already running this pattern informally. Make it explicit.
 
 | Surface | Job | When you reach for it |
 | --- | --- | --- |
-| **Cowork** (Claude desktop) | Planning, prompt-drafting, exploration, "what should we build" | Before opening a Code session, drafting specs, refining requirements, recapping a phase |
-| **Code** (this terminal) | Execution, implementation, anything that touches files / DB / edge fns | Once the spec is clear and you want me to do the work |
+| **Cowork** (Claude desktop app) | Planning, prompt-drafting, exploration, "what should we build," wireframes | Before opening a Code session, drafting specs, refining requirements, recapping a phase |
+| **Code** (Claude desktop app) | Execution, implementation, anything that touches files / DB / edge fns | Once the spec is clear and you want me to do the work |
+
+**How to open Code:** launch the Claude desktop app, switch to Code mode, and open the `mirror-nyc-hq` folder directly in the app. Do NOT use `cd` + `claude` in a terminal -- Jimmie does not use the CLI.
 
 **The mistake to avoid:** using Code for ideation. Code sessions burn context fast, and it's easy to lose architectural decisions in the noise of file edits. Use Cowork to think; arrive in Code with a tight prompt.
 
@@ -23,7 +25,31 @@ You're already running this pattern informally. Make it explicit.
 1. Cowork session: brainstorm + interview-style spec (use Extended Thinking on Opus 4.6)
 2. Cowork outputs a markdown spec → save to `OUTPUTS/` or paste back into a Code-session prompt
 3. Code session: paste the spec, ask me to validate/critique it FIRST, then implement
-4. End-of-feature: Cowork captures decisions back into `docs/decisions.md`
+4. After each sub-phase: paste Code's completion summary into Cowork. Cowork updates CHECKPOINT.md + decisions.md before anything else (see §1a below).
+5. End-of-feature: final doc sweep in Code (roadmap, edge-functions.md, any remaining decisions), then squash-merge.
+
+**§1a — Cowork as the sync enforcer**
+
+Every time you paste a Code sub-phase summary into Cowork, Cowork's first action is a doc sync pass:
+1. Update `CHECKPOINT.md` — branch commit hash, current sub-phase, what's done vs. next.
+2. Update `docs/decisions.md` — any architectural decisions, conflict resolutions, or rationale captured in the Code output that isn't already in the doc.
+3. Flag if anything in the Code output contradicts existing docs (schema.md, edge-functions.md, auth-model.md) so it can be corrected before the next session starts.
+
+This makes Cowork the enforcing sync layer rather than relying on Code to defer to end-of-phase sweeps.
+
+**On auto-sync between Cowork and Code**
+
+There is no native live bridge between the two sessions. The closest approximation: Code writes a `COWORK_SYNC.md` file to the workspace after each sub-phase completion (a structured summary of what landed, decisions made, open items). Cowork reads it at the start of the next session and updates the docs. This cuts the manual paste step -- you'd just open Cowork and say "sync from latest Code output" instead of copying the terminal wall of text. Add this instruction to the Code kickoff prompt to activate it:
+
+```
+After each sub-phase commit, write a structured summary to /Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/COWORK_SYNC.md with:
+- Sub-phase number and commit hash
+- What landed (files created/modified, migrations applied, functions deployed)
+- Decisions made or confirmed
+- Open items / flags for Jimmie
+- Next sub-phase
+Overwrite the file each time (Cowork reads the latest, not a log).
+```
 
 ---
 
@@ -32,7 +58,7 @@ You're already running this pattern informally. Make it explicit.
 The Cowork article is right that the folder system is the whole game. Set this up once and every session arrives with you-context already loaded.
 
 ```
-~/Documents/Claude Cowork/
+~/Claude/Mirror NYC HQ'
 ├── ABOUT ME/
 │   ├── about-me.md           ← who you are, how you think, how you want output
 │   ├── anti-ai-writing-style.md  ← THE no-em-dashes file + other voice rules
@@ -44,7 +70,7 @@ The Cowork article is right that the folder system is the whole game. Set this u
 ### What to put in each ABOUT ME file
 
 **`about-me.md`** — under 2000 words. Have Claude interview you. Sample seed:
-> "Interview me to create an about-me.md. Ask 15-20 questions about my role at Mirror NYC, how I think about building products, my technical level (light HTML/CSS, fluent in AI workflow design, comfortable in Lovable, NOT a coder), my tone preferences (casual / direct / no filler / no em dashes), and how I want Claude to push back on me vs. defer."
+> "Interview me to write the about-me.md. Ask 10-15 questions about my role at Mirror NYC, how I think about building products, my technical level (light HTML/CSS, fluent in AI workflow design, comfortable in Lovable, NOT a coder), my tone preferences (casual / direct / no filler / no em dashes), and how I want Claude to push back on me vs. defer."
 
 **`anti-ai-writing-style.md`** — codify the rules already in CLAUDE.md item "How to talk to Jimmie":
 - No em dashes anywhere. Use `,` or `(parentheses)` or `:` instead
@@ -54,7 +80,7 @@ The Cowork article is right that the folder system is the whole game. Set this u
 - Don't fill gaps; ask if unclear
 - Concise by default, deeper when the task warrants it
 
-**`my-company.md`** — 6-8 sharp questions, answered with focus. What's Mirror NYC building this quarter? What does HQ unlock for the team? What are you actively trying to avoid? Update quarterly.
+**`my-company.md`** — 6-8 sharp questions, answered with focus. What's Mirror NYC building this quarter? What does HQ unlock for the team? What are you actively trying to avoid? Update quarterly."Interview me to write the my-company.md. Ask 10-12 questions Mirror NYC, team structure, workflow, internal and external tools utilized, tone preferences and immeadiate goals and priorities, and anything else you think would be relevant context about the company to the development and implementation of these tools and apps."
 
 ### Global Instructions (Cowork settings → Edit Global Instructions)
 
@@ -62,7 +88,7 @@ The Cowork article is right that the folder system is the whole game. Set this u
 You're working with Jimmie Baugh, Senior Producer at Mirror NYC.
 
 Folder structure:
-- ABOUT ME/ → who he is, voice rules, company priorities. Read every session.
+- ABOUT ME/ → who he is, voice rules, company prioritiABes. Read every session.
 - OUTPUTS/ → save substantive drafts (specs, plans, decision memos) here when work is worth keeping.
 - TEMPLATES/ → reusable session-prompt scaffolds for HQ work (Phase port plan, new edge function spec, new HQ surface page spec, etc.). Pull from here when starting a new task that fits a pattern.
 
@@ -74,6 +100,8 @@ Always: read ABOUT ME on session start. Reference anti-ai-writing-style.md when 
 ---
 
 ## 3. Code-side setup (worth doing before Phase 4 starts)
+
+**Desktop app workflow:** open Claude Code desktop app, click "Open Folder," select `/Users/jimmie/Code/mirror-nyc-hq`. That's it -- no terminal needed. CLAUDE.md and subdirectory `.md` files load automatically. Subagents run from the same session with `/agent <name>`.
 
 The HQ repo already has a strong CLAUDE.md and docs structure. The gaps below are about layering in subagents, hooks, and slash commands so I operate more autonomously without losing accuracy.
 
@@ -251,7 +279,6 @@ metadata:
 ```
 The description's trigger keywords are how Claude decides when to load the skill on-demand.
 
-Skills codify recurring HQ workflows so I don't reinvent them each phase.
 
 **`add-edge-function.md`**:
 ```
@@ -357,7 +384,6 @@ POST-MERGE:
 These hooks aren't strictly necessary (the harness sandbox already catches most of this) but they document intent and run regardless of model judgment.
 
 #### 3d. Custom slash commands — one `.md` file per command inside `.claude/commands/`
-
 **`/ship`** — run the pre-merge checklist + report. Equivalent of "before I squash-merge, what's not clean?"
 
 **`/diagnose`** — query cron + edge fn health + recent migrations against remote to surface drift.
@@ -482,19 +508,31 @@ Each gets a Cowork-drafted spec before any code. The spec-driven workflow above 
 ## 6. Templates worth creating in Cowork
 
 These belong in your **master Cowork folder** (single folder per person, not per project — see §2 for setup). Save under `<master-folder>/TEMPLATES/HQ/` if you want HQ-specific templates separated from cross-project ones, or flat in `TEMPLATES/` if you'd rather accumulate everything together. The folder name itself is whatever you chose for the master Cowork folder; the article's `Claude Cowork` is just an example.
-
-**`new-phase-kickoff.md`** — paste this at the start of a new phase Code session:
+**`new-phase-kickoff.md`** — paste this at the start of a new phase Code session (open Claude Code desktop app, select the mirror-nyc-hq folder, paste into the chat):
 ```
-We're starting Phase X.Y. Read the following IN ORDER before doing anything:
+We're starting Phase X.Y — <surface name>. Read the following IN ORDER before doing anything:
 1. docs/roadmap.md (full context on this phase)
 2. docs/decisions.md (most recent phase first)
 3. CHECKPOINT.md (latest commit, drift, deployed state)
-4. docs/specs/<this-surface>.md (the spec we drafted in Cowork)
-5. docs/working-with-claude.md (this playbook)
+4. OUTPUTS/phase-X-Y-<surface>-spec.md (the spec drafted in Cowork)
+5. OUTPUTS/phase-X-Y-<surface>-wireframe.html (reference wireframe — treat as layout authority)
+6. docs/working-with-claude.md (this playbook)
 
-Then propose: feature branch name, sub-phase breakdown, the FIRST sub-phase's
-implementation plan. Don't start coding until I approve the plan.
+Then:
+a. Write the full sub-phase breakdown into docs/roadmap.md before touching any code (per conventions.md Documentation section).
+b. Propose: feature branch name and the FIRST sub-phase's implementation plan.
+c. Don't start coding until I approve the plan.
+
+After each sub-phase commit, write a structured summary to /Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/COWORK_SYNC.md:
+- Sub-phase number and commit hash
+- What landed (files created/modified, migrations applied, functions deployed)
+- Decisions made or confirmed
+- Open items / flags for me
+- Next sub-phase
+Overwrite the file each time.
 ```
+
+Note: step 5 (wireframe) applies when a Cowork wireframe exists for the surface. Skip it if the phase has no wireframe output.
 
 **`new-edge-function.md`** — for spinning up a new function:
 ```
@@ -587,7 +625,7 @@ You don't need all of this at once. Here's what moves the needle most per hour s
 | 4 | 30 min | Define the four custom slash commands (/ship, /diagnose, /spec, /sync-prompts). |
 | 4 | 30 min | Save the four Cowork TEMPLATES files. |
 | 5 | 30 min | Try it: open a Cowork session, draft a Phase 4 sub-phase spec. |
-| 5 | 30 min | Open a Code session with the new-phase-kickoff template. Verify the subagents run cleanly. |
+| 5 | 30 min | Open Claude Code desktop app, select the mirror-nyc-hq folder, paste the new-phase-kickoff template. Verify the subagents run cleanly. |
 | 6-7 | — | Use the system on Phase 4. Iterate as gaps surface. |
 
 **Don't:**
