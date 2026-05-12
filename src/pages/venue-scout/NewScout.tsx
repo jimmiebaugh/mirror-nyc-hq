@@ -18,7 +18,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { computeScoutName } from "@/lib/venue-scout/computeScoutName";
-import { stepToRoute } from "@/lib/venue-scout/format";
 
 export default function NewScout() {
   const navigate = useNavigate();
@@ -51,7 +50,7 @@ export default function NewScout() {
         name: computeScoutName(client, event),
         created_by: user?.id ?? null,
       })
-      .select("id, current_step")
+      .select("id")
       .single();
     setCreating(false);
     if (error || !data) {
@@ -63,7 +62,11 @@ export default function NewScout() {
       return;
     }
     toast({ title: "Project created" });
-    navigate(stepToRoute(data.id, data.current_step));
+    // Phase 4.3-port: post-create lands on the Brief surface. 4.2-port routed
+    // to stepToRoute('sheet_prompt') which 404'd until the sourcing flow
+    // ships; the Brief is the first per-scout page producers should hit, and
+    // its Continue button advances to the sheet-prompt route in turn.
+    navigate(`/venue-scout/scouts/${data.id}/brief`);
   };
 
   return (

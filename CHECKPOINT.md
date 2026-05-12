@@ -4,9 +4,9 @@ Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-12
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
-**Active feature branch:** `vs-port-fresh` — branched off `dd38577`. Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `f4a9a2a` (Phase 4.2-port squashed from `claude/vs-port-4-2-scout-index`).
-**Current phase:** Phase 4.2-port DONE on `vs-port-fresh`; next: Phase 4.3-port (Brief) per port plan § 9.
+**Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. Active sub-phase worktree: `claude/vs-port-4-3-brief` (Brief page + `vs-parse-brief` port rebuild).
+**Latest commit on `vs-port-fresh`:** `<TBD-4.3-port-squash>` (Phase 4.3-port squashed from `claude/vs-port-4-3-brief`).
+**Current phase:** Phase 4.3-port DONE on `vs-port-fresh`; next: Phase 4.4-port (Sheet Prompt + Sheet Upload + parse-sheet) per port plan § 10.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
@@ -38,6 +38,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 - All Phase 3.8 edge functions need to be deployed via `supabase functions deploy <name>` (cron functions + `ts-send-pull-notification` + re-deploys for `ts-pull-candidates` and any function that imports `_shared/anthropic.ts`).
 - Phase 3.8 migrations need to be pushed: `supabase db push --linked`.
 - **Venue Scout** is being rebuilt as a 1:1 port from `mirror-nyc-venue-scout-pro` on the `vs-port-fresh` branch (started 2026-05-12). The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived as a reference but no longer the canonical implementation. See `docs/venue-scout-port-plan.md` for the 10 sub-phase sequence and `OUTPUTS/COWORK_SYNC.md` for current state.
+- **`vs-parse-brief` (port version) is deployed to production but the Brief page is on `vs-port-fresh` only.** The new edge function lives in the same deployment slot as the failed-attempt vs-parse-brief and has its signature / output shape (`{ scout_id, storage_path }` → `{ parsed_fields }`). Only the Brief page (on `vs-port-fresh`) calls it; until cutover, the new code is reachable but unexercised in main.
 - HQ Core pages beyond `/projects` are stubs (Phase 5).
 - In-app notifications bell (Phase 5). Pull-completion email is live; bell + per-user prefs come later.
 
@@ -60,6 +61,9 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
+<TBD-4.3-port-squash>  [skip netlify] Phase 4.3-port: Brief page + vs-parse-brief rebuild (squash-merged from claude/vs-port-4-3-brief)
+c2af48e  [skip netlify] Phase 4.2-port doc sync: drop stale 4.2-port awaiting-squash gate, mark stepToRoute as landed in schema.md
+0fedaa9  [skip netlify] Backfill f4a9a2a squash hash into CHECKPOINT.md
 f4a9a2a  [skip netlify] Phase 4.2-port: Scout Index + New Scout entry (squash-merged from claude/vs-port-4-2-scout-index)
 08d6564  [skip netlify] Backfill 4483895 squash hash into CHECKPOINT.md
 4483895  [skip netlify] Phase 4.1-port: schema augmentation + shared module priming (squash-merged from claude/vs-port-4-1-schema)
@@ -83,15 +87,15 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 ## Next up
 
-**Phase 4.3-port** per `docs/venue-scout-port-plan.md` § 9: Brief surface. Port `/projects/:id/brief` from VS Pro -- BriefForm (read/edit), brief PDF upload + parse via `vs-parse-brief` (rebuilt from scratch using VS Pro shape), and the entry point from Scout Index after a producer creates a new project (the sheet-prompt route lands in 4.4-port; until then post-create navigation 404s as noted in `docs/decisions.md` Phase 4.2-port).
+**Phase 4.4-port** per `docs/venue-scout-port-plan.md` § 10: Sheet Prompt + Sheet Upload + `vs-parse-sheet`. The sourcing-sheet step that follows Brief in the producer funnel. Closes the 404 window NewScout / Brief Continue currently routes into.
 
-`vs-port-fresh` is published on origin (HEAD `0fedaa9` as of the 4.2-port push). Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
+`vs-port-fresh` is published on origin (HEAD `c2af48e` as of the 4.2-port doc-sync push; 4.3-port squash lands after Jimmie's go-ahead). Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
 
 **Production wiring for Phase 3.8** still pending (GUCs, db push, 12 edge function deploys). Can happen in parallel since it's all out-of-band (no Netlify). Full step-by-step in `NEXT_STEPS.md`.
 
 **Carried-forward cleanup queued:**
 - Verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix, then flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`.
-- Cutover deletion of failed-attempt edge functions: `vs-parse-brief`, `vs-parse-sheet`, `vs-start-sourcing`, `vs-compile-summaries`, `vs-generate-deck`. Defer until vs-port-fresh squash-merges (or hard-resets) onto main.
+- Cutover deletion of failed-attempt edge functions: `vs-parse-sheet`, `vs-start-sourcing`, `vs-compile-summaries`, `vs-generate-deck`. (`vs-parse-brief` was rebuilt in place at 4.3-port; verify the port version is current rather than delete.) Defer until vs-port-fresh squash-merges (or hard-resets) onto main.
 
 ## How to update this file
 
