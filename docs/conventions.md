@@ -44,6 +44,7 @@ How we write code in this repo. Read this before adding tables, columns, edge fu
 - Use `react-query` for server state. Local UI state is fine in `useState`. Wizard state goes in a Zustand store (see `src/stores/wizardStore.ts`).
 - Route gates: `<ProtectedRoute>` for auth, `<AdminRoute>` for admin-only routes (already wraps `ProtectedRoute`).
 - Type imports come from `@/integrations/supabase/types` so they stay in sync with schema regen.
+- `src/lib/venue-scout/venueTypes.ts` mirrors `supabase/functions/_shared/venueTypes.ts`. Any change to `CANONICAL_TYPES`, `TYPE_STYLES`, `canonicalizeType`, `canonicalizeMultiType`, `parseTypes`, or `sanitizeWebsiteUrl` touches BOTH files in the same commit. The header comment on each file flags the rule; drift produces mismatched venue-type pills between the matrix UI and the AI / sheet source data.
 
 ## Naming
 

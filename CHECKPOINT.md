@@ -4,9 +4,10 @@ Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-12
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
-**Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `49e03e6` (Phase 4.5-port squashed from `claude/vs-port-4-5-researching`).
-**Current phase:** Phase 4.5-port DONE on `vs-port-fresh`; next: Phase 4.6-port (Sourcing Report + Shortlist + matrix primitives) per port plan § 11.
+**Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`.
+**Sub-phase worktree active:** `claude/vs-port-4-6-matrix` off `vs-port-fresh` HEAD `13d057c`. Phase 4.6-port (Sourcing Report + Shortlist + matrix primitives + shortlist sync trigger). Pending squash.
+**Latest commit on `vs-port-fresh`:** `13d057c` (Phase 4.5-port squashed + backfilled; Phase 4.6-port pending squash from `claude/vs-port-4-6-matrix`).
+**Current phase:** Phase 4.6-port IN PROGRESS on `claude/vs-port-4-6-matrix`. Awaits squash to `vs-port-fresh`.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
@@ -63,6 +64,8 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
+<TBD-4.6-port-squash>  [skip netlify] Phase 4.6-port: Sourcing Report + Shortlist + matrix primitives (squash-merged from claude/vs-port-4-6-matrix)  [PENDING SQUASH]
+13d057c  [skip netlify] Backfill 49e03e6 squash hash into CHECKPOINT.md
 49e03e6  [skip netlify] Phase 4.5-port: Researching + vs-research-venues rebuild (squash-merged from claude/vs-port-4-5-researching)
 6c98137  [skip netlify] Backfill a20b8e3 squash hash into CHECKPOINT.md
 a20b8e3  [skip netlify] Phase 4.4-port: SheetPrompt + SheetUpload + vs-parse-sheet rebuild (squash-merged from claude/vs-port-4-4-sheet)
@@ -80,6 +83,7 @@ dd38577  [skip netlify] Phase 4.1 Cowork-side doc state (port branch base)
 ## Recent migrations
 
 ```
+20260512230000_phase_4_6_port_shortlist_sync_trigger.sql        Phase 4.6-port — re-introduce vs_candidate_venues_shortlist_sync trigger at simplified shape (shortlisted false→true only). Matches HQ venues by website_url first, then case-insensitive name+neighborhood. SECURITY DEFINER; INSERTs new venues rows when no match. (APPLIED)
 20260512220000_phase_4_5_port_research_error.sql                Phase 4.5-port — ALTER TABLE vs_scouts ADD COLUMN research_error text (persisted error channel for the EdgeRuntime.waitUntil + Realtime flow on vs-research-venues) (APPLIED)
 20260512210000_phase_4_1_port_drop_orphan_helper.sql            Phase 4.1-port follow-up — DROP _jsonb_array_to_text_array (orphan helper from failed Phase 4.3.1's create_scout_with_brief, missed by the main port migration; surfaced by code-reviewer) (APPLIED)
 20260512200000_phase_4_1_port_schema.sql                        Phase 4.1-port — DROP failed-attempt vs_briefs / vs_sourcing_rounds / vs_pitch_decks; reset vs_scouts to brief-inline shape with current_step state machine + generated_decks jsonb history; vs_candidate_venues simplified (single-round per scout); vs_venue_photos with ON DELETE CASCADE; RLS open to authenticated; vs_scouts in supabase_realtime publication with REPLICA IDENTITY FULL (APPLIED)
@@ -94,7 +98,7 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 ## Next up
 
-**Phase 4.6-port** per `docs/venue-scout-port-plan.md` § 11: Sourcing Report + Shortlist + matrix primitives. The matrix surfaces where 4.5-port's Researching pipeline lands.
+**Phase 4.7-port** per `docs/venue-scout-port-plan.md`: Review + PhotoUploadModal + NotesModal write-back + Compile. 4.7-port lands the photo upload modal that 4.6-port stubbed (button state machine renders but click is a toast), the `/sourcing/review` page (Shortlist Continue target; currently 404s once 4.6-port lands), and the `vs-compile-summaries` rebuild that 4.5-port research and 4.6-port producer notes feed into.
 
 `vs-port-fresh` is published on origin (HEAD `6c98137` after the 4.4-port post-squash push). Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
 
