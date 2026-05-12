@@ -26,10 +26,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callClaude, type ClaudeTool } from "../_shared/anthropic.ts";
 
+// User-invoked synchronous only; no internal-secret path. Don't advertise
+// `x-internal-secret` to the browser preflight (caught by code-reviewer
+// during 4.4-port; same cleanup applied to vs-parse-sheet in this commit).
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-internal-secret",
+    "authorization, x-client-info, apikey, content-type",
 };
 
 type ParseRequest = {

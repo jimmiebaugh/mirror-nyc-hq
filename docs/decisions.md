@@ -2,6 +2,32 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.4-port (Sheet Prompt + Sheet Upload + vs-parse-sheet)
+
+### Bucket name `sourcing_sheets` (underscore), not VS Pro's `sourcing-sheets` (hyphen)
+
+VS Pro uses `sourcing-sheets`. HQ uses `sourcing_sheets` per the port plan § 2 storage table and the existing initial-schema bucket name. The port adapts (frontend upload target, edge function download source) but the bucket itself is unchanged.
+
+### `type` column renamed to `venue_type` in `vs_candidate_venues`
+
+VS Pro's `venues.type` reads as a Postgres / TS reserved word. Rename landed in the 4.1-port migration; vs-parse-sheet writes the new column name on every INSERT. Frontend ports (Sourcing Report, Shortlist, etc.) read `venue_type` from the row going forward.
+
+### PDF parse stays intentionally naive (lifted verbatim from VS Pro)
+
+VS Pro's `parse-sheet` returns 0 venues for PDF uploads (the `pdfjs` / `unpdf` parse-the-table path is unreliable). Port plan § 6 marks parse-sheet as Lift, so HQ keeps the same behavior: PDF -> empty rows -> frontend routes to `/sourcing/error/empty-sheet`. Real PDF table extraction is a post-cutover enhancement, not a port-sub-phase fix.
+
+### Error route handled by a 4.4-port stub; full ErrorState lands in 4.9-port
+
+VS Pro `ErrorState.tsx` is in scope for Phase 4.9-port per port plan § 9. To avoid a five-sub-phase 404 window for parse-fail / empty-sheet conditions, 4.4-port ships a ~30-line `ErrorStateStub.tsx` that reads `:errorKey` from the URL and renders a key-keyed message + back-to-Sourcing link. Stub gets replaced (in place at the same route) when 4.9-port ports the full version. Stub-vs-full divergence is contained to the message rendering; the route + nav target stays put.
+
+### `vs-parse-sheet` slot replacement in production
+
+Failed-attempt `vs-parse-sheet` function is still in production. The 4.4-port version deploys to the same slot, same name, different shape (`{ scout_id, storage_path }` payload, INSERT into `vs_candidate_venues` not `venues`, `venue_type` not `type`). After cutover, the cleanup task reduces from "delete vs-parse-sheet" to "verify the port version is the current deployment". Parallel to how 4.3-port handled `vs-parse-brief`.
+
+### `sourcing_sheets` storage policy tier mismatch is pre-existing drift; not 4.4-port's job
+
+Storage policy on `sourcing_sheets` bucket is `is_producer_or_admin()` while the `vs_*` table RLS is open-authenticated (4.1-port). A `member` user could create a scout via the open-RLS table path but couldn't upload a sheet (storage denies). `docs/auth-model.md` line 13-15 also says members get no VS access, contradicting the table RLS. Reconciliation belongs in the cutover doc sweep, not a 4.4-port sub-phase fix.
+
 ## Phase 4.3-port (Brief)
 
 ### Brief is a single-page form; PDF parse is an affordance on that form
