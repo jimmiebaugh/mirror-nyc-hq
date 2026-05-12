@@ -27,6 +27,7 @@ import NewScout from "./pages/venue-scout/NewScout";
 import Brief from "./pages/venue-scout/Brief";
 import SheetPrompt from "./pages/venue-scout/SheetPrompt";
 import SheetUpload from "./pages/venue-scout/SheetUpload";
+import Researching from "./pages/venue-scout/Researching";
 import ErrorStateStub from "./pages/venue-scout/ErrorStateStub";
 
 const queryClient = new QueryClient();
@@ -157,6 +158,10 @@ const App = () => (
               <Route
                 path="/venue-scout/scouts/:id/sourcing/sheet-upload"
                 element={<SheetUpload />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/sourcing/researching"
+                element={<Researching />}
               />
               <Route
                 path="/venue-scout/scouts/:id/sourcing/error/:errorKey"

@@ -1171,6 +1171,7 @@ export type Database = {
           live_dates: string | null
           name: string
           project_id: string | null
+          research_error: string | null
           sheet_storage_path: string | null
           status: string
           updated_at: string
@@ -1195,6 +1196,7 @@ export type Database = {
           live_dates?: string | null
           name: string
           project_id?: string | null
+          research_error?: string | null
           sheet_storage_path?: string | null
           status?: string
           updated_at?: string
@@ -1219,6 +1221,7 @@ export type Database = {
           live_dates?: string | null
           name?: string
           project_id?: string | null
+          research_error?: string | null
           sheet_storage_path?: string | null
           status?: string
           updated_at?: string

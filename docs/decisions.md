@@ -2,6 +2,44 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.5-port (Researching + vs-research-venues)
+
+### `EdgeRuntime.waitUntil` + Realtime replaces VS Pro's sync-await
+
+Port plan § 8.3 calls this out. VS Pro's Researching page awaits a synchronous fetch on `research-venues` for 30 to 90 seconds before navigating. HQ port flips the handshake: `vs-research-venues` returns 200 immediately, the AI work runs inside `EdgeRuntime.waitUntil`, and the Researching page Realtime-subscribes to `vs_scouts` (`REPLICA IDENTITY FULL` was set on the table during 4.1-port) plus 3-second polling fallback. Faster perceived UX, graceful navigation-away (kicking off then closing the tab still completes the research). Same pattern as `ts-final-review` + `FinalReviewLoading`.
+
+### `vs_scouts.research_error text` column added for the EdgeRuntime.waitUntil failure channel
+
+Because the page no longer reads failure off the HTTP response, the function needs a persistent channel to signal "research failed". `status='failed'` alone doesn't carry a message; `research_error text` (nullable) does. Function clears it at kickoff so a retry from a prior failure starts clean, then writes the message on any error path. The Researching page navigates to `/sourcing/error/research-timeout` (the existing 4.4-port stub keyspace) on non-null `research_error` + `status='failed'`.
+
+### Testing `claude-sonnet-4-6` (wrapper default) on `vs-research-venues`
+
+Existing memory note `project_sourcing_model_pin` pins the failed-attempt `vs-start-sourcing` function to `claude-sonnet-4-5` after the 2026-05-11 `web_search` degradation. The port-side `vs-research-venues` is a NEW function name (does not slot-replace anything) and we're starting fresh on `claude-sonnet-4-6`. Diagnostic log line on every call captures `input_tokens`, `output_tokens`, and `server_tool_use` block count: the collapse signature is `out<200 AND server_tool_uses=0`. If the first real round in production reproduces that, the pivot procedure is documented in `supabase/functions/vs-research-venues/index.ts` (single-line `model: "claude-sonnet-4-5"` override on the `callClaude` call) and the memory note gets updated to add `vs-research-venues` alongside `vs-start-sourcing`.
+
+### URL quality lever stays off the SYSTEM prompt
+
+Per memory rule `feedback_tool_choice_collapse`: per-item gating in SYSTEM prompts (or `minItems` constraints on the array under forced `tool_choice`) collapses output. The SYSTEM string is lifted verbatim from VS Pro: the type-constraint paragraph and the listing-DB callout are unchanged. URL quality is enforced by two deterministic post-emission gates: (a) the `website_url` schema description nudge (positive-only with concrete examples; no forbidden-URL list), and (b) `sanitizeWebsiteUrl` from `_shared/venueTypes.ts` rejecting search pages + listing-DB homepages while letting deep links through. Same two-gate chain the failed-attempt URL-quality hot patch settled on.
+
+### Idempotency via `brief_data.research_started_at` 90-second grace window
+
+`EdgeRuntime.waitUntil` runs after the response, which means a page hard-refresh while research is in flight will fire the kickoff invoke again. Without a guard, that doubles the Anthropic spend and INSERTs duplicates. Function checks two conditions before doing work: (a) `current_step !== 'researching'` skips (page already moved on), and (b) `brief_data.research_started_at` less than 90 seconds old skips (kickoff still in flight). Otherwise it stamps `research_started_at = now()` and proceeds. 90 seconds is slightly longer than typical Anthropic response time so a normal completion clears the window naturally.
+
+### 120-second hard ceiling on Claude work
+
+`Promise.race(callClaude, timeout)` inside `work`. If the call hangs (network stall, server-side issue), writes `status='failed' + research_error='timed out after 120s'` instead of leaving the page spinning forever. Defense-in-depth; the AI typically returns in 60 to 90 seconds.
+
+### Empty sanitized result writes failure (does not silently advance)
+
+After `canonicalizeType` + `sanitizeWebsiteUrl` + nameless-row filter, if `cleanVenues.length === 0` we treat it as a research failure (`research_error='AI returned no usable venues. Try again.'`) rather than INSERTing zero rows and flipping to `sourcing_report`. Surfaces the issue to the producer; silent zero-result would leave them on a Sourcing Report with no candidates and no obvious "what now".
+
+### `vs_scouts.status='in_progress'` on research success
+
+VS Pro's `projects.status` semantics were undefined; HQ port locks them down. `draft` (initial) goes to `in_progress` (research complete, in the AI funnel through deck generation), then to `complete` (4.8-port deck generated) or `failed` (any AI pipeline error). The ScoutIndex pill (4.2-port) reads from this column; writing `in_progress` on research success lets the pill distinguish "started" from "researched" at a glance.
+
+### `vs-research-venues` is a NEW function name (does NOT slot-replace `vs-start-sourcing`)
+
+VS Pro's research function was named `research-venues`; the failed-attempt HQ function is named `vs-start-sourcing`. The port plan's renames put the new function at `vs-research-venues`, which is unused. After 4.5-port deploys, `vs-start-sourcing` stays on the cutover deletion list (different from how 4.3-port / 4.4-port slot-replaced existing functions).
+
 ## Phase 4.4-port (Sheet Prompt + Sheet Upload + vs-parse-sheet)
 
 ### Bucket name `sourcing_sheets` (underscore), not VS Pro's `sourcing-sheets` (hyphen)
