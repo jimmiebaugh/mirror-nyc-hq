@@ -4,9 +4,9 @@ Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-12
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
-**Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. Active sub-phase worktree: `claude/vs-port-4-5-researching` at `.claude/worktrees/vs-port-4-5-researching/`.
-**Latest commit on `vs-port-fresh`:** `6c98137` (4.4-port backfill); 4.5-port awaits squash. Worktree HEAD will become `<TBD-4.5-port-squash>` after the awaiting-squash gate.
-**Current phase:** Phase 4.5-port (Researching + vs-research-venues) IN PROGRESS in worktree `claude/vs-port-4-5-researching`. Awaiting squash gate.
+**Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
+**Latest commit on `vs-port-fresh`:** `49e03e6` (Phase 4.5-port squashed from `claude/vs-port-4-5-researching`).
+**Current phase:** Phase 4.5-port DONE on `vs-port-fresh`; next: Phase 4.6-port (Sourcing Report + Shortlist + matrix primitives) per port plan § 11.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
@@ -63,7 +63,7 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
-<TBD-4.5-port-squash>  [skip netlify] Phase 4.5-port: Researching + vs-research-venues rebuild (squash-merged from claude/vs-port-4-5-researching)
+49e03e6  [skip netlify] Phase 4.5-port: Researching + vs-research-venues rebuild (squash-merged from claude/vs-port-4-5-researching)
 6c98137  [skip netlify] Backfill a20b8e3 squash hash into CHECKPOINT.md
 a20b8e3  [skip netlify] Phase 4.4-port: SheetPrompt + SheetUpload + vs-parse-sheet rebuild (squash-merged from claude/vs-port-4-4-sheet)
 edf92ae  [skip netlify] Backfill 39e7edd squash hash into CHECKPOINT.md
