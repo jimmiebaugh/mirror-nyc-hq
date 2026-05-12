@@ -54,7 +54,9 @@ Squash-merged at `cb038fc`. Reverted Phase 3.7's over-aggressive 12-word cap on 
 - Real-cron test: trigger a manual `ts-cron-scheduled-pulls` invocation in production, watch watchdog detect a fake stall. Requires GUCs set in Supabase SQL editor and Phase 3.8 edge functions deployed (see `NEXT_STEPS.md`).
 - Cleanup of deprecated `auto_rejected` enum value requires enum rebuild. Not worth it now.
 
-## Phase 4: Venue Scout — IN PROGRESS
+## Phase 4: Venue Scout — IN PROGRESS (port restart)
+
+> **Superseded by `docs/venue-scout-port-plan.md`.** The sub-phase numbering and route table below describe the abandoned 4.1 - 4.6 attempt that shipped on `main` and is now archived as a reference. Active work since 2026-05-12 lives on the `vs-port-fresh` branch as a 1:1 port from `mirror-nyc-venue-scout-pro` (the same way Phase 3 ported Talent Scout from `mirror-talent-scout`). Sub-phase sequence is `4.1-port` through `4.10-port` per the port plan § 9. Phase 4.1-port (schema augmentation + shared module priming) landed at `395b4cc`; Phase 4.2-port (Scout Index + New Scout) is next.
 
 Full 12-step sourcing flow from brief upload through Google Slides deck generation. All new surfaces are designed in Cowork (wireframe + spec saved to `OUTPUTS/`) then implemented in Code. No Lovable. Design system foundation is Talent Scout pages per `docs/design-system.md`.
 

@@ -26,7 +26,7 @@ A user can be assigned to projects (as account manager or designer) regardless o
 - `users`: SELECT any auth user. INSERT blocked from API (only via `handle_new_user` trigger with service role). UPDATE: own row for `avatar_url`, `full_name`, `department_tags`; admin can update anyone's `permission_role`. DELETE admin only.
 - HQ tables (`projects`, `clients`, `venues`, `venue_types`, `tasks`, all join tables): SELECT/INSERT/UPDATE any auth user. DELETE: admin only for projects, venues, clients. Tasks: any auth user can DELETE.
 - `ts_*`: all operations admin only.
-- `vs_*`: SELECT/INSERT/UPDATE producer or admin. DELETE admin only.
+- `vs_*`: all operations open to all authenticated users (no role gating, no admin DELETE restriction). Single permissive `FOR ALL TO authenticated USING (true) WITH CHECK (true)` policy per table. Locked in port plan § 8.6 as the collaborative agency-wide model: any authenticated `@mirrornyc.com` user can read or write any scout, candidate venue, or photo.
 - `notifications`: SELECT and UPDATE only by recipient. INSERT via service role only.
 - `global_settings`: SELECT any auth user. UPDATE admin only.
 - `activity_log`: SELECT any auth user. INSERT via Postgres trigger only.

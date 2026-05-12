@@ -33,13 +33,37 @@ const PRICE_OUT_PER_MTOK = 15;
 const PRICE_CACHE_WRITE_PER_MTOK = 3.75;
 const PRICE_CACHE_READ_PER_MTOK = 0.3;
 
+export type ClaudeImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
 export type ClaudeContentPart =
-  | { type: "text"; text: string; cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" } };
+  | { type: "text"; text: string; cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" } }
+  | {
+      type: "image";
+      source: { type: "base64"; media_type: ClaudeImageMediaType; data: string };
+    }
+  | {
+      type: "document";
+      source: { type: "base64"; media_type: "application/pdf"; data: string };
+    };
 
 export type ClaudeMessage = {
   role: "user" | "assistant";
   content: string | ClaudeContentPart[];
 };
+
+/**
+ * Anthropic tool definition. Mirrors the API shape:
+ *   - Custom tools: { name, description, input_schema }
+ *   - Server tools: { type: "web_search_20250305" | ..., name, ... }
+ * Phase 4.4 (vs-start-sourcing) is the first HQ caller to need tools.
+ */
+// deno-lint-ignore no-explicit-any
+export type ClaudeTool = Record<string, any>;
+
+export type ClaudeToolChoice =
+  | { type: "auto" }
+  | { type: "any" }
+  | { type: "tool"; name: string };
 
 export type CallClaudeOptions = {
   model?: string;
@@ -50,7 +74,17 @@ export type CallClaudeOptions = {
   anthropic_beta?: string[];
   /** Caller label for logs. */
   fn_name?: string;
+  /**
+   * Tools (server tools like web_search and / or custom tools) the model may
+   * invoke. Pair with `tool_choice` to force a specific tool.
+   */
+  tools?: ClaudeTool[];
+  tool_choice?: ClaudeToolChoice;
 };
+
+/** A single content block from Claude's response (text, tool_use, etc.). */
+// deno-lint-ignore no-explicit-any
+export type ClaudeResponseBlock = Record<string, any> & { type: string };
 
 export type ClaudeUsage = {
   input_tokens: number;
@@ -62,6 +96,14 @@ export type ClaudeUsage = {
 export type ClaudeOk = {
   ok: true;
   text: string;
+  /**
+   * Full content array from the response, in order. Includes text, tool_use,
+   * server_tool_use, and any other block types the API returned. Inspect this
+   * (rather than `text`) when the call uses tools.
+   */
+  content: ClaudeResponseBlock[];
+  /** Stop reason from the API: "end_turn" | "tool_use" | "max_tokens" | etc. */
+  stop_reason: string | null;
   usage: ClaudeUsage;
   cost_usd: number;
   raw: unknown;
@@ -192,6 +234,8 @@ export async function callClaude(
 
   const body: Record<string, unknown> = { model, max_tokens, messages };
   if (options.system !== undefined) body.system = options.system;
+  if (options.tools !== undefined) body.tools = options.tools;
+  if (options.tool_choice !== undefined) body.tool_choice = options.tool_choice;
 
   let res: Response;
   try {
@@ -215,7 +259,15 @@ export async function callClaude(
   }
 
   const data = await res.json();
-  const text: string = data?.content?.[0]?.text ?? "";
+  const blocks: ClaudeResponseBlock[] = Array.isArray(data?.content) ? data.content : [];
+  // Concatenate every text block in order. Pre-tools callers expected `text`
+  // to be a flat string of the model's reply; preserve that. Tool callers
+  // should read `content` directly.
+  const text: string = blocks
+    .filter((b) => b?.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("");
+  const stop_reason: string | null = typeof data?.stop_reason === "string" ? data.stop_reason : null;
   const usage: ClaudeUsage = {
     input_tokens: data?.usage?.input_tokens ?? 0,
     output_tokens: data?.usage?.output_tokens ?? 0,
@@ -238,5 +290,5 @@ export async function callClaude(
     console.warn("[anthropic-spend-tracker] tracking failed (non-fatal):", e);
   }
 
-  return { ok: true, text, usage, cost_usd, raw: data };
+  return { ok: true, text, content: blocks, stop_reason, usage, cost_usd, raw: data };
 }

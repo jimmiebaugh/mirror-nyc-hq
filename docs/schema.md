@@ -157,49 +157,65 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 
 ## Venue Scout (linked to HQ)
 
+Three-table schema landed in Phase 4.1-port (`20260512200000_phase_4_1_port_schema.sql`). Replaces the failed-attempt Phase 4 shape from main with the 1:1 port from `mirror-nyc-venue-scout-pro`. The earlier `vs_briefs`, `vs_sourcing_rounds`, and `vs_pitch_decks` tables were dropped per the locked decisions in `docs/venue-scout-port-plan.md`:
+- § 8.1 single-round per scout (no `vs_sourcing_rounds`)
+- § 8.2 brief inline on `vs_scouts` (no `vs_briefs`)
+- § 8.5 deck history as `vs_scouts.generated_decks` jsonb array (no `vs_pitch_decks`)
+- § 8.6 RLS open to all authenticated (collaborative agency-wide workflow)
+
 ### vs_scouts
-- `id`, `name` (text)
-- `project_id` (FK to projects, nullable; standalone allowed)
-- `phase` (enum: `sourcing`, `deck`, `done`)
-- `created_by`, `created_at`, `updated_at`, `last_touched_at`
-
-### vs_briefs (multiple briefs allowed per scout)
-- `id`, `scout_id` (FK)
-- `source_file_path` (text)
-- `client`, `event_name`, `vibe`, `target_audience`, `ideal_features` (text)
-- `event_dates_start`, `event_dates_end` (date), `budget` (text)
-- `neighborhoods` (text[])
-- `square_footage_min`, `square_footage_max` (int)
-- `event_overview` (text, editable, used for deck)
+- `id` (uuid, PK), `name` (text, NOT NULL)
+- Brief fields inline (port plan § 8.2):
+  - `client_name`, `event_name`, `live_dates`, `city` (text)
+  - `budget` (numeric)
+  - `brief_data` (jsonb, default `{}`): flexible per-scout extras the producer surfaces from the uploaded brief PDF
+  - `event_overview` (text)
+- `current_step` (text, NOT NULL, default `sheet_prompt`, CHECK in 9 values from VS Pro: `sheet_prompt`, `sheet_upload`, `researching`, `sourcing_report`, `shortlist`, `review_selects`, `compiling`, `deck_prep`, `completed`): workflow state machine per port plan § 8.4. Drives every page's continue logic via `stepToRoute()` (`src/lib/venue-scout/format.ts`, lands in Phase 4.2-port).
+- `status` (text, NOT NULL, default `draft`): VS Pro carries this independent of `current_step`; kept for parity.
+- `sheet_storage_path` (text, nullable): path under `sourcing_sheets` storage bucket
+- `derived_columns` (jsonb, default `[]`): array of `{id, label, criteria}` alignment columns the AI selected for the single sourcing pass (collapsed onto the scout per § 8.1).
+- `generated_decks` (jsonb, default `[]`, port plan § 8.5): deck history as array of `{deck_id, deck_name, version, generated_at, venue_count, slide_count, edit_url, embed_url}`. Replaces the separate `vs_pitch_decks` table.
+- `deck_order` (jsonb, default `[]`): producer-controlled venue order for deck slides
+- HQ-specific operational columns (no VS Pro analog):
+  - `project_id` (uuid, FK to `projects`, nullable; standalone scouts allowed)
+  - `archived_at` (timestamptz, nullable; null = active, non-null = archived)
+  - `created_by`, `updated_by` (uuid, FK to users)
+  - `last_touched_at` (timestamptz, NOT NULL, default `now()`): tracks meaningful user activity (sourcing kick-off, brief save, deck generated). Drives the Scout Index sort.
 - `created_at`, `updated_at`
-
-### vs_sourcing_rounds
-- `id`, `scout_id` (FK)
-- `source_type` (enum: `uploaded_sheet`, `ai_research`)
-- `uploaded_file_path` (nullable)
-- `status` (enum: `researching`, `complete`, `failed`)
-- `generated_at`
+- Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` (port plan § 8.3) so the Researching / Compiling / Generating loading pages can subscribe to `current_step` changes via `postgres_changes`.
 
 ### vs_candidate_venues
-- `id`, `sourcing_round_id` (FK), `scout_id` (FK; denormalized)
-- `linked_venue_id` (FK to venues, nullable; populated when synced)
-- `name`, `address`, `neighborhood`, `venue_type` (text; freeform here)
-- `features` (text[]), `alignment_criteria` (jsonb)
-- `rank` (int 0-100)
-- `recommendations`, `considerations`, `notes`, `pitch_notes`, `website_url` (text)
-- `shortlisted` (bool), `pitched` (bool), `include_in_deck` (bool, default true)
-- `order_in_deck` (int)
-- `photos` (jsonb: `{top_left, top_right, bottom_left, bottom_right}`)
-- `added_manually` (bool)
+Maps to VS Pro `venues` (renamed because HQ already has a `venues` table for the master venue list). VS Pro's `venue_notes` collapsed inline as `notes` per port plan § 2.
+
+- `id` (uuid, PK)
+- `scout_id` (uuid, FK to `vs_scouts`, ON DELETE CASCADE)
+- `linked_venue_id` (uuid, FK to HQ `venues`, ON DELETE SET NULL): set by the shortlist sync trigger when a candidate flips into the master HQ venues table. Trigger lands when the Shortlist surface ports (Phase 4.6-port); column reserved here.
+- `name` (text, NOT NULL), `neighborhood`, `address` (text)
+- `venue_type` (text): VS Pro stores `type`; renamed because `type` reads as a system word in TS / Postgres tooling
+- `key_features` (text[], default `{}`)
+- `website_url` (text)
+- `size_sq_ft` (int), `capacity` (int)
+- `derived_attrs` (jsonb, default `{}`)
+- `recommendations`, `considerations` (text[], default `{}`): bullet lists from AI research
+- `rank` (int, CHECK 0-100 or NULL): VS Pro stores `ranking_score`; renamed for parity with HQ Talent Scout's score naming
+- `source` (text, NOT NULL, default `manual`, CHECK in `sheet`, `research`, `manual`)
+- `shortlisted`, `pitched` (bool, default false), `include_in_deck` (bool, default true)
+- `venue_overview` (text): AI-generated venue summary written by `vs-compile-summaries` (Phase 4.7-port)
+- `notes` (text): inlined from VS Pro `venue_notes`. Free-text matrix notes
+- `pitch_notes` (text): pitch-context notes from Shortlist
 - `created_at`, `updated_at`
 
-**Sync rule:** when `shortlisted` flips false to true, OR when an `added_manually` venue's research completes, check HQ `venues` for a match (by `name + neighborhood` or by `website_url`). If no match, INSERT a new row in `venues` and set `linked_venue_id`. If match, just set `linked_venue_id`. Never update an existing HQ venue row. Implemented by the `vs_candidate_venues_shortlist_sync` Postgres trigger.
+**Sync rule** (trigger lands in Phase 4.6-port, when the Shortlist surface ports): when `shortlisted` flips false to true, check HQ `venues` for a match (by `website_url` first, then by case-insensitive `name + neighborhood`). If no match, INSERT a new row in `venues` and set `linked_venue_id`. If match, just set `linked_venue_id`. Never update an existing HQ venue row. Will be implemented by a simplified `vs_candidate_venues_shortlist_sync` Postgres trigger (the failed-attempt version is dropped in the port migration; the new one fires only on the shortlisted false→true condition).
 
-### vs_pitch_decks
-- `id`, `scout_id` (FK)
-- `google_slides_id`, `google_slides_url`, `drive_folder_path` (text)
-- `version_number` (int; incremented per regeneration)
-- `generated_at`, `generated_by` (FK)
+### vs_venue_photos
+Lifted from VS Pro with HQ rename. ON DELETE CASCADE so a Start Over (which deletes all candidate venues for a scout) cleans photos automatically.
+
+- `id` (uuid, PK)
+- `candidate_venue_id` (uuid, FK to `vs_candidate_venues`, ON DELETE CASCADE)
+- `slot` (int, NOT NULL, CHECK BETWEEN 1 AND 4): `1 = top_left`, `2 = top_right`, `3 = bottom_left`, `4 = bottom_right` on the deck slide. UNIQUE on `(candidate_venue_id, slot)`.
+- `storage_path` (text, NOT NULL): path within the `vs_venue_photos` storage bucket (added in Phase 4.7-port when the upload UI ports), format `${scout_id}/${candidate_venue_id}/slot_${N}.${ext}`
+- `file_name`, `file_size_bytes` (text / int, nullable)
+- `created_at`
 
 ## Cross-cutting
 
@@ -233,7 +249,7 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 
 ## Postgres triggers
 
-- `vs_candidate_venues_shortlist_sync`: implements the Venue Scout sync rule above.
+- `vs_candidate_venues_shortlist_sync`: dropped in Phase 4.1-port. Will be re-introduced in a simpler form (shortlisted false→true only) when the Shortlist surface ports in Phase 4.6-port.
 - `tasks_completed_at_set`: when `tasks.status` flips to `done`, set `completed_at = now()`.
 - `activity_log_writer`: on insert/update/status-change to projects, venues, tasks, write an activity_log row.
 - `updated_at_auto`: standard updated_at trigger on every table with the column.
