@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { NotesModal } from "@/components/venue-scout/NotesModal";
+import { PhotoUploadModal } from "@/components/venue-scout/PhotoUploadModal";
 import {
   Th,
   Td,
@@ -24,10 +25,9 @@ import {
 // Lifted from VS Pro (src/pages/sourcing/Shortlist.tsx) per port plan § 9 +
 // Phase 4.6-port spec. Same column-rename / route-prefix / table-rename
 // adapts as SourcingReport, plus:
-//   - PhotoUploadModal STUBBED: photoCounts always 0; clicking the pitched
-//     "+ Upload" button shows a toast pointing to Phase 4.7-port. The button
-//     state machine (Locked / Upload / Complete) is rendered for visual
-//     parity with VS Pro.
+//   - Photo column: 4.6-port stubbed the upload affordance (toast no-op,
+//     photoCounts always 0). 4.7.1-port unstubs it: real counts query
+//     against vs_venue_photos + real PhotoUploadModal open on pitched rows.
 //   - Manual venue add: inserts with `source: 'manual', shortlisted: false`
 //     to match VS Pro behavior. The filter `v.shortlisted || v.source ===
 //     'manual'` makes manual rows visible on Shortlist regardless of the
@@ -64,7 +64,9 @@ export default function Shortlist() {
   const [loading, setLoading] = useState(true);
 
   const [notesOpen, setNotesOpen] = useState(false);
+  const [photosOpen, setPhotosOpen] = useState(false);
   const [activeVenue, setActiveVenue] = useState<Venue | null>(null);
+  const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {},
@@ -94,6 +96,23 @@ export default function Shortlist() {
       (v) => v.shortlisted || v.source === "manual",
     );
     setVenues(visible);
+
+    // 4.7.1-port: real photo counts (4.6-port stub returned 0 always).
+    if (visible.length) {
+      const ids = visible.map((v) => v.id);
+      const { data: ph } = await supabase
+        .from("vs_venue_photos")
+        .select("candidate_venue_id")
+        .in("candidate_venue_id", ids);
+      const counts: Record<string, number> = {};
+      (ph ?? []).forEach((p) => {
+        counts[p.candidate_venue_id] = (counts[p.candidate_venue_id] ?? 0) + 1;
+      });
+      setPhotoCounts(counts);
+    } else {
+      setPhotoCounts({});
+    }
+
     setLoading(false);
   }, [scoutId]);
 
@@ -203,11 +222,8 @@ export default function Shortlist() {
 
   function openPhotos(v: Venue) {
     if (!v.pitched) return;
-    // 4.6-port stub: PhotoUploadModal lands in 4.7-port. The button state
-    // machine is rendered for visual parity but the click is a no-op toast.
-    toast("Photo upload ships in Phase 4.7", {
-      description: "Mark for pitch enables this affordance.",
-    });
+    setActiveVenue(v);
+    setPhotosOpen(true);
   }
 
   async function onContinue() {
@@ -312,9 +328,7 @@ export default function Shortlist() {
                     .map((s) => s.trim())
                     .filter(Boolean);
                   const note = v.notes ?? undefined;
-                  // photoCounts STUB: always 0 in 4.6-port until 4.7-port
-                  // lands the upload modal + reads vs_venue_photos.
-                  const phCount = 0;
+                  const phCount = photoCounts[v.id] ?? 0;
                   return (
                     <tr
                       key={v.id}
@@ -573,6 +587,19 @@ export default function Shortlist() {
                 v.id === activeVenue.id ? { ...v, notes: content } : v,
               ),
             );
+          }
+        }}
+      />
+
+      <PhotoUploadModal
+        open={photosOpen}
+        onOpenChange={setPhotosOpen}
+        scoutId={scoutId ?? ""}
+        venueId={activeVenue?.id ?? null}
+        venueName={activeVenue?.name ?? ""}
+        onSaved={(c) => {
+          if (activeVenue) {
+            setPhotoCounts((prev) => ({ ...prev, [activeVenue.id]: c }));
           }
         }}
       />

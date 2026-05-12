@@ -214,9 +214,11 @@ Lifted from VS Pro with HQ rename. ON DELETE CASCADE so a Start Over (which dele
 - `id` (uuid, PK)
 - `candidate_venue_id` (uuid, FK to `vs_candidate_venues`, ON DELETE CASCADE)
 - `slot` (int, NOT NULL, CHECK BETWEEN 1 AND 4): `1 = top_left`, `2 = top_right`, `3 = bottom_left`, `4 = bottom_right` on the deck slide. UNIQUE on `(candidate_venue_id, slot)`.
-- `storage_path` (text, NOT NULL): path within the `vs_venue_photos` storage bucket (added in Phase 4.7-port when the upload UI ports), format `${scout_id}/${candidate_venue_id}/slot_${N}.${ext}`
+- `storage_path` (text, NOT NULL): path within the `vs_venue_photos` storage bucket, format `${scout_id}/${candidate_venue_id}/slot-${N}-${timestamp}.${ext}` (lifted from VS Pro; the timestamp cache-busts when a producer re-uploads to a slot whose old object was just deleted)
 - `file_name`, `file_size_bytes` (text / int, nullable)
 - `created_at`
+
+Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSignedUrl(path, 3600)`, storage RLS gated on `is_producer_or_admin()`). Created in 4.7.1-port (`20260512240000_phase_4_7_1_port_vs_venue_photos_bucket.sql`). Distinct from the public `venue_photos` bucket reserved for HQ Core's master `venues` table.
 
 ## Cross-cutting
 
