@@ -14,6 +14,12 @@ const STUB_MESSAGES: Record<string, string> = {
     "We couldn't parse that sheet. Try a different file, or skip the upload and let us research candidates from the brief.",
   "empty-sheet":
     "We didn't find any venues in that sheet. Try a different file, or skip the upload and let us research candidates from the brief.",
+  // Phase 4.5-port: written by vs-research-venues on any AI / insert /
+  // timeout failure. The full ErrorState ports in 4.9-port and will
+  // surface vs_scouts.research_error for debug visibility; this stub
+  // keeps a static message until then.
+  "research-timeout":
+    "We couldn't finish researching venues. The AI request timed out or returned no results. Head back to Sourcing and try again, or contact the team.",
 };
 
 export default function ErrorStateStub() {
