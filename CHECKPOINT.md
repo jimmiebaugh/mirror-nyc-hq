@@ -85,7 +85,7 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 **Phase 4.3-port** per `docs/venue-scout-port-plan.md` § 9: Brief surface. Port `/projects/:id/brief` from VS Pro -- BriefForm (read/edit), brief PDF upload + parse via `vs-parse-brief` (rebuilt from scratch using VS Pro shape), and the entry point from Scout Index after a producer creates a new project (the sheet-prompt route lands in 4.4-port; until then post-create navigation 404s as noted in `docs/decisions.md` Phase 4.2-port).
 
-**Squash-approval gate for Phase 4.2-port** comes first. After approval: squash the worktree commits onto `vs-port-fresh`, push (or hold), backfill the squash hash into CHECKPOINT here in a follow-up commit. See `OUTPUTS/COWORK_SYNC.md` for the live status.
+`vs-port-fresh` is published on origin (HEAD `0fedaa9` as of the 4.2-port push). Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
 
 **Production wiring for Phase 3.8** still pending (GUCs, db push, 12 edge function deploys). Can happen in parallel since it's all out-of-band (no Netlify). Full step-by-step in `NEXT_STEPS.md`.
 
