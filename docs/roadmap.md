@@ -43,19 +43,97 @@ Squash-merged at `2ab37c3` (2026-05-08). Manual-reviewed flag with auto/manual p
 ### 3.9 Pull notification — DONE
 `ts-send-pull-notification` standalone deployed; `ts-pull-candidates` fires it fire-and-forget on every `status='complete'` write (chunked finalize, dedupe-clears-pending-to-zero, zero-results paths). Tallies per-status counts and emails the role's hiring manager from `jobs@mirrornyc.com` with a deep link to PullDetail. Folds into `notifications-dispatch` in Phase 5.
 
-### 3.10 Scorecard refinement step — NEXT (in flight on `phase-3-10-scorecard-refine`)
-New `ts-refine-scorecard` edge function plus a Process / Save button morph on both scorecard edit surfaces (wizard step-3 AND the Edit Role page). After any user edit (revise existing criterion, add manual, remove manual) the bottom-bar action becomes **Process scorecard**; clicking sends the current criteria + role context through Claude, which standardizes `name` and `full_points_rubric` while preserving every concept the user provided. Two server-side guarantees: (1) dead criteria — `weight=0` OR empty `name`+`full_points_rubric` — are dropped before the prompt runs (the count is surfaced in the success toast); (2) defense-in-depth merge restores `tier`, `weight`, `is_disqualifier`, `is_manual` from the user's input regardless of model output. Each tier is re-sorted highest-weight first after refine. On the wizard, the action flips to **Approve & lock scorecard** once clean. On Edit Role, the action flips back to **Save changes** which runs the existing confirm-and-trigger-bulk-reeval flow.
+### 3.10 Scorecard refinement step — DONE
+Squash-merged at `b70f0e9`. New `ts-refine-scorecard` edge function + Process / Save button morph on wizard step-3 and Edit Role. Dead-criterion drop server-side before prompt. Defense-in-depth merge restores tier / weight / is_disqualifier / is_manual from user input regardless of model output. Tier re-sort client-side after refine.
 
-### 3.X queued for runtime validation
+### 3.11 Scorecard substance restoration + summary field — DONE
+Squash-merged at `cb038fc`. Reverted Phase 3.7's over-aggressive 12-word cap on `full_points_rubric`. Each criterion now carries two describer fields: `full_points_rubric` (1-3 substantive sentences for the per-candidate evaluator) and `summary` (14-word recap for compact UI surfaces), generated in the same Claude pass.
+
+### 3.X runtime validation (pending, not a code phase)
 - Verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix; flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`. Hands-on test, not a code change.
-- Real-cron test: trigger a manual `ts-cron-scheduled-pulls` invocation in production, watch the watchdog detect a fake stall.
-- Cleanup of deprecated `auto_rejected` enum value requires enum rebuild — not worth it now.
+- Real-cron test: trigger a manual `ts-cron-scheduled-pulls` invocation in production, watch watchdog detect a fake stall. Requires GUCs set in Supabase SQL editor and Phase 3.8 edge functions deployed (see `NEXT_STEPS.md`).
+- Cleanup of deprecated `auto_rejected` enum value requires enum rebuild. Not worth it now.
 
-## Phase 4: Venue Scout — TODO
+## Phase 4: Venue Scout — IN PROGRESS (port restart)
 
-Same approach as Phase 3 (port from cloned repo). Venue Scout draft repo is incomplete; the screen-by-screen spec (Jimmie has it; can paste on request) is the source of truth, not the draft. Edge functions: `vs-parse-brief`, `vs-research-venues`, `vs-parse-sourcing-sheet`, `vs-research-single-venue`, `vs-generate-deck`. `venue_types` lookup values needed from Jimmie before this starts.
+> **Superseded by `docs/venue-scout-port-plan.md`.** The sub-phase numbering and route table below describe the abandoned 4.1 - 4.6 attempt that shipped on `main` and is now archived as a reference. Active work since 2026-05-12 lives on the `vs-port-fresh` branch as a 1:1 port from `mirror-nyc-venue-scout-pro` (the same way Phase 3 ported Talent Scout from `mirror-talent-scout`). Sub-phase sequence is `4.1-port` through `4.10-port` per the port plan § 9. Phase 4.1-port (schema augmentation + shared module priming) landed at `395b4cc`; Phase 4.2-port (Scout Index + New Scout) is next.
 
-Sequential, not parallel — Talent Scout fully working before Venue Scout starts.
+Full 12-step sourcing flow from brief upload through Google Slides deck generation. All new surfaces are designed in Cowork (wireframe + spec saved to `OUTPUTS/`) then implemented in Code. No Lovable. Design system foundation is Talent Scout pages per `docs/design-system.md`.
+
+Auth gate: `ProtectedRoute` — all authenticated users (member, producer, admin). RLS is open: any authenticated user can read and write any scout (one `FOR ALL TO authenticated USING (true)` policy per vs_* table).
+
+VS Pro source repo at `/Users/jimmie/Code/mirror-nyc-venue-scout-pro` is reference for functional scope and edge function logic only. All UI/layout comes from HQ design system.
+
+Route tree (18 routes, all under `/venue-scout/scouts/:id`):
+
+| Route | Surface |
+|---|---|
+| `/venue-scout` | Scout Index — list all scouts |
+| `/venue-scout/scouts/:id` | Scout Dashboard (hub) |
+| `/venue-scout/scouts/:id/brief-intake` | Brief Intake — upload + AI pre-fill + edit |
+| `/venue-scout/scouts/:id/brief-report` | Brief Report — review parsed brief + version history |
+| `/venue-scout/scouts/:id/sourcing-prompt` | Sourcing Prompt — neighborhood / focus prompt input |
+| `/venue-scout/scouts/:id/sheet-upload` | Sheet Upload — paste/upload sourcing spreadsheet |
+| `/venue-scout/scouts/:id/researching` | Researching — live Realtime progress (10-15 venues) |
+| `/venue-scout/scouts/:id/matrix` | Candidate Venues Matrix — full-width scored matrix |
+| `/venue-scout/scouts/:id/shortlist` | Venue Shortlist — shortlisted venues + deck notes |
+| `/venue-scout/scouts/:id/review` | Review Selects — pitched venues confirmation |
+| `/venue-scout/scouts/:id/compiling` | Compiling — generates summaries + researches manual adds |
+| `/venue-scout/scouts/:id/deck-prep` | Deck Prep — drag reorder, photo slot assignment, slide count |
+| `/venue-scout/scouts/:id/generating` | Generating — 1-2 min Google Slides generation progress |
+| `/venue-scout/scouts/:id/deck/:version` | Pitch Deck Ready — embedded preview + version history |
+| `/venue-scout/scouts/:id/settings` | Scout Settings — rename, danger zone (Start Over) |
+| `/venue-scout/scouts/:id/sourcing/:roundId` | Sourcing Round Detail |
+| `/venue-scout/scouts/:id/error/:errorCode` | Error States |
+
+Edge functions (new, all `vs-*` prefix):
+
+| Function | When invoked |
+|---|---|
+| `vs-parse-brief` | Brief Intake submit — parses uploaded PDF/doc, returns structured fields |
+| `vs-start-sourcing` | Sourcing Prompt submit — kicks off venue research round |
+| `vs-parse-sheet` | Sheet Upload submit — parses pasted/uploaded spreadsheet into candidate rows |
+| `vs-compile-summaries` | Compiling page — generates venue overviews + researches manually-added venues |
+| `vs-generate-deck` | Generating page — copies Google Slides template via service account, populates slides |
+
+### 4.1 Scout Dashboard — SQUASH-READY (branch `phase-4-1-scout-dashboard`)
+
+First Venue Scout surface. Hub page for a single scout: hero card (name, phase pill, sourcing status pill, stat tiles, CTA state machine), brief summary card, sourcing rounds card, shortlisted venues compact card. Primitives extracted here serve all downstream phases.
+
+Spec: `OUTPUTS/phase-4-1-scout-dashboard-spec.md` | Wireframe: `OUTPUTS/phase-4-1-scout-dashboard-wireframe.html`
+
+| Sub-phase | Status | Commit |
+|---|---|---|
+| 4.1.1 RLS migration, ideal_features text→text[], vs_sourcing_rounds Realtime, types regen, doc sweep | Done | `209650f` |
+| 4.1.2 Field.tsx extraction, venueTypes.ts, ScoutPhasePill / SourcingStatusPill / RankBadge | Done | `b385924` |
+| 4.1.3 ScoutDashboard.tsx page + route registration, inDeck stat tightened | Done | `5cdba51` + `f6d1824` |
+| 4.1.4 code-reviewer subagent, review fixes, doc sweep, squash-merge prep | Done | `5612e7f` + `6930ca6` |
+
+6 commits total, 17 files, +1256 / -59. tsc + build clean. Awaiting squash-merge approval.
+
+### 4.2 Scout List — TODO
+
+`/venue-scout` index page. List all scouts with last-updated sort, "+ New Scout" CTA, archive / restore. Follows Talent Scout `Index.tsx` pattern.
+
+### 4.3 Wizard + Brief Intake + Brief Report + Settings — TODO
+
+Scout-creation wizard (new scout flow), `/brief-intake` (file upload + `vs-parse-brief` AI parse + editable fields form, first VS edge function), `/brief-report` (review parsed brief, version history, link to start sourcing), `/settings` (rename, danger zone including Start Over). Start Over lives here: deletes candidate venues + sourcing rounds + photos, resets phase to sourcing, keeps brief. New edge function `vs-parse-brief`.
+
+### 4.4 Sourcing Pipeline + Matrix — TODO
+
+`/sourcing-prompt` + `/sheet-upload` + `/researching` (live Realtime progress subscribed to `vs_sourcing_rounds` -- publication already in place from 4.1.1) + full-width matrix at `/matrix` + `/sourcing/:roundId` detail. New columns on `vs_candidate_venues` (`key_features`, `derived_attrs`, `size_sq_ft`, `capacity`, `source`) added in this phase's migration. New edge functions `vs-start-sourcing`, `vs-parse-sheet`, `vs-research-venues`. Likely the most complex single phase in Phase 4.
+
+### 4.5 Shortlist + Review + Compile — TODO
+
+`/shortlist` (shortlisted venues with Deck Notes field, manual venue add, photo upload -- introduces `vs_venue_photos` table and real photos replace the 4.1 IMG placeholders), `/review` (pitched venues confirmation), `/compiling` (Realtime progress while `vs-compile-summaries` generates venue overviews + researches manual adds). New edge function `vs-compile-summaries`. Schema: `vs_venue_photos` table added here.
+
+### 4.6 Deck Prep + Generate + Ready — TODO
+
+`/deck-prep` (drag-to-reorder slots, photo-slot swap up to 4 per venue, slide count preview), `/generating` (progress screen, 1-2 min), `/deck/:version` (embedded Slides preview, version history, "New Version" trigger). New edge function `vs-generate-deck` -- copies Google Slides template via service account, populates slides. Multi-deck versioning via `vs_pitch_decks.version_number`.
+
+### 4.8 Scout Index + Settings + Error States + Nav — TODO
+
+`/venue-scout` Scout Index — list all scouts, "New Scout" CTA, last-updated sort. `/settings` — rename scout, Start Over (deletes candidate venues + sourcing rounds + photos, resets phase to sourcing, keeps brief). `/error/:errorCode` — four named error states (empty sheet, unsupported format, research timeout, deck generation failure). Top nav wired: `VENUES` caption appears when in `/venue-scout/*` routes (matches `TALENT` pattern).
 
 ## Phase 5: Cross-cutting — TODO
 
@@ -75,6 +153,7 @@ Sequential, not parallel — Talent Scout fully working before Venue Scout start
 
 ## Open questions still pending
 
-- `venue_types` lookup values. Jimmie provides before Phase 4.
 - Project status enum may be refined and reduced. Current 14 values are fine for now; revisit in Phase 5 polish.
 - Talent Scout data extraction details (Phase 6.2). If Phase 6 inventory turns up data that doesn't fit the re-pull plan, revisit.
+- `vs_venue_photos` schema design (deferred to Phase 4.5). Separate table `(candidate_venue_id FK, slot int 1-4, storage_path)` is the working plan.
+- Venue type taxonomy: resolved in 4.1.2 via `venueTypes.ts` (CANONICAL_TYPES ported from VS Pro source). No action needed before 4.4.
