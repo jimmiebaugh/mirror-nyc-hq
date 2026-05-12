@@ -2,11 +2,12 @@
 
 Living-state doc. Update on every meaningful merge to `main`.
 
-**Last updated:** 2026-05-09
-**Latest commit on main:** `cb038fc` Phase 3.11 — scorecard substance restoration + summary field (squash-merged from `phase-3-11-scorecard-substance`)
-**Active feature branch:** `phase-4-1-scout-dashboard` — 6 commits, latest `6930ca6` (4.1.4 doc sweep). 17 files changed, +1256/-59. tsc + build clean. Branch NOT pushed to origin. Awaiting Jimmie's squash-merge approval.
-**Current phase:** Phase 4.1 — Scout Dashboard. All four sub-phases done. Squash-ready.
-**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`).
+**Last updated:** 2026-05-12
+**Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
+**Active feature branch:** `vs-port-fresh` — branched off `dd38577`. Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
+**Latest commit on `vs-port-fresh`:** `4483895` (Phase 4.1-port squashed from `claude/vs-port-4-1-schema`).
+**Current phase:** Phase 4.1-port DONE on `vs-port-fresh`; next: Phase 4.2-port (Scout Index + New Scout entry) per port plan § 9.
+**Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
 
@@ -36,7 +37,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 - Cron schedules are committed but require runtime activation: production GUCs (`app.supabase_url` + `app.internal_api_secret`) need to be set in Supabase SQL editor before the schedules will fire. Until then they're scheduled-but-noop. See `NEXT_STEPS.md` § 2a.
 - All Phase 3.8 edge functions need to be deployed via `supabase functions deploy <name>` (cron functions + `ts-send-pull-notification` + re-deploys for `ts-pull-candidates` and any function that imports `_shared/anthropic.ts`).
 - Phase 3.8 migrations need to be pushed: `supabase db push --linked`.
-- Venue Scout routes (`/venue-scout/*`) don't exist yet (Phase 4).
+- **Venue Scout** is being rebuilt as a 1:1 port from `mirror-nyc-venue-scout-pro` on the `vs-port-fresh` branch (started 2026-05-12). The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived as a reference but no longer the canonical implementation. See `docs/venue-scout-port-plan.md` for the 10 sub-phase sequence and `OUTPUTS/COWORK_SYNC.md` for current state.
 - HQ Core pages beyond `/projects` are stubs (Phase 5).
 - In-app notifications bell (Phase 5). Pull-completion email is live; bell + per-user prefs come later.
 
@@ -44,57 +45,51 @@ Living-state doc. Update on every meaningful merge to `main`.
 
 - `auto_rejected` enum value is deprecated (Phase 3.7.2.1 backfilled to `reject` + `manually_reviewed=false`) but kept in the enum for safety. New writes never use it. Cleanup requires enum rebuild — not worth it now.
 - Packet path needs end-to-end verification after the WORKER_RESOURCE_LIMIT fix (signed-URL email body, no MIME attachment) before the UI flag flips back on. `ts-final-review` itself is verified end-to-end.
+- **Failed-attempt Venue Scout artifacts still in production until cutover:** five orphaned edge functions (`vs-parse-brief`, `vs-parse-sheet`, `vs-start-sourcing`, `vs-compile-summaries`, `vs-generate-deck`) keep responding to direct invocations. Storage buckets `briefs`, `sourcing_sheets`, `venue_photos` retain their objects. Phase 4.1-port migration dropped the failed-attempt vs_* tables and the nine `phase_4_*` migration history rows are repaired to `reverted` in the supabase schema_migrations table. Edge function deletion + bucket cleanup are queued for the cutover commit (see port plan § "Done when").
 
 ## Recent commits (main)
 
 ```
+6532235  [skip netlify] Backfill a44c6a3 hash into CHECKPOINT.md (failed Phase 4 path; archived)
+a44c6a3  [skip netlify] URL-quality patch (failed Phase 4 path; archived)
 cb038fc  Phase 3.11: scorecard substance restoration + summary field (squash-merged from phase-3-11-scorecard-substance)
 b70f0e9  Phase 3.10: scorecard refinement step (squash-merged from phase-3-10-scorecard-refine)
 e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged from phase-3-8-cron-watchdogs)
-2ab37c3  Phase 3.7: Candidates UX + referral ingestion (squash-merged from phase-3-7-candidates-ux)
 ```
 
-## Recent commits (phase-4-1-scout-dashboard, NOT on main yet)
+## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
-6930ca6  Phase 4.1.4: doc sweep — roadmap + decisions [skip netlify]
-5612e7f  Phase 4.1.4: review fixes — View All count, label-form CSS, reload useCallback [skip netlify]
-f6d1824  Phase 4.1.3.1: tighten inDeck stat to pitched && include_in_deck [skip netlify]
-5cdba51  Phase 4.1.3: ScoutDashboard.tsx + App.tsx route registration [skip netlify]
-b385924  Phase 4.1.2: Field.tsx extraction, venueTypes.ts, ScoutPhasePill / SourcingStatusPill / RankBadge [skip netlify]
-209650f  Phase 4.1.1: relax vs_* RLS to authenticated, ideal_features text→text[], vs_sourcing_rounds Realtime [skip netlify]
+4483895  [skip netlify] Phase 4.1-port: schema augmentation + shared module priming (squash-merged from claude/vs-port-4-1-schema)
+ae22bb8  [skip netlify] Port plan: Venue Scout 1:1 port from mirror-nyc-venue-scout-pro
+dd38577  [skip netlify] Phase 4.1 Cowork-side doc state (port branch base)
 ```
 
 ## Recent migrations
 
 ```
-20260508120001_phase_3_8_drop_dead_reeval_progress_column.sql   Phase 3.8 — drop ts_pull_rounds.reeval_last_progress_at (dead since Phase 3.5) (PENDING db push)
-20260508120000_phase_3_8_cron_extensions_and_schedules.sql      Phase 3.8 — pg_cron + pg_net + invoke_edge_function helper + six cron schedules (PENDING db push)
-20260508005206_phase_3_7_7_referral_columns.sql                 Phase 3.7.7 — is_referral boolean + referrer_email text on ts_candidates (APPLIED)
-20260508002545_phase_3_7_6_force_competitor_default.sql         Phase 3.7.6 — idempotent DO block: INSERT row if missing OR UPDATE if column empty for global competitor list (APPLIED)
-20260507225501_phase_3_7_6_default_competitor_list.sql          Phase 3.7.6 — conditional UPDATE seeding the default 19-entry global competitor list (APPLIED)
-20260507221645_phase_3_7_5_global_competitor_list.sql           Phase 3.7.5 — global_settings.talent_scout_competitor_list text[] column (APPLIED)
-20260507092912_phase_3_7_deprecate_auto_rejected.sql            Phase 3.7.2.1 — backfill auto_rejected rows to reject + manually_reviewed=false (APPLIED)
-20260507092102_phase_3_7_manually_reviewed.sql                  Phase 3.7.2 — ts_candidates.manually_reviewed boolean default false (APPLIED)
+20260512210000_phase_4_1_port_drop_orphan_helper.sql            Phase 4.1-port follow-up — DROP _jsonb_array_to_text_array (orphan helper from failed Phase 4.3.1's create_scout_with_brief, missed by the main port migration; surfaced by code-reviewer) (APPLIED)
+20260512200000_phase_4_1_port_schema.sql                        Phase 4.1-port — DROP failed-attempt vs_briefs / vs_sourcing_rounds / vs_pitch_decks; reset vs_scouts to brief-inline shape with current_step state machine + generated_decks jsonb history; vs_candidate_venues simplified (single-round per scout); vs_venue_photos with ON DELETE CASCADE; RLS open to authenticated; vs_scouts in supabase_realtime publication with REPLICA IDENTITY FULL (APPLIED)
+20260508150000_phase_3_11_pull_watchdog_2min.sql                Phase 3.11.1 — pull-watchdog cadence 5min→2min, threshold 60min→5min (APPLIED)
+20260508140000_phase_3_8_add_updated_at_to_pull_rounds.sql      Phase 3.8 — updated_at trigger on ts_pull_rounds for watchdog heartbeat (APPLIED)
+20260508130000_phase_3_8_vault_for_internal_secret.sql          Phase 3.8 — Vault stores internal_api_secret (APPLIED)
+20260508120001_phase_3_8_drop_dead_reeval_progress_column.sql   Phase 3.8 — drop ts_pull_rounds.reeval_last_progress_at (APPLIED)
+20260508120000_phase_3_8_cron_extensions_and_schedules.sql      Phase 3.8 — pg_cron + pg_net + invoke_edge_function helper + six cron schedules (APPLIED)
 ```
+
+The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout Dashboard) and Phase 4.6 (Deck Prep) were repaired to `reverted` in the remote `supabase_migrations.schema_migrations` table on 2026-05-12 ahead of the Phase 4.1-port push. The actual table state is now whatever the port migration produced, regardless of the abandoned history.
 
 ## Next up
 
-**Squash-merge Phase 4.1** when Jimmie gives the go. Code runs `/ship` flow (tsc / build / migration list / origin status), squashes to main (no [skip netlify] -- this IS the deploy), then a follow-up [skip netlify] commit to backfill CHECKPOINT.md post-merge.
+**Phase 4.2-port** per `docs/venue-scout-port-plan.md` § 9: Scout Index + New Scout entry. Port `src/pages/Index.tsx` from VS Pro to `ScoutIndex.tsx` (active / archived disclosure UI per Phase 4.2 main precedent), rewrite the New Scout entry from scratch (VS Pro placeholder is unusable), wire `Venue Scout` link in TopNav.
 
-**Three open questions before squash (from code-reviewer + test plan):**
-1. **Start Over button:** defer to Scout Settings (4.3) or add a destructive ghost button on the dashboard now?
-2. **NewRoleDetails labels:** 13px coral → 12px white from 4.1.2 Field.tsx extraction. Read it cold and decide: restore locally in NewRoleDetails, or accept the canonical alignment?
-3. **inDeck stat:** renders 0 until DeckPrep ships. Expected -- just confirm you're comfortable with it showing 0 for all of Phase 4.2-4.5.
+**Squash-approval gate for Phase 4.1-port** comes first. After approval: squash the worktree commits onto `vs-port-fresh`, push (or hold), backfill CHECKPOINT here. See `OUTPUTS/COWORK_SYNC.md` for the live status.
 
-**After squash: cut `phase-4-2-scout-list` branch and start 4.2 (Scout List index page).**
-
-**Phase 4.1.4** — code-reviewer subagent, §11 manual test plan, doc sweep, squash-merge to main.
-
-**Production wiring for Phase 3.8** still pending (GUCs, db push, 12 edge function deploys). Can happen in parallel with Phase 4.1 feature work since it's all out-of-band (no Netlify). Full step-by-step in `NEXT_STEPS.md`.
+**Production wiring for Phase 3.8** still pending (GUCs, db push, 12 edge function deploys). Can happen in parallel since it's all out-of-band (no Netlify). Full step-by-step in `NEXT_STEPS.md`.
 
 **Carried-forward cleanup queued:**
 - Verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix, then flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`.
+- Cutover deletion of failed-attempt edge functions: `vs-parse-brief`, `vs-parse-sheet`, `vs-start-sourcing`, `vs-compile-summaries`, `vs-generate-deck`. Defer until vs-port-fresh squash-merges (or hard-resets) onto main.
 
 ## How to update this file
 

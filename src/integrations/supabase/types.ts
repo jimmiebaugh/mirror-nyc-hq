@@ -1055,153 +1055,82 @@ export type Database = {
           },
         ]
       }
-      vs_briefs: {
-        Row: {
-          budget: string | null
-          client: string | null
-          created_at: string
-          event_dates_end: string | null
-          event_dates_start: string | null
-          event_name: string | null
-          event_overview: string | null
-          id: string
-          ideal_features: string | null
-          neighborhoods: string[]
-          scout_id: string
-          source_file_path: string | null
-          square_footage_max: number | null
-          square_footage_min: number | null
-          target_audience: string | null
-          updated_at: string
-          vibe: string | null
-        }
-        Insert: {
-          budget?: string | null
-          client?: string | null
-          created_at?: string
-          event_dates_end?: string | null
-          event_dates_start?: string | null
-          event_name?: string | null
-          event_overview?: string | null
-          id?: string
-          ideal_features?: string | null
-          neighborhoods?: string[]
-          scout_id: string
-          source_file_path?: string | null
-          square_footage_max?: number | null
-          square_footage_min?: number | null
-          target_audience?: string | null
-          updated_at?: string
-          vibe?: string | null
-        }
-        Update: {
-          budget?: string | null
-          client?: string | null
-          created_at?: string
-          event_dates_end?: string | null
-          event_dates_start?: string | null
-          event_name?: string | null
-          event_overview?: string | null
-          id?: string
-          ideal_features?: string | null
-          neighborhoods?: string[]
-          scout_id?: string
-          source_file_path?: string | null
-          square_footage_max?: number | null
-          square_footage_min?: number | null
-          target_audience?: string | null
-          updated_at?: string
-          vibe?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "vs_briefs_scout_id_fkey"
-            columns: ["scout_id"]
-            isOneToOne: false
-            referencedRelation: "vs_scouts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       vs_candidate_venues: {
         Row: {
-          added_manually: boolean
           address: string | null
-          alignment_criteria: Json
-          considerations: string | null
+          capacity: number | null
+          considerations: string[]
           created_at: string
-          features: string[]
+          derived_attrs: Json
           id: string
           include_in_deck: boolean
+          key_features: string[]
           linked_venue_id: string | null
           name: string
           neighborhood: string | null
           notes: string | null
-          order_in_deck: number | null
-          photos: Json
           pitch_notes: string | null
           pitched: boolean
           rank: number | null
-          recommendations: string | null
-          research_status: Database["public"]["Enums"]["vs_research_status"]
+          recommendations: string[]
           scout_id: string
           shortlisted: boolean
-          sourcing_round_id: string
+          size_sq_ft: number | null
+          source: string
           updated_at: string
+          venue_overview: string | null
           venue_type: string | null
           website_url: string | null
         }
         Insert: {
-          added_manually?: boolean
           address?: string | null
-          alignment_criteria?: Json
-          considerations?: string | null
+          capacity?: number | null
+          considerations?: string[]
           created_at?: string
-          features?: string[]
+          derived_attrs?: Json
           id?: string
           include_in_deck?: boolean
+          key_features?: string[]
           linked_venue_id?: string | null
           name: string
           neighborhood?: string | null
           notes?: string | null
-          order_in_deck?: number | null
-          photos?: Json
           pitch_notes?: string | null
           pitched?: boolean
           rank?: number | null
-          recommendations?: string | null
-          research_status?: Database["public"]["Enums"]["vs_research_status"]
+          recommendations?: string[]
           scout_id: string
           shortlisted?: boolean
-          sourcing_round_id: string
+          size_sq_ft?: number | null
+          source?: string
           updated_at?: string
+          venue_overview?: string | null
           venue_type?: string | null
           website_url?: string | null
         }
         Update: {
-          added_manually?: boolean
           address?: string | null
-          alignment_criteria?: Json
-          considerations?: string | null
+          capacity?: number | null
+          considerations?: string[]
           created_at?: string
-          features?: string[]
+          derived_attrs?: Json
           id?: string
           include_in_deck?: boolean
+          key_features?: string[]
           linked_venue_id?: string | null
           name?: string
           neighborhood?: string | null
           notes?: string | null
-          order_in_deck?: number | null
-          photos?: Json
           pitch_notes?: string | null
           pitched?: boolean
           rank?: number | null
-          recommendations?: string | null
-          research_status?: Database["public"]["Enums"]["vs_research_status"]
+          recommendations?: string[]
           scout_id?: string
           shortlisted?: boolean
-          sourcing_round_id?: string
+          size_sq_ft?: number | null
+          source?: string
           updated_at?: string
+          venue_overview?: string | null
           venue_type?: string | null
           website_url?: string | null
         }
@@ -1220,93 +1149,80 @@ export type Database = {
             referencedRelation: "vs_scouts"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "vs_candidate_venues_sourcing_round_id_fkey"
-            columns: ["sourcing_round_id"]
-            isOneToOne: false
-            referencedRelation: "vs_sourcing_rounds"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      vs_pitch_decks: {
-        Row: {
-          drive_folder_path: string | null
-          generated_at: string
-          generated_by: string | null
-          google_slides_id: string | null
-          google_slides_url: string | null
-          id: string
-          scout_id: string
-          version_number: number
-        }
-        Insert: {
-          drive_folder_path?: string | null
-          generated_at?: string
-          generated_by?: string | null
-          google_slides_id?: string | null
-          google_slides_url?: string | null
-          id?: string
-          scout_id: string
-          version_number?: number
-        }
-        Update: {
-          drive_folder_path?: string | null
-          generated_at?: string
-          generated_by?: string | null
-          google_slides_id?: string | null
-          google_slides_url?: string | null
-          id?: string
-          scout_id?: string
-          version_number?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "vs_pitch_decks_generated_by_fkey"
-            columns: ["generated_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "vs_pitch_decks_scout_id_fkey"
-            columns: ["scout_id"]
-            isOneToOne: false
-            referencedRelation: "vs_scouts"
-            referencedColumns: ["id"]
-          },
         ]
       }
       vs_scouts: {
         Row: {
+          archived_at: string | null
+          brief_data: Json
+          budget: number | null
+          city: string | null
+          client_name: string | null
           created_at: string
           created_by: string | null
+          current_step: string
+          deck_order: Json
+          derived_columns: Json
+          event_name: string | null
+          event_overview: string | null
+          generated_decks: Json
           id: string
           last_touched_at: string
+          live_dates: string | null
           name: string
-          phase: Database["public"]["Enums"]["vs_scout_phase"]
           project_id: string | null
+          sheet_storage_path: string | null
+          status: string
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
+          archived_at?: string | null
+          brief_data?: Json
+          budget?: number | null
+          city?: string | null
+          client_name?: string | null
           created_at?: string
           created_by?: string | null
+          current_step?: string
+          deck_order?: Json
+          derived_columns?: Json
+          event_name?: string | null
+          event_overview?: string | null
+          generated_decks?: Json
           id?: string
           last_touched_at?: string
+          live_dates?: string | null
           name: string
-          phase?: Database["public"]["Enums"]["vs_scout_phase"]
           project_id?: string | null
+          sheet_storage_path?: string | null
+          status?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
+          archived_at?: string | null
+          brief_data?: Json
+          budget?: number | null
+          city?: string | null
+          client_name?: string | null
           created_at?: string
           created_by?: string | null
+          current_step?: string
+          deck_order?: Json
+          derived_columns?: Json
+          event_name?: string | null
+          event_overview?: string | null
+          generated_decks?: Json
           id?: string
           last_touched_at?: string
+          live_dates?: string | null
           name?: string
-          phase?: Database["public"]["Enums"]["vs_scout_phase"]
           project_id?: string | null
+          sheet_storage_path?: string | null
+          status?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: [
           {
@@ -1323,39 +1239,49 @@ export type Database = {
             referencedRelation: "projects"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "vs_scouts_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
-      vs_sourcing_rounds: {
+      vs_venue_photos: {
         Row: {
-          generated_at: string
+          candidate_venue_id: string
+          created_at: string
+          file_name: string | null
+          file_size_bytes: number | null
           id: string
-          scout_id: string
-          source_type: Database["public"]["Enums"]["vs_sourcing_round_source_type"]
-          status: Database["public"]["Enums"]["vs_sourcing_round_status"]
-          uploaded_file_path: string | null
+          slot: number
+          storage_path: string
         }
         Insert: {
-          generated_at?: string
+          candidate_venue_id: string
+          created_at?: string
+          file_name?: string | null
+          file_size_bytes?: number | null
           id?: string
-          scout_id: string
-          source_type: Database["public"]["Enums"]["vs_sourcing_round_source_type"]
-          status?: Database["public"]["Enums"]["vs_sourcing_round_status"]
-          uploaded_file_path?: string | null
+          slot: number
+          storage_path: string
         }
         Update: {
-          generated_at?: string
+          candidate_venue_id?: string
+          created_at?: string
+          file_name?: string | null
+          file_size_bytes?: number | null
           id?: string
-          scout_id?: string
-          source_type?: Database["public"]["Enums"]["vs_sourcing_round_source_type"]
-          status?: Database["public"]["Enums"]["vs_sourcing_round_status"]
-          uploaded_file_path?: string | null
+          slot?: number
+          storage_path?: string
         }
         Relationships: [
           {
-            foreignKeyName: "vs_sourcing_rounds_scout_id_fkey"
-            columns: ["scout_id"]
+            foreignKeyName: "vs_venue_photos_candidate_venue_id_fkey"
+            columns: ["candidate_venue_id"]
             isOneToOne: false
-            referencedRelation: "vs_scouts"
+            referencedRelation: "vs_candidate_venues"
             referencedColumns: ["id"]
           },
         ]
@@ -1413,10 +1339,6 @@ export type Database = {
       ts_role_auto_pull_schedule: "off" | "daily" | "every_3_days" | "weekly"
       ts_role_reeval_status: "idle" | "running" | "complete" | "failed"
       ts_role_status: "open" | "closed"
-      vs_research_status: "pending" | "researching" | "complete" | "failed"
-      vs_scout_phase: "sourcing" | "deck" | "done"
-      vs_sourcing_round_source_type: "uploaded_sheet" | "ai_research"
-      vs_sourcing_round_status: "researching" | "complete" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1586,10 +1508,6 @@ export const Constants = {
       ts_role_auto_pull_schedule: ["off", "daily", "every_3_days", "weekly"],
       ts_role_reeval_status: ["idle", "running", "complete", "failed"],
       ts_role_status: ["open", "closed"],
-      vs_research_status: ["pending", "researching", "complete", "failed"],
-      vs_scout_phase: ["sourcing", "deck", "done"],
-      vs_sourcing_round_source_type: ["uploaded_sheet", "ai_research"],
-      vs_sourcing_round_status: ["researching", "complete", "failed"],
     },
   },
 } as const
