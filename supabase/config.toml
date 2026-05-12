@@ -56,3 +56,10 @@ verify_jwt = false
 # self-invoke at round-completion (server-to-server with internal-secret).
 [functions.ts-send-pull-notification]
 verify_jwt = false
+
+# Phase 4.3-port: brief PDF parser. User-invoked synchronous from the Brief
+# page; no self-invoke. Default verify_jwt=true is correct here; the explicit
+# entry exists for clarity since every prior vs-* / ts-* function flipped it
+# off and this is the first vs-* function that keeps it on.
+[functions.vs-parse-brief]
+verify_jwt = true

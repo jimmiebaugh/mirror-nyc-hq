@@ -24,6 +24,7 @@ import FinalReviewLoading from "./pages/talent-scout/FinalReviewLoading";
 import FinalReviewDetail from "./pages/talent-scout/FinalReviewDetail";
 import ScoutIndex from "./pages/venue-scout/ScoutIndex";
 import NewScout from "./pages/venue-scout/NewScout";
+import Brief from "./pages/venue-scout/Brief";
 
 const queryClient = new QueryClient();
 
@@ -145,6 +146,7 @@ const App = () => (
               />
               <Route path="/venue-scout" element={<ScoutIndex />} />
               <Route path="/venue-scout/scouts/new" element={<NewScout />} />
+              <Route path="/venue-scout/scouts/:id/brief" element={<Brief />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

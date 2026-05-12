@@ -66,7 +66,7 @@ Resets `global_settings.anthropic_spend_current_month_usd=0` and `cap_alert_sent
 
 ## Venue Scout — Phase 4
 
-- `vs-parse-brief(file_path)`: parse uploaded brief.
+- `vs-parse-brief({ scout_id, storage_path })` (Phase 4.3-port rebuild): downloads a brief PDF from the `briefs` bucket and parses it via `callClaude('venue_scout', ...)` with a forced `submit_brief` tool call. Returns `{ parsed_fields }` for the Brief page to merge into form state. User-invoked synchronous, `verify_jwt = true`. Replaces the failed-attempt vs-parse-brief in the deployed-function slot; no separate cutover deletion needed.
 - `vs-research-venues(scout_id)`: AI + web research using `global_settings.venue_research_priority_sites` as soft context.
 - `vs-parse-sourcing-sheet(file_path, scout_id)`: parse PDF/XLSX/CSV.
 - `vs-research-single-venue(candidate_venue_id)`: research a manual venue, triggers HQ Venues backfill via the `vs_candidate_venues_shortlist_sync` trigger.

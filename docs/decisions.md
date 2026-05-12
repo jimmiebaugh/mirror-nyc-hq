@@ -2,6 +2,33 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.3-port (Brief)
+
+### Brief is a single-page form; PDF parse is an affordance on that form
+
+VS Pro had no real brief surface (`/projects/:projectId/brief` was a `ComingNext` placeholder). Port plan § 9 explicitly directs HQ-from-scratch design. We shipped `/venue-scout/scouts/:id/brief` as a single-page form modeled after `RoleSettings.tsx` (dirty-state tracking, sticky save bar, beforeunload guard, cancel-leave AlertDialog). PDF upload + parse lives ABOVE the field stack as an affordance: drop a PDF, `vs-parse-brief` extracts structured fields via a forced `submit_brief` tool call, producer reviews in a preview panel, clicks Apply to merge into the form. No multi-step wizard. The failed-attempt 4.3.1 path tried a wizard and the carry-along cost wasn't worth it when there's only one card.
+
+### NewScout post-create navigation flips from `sheet_prompt` route to `/brief`
+
+4.2-port shipped `NewScout` routing to `stepToRoute(id, 'sheet_prompt')`, an intentional 404 window until the sourcing flow lands. 4.3-port supersedes that: post-create lands on `/venue-scout/scouts/:id/brief`, which is the first per-scout page producers should hit. Brief's Continue button still calls `stepToRoute(id, 'sheet_prompt')` after saving, so the 404 window simply moves one step downstream until 4.4-port lands.
+
+### `brief_data` canonical jsonb keys: `expected_guest_count`, `notes`, `uploaded_files`
+
+Port plan § 8.2 puts every brief field on `vs_scouts`: named columns for the structured ones (`client_name`, `event_name`, `live_dates`, `city`, `budget`, `event_overview`) and `brief_data jsonb` for everything else. We locked three canonical keys for 4.3-port:
+- `expected_guest_count` (number): consumed by `vs-generate-deck` slide templating.
+- `notes` (string): freeform context that downstream prompts (`vs-research-venues`, `vs-compile-summaries`) stringify wholesale.
+- `uploaded_files` (string[]): storage paths under the `briefs` bucket. Append-only; future audit / re-parse can re-read source documents.
+
+Additional keys passed through from parse ride along inside `brief_data` without a dedicated form field, and downstream prompts stringify the entire jsonb so anything the producer manages to add gets seen by the AI.
+
+### `vs-parse-brief` (port version) replaces the failed-attempt function in place
+
+Same name, same deployment slot, different signature (`{ scout_id, storage_path }` vs the failed `{ session_id, storage_paths[] }`) and different output shape (matches port-plan `brief_data` keys, not the failed `vs_briefs` columns). After cutover, the failed-attempt cleanup task reduces from "delete vs-parse-brief" to "verify the port version is current" (it will be). Uses Claude's native PDF reading via a `document` content block (no `unpdf` round-trip); modern HQ pattern for any single-PDF parse.
+
+### `vs-parse-brief` is `verify_jwt = true`: explicit entry in config.toml
+
+Default is true, so the entry is technically optional, but every prior `vs-*` / `ts-*` function in `config.toml` flipped it OFF for self-invocation. `vs-parse-brief` is the first VS function that keeps the default, and the explicit entry advertises that as a deliberate choice rather than a missed config row.
+
 ## Phase 4.2-port (Scout Index + New Scout entry)
 
 ### `current_step` derives the producer-facing phase label; no schema column
