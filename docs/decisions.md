@@ -2,6 +2,52 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.6-port (Sourcing Report + Shortlist + matrix primitives)
+
+### Frontend `venueTypes.ts` mirror landed; lock-step with `_shared/venueTypes.ts`
+
+Port plan § 6 primed the server-side `_shared/venueTypes.ts` in Phase 4.1-port ahead of consumers (`vs-parse-sheet` at 4.4-port and `vs-research-venues` at 4.5-port). 4.6-port lands the frontend mirror at `src/lib/venue-scout/venueTypes.ts` for the matrix. Same `CANONICAL_TYPES`, `TYPE_STYLES`, `canonicalizeType`, `canonicalizeMultiType`, `parseTypes`, `sanitizeWebsiteUrl` exports; any change touches both files in the same commit. Header comments on both files flag the rule. Drift produces mismatched venue type pills between the matrix UI and the AI / sheet source data.
+
+### Notes table dropped; notes inline on `vs_candidate_venues.notes`
+
+VS Pro carries a separate `venue_notes` table with a row per venue and a separate query at mount. The port collapses it into a single nullable `notes text` column on `vs_candidate_venues` (already on schema as of 4.1-port). Saves a round-trip on the matrix page mount, simplifies the NotesModal save path (single UPDATE instead of an UPSERT against a child table), and matches the inline-on-parent pattern HQ uses for Talent Scout `internal_notes`.
+
+### Photo upload column stubbed for visual parity
+
+VS Pro's `UploadPhotosButton` renders three states (Locked / + Upload / ✓ Complete) gated on `pitched` and a count from `venue_photos`. 4.6-port lifts the button verbatim but always passes `count=0` and routes the click handler to a toast pointing to Phase 4.7-port. Producer sees the full column + state machine so the Shortlist page reads complete; the upload modal + `vs_venue_photos` reads land in 4.7-port. Alternative was to hide the column entirely until 4.7, which would have masked the visual layout and made the column-width audit harder.
+
+### Matrix renders inside AppShell's `max-w-7xl` container with horizontal scroll
+
+VS Pro's matrix wrappers in `max-w-[1860px]` page-level container; the table itself is `min-w-[1740px]` and scrolls horizontally inside its own `overflow-x-auto` wrapper. HQ's AppShell scopes every authenticated route to `max-w-7xl` (1280px), so the matrix scrolls horizontally on most viewports rather than breaking out of the AppShell container. Tradeoff acknowledged: less optimal on wide monitors than VS Pro's layout, but stays inside the AppShell idiom (same as every other HQ surface) and avoids negative-margin escapes. Revisit at the 4.10-port polish pass if it actually bites.
+
+### Inline header pattern (no `PageHeader` component lift)
+
+VS Pro uses a `PageHeader` component with `crumbs`, `label`, `title`, `description`, `actions` props. HQ port has inlined the equivalent pattern on every Venue Scout surface (Phase 4.2 through 4.5). 4.6-port stays consistent: `crumb` link + eyebrow + `h-page` heading + right-aligned counter + optional description, all inline. Extraction to a shared `PageHeader` component is a candidate for a doc-only cleanup commit once enough surfaces have shipped that the pattern is stable.
+
+### Type-pill palette lifted verbatim from VS Pro (no HQ token substitution)
+
+VS Pro's per-type `bg-[rgba(181,133,136,0.18)] text-[#D89BA0]`-style rgba palette is an intentional desaturated brand-context color set with one tone per venue type. HQ design tokens don't define equivalent type-specific accents and substituting `text-foreground / muted-foreground` would lose the at-a-glance type signal. Lift the literal rgba values into `TYPE_STYLES` and keep them out of the HQ token chain. Same rationale applies to the rank-tier hex colors (`#4ade80`, `#f59e0b`, `#ef4444`, `#555`): VS Pro picked them deliberately and they're the same colors HQ uses inline elsewhere (`tier-badge--3` etc.), so leave them as literals in `RANK_TEXT` / `RANK_BAR`.
+
+### Matrix column-header strip uses `bg-surface` (opaque), not `bg-secondary/30`
+
+4.2-port (ScoutIndex) and 4.4-port (SheetUpload) both use `bg-secondary/30` for their list-view header strips because no sticky columns are in play and the translucent backdrop reads cleanly over `bg-background`. The matrix has sticky col1 + col2 headers, so the 30% alpha lets horizontally-scrolled column content bleed THROUGH the sticky cells, producing a visual smear. Surfaced by code-reviewer cold pass on `272a077`. Swapped to opaque `bg-surface` (`0 0% 4%`), which also matches VS Pro `--bg-elevated` (`0 0% 4%`) byte-for-byte. Header strip now reads slightly darker than the matrix body (`bg-surface-alt` = `0 0% 8%`), preserving VS Pro's intended elevation contrast.
+
+### `Shortlist.debounceSave` widens its patch type and splits `key_features` eagerly
+
+The manual-row `<input>` emits a raw delimited string ("warehouse, gallery, …") on each keystroke. The original implementation cast that string into the `key_features: string[] | null` slot via `as unknown as string[]`, leaving a string in the in-memory Venue. Surfaced by code-reviewer as a type-lie that would crash any consumer reading `v.key_features` as an array (`.join` / `.map` on string vs. array). Fix: `debounceSave` now accepts a `VenuePatch` union (`key_features?: string[] | string | null`) and normalizes to an array BEFORE writing state, so the Venue type stays honest and the eventual DB UPDATE writes the array directly (the previous deferred split inside the setTimeout became dead code).
+
+### Alignment pills use Tailwind `green-400` / `amber-400` instead of `--success` / `--warning` tokens
+
+VS Pro reads `bg-[hsl(var(--success))]/15` and `bg-[hsl(var(--warning))]/13` on the Alignment column pills. HQ defines `--success` (matches: 4ade80) but uses `--warn`, not `--warning`. Rather than introduce a `--warning` alias or two-track the pill backgrounds across HQ files, swap both pills to fixed Tailwind palette colors that resolve to the same hex (green-400 = #4ade80, amber-400 = #f59e0b). One-line substitution; no token-naming follow-up needed.
+
+### Shortlist sync trigger simplified to one condition
+
+The failed-attempt trigger fired on `(shortlisted false→true) OR (added_manually=true AND research_status='complete')`. Port schema doesn't carry `added_manually` (collapsed into `source='manual'`) or `research_status`. The 4.6-port re-introduction fires only on `shortlisted false→true`. Manual venues added on Shortlist enter with `shortlisted=false, source='manual'`; the page's `v.shortlisted || v.source==='manual'` filter makes them visible regardless. If a producer pitches a manual venue but never toggles shortlisted, the sync trigger never fires and no HQ `venues` row is created — known gap, acceptable for 4.6-port. A future migration could extend the trigger to also fire on `pitched false→true` or on `source='manual'` INSERT, but that's out of scope here.
+
+### Manual venue add row inserts `shortlisted: false`
+
+VS Pro's behavior. The page filter `v.shortlisted || v.source==='manual'` makes manual rows visible on Shortlist regardless, so auto-shortlisting them wouldn't change visibility — it would just fire the sync trigger on insert before the producer has confirmed details. Keeping `shortlisted=false` matches VS Pro and defers the sync to an explicit producer action (toggling shortlist back on `SourcingReport`, or extending the trigger later per the prior decision).
+
 ## Phase 4.5-port (Researching + vs-research-venues)
 
 ### `EdgeRuntime.waitUntil` + Realtime replaces VS Pro's sync-await

@@ -190,7 +190,7 @@ Maps to VS Pro `venues` (renamed because HQ already has a `venues` table for the
 
 - `id` (uuid, PK)
 - `scout_id` (uuid, FK to `vs_scouts`, ON DELETE CASCADE)
-- `linked_venue_id` (uuid, FK to HQ `venues`, ON DELETE SET NULL): set by the shortlist sync trigger when a candidate flips into the master HQ venues table. Trigger lands when the Shortlist surface ports (Phase 4.6-port); column reserved here.
+- `linked_venue_id` (uuid, FK to HQ `venues`, ON DELETE SET NULL): set by the `vs_candidate_venues_shortlist_sync` trigger (re-introduced in Phase 4.6-port) when a candidate flips `shortlisted` false to true. See the trigger entry below for the simplified shape.
 - `name` (text, NOT NULL), `neighborhood`, `address` (text)
 - `venue_type` (text): VS Pro stores `type`; renamed because `type` reads as a system word in TS / Postgres tooling
 - `key_features` (text[], default `{}`)
@@ -206,7 +206,7 @@ Maps to VS Pro `venues` (renamed because HQ already has a `venues` table for the
 - `pitch_notes` (text): pitch-context notes from Shortlist
 - `created_at`, `updated_at`
 
-**Sync rule** (trigger lands in Phase 4.6-port, when the Shortlist surface ports): when `shortlisted` flips false to true, check HQ `venues` for a match (by `website_url` first, then by case-insensitive `name + neighborhood`). If no match, INSERT a new row in `venues` and set `linked_venue_id`. If match, just set `linked_venue_id`. Never update an existing HQ venue row. Will be implemented by a simplified `vs_candidate_venues_shortlist_sync` Postgres trigger (the failed-attempt version is dropped in the port migration; the new one fires only on the shortlisted false→true condition).
+**Sync rule** (landed in Phase 4.6-port; see triggers section below): when `shortlisted` flips false to true, the `vs_candidate_venues_shortlist_sync` trigger checks HQ `venues` for a match (by `website_url` first, then by case-insensitive `name + neighborhood`). If no match, INSERT a new row in `venues` and set `linked_venue_id`. If match, just set `linked_venue_id`. Never updates an existing HQ venue row. The simplified version (fires only on the false→true condition) replaces the failed-attempt version dropped in Phase 4.1-port.
 
 ### vs_venue_photos
 Lifted from VS Pro with HQ rename. ON DELETE CASCADE so a Start Over (which deletes all candidate venues for a scout) cleans photos automatically.
@@ -250,7 +250,7 @@ Lifted from VS Pro with HQ rename. ON DELETE CASCADE so a Start Over (which dele
 
 ## Postgres triggers
 
-- `vs_candidate_venues_shortlist_sync`: dropped in Phase 4.1-port. Will be re-introduced in a simpler form (shortlisted false→true only) when the Shortlist surface ports in Phase 4.6-port.
+- `vs_candidate_venues_shortlist_sync`: re-introduced in Phase 4.6-port (migration `20260512230000_phase_4_6_port_shortlist_sync_trigger.sql`) at a simplified shape after being dropped in Phase 4.1-port. BEFORE UPDATE on `vs_candidate_venues`, fires only when `shortlisted` flips false to true. Matches HQ `venues` by `website_url` first, then by case-insensitive `name + neighborhood`; sets `linked_venue_id` on match. If no match, INSERTs a new HQ `venues` row (carrying `name`, `address`, `neighborhood`, `website_url`, `features` from `key_features`, and `created_by` pulled from the parent `vs_scouts` row) and sets `linked_venue_id`. SECURITY DEFINER so the INSERT bypasses RLS on `venues`. Never updates an existing HQ venue row — the master `venues` table is treated as append-only by this trigger.
 - `tasks_completed_at_set`: when `tasks.status` flips to `done`, set `completed_at = now()`.
 - `activity_log_writer`: on insert/update/status-change to projects, venues, tasks, write an activity_log row.
 - `updated_at_auto`: standard updated_at trigger on every table with the column.

@@ -273,4 +273,94 @@
   .status-pill--active { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
   .status-pill--complete { background: rgba(74, 222, 128, 0.10); color: #4ade80; border-color: rgba(74, 222, 128, 0.3); }
   .status-pill--new { background: hsl(var(--surface-alt)); color: hsl(var(--muted-foreground)); border-color: hsl(var(--border)); }
+
+  /* ─── Venue Scout matrix (Phase 4.6-port) ──────────────────────────────
+     Notes cell buttons, bullet markers, ghost input. Lifted from VS Pro's
+     inline @layer rules with HQ tokens; the coral rgba uses literal values
+     derived from Mirror primary (#BE4E44 = rgb(190, 78, 68)) so the matrix
+     reads as one continuous brand surface. Keep these in this file rather
+     than colocated with primitives so all component-layer styles stay in
+     one place. */
+  .notes-cell {
+    background: rgba(190, 78, 68, 0.10);
+    border: 1px solid rgba(190, 78, 68, 0.25);
+    border-radius: 3px;
+    padding: 10px 12px;
+    color: hsl(var(--foreground));
+    font-size: 12.5px;
+    cursor: pointer;
+    text-align: left;
+    line-height: 1.4;
+    width: 100%;
+  }
+  .notes-cell:hover { background: rgba(190, 78, 68, 0.14); }
+  .notes-cell .ico {
+    color: hsl(var(--primary));
+    margin-right: 6px;
+    font-weight: 700;
+  }
+  .notes-cell-empty {
+    background: rgba(190, 78, 68, 0.06);
+    color: hsl(var(--primary));
+    font-weight: 700;
+    border: 1px dashed rgba(190, 78, 68, 0.40);
+    border-radius: 3px;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 11px;
+    padding: 10px 12px;
+    cursor: pointer;
+    width: 100%;
+  }
+  .notes-cell-empty:hover { background: rgba(190, 78, 68, 0.10); }
+
+  .bullets { list-style: none; padding: 0; margin: 0; }
+  .bullets li {
+    position: relative;
+    padding-left: 18px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.5;
+  }
+  .bullets li::before {
+    content: '';
+    width: 10px;
+    height: 1.5px;
+    background: hsl(var(--primary));
+    position: absolute;
+    left: 0;
+    top: 9px;
+  }
+
+  /* Bare-style input for inline-editable manual rows in Shortlist. */
+  .ghost-input {
+    @apply bg-transparent border border-transparent rounded px-2 py-1
+           hover:bg-input
+           focus:bg-input
+           focus:outline-none focus:ring-2 focus:ring-primary/60;
+  }
+}
+
+@layer utilities {
+  /* ─── Venue Scout matrix utilities (Phase 4.6-port) ───────────────────
+     Thin scrollbar for the matrix horizontal scroll. Matrix column-header
+     text wrapping keeps "Notes / Feedback" tight. Subtle-text aliases match
+     VS Pro's token vocabulary; HQ tokens stop at --subtle-foreground (54%),
+     so --faint maps to /60 of the same. */
+  .scrollbar-thin::-webkit-scrollbar { height: 8px; width: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border-strong));
+    border-radius: 999px;
+  }
+  .matrix-th-text {
+    word-break: keep-all;
+    overflow-wrap: normal;
+    hyphens: none;
+    white-space: normal;
+    line-height: 1.15;
+  }
+  .text-subtle { color: hsl(var(--subtle-foreground)); }
+  .text-faint { color: hsl(var(--subtle-foreground) / 0.6); }
 }
