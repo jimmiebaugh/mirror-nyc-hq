@@ -170,7 +170,7 @@ Three-table schema landed in Phase 4.1-port (`20260512200000_phase_4_1_port_sche
   - `budget` (numeric)
   - `brief_data` (jsonb, default `{}`): flexible per-scout extras the producer surfaces from the uploaded brief PDF
   - `event_overview` (text)
-- `current_step` (text, NOT NULL, default `sheet_prompt`, CHECK in 9 values from VS Pro: `sheet_prompt`, `sheet_upload`, `researching`, `sourcing_report`, `shortlist`, `review_selects`, `compiling`, `deck_prep`, `completed`): workflow state machine per port plan § 8.4. Drives every page's continue logic via `stepToRoute()` (`src/lib/venue-scout/format.ts`, lands in Phase 4.2-port).
+- `current_step` (text, NOT NULL, default `sheet_prompt`, CHECK in 9 values from VS Pro: `sheet_prompt`, `sheet_upload`, `researching`, `sourcing_report`, `shortlist`, `review_selects`, `compiling`, `deck_prep`, `completed`): workflow state machine per port plan § 8.4. Drives every page's continue logic via `stepToRoute()` (`src/lib/venue-scout/format.ts`, landed in Phase 4.2-port). Producer-facing label rendered via `currentStepToLabel()` in the same file.
 - `status` (text, NOT NULL, default `draft`): VS Pro carries this independent of `current_step`; kept for parity.
 - `sheet_storage_path` (text, nullable): path under `sourcing_sheets` storage bucket
 - `derived_columns` (jsonb, default `[]`): array of `{id, label, criteria}` alignment columns the AI selected for the single sourcing pass (collapsed onto the scout per § 8.1).
