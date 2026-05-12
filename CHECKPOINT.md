@@ -5,8 +5,8 @@ Living-state doc. Update on every meaningful merge to `main`.
 **Last updated:** 2026-05-12
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
 **Active feature branch:** `vs-port-fresh` — branched off `dd38577`. Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `4483895` (Phase 4.1-port squashed from `claude/vs-port-4-1-schema`).
-**Current phase:** Phase 4.1-port DONE on `vs-port-fresh`; next: Phase 4.2-port (Scout Index + New Scout entry) per port plan § 9.
+**Latest commit on `vs-port-fresh`:** `f4a9a2a` (Phase 4.2-port squashed from `claude/vs-port-4-2-scout-index`).
+**Current phase:** Phase 4.2-port DONE on `vs-port-fresh`; next: Phase 4.3-port (Brief) per port plan § 9.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
@@ -60,6 +60,8 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
+f4a9a2a  [skip netlify] Phase 4.2-port: Scout Index + New Scout entry (squash-merged from claude/vs-port-4-2-scout-index)
+08d6564  [skip netlify] Backfill 4483895 squash hash into CHECKPOINT.md
 4483895  [skip netlify] Phase 4.1-port: schema augmentation + shared module priming (squash-merged from claude/vs-port-4-1-schema)
 ae22bb8  [skip netlify] Port plan: Venue Scout 1:1 port from mirror-nyc-venue-scout-pro
 dd38577  [skip netlify] Phase 4.1 Cowork-side doc state (port branch base)
@@ -81,9 +83,9 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 ## Next up
 
-**Phase 4.2-port** per `docs/venue-scout-port-plan.md` § 9: Scout Index + New Scout entry. Port `src/pages/Index.tsx` from VS Pro to `ScoutIndex.tsx` (active / archived disclosure UI per Phase 4.2 main precedent), rewrite the New Scout entry from scratch (VS Pro placeholder is unusable), wire `Venue Scout` link in TopNav.
+**Phase 4.3-port** per `docs/venue-scout-port-plan.md` § 9: Brief surface. Port `/projects/:id/brief` from VS Pro -- BriefForm (read/edit), brief PDF upload + parse via `vs-parse-brief` (rebuilt from scratch using VS Pro shape), and the entry point from Scout Index after a producer creates a new project (the sheet-prompt route lands in 4.4-port; until then post-create navigation 404s as noted in `docs/decisions.md` Phase 4.2-port).
 
-**Squash-approval gate for Phase 4.1-port** comes first. After approval: squash the worktree commits onto `vs-port-fresh`, push (or hold), backfill CHECKPOINT here. See `OUTPUTS/COWORK_SYNC.md` for the live status.
+**Squash-approval gate for Phase 4.2-port** comes first. After approval: squash the worktree commits onto `vs-port-fresh`, push (or hold), backfill the squash hash into CHECKPOINT here in a follow-up commit. See `OUTPUTS/COWORK_SYNC.md` for the live status.
 
 **Production wiring for Phase 3.8** still pending (GUCs, db push, 12 edge function deploys). Can happen in parallel since it's all out-of-band (no Netlify). Full step-by-step in `NEXT_STEPS.md`.
 
