@@ -26,8 +26,11 @@ type NavItem = { to: string; label: string; end?: boolean; adminOnly?: boolean }
 // built out properly. Talent Scout is the only top-nav destination
 // for now. The Dashboard route still exists; the M-wordmark in the
 // header links back to / for users who land there.
+// Phase 4.2-port: Venue Scout joins the nav, open to all authenticated
+// users per port plan § 8.6 (no role gating).
 const navItems: NavItem[] = [
   { to: "/talent-scout", label: "Talent Scout", adminOnly: true },
+  { to: "/venue-scout", label: "Venue Scout" },
 ];
 
 // Brand caption next to the M wordmark — reflects which app surface

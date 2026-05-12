@@ -37,7 +37,7 @@ Admin checks are done via a SECURITY DEFINER function that reads `permission_rol
 
 - `<ProtectedRoute>`: any signed-in `@mirrornyc.com` user.
 - `<AdminRoute>`: wraps `ProtectedRoute`, additionally requires `permission_role = 'admin'`. Used on every `/talent-scout/*` route.
-- Producer-only gating for `/venue-scout/*` lands in Phase 4.
+- All `/venue-scout/*` routes wrap in `<ProtectedRoute>` only (port plan § 8.6 RLS open-authenticated; Phase 4.2-port landed Scout Index + New Scout with this posture).
 
 ## Storage buckets
 

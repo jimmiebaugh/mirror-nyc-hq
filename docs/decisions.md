@@ -2,6 +2,16 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.2-port (Scout Index + New Scout entry)
+
+### `current_step` derives the producer-facing phase label; no schema column
+
+VS Pro carried a `projects.phase` text column maintained in lockstep with `current_step`. The port drops the column and derives the label from `current_step` via `currentStepToLabel()` in `src/lib/venue-scout/format.ts`. One source of truth, no drift, cheaper writes downstream. Label table lives in the helper; tweak in one file when copy needs to shift.
+
+### NewScout post-create navigates to the eventual sheet-prompt route
+
+`/venue-scout/scouts/:id/sourcing/sheet-prompt` doesn't exist yet (lands in Phase 4.4-port). Post-create still navigates there because that's the correct eventual UX -- producer fills brief, then immediately walks into the sheet-prompt flow. The 404 window is short (4.3-port and 4.4-port land soon) and the alternative (bouncing back to `/venue-scout` and forcing a row click) reads as a regression once the sheet-prompt page exists.
+
 ## Phase 4.1 (Scout Dashboard — first Venue Scout surface)
 
 ### Venue Scout RLS: one permissive FOR ALL policy per vs_* table, no creator or role scoping
