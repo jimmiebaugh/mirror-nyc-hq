@@ -2,6 +2,32 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.7.1-port (Review + PhotoUploadModal + Shortlist photo unstub)
+
+### Phase 4.7 split into two passes (4.7.1 frontend, 4.7.2 backend)
+
+The combined 4.7-port scope (Review + PhotoUploadModal + storage bucket + Shortlist unstub + Compiling page + `vs-compile-summaries` edge function + `compile-failed` error key) was ~2,000+ lines across 4 artifacts. Splitting into 4.7.1 (frontend + storage) and 4.7.2 (compile flow) gives each pass a 4.6-port-sized scope, isolated code-reviewer cycles, smaller blast radius if the storage bucket migration needs revision, and keeps PhotoUploadModal complexity ("most complex single component in the port" per port plan) in its own pass. After 4.7.1, Review's Confirm + Compile Deck button writes `current_step='compiling'` and navigates to `/sourcing/compiling`, which 404s until 4.7.2-port. Same intentional 404 window pattern as 4.2→4.3, 4.3→4.4, 4.4→4.5, 4.5→4.6, 4.6→4.7.
+
+### `vs_venue_photos` bucket private + signed URLs (renamed from VS Pro `venue-photos` public)
+
+VS Pro's public `venue-photos` bucket would expose deck photos to anyone with the URL. HQ's `vs_venue_photos` bucket is private (`storage.buckets.public = false`) with storage RLS gated on `is_producer_or_admin()`, parallel to `sourcing_sheets` + `briefs`. Display reads go through `supabase.storage.from("vs_venue_photos").createSignedUrl(path, 3600)` (1-hour TTL); URLs regenerate on every Review mount and every PhotoUploadModal open. Privacy + bucket rename is the locked port-plan § 2 decision; HQ Core's existing public `venue_photos` bucket (used by the master `venues` table) stays for HQ Core reads downstream.
+
+### Storage path format `${scoutId}/${candidateVenueId}/slot-${N}-${timestamp}.${ext}`
+
+Lifted from VS Pro verbatim (hyphen + timestamp). The 4.1-port `docs/schema.md` spec read `slot_${N}.${ext}` (underscore, no timestamp) as a placeholder; this sub-phase updates the doc to the landed format. The timestamp cache-busts when a producer re-uploads to a slot whose old storage object was just deleted in the same save (otherwise the CDN can serve the stale image for that path's lifetime). Scout-id and candidate-venue-id segments rename from VS Pro's `${projectId}/${venueId}` per the HQ table rename.
+
+### HQ canonical `Field` created at `src/components/ui/Field.tsx`
+
+VS Pro's Review.tsx defined a small inline `Field` (10px uppercase muted-foreground label above child). The spec locks the inline definition gets dropped in favor of an HQ canonical primitive. Created `src/components/ui/Field.tsx` with that compact shape. Deliberately distinct from the heavier page-form Field shape used inline in `Brief`, `NewScout`, `NewRoleDetails`, `RoleSettings` (13px font-mono `text-primary` Label primitive). Those pages keep their inline definitions; consolidating both into one canonical isn't 4.7.1-port's job and the styles diverge enough that a single component would need a `variant` prop.
+
+### PhotoSlot renders actual signed URL when `hasPhoto`
+
+VS Pro's Review.tsx PhotoSlot at line 272 hardcoded the placeholder for both states (`backgroundImage: hasPhoto ? "url(/mirror-placeholder.jpg)" : "url(/mirror-placeholder.jpg)"`); appears to be a stub awaiting real signed-URL wiring. Port fixes it: when `hasPhoto && photoUrl`, render `url(${photoUrl})`. Producers expect to see their photos at a glance on Review — a placeholder-for-everything makes the page useless for the "confirm photos" task. `photoUrls` state is populated on mount + refreshed via `refreshVenuePhotos(activeVenueId)` after PhotoUploadModal save.
+
+### Shortlist photo column unstub: real query + real modal open
+
+4.6-port stubbed `photoCounts` to always 0 and the click handler to a toast. 4.7.1-port replaces the stub query with a real `select("candidate_venue_id").in(...)` against `vs_venue_photos`, replaces the toast with `setActiveVenue(v) + setPhotosOpen(true)`, and mounts `<PhotoUploadModal />` at the bottom alongside `<NotesModal />`. The button state machine (Locked / + Upload / ✓ Complete) stays verbatim from 4.6-port.
+
 ## Phase 4.6-port (Sourcing Report + Shortlist + matrix primitives)
 
 ### Frontend `venueTypes.ts` mirror landed; lock-step with `_shared/venueTypes.ts`

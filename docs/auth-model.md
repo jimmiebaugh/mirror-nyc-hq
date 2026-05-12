@@ -44,7 +44,8 @@ Admin checks are done via a SECURITY DEFINER function that reads `permission_rol
 - `candidate_attachments`: admin only (Talent Scout)
 - `packets`: admin only (Talent Scout — round + final-review packet PDFs, Phase 3.6)
 - `briefs`, `sourcing_sheets`: producer or admin (Venue Scout)
-- `venue_photos`: any auth read; producer or admin write
+- `venue_photos`: any auth read; producer or admin write (HQ Core master `venues` table photos)
+- `vs_venue_photos`: producer or admin (Venue Scout deck photos, private; signed URLs at render time, 1-hour TTL). Distinct from the public `venue_photos` bucket; the two coexist because Venue Scout decks need private upload/render while HQ Core's master-venues bucket stays public for downstream usage. Created in Phase 4.7.1-port.
 - `profile_avatars`: any auth read; user writes only to their own folder (`{user_id}/...` path prefix)
 
 All buckets are private. URLs go through `supabase.storage.createSignedUrl` with short TTLs (typical: 60 minutes for inline rendering, 1 hour for download links).

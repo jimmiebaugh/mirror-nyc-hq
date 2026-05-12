@@ -45,6 +45,7 @@ How we write code in this repo. Read this before adding tables, columns, edge fu
 - Route gates: `<ProtectedRoute>` for auth, `<AdminRoute>` for admin-only routes (already wraps `ProtectedRoute`).
 - Type imports come from `@/integrations/supabase/types` so they stay in sync with schema regen.
 - `src/lib/venue-scout/venueTypes.ts` mirrors `supabase/functions/_shared/venueTypes.ts`. Any change to `CANONICAL_TYPES`, `TYPE_STYLES`, `canonicalizeType`, `canonicalizeMultiType`, `parseTypes`, or `sanitizeWebsiteUrl` touches BOTH files in the same commit. The header comment on each file flags the rule; drift produces mismatched venue-type pills between the matrix UI and the AI / sheet source data.
+- VS surfaces that display photos use `supabase.storage.from("vs_venue_photos").createSignedUrl(path, 3600)` for 1-hour TTL signed URLs (the `vs_venue_photos` bucket is private, producer-or-admin storage RLS). Public-bucket reads are reserved for HQ Core's `venue_photos` bucket on the master `venues` table; the two buckets are distinct.
 
 ## Naming
 

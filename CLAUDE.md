@@ -46,7 +46,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 
 ## Current phase
 
-See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.6-port (Sourcing Report + Shortlist + matrix primitives + shortlist sync trigger)** in progress on `claude/vs-port-4-6-matrix`, pending squash to `vs-port-fresh`. **Phase 4.7-port (Review + PhotoUploadModal + vs-compile-summaries rebuild)** is next per `docs/venue-scout-port-plan.md`. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
+See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.7.1-port (Review + PhotoUploadModal + Shortlist photo unstub + vs_venue_photos bucket)** squashed onto `vs-port-fresh` at `e198f46`. **Phase 4.7.2-port (Compiling + vs-compile-summaries)** is next per `docs/venue-scout-port-plan.md` and the 4.7 split decision. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
 
 ## Working with this repo
 

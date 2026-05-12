@@ -30,6 +30,7 @@ import SheetUpload from "./pages/venue-scout/SheetUpload";
 import Researching from "./pages/venue-scout/Researching";
 import SourcingReport from "./pages/venue-scout/SourcingReport";
 import Shortlist from "./pages/venue-scout/Shortlist";
+import Review from "./pages/venue-scout/Review";
 import ErrorStateStub from "./pages/venue-scout/ErrorStateStub";
 
 const queryClient = new QueryClient();
@@ -172,6 +173,10 @@ const App = () => (
               <Route
                 path="/venue-scout/scouts/:id/sourcing/shortlist"
                 element={<Shortlist />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/sourcing/review"
+                element={<Review />}
               />
               <Route
                 path="/venue-scout/scouts/:id/sourcing/error/:errorKey"
