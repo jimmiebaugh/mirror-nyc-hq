@@ -22,6 +22,8 @@ import PullDetail from "./pages/talent-scout/PullDetail";
 import CandidateDetail from "./pages/talent-scout/CandidateDetail";
 import FinalReviewLoading from "./pages/talent-scout/FinalReviewLoading";
 import FinalReviewDetail from "./pages/talent-scout/FinalReviewDetail";
+import ScoutIndex from "./pages/venue-scout/ScoutIndex";
+import NewScout from "./pages/venue-scout/NewScout";
 
 const queryClient = new QueryClient();
 
@@ -141,6 +143,8 @@ const App = () => (
                   </AdminRoute>
                 }
               />
+              <Route path="/venue-scout" element={<ScoutIndex />} />
+              <Route path="/venue-scout/scouts/new" element={<NewScout />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
