@@ -168,7 +168,7 @@ Three-table schema landed in Phase 4.1-port (`20260512200000_phase_4_1_port_sche
 - Brief fields inline (port plan § 8.2):
   - `client_name`, `event_name`, `live_dates`, `city` (text)
   - `budget` (numeric)
-  - `brief_data` (jsonb, default `{}`): flexible per-scout extras the producer surfaces from the uploaded brief PDF
+  - `brief_data` (jsonb, default `{}`): flexible per-scout extras the producer surfaces from the uploaded brief PDF. Canonical keys (locked Phase 4.3-port): `expected_guest_count` (number; consumed by `vs-generate-deck` slide templating), `notes` (string; dumped verbatim into downstream research / compile prompts), `uploaded_files` (string[]; storage paths under `briefs` bucket, append-only, for audit / re-parse). Additional keys parsed from a PDF ride along, and downstream prompts stringify the entire jsonb so any key the producer adds gets seen by the AI.
   - `event_overview` (text)
 - `current_step` (text, NOT NULL, default `sheet_prompt`, CHECK in 9 values from VS Pro: `sheet_prompt`, `sheet_upload`, `researching`, `sourcing_report`, `shortlist`, `review_selects`, `compiling`, `deck_prep`, `completed`): workflow state machine per port plan § 8.4. Drives every page's continue logic via `stepToRoute()` (`src/lib/venue-scout/format.ts`, landed in Phase 4.2-port). Producer-facing label rendered via `currentStepToLabel()` in the same file.
 - `status` (text, NOT NULL, default `draft`): VS Pro carries this independent of `current_step`; kept for parity.

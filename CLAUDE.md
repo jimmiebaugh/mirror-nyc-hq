@@ -46,7 +46,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 
 ## Current phase
 
-See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.2-port (Scout Index + New Scout)** done on the `vs-port-fresh` branch; **Phase 4.3-port (Brief)** is next per `docs/venue-scout-port-plan.md`. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
+See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.3-port (Brief)** done on the `vs-port-fresh` branch; **Phase 4.4-port (Sheet Prompt + Sheet Upload + parse-sheet)** is next per `docs/venue-scout-port-plan.md`. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
 
 ## Working with this repo
 
