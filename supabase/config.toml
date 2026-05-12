@@ -69,3 +69,12 @@ verify_jwt = true
 # verify_jwt = true pattern as vs-parse-brief.
 [functions.vs-parse-sheet]
 verify_jwt = true
+
+# Phase 4.5-port: AI-driven venue research. User-invoked from the
+# Researching page; the handshake returns immediately and the AI work
+# runs inside EdgeRuntime.waitUntil. No self-invoke. verify_jwt = true
+# matches the vs-parse-* sibling pattern; the explicit entry is for
+# clarity since EdgeRuntime.waitUntil might look like a self-invoke
+# candidate at a glance.
+[functions.vs-research-venues]
+verify_jwt = true
