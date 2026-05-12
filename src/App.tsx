@@ -25,6 +25,9 @@ import FinalReviewDetail from "./pages/talent-scout/FinalReviewDetail";
 import ScoutIndex from "./pages/venue-scout/ScoutIndex";
 import NewScout from "./pages/venue-scout/NewScout";
 import Brief from "./pages/venue-scout/Brief";
+import SheetPrompt from "./pages/venue-scout/SheetPrompt";
+import SheetUpload from "./pages/venue-scout/SheetUpload";
+import ErrorStateStub from "./pages/venue-scout/ErrorStateStub";
 
 const queryClient = new QueryClient();
 
@@ -147,6 +150,18 @@ const App = () => (
               <Route path="/venue-scout" element={<ScoutIndex />} />
               <Route path="/venue-scout/scouts/new" element={<NewScout />} />
               <Route path="/venue-scout/scouts/:id/brief" element={<Brief />} />
+              <Route
+                path="/venue-scout/scouts/:id/sourcing/sheet-prompt"
+                element={<SheetPrompt />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/sourcing/sheet-upload"
+                element={<SheetUpload />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/sourcing/error/:errorKey"
+                element={<ErrorStateStub />}
+              />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

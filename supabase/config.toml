@@ -63,3 +63,9 @@ verify_jwt = false
 # off and this is the first vs-* function that keeps it on.
 [functions.vs-parse-brief]
 verify_jwt = true
+
+# Phase 4.4-port: sourcing-sheet parser (XLSX / CSV / PDF). User-invoked
+# synchronous from the SheetUpload page; no self-invoke. Same explicit
+# verify_jwt = true pattern as vs-parse-brief.
+[functions.vs-parse-sheet]
+verify_jwt = true
