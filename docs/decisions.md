@@ -2,6 +2,79 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.10.3-port (URL validation + Recs/Considerations tuning + 3-tier sort + venue_type popover + pipeline_error rename + storage reconciliation + AI surface consolidation)
+
+### AI surface consolidation: sheet enrichment moves into vs-research-venues
+
+Smoke testing 2026-05-13 surfaced a structural collapse pattern: forced `tool_choice: {type: "tool", name: "fill_venue"}` combined with server-side `web_search_20250305` caused Claude (both 4-6 and the 4-5 pivot) to emit empty tool calls (out=113-139 tokens, server_tool_uses=0) on every per-row sheet enrichment. Same shape collapse on vs-research-venues' submit_research call: out=2304-2610 but server_tool_uses=0, returning venues with null URLs from training knowledge.
+
+Locked option (2026-05-13, Path B): consolidate all AI venue work into `vs-research-venues`. New shape:
+
+- **vs-parse-sheet** becomes parse-only. Strips the per-row Claude fill pass. Returns `{ count }`. Sub-second response. Producer sees Sheet Upload -> Done immediately.
+- **vs-research-venues** runs two phases inside the existing `EdgeRuntime.waitUntil`:
+  - **Phase A (parallel):** SELECT `vs_candidate_venues WHERE scout_id=? AND source='sheet'`. For each row, `callClaude(fill_venue + web_search, model=claude-sonnet-4-5)`. Per-row patch guards prevent overwriting producer values. Per-row failures tolerated.
+  - **Phase B (parallel):** Existing sourcing pattern -- `callClaude(submit_research + web_search)` for net-new venues.
+  - Both kick off inside `work()`; Phase A awaits its loop, Phase B awaits its Claude call + INSERT, then the function awaits Phase A before the final scout state flip.
+- **vs-compile-summaries Pass 1** unchanged. Stays as the backstop for any rows that miss Phase A (compile is always a second AI surface that produces overviews).
+
+Why this fixes the collapse: per-row enrichment is no longer a synchronous parse-blocker. The sheet upload returns instantly. The "Researching" page handles both new-venue sourcing AND existing-row enrichment under a single producer wait state. Phase A's per-row calls are still subject to the same forced-tool + web_search collapse risk, but they at least live in `EdgeRuntime.waitUntil` (not blocking the user-visible upload) and the failures fall through to vs-compile-summaries Pass 1 backfill. The architectural win is one Claude surface for AI venue work, one web_search budget posture, one validation layer. SheetUpload's "Enriching N/M" UI was dropped (no Claude work happening at upload time now).
+
+Cost / latency tradeoffs: Sheet upload is now sub-second (was 30-90s for 5-15 rows). Researching is longer (was ~60-90s for sourcing alone; now ~60-120s for parallel sourcing + sheet enrich at N/5 chunks). Net producer wall-time unchanged or slightly faster (sheet wait moved to research wait).
+
+### Sheet parser fills website_url + capacity (was dropping both)
+
+Pre-4.10.3 the VS Pro `parse-sheet` pick chain extracted name + neighborhood + address + venue_type + size_sq_ft + key_features. `website_url` and `capacity` columns were dropped at parse time even when the producer entered them, then re-derived by the AI enrichment pass. Fix: add both to the pick chain. URL passes through `sanitizeWebsiteUrl` (catches search pages + listing-DB bare homepages) but no HEAD check at parse time (producer input is trusted; HEAD-checking hundreds of rows would slow parse to a crawl). Keyword lists also expanded for natural producer header variants -- `borough`, `hood`, `web`, `homepage`, `pax`, `headcount`, `seats`, `square footage`, `feet`, `amenities`, `highlights`, `description`, etc.
+
+
+
+### Final pre-cutover polish phase
+
+11 items bundled because every one is small (under 50 lines) and they all share validation surface (smoke testing 2026-05-13 + carry-forward debt from 4.5 / 4.7.2 / 4.10.2). Shipping as one squash keeps the rename pass (`research_error` -> `pipeline_error`, 7 file edits) atomic so no commit in the history compiles with a half-renamed column.
+
+### `research_error` -> `pipeline_error` column rename
+
+The column was added at 4.5-port for `vs-research-venues` failures. 4.7.2-port (`vs-compile-summaries`) and 4.8.2-port (`vs-generate-deck`) reused the same column for compile + deck errors without renaming. Name has been misleading since 4.7.2; this rename brings it in line with actual usage as the single AI-pipeline error channel. Plain `ALTER ... RENAME COLUMN` preserves all existing values. Two migrations: (1) the column rename; (2) `CREATE OR REPLACE FUNCTION start_over_scout` to clear `pipeline_error` instead of `research_error`. Cross-cutting rename touches 3 edge functions + 4 page files; all done in the same squash so the build stays green.
+
+### URL HEAD validation (post-emission gate against AI fabrication)
+
+Smoke testing 2026-05-13 surfaced URL fabrication: Claude returns LoopNet / Crexi listing URLs with invented path segments that 4xx or soft-404 to a homepage. The existing `sanitizeWebsiteUrl` catches search pages + listing-DB bare-homepage URLs but not fabricated URLs that match the syntax pattern. Locked option: new `_shared/urlValidation.ts` wraps `sanitizeWebsiteUrl` with a HEAD-request check + redirect-host + redirect-path comparison. 4xx -> reject. 5xx + network errors -> keep (transient; producer can edit). Host mismatch -> reject (soft 404). Final path significantly shorter than request path -> reject (listing-gone redirect to root). 5s timeout per URL. Parallel via `Promise.all` inside vs-research-venues (~2-3s additional latency for 15-20 URLs); per-row sequential inside vs-parse-sheet enrichOne + vs-compile-summaries Pass 1 (already chunked-parallel at the venue level, so per-chunk latency stays bounded). Memory rule `feedback_tool_choice_collapse`: AI output quality lives on schema descriptions + post-emission validation. This is the post-emission layer.
+
+### Recommendations + Considerations schema tuning (length cap + positive examples)
+
+Carry-forward from continued smoke testing: bullets too long. Tuning lives on schema descriptions in both `FILL_TOOL` (`_shared/venueFill.ts`) and `SUBMIT_RESEARCH` (`vs-research-venues/index.ts`). Added: per-array description ("2-4 short venue-specific observations ... 10-15 words"), per-item description with concrete examples lifted from Jimmie's reference set, `maxLength: 150` on recommendations / `maxLength: 200` on considerations. `maxLength` is a soft signal in JSON Schema; Claude generally honors but doesn't strictly enforce, so set generously. Memory rule `feedback_tool_choice_collapse` reaffirmed: no system-prompt edits. The two tool definitions stay independent (vs-research-venues has unique fields like `derived_columns`); inline duplication is fine over a full extraction at this stage.
+
+### Website_url schema description tuning (lifted from URL-quality hot patch lesson)
+
+Companion to HEAD validation. Updated `website_url` description in both `FILL_TOOL` and `SUBMIT_RESEARCH` to "Must be a verbatim URL from a web search result. Examples: ... Do NOT fabricate URLs or guess listing IDs." The "Do NOT fabricate" phrasing is a positive-only redirect framed against the verbatim-from-search-results positive lever (no forbidden-URL list; same posture as the URL-quality hot patch).
+
+### 3-tier source priority sort (manual -> sheet -> research)
+
+Carry-forward extension of the 4.10.2-port 2-tier (manual top / rest mixed) sort. Smoke testing surfaced that the producer wanted uploaded sheet rows visually separated from AI-research rows. New `SOURCE_PRIORITY` constant in `src/lib/venue-scout/format.ts` (single source of truth shared by SourcingReport + Shortlist). Within each tier, rank desc with nulls last. Unknown / null source falls back to lowest priority (sorts to the bottom). DeckPrep stays on producer-controlled dnd-kit order (4.6-port lock; producer-controlled order is the entire point of the DeckPrep surface).
+
+### Per-venue enrichment progress (static post-completion count)
+
+Locked option (b): SheetUpload reads `enriched_count` + `count` from the `vs-parse-sheet` response and renders "N / M enriched" when N < M. When all rows enriched (N === M), no ratio shown (redundant). Zero migration cost; ~10 line frontend addition. Realtime sub-progress option (publication add for `vs_candidate_venues` + Realtime subscription) deferred -- not worth the schema bloat for an enrichment pass that typically completes in 30-60s. If sheet sizes routinely run 60s+ in real use, revisit in a future polish phase.
+
+### venue_type inline editing UX (popover with checkboxes)
+
+4.10.2-port collapsed the manual-row `<input>` for type into the shared `<VenueIdentityStack>` and the producer's path to set `venue_type` disappeared on manual rows. Per port-plan locked "all rows editable except recs/considerations": type editing should be available on all rows (manual + sheet + research). UX: click the type-pills cell -> popover with 8 canonical types as toggleable checkboxes; toggle returns a new `CanonicalType[]`; the caller serializes to `${types.join(" / ")}` or null and persists via debounceSave. New `TypeTogglePopover` primitive in `matrix/primitives.tsx` (shadcn `Popover` was already in the repo). Replaces static type-pills in col3 on SourcingReport + Shortlist. DeckPrep doesn't render type pills today; no change.
+
+### VS storage policy reconciliation (open-authenticated, match table RLS)
+
+Pre-4.10.3 state: `briefs` + `sourcing_sheets` + `vs_venue_photos` buckets all gated `is_producer_or_admin()` while the vs_* table RLS is open-authenticated per port plan § 8.6. Member-tier users could read/write vs_* tables but couldn't upload files, breaking the "collaborative agency-wide workflow" the port plan locks. Locked option: relax storage policies to authenticated; matches table RLS posture. `docs/auth-model.md` updated in the same squash so the role-tier definitions reflect "members can use Venue Scout end-to-end." `vs_venue_photos` collapsed from 4 split policies to a single `FOR ALL` policy. `IF EXISTS` on the DROPs handles any Studio-side rename drift.
+
+### design-system § 3 Field label color (text-foreground -> text-primary)
+
+Doc-implementation drift. Doc said `text-foreground`; every implementation (TS NewRoleDetails + RoleSettings + 4.3-port Brief + 4.9-port ScoutSettings) used `text-primary` (coral). Single-line doc fix to match the actual canonical implementation.
+
+### Cutover plan update (cherry-pick before hard reset)
+
+Per port plan § "Done when" rewrite: cherry-pick the must-carry set from main onto `vs-port-fresh` before the hard-reset. Known must-carry: `f24d3f5` (2026-05-13 TS Final Review packet template + layout fixes + email-as-cover-letter fallback). Everything else on main since `dd38577` is the archived failed-Phase-4 stack + URL-quality hot patches, which we DISCARD on cutover. No conflicts expected for must-carry items since TS files are disjoint from VS port files. Verification check is `git show --stat <new-sha>` vs `git show --stat <source-sha>`, not the naive `git log main --not vs-port-fresh --oneline` empty check (which is impossible by design since vs-port-fresh branched from `dd38577`, has archived commits on main below it, and cherry-picks produce new SHAs). Dry-run 2026-05-13 confirmed `git cherry-pick f24d3f5` applies cleanly (2 files, 184+/17-, no conflicts).
+
+### Side-by-side reconciliation pass (small fixes inline, larger items deferred to 4.10.4)
+
+Final pre-cutover walk of VS Pro vs HQ surface-by-surface. Locked option: fold small fixes (5 line change or less) inline as part of 4.10.3 squash; defer larger items to 4.10.4 with logged rationale. Expected intentional divergences (page wrapper widths, Alignment column gone, Source pills present, inline editing extensions, Settings page, ErrorState debug detail) stay as-is per port-plan locks; not regressed. Walk surfaced no unknown divergences that block cutover.
+
 ## Phase 4.10.2-port (matrix UX overhaul: inline editing + Source pill + Alignment column removal + manual-at-top sort)
 
 ### Three matrix changes bundled
@@ -96,9 +169,9 @@ History is preserved across resets. If a producer Starts Over after generating a
 
 Photos in `vs_venue_photos` bucket and sheets in `sourcing_sheets` bucket orphan after the table DELETEs run. Future cron sweep handles cleanup. Same precedent as 4.7.1-port photo storage and TS `candidate_attachments`. Trade-off: simpler RPC + faster Start Over vs slightly delayed reclaim of bucket bytes.
 
-### ErrorState surfaces `research_error` in a `<details>` section
+### ErrorState surfaces `research_error` in a `<details>` section (renamed to `pipeline_error` in Phase 4.10.3-port)
 
-Producer can expand the collapsed-by-default summary to see the raw `<CODE>: <message>` from `vs_scouts.research_error`. Copy + forward to team for triage. Not auto-expanded; subtle. Replaces the stub's "static message" with the actual error text. Same `research_error` column carries research / compile / deck errors today (rename deferred to 4.10.3 per the prior decision).
+Producer can expand the collapsed-by-default summary to see the raw `<CODE>: <message>` from `vs_scouts.pipeline_error` (column renamed from `research_error` in Phase 4.10.3-port). Copy + forward to team for triage. Not auto-expanded; subtle. Replaces the stub's "static message" with the actual error text. Single column carries research / compile / deck errors as of 4.7.2-port.
 
 ### Per-scout chrome (gear + step-through nav) on every action page, NOT on loading screens
 
@@ -180,7 +253,7 @@ VS Pro's DeckPrep has a stub `current_step='deck_generated'` write inside an unr
 
 ## Phase 4.7.2-port (Compiling + vs-compile-summaries)
 
-### Reuse `vs_scouts.research_error` column for compile errors
+### Reuse `vs_scouts.research_error` column for compile errors (renamed to `pipeline_error` in Phase 4.10.3-port)
 
 Adding a `compile_error` column would split the AI-pipeline failure channel into two physically-separate state machines for what is conceptually a single producer-facing concern ("something in the AI pipeline went wrong"). Keeping one channel means both Researching and Compiling pages subscribe to the same Realtime payload shape, ErrorStateStub keys (`research-timeout`, `compile-failed`) co-locate, and Scout Index can render a single "had a problem" indicator without joining two columns. The column rename to `pipeline_error` (more accurately describing the dual usage) is deferred to cutover doc sweep or 4.9-port polish; renaming is cheap, splitting later is not.
 

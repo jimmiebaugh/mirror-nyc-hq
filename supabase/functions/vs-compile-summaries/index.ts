@@ -5,8 +5,9 @@
 //   1. Both Anthropic calls go through callClaude('venue_scout', ...) for
 //      spend tracking + per-app key + cache discounts. No raw fetch.
 //   2. Sanitization on Pass 1 output: venue_type tokens through
-//      canonicalizeType, website_url through sanitizeWebsiteUrl,
-//      ranking_score -> rank Math.round for INTEGER column.
+//      canonicalizeType, website_url through validateWebsiteUrl (4.10.3-port
+//      HEAD-validation wrapper around sanitizeWebsiteUrl), ranking_score ->
+//      rank Math.round for INTEGER column.
 //   3. EdgeRuntime.waitUntil divorces request lifetime from work lifetime
 //      (port plan § 8.3). The function returns 200 immediately; the AI
 //      work + per-venue UPDATEs + final UPDATE run in the background. The
@@ -49,10 +50,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callClaude, type ClaudeTool } from "../_shared/anthropic.ts";
-import {
-  canonicalizeType,
-  sanitizeWebsiteUrl,
-} from "../_shared/venueTypes.ts";
+import { canonicalizeType } from "../_shared/venueTypes.ts";
+import { validateWebsiteUrl } from "../_shared/urlValidation.ts";
 import {
   buildFillUserMsg,
   FILL_SYSTEM,
@@ -121,7 +120,7 @@ async function writeFailure(
     .from("vs_scouts")
     .update({
       status: "failed",
-      research_error: message,
+      pipeline_error: message,
       last_touched_at: new Date().toISOString(),
     })
     .eq("id", scout_id);
@@ -196,7 +195,7 @@ Deno.serve(async (req) => {
         ...briefData,
         compile_started_at: new Date().toISOString(),
       },
-      research_error: null,
+      pipeline_error: null,
     })
     .eq("id", scout_id);
 
@@ -261,7 +260,7 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
           .update({
             current_step: "deck_prep",
             status: "in_progress",
-            research_error: null,
+            pipeline_error: null,
             last_touched_at: new Date().toISOString(),
           })
           .eq("id", scout_id);
@@ -307,6 +306,9 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
             address: v.address,
             neighborhood: v.neighborhood,
             venue_type: v.venue_type,
+            // Phase 4.10.3-port: forward producer-set URL so backfill
+            // research uses it as primary source.
+            website_url: v.website_url,
             notes: v.notes,
           });
 
@@ -315,12 +317,22 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
               "venue_scout",
               [{ role: "user", content: fillUserMsg }],
               {
-                // Testing claude-sonnet-4-6 (wrapper default). If the
-                // diagnostic log shows out<200 on Pass 1, pivot to 4-5
-                // by adding `model: "claude-sonnet-4-5"` here.
-                max_tokens: 2000,
+                // Phase 4.10.3-port: pivoted to claude-sonnet-4-5 (per
+                // smoke test 2026-05-13; same collapse signature as
+                // vs-parse-sheet:fill). Bumped 2000 -> 6000 for
+                // web_search content room.
+                model: "claude-sonnet-4-5",
+                max_tokens: 6000,
                 system: FILL_SYSTEM,
-                tools: [FILL_TOOL],
+                // Phase 4.10.3-port: add web_search so backfill of sheet
+                // + manual rows can fill website_url from real search
+                // results. Parity with vs-parse-sheet enrichOne and
+                // vs-research-venues. max_uses=2 keeps per-row latency
+                // bounded; backfill set is typically small.
+                tools: [
+                  FILL_TOOL,
+                  { type: "web_search_20250305", name: "web_search", max_uses: 2 },
+                ],
                 tool_choice: { type: "tool", name: "fill_venue" },
                 fn_name: "vs-compile-summaries:fill",
               },
@@ -355,7 +367,10 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
                 }
 
                 if (!v.website_url) {
-                  const cleaned = sanitizeWebsiteUrl(f.website_url);
+                  // Phase 4.10.3-port: HEAD-validated. Same per-row sequential
+                  // pattern as vs-parse-sheet's enrichOne; Pass 1 runs CHUNK_SIZE
+                  // rows in parallel so per-chunk latency stays bounded.
+                  const cleaned = await validateWebsiteUrl(f.website_url);
                   if (cleaned) patch.website_url = cleaned;
                 }
 
@@ -512,7 +527,7 @@ Write the venue_overview paragraph.`;
         .update({
           current_step: "deck_prep",
           status: "in_progress",
-          research_error: null,
+          pipeline_error: null,
           last_touched_at: new Date().toISOString(),
         })
         .eq("id", scout_id);

@@ -88,6 +88,21 @@ export function isInProgress(step: string | null | undefined): boolean {
   return !!step && step !== "sheet_prompt" && step !== "completed";
 }
 
+// Phase 4.10.3-port: 3-tier source priority for the matrix sort.
+// Manual venues pin to the top (producer-added are always visible), then
+// uploaded sheet rows, then AI-research rows. Within each tier, rank desc.
+// Used by SourcingReport + Shortlist; DeckPrep stays on producer-controlled
+// dnd-kit order (port plan § 9 4.6-port lock).
+//
+// `source` column values are 'manual' | 'sheet' | 'research' per the
+// vs_candidate_venues constraint (port plan § 4.1-port migration). Unknown
+// or null values fall back to lowest priority so they sort to the bottom.
+export const SOURCE_PRIORITY: Record<string, number> = {
+  manual: 0,
+  sheet: 1,
+  research: 2,
+};
+
 // Producer-facing label for the Phase column on Scout Index. Tweak in one
 // place if copy needs to shift.
 export function currentStepToLabel(step: string | null | undefined): string {

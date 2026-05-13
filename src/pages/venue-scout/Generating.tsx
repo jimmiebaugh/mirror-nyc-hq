@@ -23,7 +23,7 @@
 //     about completion via Realtime, not the response.
 //   - Server-side idempotency on vs-generate-deck means dev-mode double-mount
 //     and refresh-mid-flight are both safe (no double Slides API calls).
-//   - Failure path: vs-generate-deck writes status='failed' + research_error
+//   - Failure path: vs-generate-deck writes status='failed' + pipeline_error
 //     formatted as `<CODE>: <message>`. Page parses the code with a regex,
 //     falls back to UNKNOWN, and navigates to /deck/error/<code>.
 
@@ -35,7 +35,7 @@ type ScoutRow = {
   id: string;
   current_step: string | null;
   status: string | null;
-  research_error: string | null;
+  pipeline_error: string | null;
   generated_decks: unknown;
 };
 
@@ -61,7 +61,7 @@ export default function Generating() {
     const fetchScout = async () => {
       const { data } = await supabase
         .from("vs_scouts")
-        .select("id, current_step, status, research_error, generated_decks")
+        .select("id, current_step, status, pipeline_error, generated_decks")
         .eq("id", scoutId)
         .maybeSingle();
       if (!cancelled && data) setScout(data as unknown as ScoutRow);
@@ -87,7 +87,7 @@ export default function Generating() {
 
     // 2. Optimistic clear of any prior failure state BEFORE the initial
     //    fetch lands. Without this, a Generate-after-failure flow lets
-    //    the page read stale `status='failed' + research_error='...'`
+    //    the page read stale `status='failed' + pipeline_error='...'`
     //    from a prior run and the nav effect immediately routes back to
     //    /deck/error/<code> before the new run even starts. The edge
     //    function also clears these at kickoff (idempotent double-write
@@ -95,7 +95,7 @@ export default function Generating() {
     void (async () => {
       await supabase
         .from("vs_scouts")
-        .update({ status: "in_progress", research_error: null })
+        .update({ status: "in_progress", pipeline_error: null })
         .eq("id", scoutId);
 
       // 3. Initial fetch (now reads the cleared state).
@@ -140,12 +140,12 @@ export default function Generating() {
       return;
     }
 
-    // Failure: vs-generate-deck writes status='failed' + research_error
+    // Failure: vs-generate-deck writes status='failed' + pipeline_error
     // formatted as `<CODE>: <message>`. Parse the code, fall back to
     // UNKNOWN, route to the per-key error stub. `replace: true` same
     // reasoning as the success path.
-    if (scout.status === "failed" && scout.research_error) {
-      const code = parseErrorCode(scout.research_error);
+    if (scout.status === "failed" && scout.pipeline_error) {
+      const code = parseErrorCode(scout.pipeline_error);
       navigate(`/venue-scout/scouts/${scoutId}/deck/error/${code}`, {
         replace: true,
       });

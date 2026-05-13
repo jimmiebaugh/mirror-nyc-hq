@@ -10,20 +10,20 @@ import {
   Td,
   HdrStack,
   VStack,
-  Pill,
   Bullets,
   NotesCellButton,
   parseTypes,
-  TYPE_STYLES,
-  TYPE_FALLBACK_STYLE,
   EditableField,
   EditableTextarea,
   VenueIdentityStack,
+  TypeTogglePopover,
 } from "@/components/venue-scout/matrix/primitives";
+import type { CanonicalType } from "@/components/venue-scout/matrix/primitives";
 import {
   ScoutSettingsLink,
   ScoutStepThroughNav,
 } from "@/components/venue-scout/ScoutChrome";
+import { SOURCE_PRIORITY } from "@/lib/venue-scout/format";
 
 // Lifted from VS Pro (src/pages/sourcing/SourcingReport.tsx) per port plan
 // § 9 + Phase 4.6-port spec. Adapts:
@@ -134,16 +134,19 @@ export default function SourcingReport() {
     };
   }, []);
 
-  // Phase 4.10.2-port: client-side manual-at-top sort. Within each group
-  // (manual / non-manual), rank desc with nulls last. Mirrors Shortlist's
-  // existing pattern but here we read from a SQL-ordered list and re-sort
-  // anyway so the manual-at-top invariant holds on every state change.
+  // Phase 4.10.3-port: 3-tier source priority sort (manual -> sheet ->
+  // research). Within each tier, rank desc with nulls last. Replaces the
+  // 4.10.2-port 2-tier manual-at-top sort so uploaded sheet rows visually
+  // separate from AI-research rows. SOURCE_PRIORITY constant lives in
+  // src/lib/venue-scout/format.ts so SourcingReport + Shortlist stay in
+  // lock-step. Re-sorts on every venues state change so manual + sheet
+  // invariants hold across optimistic mutations.
   const sortedVenues = useMemo(() => {
     const arr = [...venues];
     arr.sort((a, b) => {
-      const aManual = a.source === "manual" ? 0 : 1;
-      const bManual = b.source === "manual" ? 0 : 1;
-      if (aManual !== bManual) return aManual - bManual;
+      const aPri = SOURCE_PRIORITY[a.source ?? "research"] ?? 99;
+      const bPri = SOURCE_PRIORITY[b.source ?? "research"] ?? 99;
+      if (aPri !== bPri) return aPri - bPri;
       return (b.rank ?? -1) - (a.rank ?? -1);
     });
     return arr;
@@ -361,22 +364,15 @@ export default function SourcingReport() {
                             />
                           }
                           bot={
-                            <div className="flex flex-col items-center gap-[7px]">
-                              {types.length ? (
-                                types.map((t, i) => (
-                                  <Pill
-                                    key={i}
-                                    className={
-                                      TYPE_STYLES[t] ?? TYPE_FALLBACK_STYLE
-                                    }
-                                  >
-                                    {t}
-                                  </Pill>
-                                ))
-                              ) : (
-                                <span className="text-muted-foreground">-</span>
-                              )}
-                            </div>
+                            <TypeTogglePopover
+                              currentTypes={types}
+                              onChange={(next: CanonicalType[]) =>
+                                debounceSave(v.id, {
+                                  venue_type:
+                                    next.length > 0 ? next.join(" / ") : null,
+                                })
+                              }
+                            />
                           }
                         />
                       </Td>
