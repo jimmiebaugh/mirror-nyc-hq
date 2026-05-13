@@ -5,7 +5,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 **Last updated:** 2026-05-13
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
 **Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `<TBD-4.9-port-squash>` (Phase 4.9-port squashed from `claude/vs-port-4-9-settings-error`). Prior: `b75a106` (Phase 4.8.3-port).
+**Latest commit on `vs-port-fresh`:** `19c0683` (Phase 4.9-port squashed from `claude/vs-port-4-9-settings-error`). Prior: `b75a106` (Phase 4.8.3-port).
 **Current phase:** Phase 4.9-port DONE on `vs-port-fresh`; **Phase 4 port feature-complete + producer has Settings + Start Over + full error recovery.** Next: Phase 4.10.1-port (sheet upload AI enrichment). Phase 4.7 was split into two passes (both shipped). Phase 4.8 was split into two passes at spec time (4.8.1 frontend + infra, 4.8.2 generate flow); both shipped + 4.8.3 hotfix. 4.9 lands Settings page + full ErrorState.tsx (replacing the 4.4-port stub) + post-completion step-through nav + always-visible gear icon across every per-scout action page.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
@@ -63,7 +63,7 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
-<TBD-4.9-port-squash>  [skip netlify] Phase 4.9-port: Scout Settings page + full ErrorState.tsx + post-completion step-through nav strip + always-visible gear icon (squash-merged from claude/vs-port-4-9-settings-error)
+19c0683  [skip netlify] Phase 4.9-port: Scout Settings page + full ErrorState.tsx + post-completion step-through nav strip + always-visible gear icon (squash-merged from claude/vs-port-4-9-settings-error)
 b75a106  [skip netlify] Phase 4.8.3-port: deck-output correctness hotfix (slide-index shift in vs-generate-deck + DeckPrep FRONT_MATTER_SLIDES bump + ALL-CAPS venue_name + loading-page copy refresh) (squash-merged from claude/vs-port-4-8-3-deck-fixes)
 1bfe135  [skip netlify] Backfill 7a55dc2 squash hash into CHECKPOINT.md + CLAUDE.md
 7a55dc2  [skip netlify] Phase 4.8.2-port: Generating page + vs-generate-deck edge function + four deck error keys (squash-merged from claude/vs-port-4-8-2-generate)
