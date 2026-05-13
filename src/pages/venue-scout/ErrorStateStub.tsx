@@ -9,24 +9,50 @@
 
 import { Link, useParams } from "react-router-dom";
 
-const STUB_MESSAGES: Record<string, string> = {
-  "parse-fail":
-    "We couldn't parse that sheet. Try a different file, or skip the upload and let us research candidates from the brief.",
-  "empty-sheet":
-    "We didn't find any venues in that sheet. Try a different file, or skip the upload and let us research candidates from the brief.",
+type StubEntry = { message: string; back: { route: string; label: string } };
+
+const STUB_ENTRIES: Record<string, StubEntry> = {
+  "parse-fail": {
+    message:
+      "We couldn't parse that sheet. Try a different file, or skip the upload and let us research candidates from the brief.",
+    back: { route: "sourcing/sheet-prompt", label: "Sourcing" },
+  },
+  "empty-sheet": {
+    message:
+      "We didn't find any venues in that sheet. Try a different file, or skip the upload and let us research candidates from the brief.",
+    back: { route: "sourcing/sheet-prompt", label: "Sourcing" },
+  },
   // Phase 4.5-port: written by vs-research-venues on any AI / insert /
   // timeout failure. The full ErrorState ports in 4.9-port and will
   // surface vs_scouts.research_error for debug visibility; this stub
   // keeps a static message until then.
-  "research-timeout":
-    "We couldn't finish researching venues. The AI request timed out or returned no results. Head back to Sourcing and try again, or contact the team.",
+  "research-timeout": {
+    message:
+      "We couldn't finish researching venues. The AI request timed out or returned no results. Head back to Sourcing and try again, or contact the team.",
+    back: { route: "sourcing/sheet-prompt", label: "Sourcing" },
+  },
+  // Phase 4.7.2-port: written by vs-compile-summaries on any AI /
+  // timeout failure. Same disposition as research-timeout (single
+  // AI-pipeline error channel via vs_scouts.research_error per the
+  // decision in docs/decisions.md). Back-link goes to Review (where
+  // the producer just came from), not sheet-prompt.
+  "compile-failed": {
+    message:
+      "We couldn't finish compiling the deck. The AI request errored or timed out. Head back to Review or contact the team.",
+    back: { route: "sourcing/review", label: "Review" },
+  },
 };
 
 export default function ErrorStateStub() {
   const { id: scoutId, errorKey } = useParams();
+  const entry = STUB_ENTRIES[errorKey ?? ""];
   const message =
-    STUB_MESSAGES[errorKey ?? ""] ??
+    entry?.message ??
     "Something went wrong with the sourcing flow. Head back to Sourcing and try again.";
+  const back = entry?.back ?? {
+    route: "sourcing/sheet-prompt",
+    label: "Sourcing",
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pt-12 text-center">
@@ -37,10 +63,10 @@ export default function ErrorStateStub() {
       <p className="text-sm text-muted-foreground">{message}</p>
       <div className="pt-4">
         <Link
-          to={`/venue-scout/scouts/${scoutId}/sourcing/sheet-prompt`}
+          to={`/venue-scout/scouts/${scoutId}/${back.route}`}
           className="crumb"
         >
-          ← Back to Sourcing
+          ← Back to {back.label}
         </Link>
       </div>
     </div>

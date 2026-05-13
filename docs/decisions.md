@@ -2,6 +2,32 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.7.2-port (Compiling + vs-compile-summaries)
+
+### Reuse `vs_scouts.research_error` column for compile errors
+
+Adding a `compile_error` column would split the AI-pipeline failure channel into two physically-separate state machines for what is conceptually a single producer-facing concern ("something in the AI pipeline went wrong"). Keeping one channel means both Researching and Compiling pages subscribe to the same Realtime payload shape, ErrorStateStub keys (`research-timeout`, `compile-failed`) co-locate, and Scout Index can render a single "had a problem" indicator without joining two columns. The column rename to `pipeline_error` (more accurately describing the dual usage) is deferred to cutover doc sweep or 4.9-port polish; renaming is cheap, splitting later is not.
+
+### Compile timeout raised to 180 seconds (vs 4.5-port research's 120)
+
+Compile arithmetic is per-venue, not per-call. 5 pitched venues with all manual rows triggers up to 10 sequential Claude calls (Pass 1 fill + Pass 2 overview each). At ~15 seconds per call, that's 150s of work; ceiling at 180s gives a 30s buffer. Research is a single Claude call regardless of venue count (the tool returns a batched array), so its 120s ceiling stays appropriate.
+
+### Two-pass compile-summaries through `callClaude` (first multi-tool-choice consumer)
+
+VS Pro's compile-summaries was the first function in the source repo with two distinct `tool_choice`-forced tools in a single function (`fill_venue` for Pass 1, `write_overview` for Pass 2). HQ's port is the first port-side function with that shape; the `callClaude` wrapper already supports per-call `tools` + `tool_choice` so no wrapper changes needed. Pattern documented inline in `vs-compile-summaries/index.ts` for the next multi-tool consumer.
+
+### Notes flow collapsed: inline `vs_candidate_venues.notes` (vs VS Pro's separate `venue_notes` table query)
+
+VS Pro reads `from("venue_notes").select(...)` separately to build a `noteMap`. 4.3-port already inlined producer notes into `vs_candidate_venues.notes`; vs-compile-summaries's venues query selects `notes` directly. Both Pass 1 and Pass 2 user messages substitute `Producer notes: ${v.notes ?? "(none)"}` from the inline field. Saves one round-trip per compile call and avoids the extra `notes_by_venue_id` mapping step.
+
+### `vs-compile-summaries` payload simplified from `{ project_id, venue_ids }` to `{ scout_id }`
+
+VS Pro requires the page to fetch pitched venue IDs first and pass them in. Port flips: the function queries pitched venues itself via `eq("scout_id", scout_id).eq("pitched", true)`. Smaller payload, matches the rest of the port-side functions (`vs-parse-brief`, `vs-research-venues` both take `{ scout_id }` only), and centralizes "which venues to compile" in one place (server-side, atomic with the load) instead of split between page and function. Pitched-venues query is fast (indexed on `(scout_id, pitched)` via the implicit FK + boolean column).
+
+### Testing `claude-sonnet-4-6` on compile-summaries (independent test from 4.5-port research-venues)
+
+Same posture as research-venues: take the wrapper default and watch the diagnostic log for the collapse signature. Different prompts may behave differently — research's `submit_research` with `web_search` had a known May 11 collapse pattern (out<200 + server_tool_uses=0); compile's `fill_venue` and `write_overview` are pure text-tool flows with no server tools, so the signal narrows to `out<200`. Pivot procedure to `claude-sonnet-4-5` is inline in the function. The memory note `project_sourcing_model_pin` covers the failed-attempt `vs-start-sourcing` and does NOT carry over to port-side functions.
+
 ## Phase 4.7.1-port (Review + PhotoUploadModal + Shortlist photo unstub)
 
 ### Phase 4.7 split into two passes (4.7.1 frontend, 4.7.2 backend)
