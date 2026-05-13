@@ -32,6 +32,10 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { PhotoUploadModal } from "@/components/venue-scout/PhotoUploadModal";
+import {
+  ScoutSettingsLink,
+  ScoutStepThroughNav,
+} from "@/components/venue-scout/ScoutChrome";
 
 type Venue = {
   id: string;
@@ -65,6 +69,11 @@ export default function DeckPrep() {
   const [included, setIncluded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  // Phase 4.9-port: meta for <ScoutStepThroughNav />. Extends the existing
+  // deck_order fetch to also pull current_step + generated_decks.
+  const [scoutMeta, setScoutMeta] = useState<
+    { current_step: string | null; generated_decks: unknown } | null
+  >(null);
   const [photoModal, setPhotoModal] = useState<
     { venueId: string; venueName: string } | null
   >(null);
@@ -101,10 +110,18 @@ export default function DeckPrep() {
     if (!scoutId) return;
     const { data: scout } = await supabase
       .from("vs_scouts")
-      .select("deck_order")
+      .select("deck_order, current_step, generated_decks")
       .eq("id", scoutId)
       .maybeSingle();
     const savedOrder = ((scout?.deck_order as unknown) ?? []) as string[];
+    setScoutMeta(
+      scout
+        ? {
+            current_step: (scout.current_step as string | null) ?? null,
+            generated_decks: scout.generated_decks,
+          }
+        : null,
+    );
 
     const { data: vs } = await supabase
       .from("vs_candidate_venues")
@@ -324,14 +341,18 @@ export default function DeckPrep() {
               their slot position on the deck slide.
             </p>
           </div>
-          <Link
-            to={reviewPath}
-            className="text-[13px] font-mono uppercase tracking-wider text-primary hover:underline"
-          >
-            ← Back to Review
-          </Link>
+          <div className="flex items-end gap-3">
+            <Link
+              to={reviewPath}
+              className="text-[13px] font-mono uppercase tracking-wider text-primary hover:underline"
+            >
+              ← Back to Review
+            </Link>
+            {scoutId && <ScoutSettingsLink scoutId={scoutId} />}
+          </div>
         </div>
       </header>
+      {scoutId && <ScoutStepThroughNav scoutId={scoutId} scout={scoutMeta} />}
 
       <div className="text-right text-xs text-muted-foreground mb-3">
         <strong className="text-foreground">{includedVenues.length}</strong>{" "}

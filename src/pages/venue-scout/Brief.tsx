@@ -38,6 +38,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { stepToRoute } from "@/lib/venue-scout/format";
 import {
+  ScoutSettingsLink,
+  ScoutStepThroughNav,
+} from "@/components/venue-scout/ScoutChrome";
+import {
   appendUploadedFile,
   applyParsedFields,
   EMPTY_BRIEF_FORM,
@@ -286,14 +290,18 @@ export default function Brief() {
       <Link to="/venue-scout" className="crumb">
         ← Back to Venue Scout
       </Link>
-      <header className="space-y-2">
-        <h1 className="h-page">Brief</h1>
-        <p className="text-sm text-muted-foreground">
-          {form.event_name && form.client_name
-            ? `${form.event_name} · ${form.client_name}`
-            : "Project details and sourcing context."}
-        </p>
+      <header className="flex items-end justify-between gap-5">
+        <div className="space-y-2">
+          <h1 className="h-page">Brief</h1>
+          <p className="text-sm text-muted-foreground">
+            {form.event_name && form.client_name
+              ? `${form.event_name} · ${form.client_name}`
+              : "Project details and sourcing context."}
+          </p>
+        </div>
+        <ScoutSettingsLink scoutId={scout.id} />
       </header>
+      <ScoutStepThroughNav scoutId={scout.id} scout={scout} />
 
       {isArchived && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">

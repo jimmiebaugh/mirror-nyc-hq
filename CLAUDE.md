@@ -46,7 +46,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 
 ## Current phase
 
-See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.8.3-port (deck-output correctness hotfix)** squashed onto `vs-port-fresh` at `b75a106` (prior 4.8.2-port at `7a55dc2`). **Phase 4 port is feature-complete and produces a correct deck.** Full producer journey works end-to-end (Brief through deck Generation to /brief landing), and 4.8.3 corrected the slide-index off-by-one against Mirror's actual 6-front-matter-slide template. Remaining sub-phases are non-blocking polish: **Phase 4.9-port** (Settings + Start Over + full ErrorState.tsx) is next per `docs/venue-scout-port-plan.md`. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
+See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.9-port (Scout Settings + full ErrorState + per-scout chrome)** squashed onto `vs-port-fresh` at `19c0683` (prior 4.8.3-port at `b75a106`). **Phase 4 port is feature-complete + has full recovery + polish surface.** Settings page (rename / project link / Start Over RPC) + full ErrorState (9 keys with the `vs_scouts.research_error` debug detail) + always-visible gear icon + post-completion step-through nav strip across every per-scout action page. Loading screens (Researching / Compiling / Generating) excluded by design. Next: **Phase 4.10.1-port** (sheet-upload AI enrichment) per `docs/venue-scout-port-plan.md`. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
 
 ## Working with this repo
 
