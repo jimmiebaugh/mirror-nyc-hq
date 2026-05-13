@@ -404,18 +404,19 @@ export function SourcePill({ source }: { source: string | null }) {
 // Phase 4.10.2-port: vertical stack for the Venue | Address cell (col2 on
 // SourcingReport + Shortlist). Replaces the old 2-element VStack for that
 // cell to absorb Rank + Source pill from the removed Alignment column.
-// Layout: name (no divider) -> address -> divider -> website (if any) ->
-// divider -> rank -> source pill (no divider; the 24px gap is enough).
 //
-// Vertical rhythm: `gap-[24px]` between children gives 24px of breathing
-// room above and below each <StackDivider />. Matches the `dividerPad={18}`
-// hint passed to the sibling VStack in the Neighborhood | Type column so
-// both sticky-area cells read with the same dividers-as-breathing-marks
-// cadence (per Jimmie's 2026-05-13 smoke calls: divider spacing 1.5x'd from
-// the first pass; dedicated divider above website; no divider between name
-// and address since the two read as one venue-identity block; no divider
-// between rank and source pill since the pill's size + color already
-// reads as a separate footer-tag rather than another stack element).
+// Phase 4.10.4-port: rank line dropped from the stack render. Rank is a
+// reversible UI hide; the DB column + tool emission + patch-write paths all
+// stay (per spec § 4a). The `rank` prop was also removed from this
+// component's signature (no caller passes it through anymore); the matrix
+// `RankDisplay` primitive is kept in this module so a future re-enable
+// only has to add the prop back + drop the call back into the stack.
+//
+// New layout: name -> address -> divider -> website (if any) -> divider ->
+// source pill. The middle divider above the source pill collapses out
+// because rank is gone, so the bottom of the stack reads: divider ->
+// source pill (no divider between since the 24px gap + pill color already
+// reads as a footer-tag).
 export function VenueIdentityStack({
   venueId,
   name,
@@ -423,7 +424,6 @@ export function VenueIdentityStack({
   address,
   onAddressChange,
   website,
-  rank,
   source,
   autoFocusName = false,
 }: {
@@ -433,7 +433,6 @@ export function VenueIdentityStack({
   address: string;
   onAddressChange: (next: string) => void;
   website: string | null;
-  rank: number | null;
   source: string | null;
   autoFocusName?: boolean;
 }) {
@@ -472,9 +471,6 @@ export function VenueIdentityStack({
         </>
       ) : null}
       <StackDivider />
-
-      {/* Rank */}
-      <RankDisplay score={rank} />
 
       {/* Source pill (no divider above; the 24px gap from the flex
           container is the breathing room). */}

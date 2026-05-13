@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { NotesModal } from "@/components/venue-scout/NotesModal";
-import { PhotoUploadModal } from "@/components/venue-scout/PhotoUploadModal";
 import {
   Th,
   Td,
@@ -58,9 +57,11 @@ type Venue = {
 };
 
 // Phase 4.10.2-port: 9 -> 8 columns after dropping the Alignment | Rank
-// column. Rank now lives inside the Venue | Address cell via
-// <VenueIdentityStack>.
-const TOTAL_COLS = 8;
+// column.
+// Phase 4.10.4-port: 8 -> 7 columns after dropping the Upload Photos column.
+// Photos still live on Review.tsx; the upload affordance is gone from
+// Shortlist per producer-flow simplification (Jimmie lock 2026-05-13).
+const TOTAL_COLS = 7;
 
 export default function Shortlist() {
   const { id: scoutId } = useParams<{ id: string }>();
@@ -75,9 +76,7 @@ export default function Shortlist() {
   >(null);
 
   const [notesOpen, setNotesOpen] = useState(false);
-  const [photosOpen, setPhotosOpen] = useState(false);
   const [activeVenue, setActiveVenue] = useState<Venue | null>(null);
-  const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
   // Phase 4.10.2-port: id of the most recently inserted manual row. Passed
   // through to <VenueIdentityStack autoFocusName> so the new contenteditable
   // span receives focus on mount. Replaces the previous setTimeout +
@@ -122,22 +121,6 @@ export default function Shortlist() {
     );
     setVenues(visible);
 
-    // 4.7.1-port: real photo counts (4.6-port stub returned 0 always).
-    if (visible.length) {
-      const ids = visible.map((v) => v.id);
-      const { data: ph } = await supabase
-        .from("vs_venue_photos")
-        .select("candidate_venue_id")
-        .in("candidate_venue_id", ids);
-      const counts: Record<string, number> = {};
-      (ph ?? []).forEach((p) => {
-        counts[p.candidate_venue_id] = (counts[p.candidate_venue_id] ?? 0) + 1;
-      });
-      setPhotoCounts(counts);
-    } else {
-      setPhotoCounts({});
-    }
-
     setLoading(false);
   }, [scoutId]);
 
@@ -173,13 +156,20 @@ export default function Shortlist() {
   // Phase 4.10.3-port: 3-tier source priority sort (manual -> sheet ->
   // research). Mirrors SourcingReport. SOURCE_PRIORITY lives in
   // src/lib/venue-scout/format.ts.
+  //
+  // Phase 4.10.4-port: secondary tiebreaker flipped from `rank desc` to
+  // alphabetical-by-name (case-insensitive + numeric collation). Rank column
+  // still lives in the DB; display is hidden only.
   const sorted = useMemo(() => {
     const arr = [...venues];
     arr.sort((a, b) => {
       const aPri = SOURCE_PRIORITY[a.source ?? "research"] ?? 99;
       const bPri = SOURCE_PRIORITY[b.source ?? "research"] ?? 99;
       if (aPri !== bPri) return aPri - bPri;
-      return (b.rank ?? -1) - (a.rank ?? -1);
+      return (a.name ?? "").localeCompare(b.name ?? "", undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
     });
     return arr;
   }, [venues]);
@@ -275,12 +265,6 @@ export default function Shortlist() {
     setNotesOpen(true);
   }
 
-  function openPhotos(v: Venue) {
-    if (!v.pitched) return;
-    setActiveVenue(v);
-    setPhotosOpen(true);
-  }
-
   async function onContinue() {
     if (!scoutId || !canContinue) return;
     const { error } = await supabase
@@ -313,9 +297,8 @@ export default function Shortlist() {
             </div>
             <h1 className="h-page">Venue Shortlist</h1>
             <p className="text-sm text-muted-foreground max-w-3xl">
-              Mark the venues you want to pitch. Add notes per venue, upload
-              deck photos for the pitched ones, and pull in any manual
-              additions before continuing.
+              Mark the venues you want to pitch. Add notes per venue and pull
+              in any manual additions before continuing.
             </p>
           </div>
           <div className="flex items-end gap-4">
@@ -348,10 +331,14 @@ export default function Shortlist() {
           - Total matrix width 1740 -> 1580.
           - `columns` (derived alignment columns) stays read off vs_scouts
             (no longer rendered; kept for parity with SourcingReport).
+
+        Phase 4.10.4-port: 8 -> 7 columns. Upload Photos column dropped;
+        photo upload now lives only on Review.tsx (4.7.1-port surface).
+        Total matrix width 1580 -> 1450.
       */}
       <div className="bg-surface-alt rounded-md overflow-hidden border border-border">
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full min-w-[1580px] border-collapse text-[12.5px]">
+          <table className="w-full min-w-[1450px] border-collapse text-[12.5px]">
             <colgroup>
               <col style={{ width: 60 }} />
               <col style={{ width: 230 }} />
@@ -359,7 +346,6 @@ export default function Shortlist() {
               <col style={{ width: 220 }} />
               <col style={{ width: 250 }} />
               <col style={{ width: 250 }} />
-              <col style={{ width: 130 }} />
               <col style={{ width: 230 }} />
             </colgroup>
             <thead className="sticky top-0 z-20">
@@ -370,7 +356,6 @@ export default function Shortlist() {
                 <Th>Features</Th>
                 <Th>Recommendations</Th>
                 <Th>Considerations</Th>
-                <Th>Upload<br />Photos</Th>
                 <Th>Notes /<br />Feedback</Th>
               </tr>
             </thead>
@@ -397,7 +382,6 @@ export default function Shortlist() {
                 sorted.map((v) => {
                   const types = parseTypes(v.venue_type);
                   const note = v.notes ?? undefined;
-                  const phCount = photoCounts[v.id] ?? 0;
                   return (
                     <tr
                       key={v.id}
@@ -428,7 +412,6 @@ export default function Shortlist() {
                             })
                           }
                           website={v.website_url}
-                          rank={v.rank}
                           source={v.source}
                           autoFocusName={v.id === lastManualId}
                         />
@@ -478,13 +461,6 @@ export default function Shortlist() {
                       </Td>
                       <Td vCenter>
                         <Bullets items={v.considerations ?? []} />
-                      </Td>
-                      <Td vCenter className="text-center">
-                        <UploadPhotosButton
-                          pitched={v.pitched}
-                          count={phCount}
-                          onClick={() => openPhotos(v)}
-                        />
                       </Td>
                       <Td vCenter className="text-center">
                         <NotesCellButton
@@ -550,69 +526,6 @@ export default function Shortlist() {
           }
         }}
       />
-
-      <PhotoUploadModal
-        open={photosOpen}
-        onOpenChange={setPhotosOpen}
-        scoutId={scoutId ?? ""}
-        venueId={activeVenue?.id ?? null}
-        venueName={activeVenue?.name ?? ""}
-        onSaved={(c) => {
-          if (activeVenue) {
-            setPhotoCounts((prev) => ({ ...prev, [activeVenue.id]: c }));
-          }
-        }}
-      />
     </div>
-  );
-}
-
-function UploadPhotosButton({
-  pitched,
-  count,
-  onClick,
-}: {
-  pitched: boolean;
-  count: number;
-  onClick: () => void;
-}) {
-  if (!pitched) {
-    return (
-      <button
-        title="Mark for Pitch to enable photo upload"
-        disabled
-        className="w-full px-2 py-2 text-[10px] font-bold uppercase tracking-[0.12em] rounded bg-input text-muted-foreground cursor-not-allowed border border-border"
-      >
-        - Locked
-      </button>
-    );
-  }
-  if (count >= 4) {
-    return (
-      <button
-        onClick={onClick}
-        className="w-full px-2 py-2 rounded bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/40 hover:bg-[#22c55e]/25 transition-colors"
-      >
-        <span className="block text-[10px] font-bold uppercase tracking-[0.12em] leading-tight">
-          ✓ Complete
-        </span>
-        <span className="block text-[10px] opacity-80 leading-tight mt-0.5">
-          (4 / 4)
-        </span>
-      </button>
-    );
-  }
-  return (
-    <button
-      onClick={onClick}
-      className="w-full px-2 py-2 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-    >
-      <span className="block text-[10px] font-bold uppercase tracking-[0.12em] leading-tight">
-        + Upload
-      </span>
-      <span className="block text-[10px] opacity-90 leading-tight mt-0.5">
-        ({count} / 4)
-      </span>
-    </button>
   );
 }

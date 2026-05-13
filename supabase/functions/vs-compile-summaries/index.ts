@@ -89,13 +89,38 @@ function jsonResponse(body: unknown, status = 200): Response {
 // (Phase 4.10.1-port). vs-parse-sheet and this function both import them so
 // the Pass 1 prompt + schema never drift.
 
+// Phase 4.10.4-port: OVERVIEW_TOOL tuned to produce shorter, better-targeted
+// overviews. Per feedback_tool_choice_collapse memory rule, the levers are
+// the tool description + the venue_overview property description + maxLength.
+// OVERVIEW_SYSTEM stays untouched.
+//
+// Targets:
+//   - 3-4 sentences, ~80 words (down from 5-8 sentences, ~150 words).
+//   - Surface standout physical / experiential features + immediate
+//     neighborhood character + at most one critical consideration.
+//   - Don't itemize every amenity; don't pad with marketing fluff.
+//
+// `maxLength: 600` is a soft signal -- Claude generally honors but does not
+// strictly truncate. ~120 words is ~600-700 characters depending on prose;
+// the cap aligns with the ~45-50% length reduction target.
+//
+// Diagnostic: if smoke output is still too long, tighten maxLength to 500
+// or 450 first. If output is still un-targeted, add more concrete examples
+// to the property description. Do NOT edit OVERVIEW_SYSTEM.
 const OVERVIEW_TOOL: ClaudeTool = {
   name: "write_overview",
   description:
-    "Write a single-paragraph (5-8 sentences) producer-tone venue overview tied to the brief.",
+    "Write a single-paragraph venue overview (3-4 sentences, ~80 words) tied to the brief. Focus on standout physical / experiential features, the immediate neighborhood character around the venue, and only the MOST critical considerations. Skip the nitty-gritty.",
   input_schema: {
     type: "object",
-    properties: { venue_overview: { type: "string" } },
+    properties: {
+      venue_overview: {
+        type: "string",
+        description:
+          "A single producer-tone paragraph of 3-4 sentences (~80 words, max ~120). Structure: (1) one-sentence identity + standout physical or experiential feature; (2) what the space offers programmatically (zones, sightlines, infrastructure, outdoor connections, flexibility); (3) one sentence on the surrounding neighborhood and the cultural / commercial context; (4) optionally, one sentence on what it's best suited for OR one critical consideration. Examples of standout features worth surfacing: 'Extremely large, contiguous floors with high ceilings'; 'Strong ability to separate zones and mitigate sound bleed'; 'Industrial aesthetic with a clean, modernized interior'; 'Robust infrastructure for load-in, power, and large-scale production'; 'Rising cultural hub already hosting CFDA / NYFW shifts'; 'Proximity to Meatpacking, Chelsea galleries, High Line'; 'Brooklyn industrial aesthetic'; 'Multiple outdoor areas (courtyard + intimate garden)'; 'Casual, communal layout supports networking and social engagement'; 'Branding opportunities, prime advertising frontage'; 'High ceilings and multiple entrances; rigging points and truss'; 'Mezzanine great for another programming area'. Examples of well-calibrated overviews: 'The Sunset is a storefront for lease that is situated on the Sunset Strip in the heart of West Hollywood. This prime retail space is within walking distance of everything and has unparalleled access to premier destinations.' / 'Chelsea Industrial is a large, industrial-style event space in West Chelsea known for hosting high-production corporate events, brand activations, and conferences. The venue features a wide-open floor plan with high ceilings, offering a flexible canvas for custom builds and large-scale programming. Its industrial aesthetic and neutral interior lend themselves well to contemporary, tech-forward events, while the surrounding neighborhood provides easy access to transportation, hotels, and production resources.' / 'Platform is a vibrant, design-forward cultural destination. Developed on a repurposed industrial site, the 50,000 sq ft campus blends boutique retail, elevated restaurants and creative community experiences. Situated in Culver City, it sits in the heart of LA art galleries, studios and tech offices.' Do NOT itemize every amenity, do NOT pad with marketing fluff, do NOT exceed ~120 words.",
+        maxLength: 600,
+      },
+    },
     required: ["venue_overview"],
   },
 };

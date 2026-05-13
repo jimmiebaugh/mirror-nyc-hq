@@ -135,19 +135,24 @@ export default function SourcingReport() {
   }, []);
 
   // Phase 4.10.3-port: 3-tier source priority sort (manual -> sheet ->
-  // research). Within each tier, rank desc with nulls last. Replaces the
-  // 4.10.2-port 2-tier manual-at-top sort so uploaded sheet rows visually
-  // separate from AI-research rows. SOURCE_PRIORITY constant lives in
-  // src/lib/venue-scout/format.ts so SourcingReport + Shortlist stay in
-  // lock-step. Re-sorts on every venues state change so manual + sheet
-  // invariants hold across optimistic mutations.
+  // research). SOURCE_PRIORITY constant lives in src/lib/venue-scout/format.ts
+  // so SourcingReport + Shortlist stay in lock-step.
+  //
+  // Phase 4.10.4-port: secondary tiebreaker flipped from `rank desc` to
+  // alphabetical-by-name. `sensitivity: "base"` ignores case; `numeric: true`
+  // sorts "Studio 10" after "Studio 2" instead of before. The rank column
+  // stays in the DB + tool schema (reversible UI hide only), so we no longer
+  // read it in the sort.
   const sortedVenues = useMemo(() => {
     const arr = [...venues];
     arr.sort((a, b) => {
       const aPri = SOURCE_PRIORITY[a.source ?? "research"] ?? 99;
       const bPri = SOURCE_PRIORITY[b.source ?? "research"] ?? 99;
       if (aPri !== bPri) return aPri - bPri;
-      return (b.rank ?? -1) - (a.rank ?? -1);
+      return (a.name ?? "").localeCompare(b.name ?? "", undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
     });
     return arr;
   }, [venues]);
@@ -343,7 +348,6 @@ export default function SourcingReport() {
                             })
                           }
                           website={v.website_url}
-                          rank={v.rank}
                           source={v.source}
                         />
                       </Td>
