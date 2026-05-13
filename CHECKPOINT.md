@@ -5,8 +5,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 **Last updated:** 2026-05-12
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
 **Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `<TBD-4.7.2-port-squash>` (Phase 4.7.2-port squashed from `claude/vs-port-4-7-2-compile`).
-**Active worktree:** `.claude/worktrees/vs-port-4-7-2-compile/` on branch `claude/vs-port-4-7-2-compile` (off `vs-port-fresh` HEAD `c98e6a3`). Phase 4.7.2-port (Compiling page + `vs-compile-summaries` edge function + `compile-failed` error key) WIP — squash gate pending.
+**Latest commit on `vs-port-fresh`:** `67fc75b` (Phase 4.7.2-port squashed from `claude/vs-port-4-7-2-compile`).
 **Current phase:** Phase 4.7.2-port DONE on `vs-port-fresh`; next: Phase 4.8-port (Deck Prep + Generate + `vs-generate-deck`). Phase 4.7 was split into two passes at spec time; both have now squashed.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
@@ -64,7 +63,7 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
-<TBD-4.7.2-port-squash>  [skip netlify] Phase 4.7.2-port: Compiling page + vs-compile-summaries edge function + compile-failed error key (squash-merged from claude/vs-port-4-7-2-compile)
+67fc75b  [skip netlify] Phase 4.7.2-port: Compiling page + vs-compile-summaries edge function + compile-failed error key (squash-merged from claude/vs-port-4-7-2-compile)
 c98e6a3  [skip netlify] Backfill e198f46 squash hash into CHECKPOINT.md
 e198f46  [skip netlify] Phase 4.7.1-port: Review + PhotoUploadModal + vs_venue_photos bucket + Shortlist photo unstub (squash-merged from claude/vs-port-4-7-1-review-photos)
 cce0065  [skip netlify] Backfill dd6a700 squash hash into CHECKPOINT.md
