@@ -423,6 +423,25 @@ export default function DeckPrep() {
         </span>
       </div>
 
+      {/* Phase 4.10.4-port: notes consolidated above the table in a single
+          bulleted card. Copy preserved verbatim from the 4.8.1-port
+          asterisk-list block that used to live below the table. Card uses
+          bg-input + white (foreground) text + coral bullet markers per
+          Jimmie's lock 2026-05-13. */}
+      <div className="mb-4 rounded-md border border-border bg-input px-4 py-3">
+        <ul className="text-sm text-foreground space-y-1 list-disc list-inside marker:text-primary">
+          <li>Drag rows to reorder · top = Venue 01</li>
+          <li>
+            Drag photos within a row to swap slot positions (TL · TR · BL · BR)
+          </li>
+          <li>
+            Cover, project info, event overview, section title, venue map
+            slides auto-generate from brief
+          </li>
+          <li>One detail + one floor plan slide per venue</li>
+        </ul>
+      </div>
+
       <div className="bg-surface-alt rounded-md border border-border overflow-hidden">
         <div className="grid grid-cols-[40px_90px_70px_minmax(220px,1fr)_minmax(280px,360px)_minmax(280px,2fr)] gap-0 border-b border-border bg-input text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
           <div className="px-3 py-3 text-center">≡</div>
@@ -475,33 +494,41 @@ export default function DeckPrep() {
         )}
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.12em]">
-        <span className="px-3 py-1.5 rounded bg-input border border-border text-amber-400">
-          ✱ Drag rows to reorder · top = Venue 01
-        </span>
-        <span className="px-3 py-1.5 rounded bg-input border border-border text-amber-400">
-          ✱ Drag photos within a row to swap slot positions (TL · TR · BL · BR)
-        </span>
-        <span className="px-3 py-1.5 rounded bg-input border border-border text-amber-400">
-          ✱ Cover, project info, event overview, section title, venue map slides
-          auto-generate from brief
-        </span>
-        <span className="px-3 py-1.5 rounded bg-input border border-border text-amber-400">
-          ✱ One detail + one floor plan slide per venue
-        </span>
-      </div>
+      {/* Phase 4.10.4-port: the below-table ✱ asterisk-note block has moved
+          above the table (see the card just above the matrix). The notes are
+          identical to the prior copy; consolidated into a single bulleted
+          card per Jimmie's lock 2026-05-13 so the producer sees them first
+          rather than below the matrix scroll. */}
 
+      {/* Phase 4.10.4-port: bottom-nav rework.
+          - "X slides will be generated" dropped (the table header already
+            shows total slide count).
+          - "X Venues" bumped to text-xl semibold to match the count emphasis
+            on the rest of the page.
+          - Bulleted list of each included venue name underneath the count,
+            in the same pitched / order sequence the deck will use. Internal
+            scroll (max-h-40) caps the floating-nav footprint when a scout
+            pitches many venues; the producer can scroll within the nav
+            without the whole bar growing. */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <Link to={reviewPath} className="crumb">
             ← Back
           </Link>
-          <div className="text-xs text-muted-foreground">
-            <strong className="text-foreground">{includedVenues.length}</strong>{" "}
-            venues
-            <span className="mx-2">·</span>
-            <strong className="text-foreground">{totalSlides} slides</strong>{" "}
-            will be generated
+          <div className="flex flex-col gap-1 max-w-md">
+            <p className="text-xl font-semibold text-foreground">
+              {includedVenues.length}{" "}
+              {includedVenues.length === 1 ? "Venue" : "Venues"}
+            </p>
+            {includedVenues.length > 0 ? (
+              <ul className="text-sm text-muted-foreground space-y-0.5 list-disc list-inside marker:text-primary max-h-40 overflow-y-auto">
+                {includedVenues.map((v) => (
+                  <li key={v.id} className="leading-snug">
+                    {v.name || "(untitled)"}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
           <Button
             onClick={generate}
@@ -564,6 +591,15 @@ function DeckRow({
   const sizeDisplay =
     venue.size_sq_ft != null ? `${venue.size_sq_ft.toLocaleString()} sq ft` : "";
   const capacityDisplay = venue.capacity != null ? `${venue.capacity}` : "";
+  // Phase 4.10.4-port: when all three meta fields (neighborhood / size /
+  // capacity) are null/empty, skip the stack entirely so the cell doesn't
+  // render an empty flex container that still occupies the parent's gap.
+  // Producer would normally fill these on Review before reaching DeckPrep;
+  // showing a "(no details)" placeholder would be misleading.
+  const hasAnyMeta =
+    (venue.neighborhood ?? "").trim().length > 0 ||
+    sizeDisplay.length > 0 ||
+    capacityDisplay.length > 0;
 
   return (
     <div
@@ -623,31 +659,68 @@ function DeckRow({
           variant="address"
           placeholder="(no address)"
         />
-        <div className="flex items-baseline flex-wrap gap-x-1 gap-y-1 text-[11.5px] text-muted-foreground">
-          <EditableField
-            id={`${venue.id}-neigh-deck`}
-            value={venue.neighborhood ?? ""}
-            onChange={(n) => onSave({ neighborhood: n.trim() || null })}
-            variant="neighborhood"
-            placeholder="(neighborhood)"
-          />
-          <span aria-hidden>·</span>
-          <EditableField
-            id={`${venue.id}-size-deck`}
-            value={sizeDisplay}
-            onChange={(raw) => onSave({ size_sq_ft: parseIntOrNull(raw) })}
-            variant="neighborhood"
-            placeholder="(sq ft)"
-          />
-          <span aria-hidden>·</span>
-          <EditableField
-            id={`${venue.id}-cap-deck`}
-            value={capacityDisplay}
-            onChange={(raw) => onSave({ capacity: parseIntOrNull(raw) })}
-            variant="neighborhood"
-            placeholder="(cap)"
-          />
-        </div>
+        {/* Phase 4.10.4-port: neighborhood / size / capacity stacked
+            vertically. Each row gets its own line with a "Field:" label so
+            the producer can scan the cell without parsing inline separators.
+            Skip a row entirely when the underlying value is null/empty
+            (don't render an empty "Neighborhood:" line). The fields remain
+            inline-editable; the visual change is layout-only.
+
+            When all three fields are empty, skip the stack container too so
+            the cell doesn't render a zero-height flex element that still
+            consumes the parent's gap-y. */}
+        {hasAnyMeta ? (
+          <div className="flex flex-col gap-y-0.5 text-[11.5px] text-muted-foreground">
+            {(venue.neighborhood ?? "").trim().length > 0 ? (
+              <div className="flex items-baseline gap-x-1">
+                <span aria-hidden className="text-muted-foreground/70">
+                  Neighborhood:
+                </span>
+                <EditableField
+                  id={`${venue.id}-neigh-deck`}
+                  value={venue.neighborhood ?? ""}
+                  onChange={(n) =>
+                    onSave({ neighborhood: n.trim() || null })
+                  }
+                  variant="neighborhood"
+                  placeholder="(neighborhood)"
+                />
+              </div>
+            ) : null}
+            {sizeDisplay.length > 0 ? (
+              <div className="flex items-baseline gap-x-1">
+                <span aria-hidden className="text-muted-foreground/70">
+                  Size:
+                </span>
+                <EditableField
+                  id={`${venue.id}-size-deck`}
+                  value={sizeDisplay}
+                  onChange={(raw) =>
+                    onSave({ size_sq_ft: parseIntOrNull(raw) })
+                  }
+                  variant="neighborhood"
+                  placeholder="(sq ft)"
+                />
+              </div>
+            ) : null}
+            {capacityDisplay.length > 0 ? (
+              <div className="flex items-baseline gap-x-1">
+                <span aria-hidden className="text-muted-foreground/70">
+                  Capacity:
+                </span>
+                <EditableField
+                  id={`${venue.id}-cap-deck`}
+                  value={capacityDisplay}
+                  onChange={(raw) =>
+                    onSave({ capacity: parseIntOrNull(raw) })
+                  }
+                  variant="neighborhood"
+                  placeholder="(cap)"
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex items-center gap-1.5">
           <EditableField
             id={`${venue.id}-url-deck`}

@@ -353,6 +353,12 @@ Sub-phases stack so each one compiles and ships end-to-end before the next begin
 
 **End-user win:** Venue Scout is shipped and matches Mirror brand.
 
+### Phase 4.10.4-port: Pre-cutover smoke polish
+
+10 items from the 2026-05-13 smoke walk, all blocking cutover. (1) Hide `rank` from the matrix render + flip secondary sort to alphabetical-by-name with numeric collation (DB column + tool emission + patch-write paths all stay); (2) drop the Upload Photos column from Shortlist (photos live on Review only); (3) per-row Notes / Feedback textarea on Review bound to `vs_candidate_venues.notes` via debounceSave; (4) Review page-intro descriptor sentence explaining the notes-feeds-overview binding; (5) `vs-compile-summaries` `OVERVIEW_TOOL` tuned for 3-4 sentence (~80 word) overviews via tool description + property description + `maxLength: 600`, `OVERVIEW_SYSTEM` stays frozen per memory rule; (6) Compiling loading copy refined to "~ 60 seconds"; (7) Deck Prep bottom floating nav reworked (drop slide-count line, bump venue count to text-xl, add bulleted included-venue list); (8) Deck Prep notes consolidated into a single bulleted card above the table (white text + coral markers), below-table asterisk block deleted; (9) Generating loading copy refined to "2-5 minutes"; (10) Deck Prep cell line-breaks: neighborhood / size / capacity on their own lines with "Field:" labels, null fields skip their row, all-null skips the container. No migrations. Out-of-band before this sub-phase: redeploy `vs-generate-deck` from `vs-port-fresh` to clear a stale-deploy production failure (the source on `vs-port-fresh` was clean; the 4.10.3 deploy claim landed in COWORK_SYNC but the function in production stayed stale). vs-compile-summaries deploy verified via `supabase functions list` (version + timestamp).
+
+**End-user win:** producer-facing smoke surfaces clean; matrix readability, notes feedback loop, and deck-prep summary all match the 2026-05-13 lock.
+
 ---
 
 ## 10. Carry-forward from main (cherry-pick lazily during the port)

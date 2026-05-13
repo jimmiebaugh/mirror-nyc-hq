@@ -2,6 +2,48 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.10.4-port (pre-cutover smoke polish)
+
+### Rank hidden in UI; column stays in DB
+
+Smoke walk 2026-05-13 surfaced rank as visual noise (producer doesn't trust the 0-100 number day-to-day; the source pill + sort tier already conveys the relevant grouping). Decision: hide rank from the matrix render but keep the DB column + the tool emission paths (FILL_TOOL, SUBMIT_RESEARCH) + the patch-write paths (vs-compile-summaries, vs-research-venues, vs-parse-sheet). Reversible by adding the prop back to `VenueIdentityStack` and dropping `<RankDisplay />` back into the stack. Locked 2026-05-13.
+
+### Secondary sort flipped to alphabetical-by-name
+
+With rank no longer the visible signal, the rank-desc tiebreaker after `SOURCE_PRIORITY` tier had no anchor to the producer's mental model. Flipped to `name.localeCompare` with `sensitivity: "base"` (case-insensitive) + `numeric: true` (so "Studio 10" sorts after "Studio 2", not before). Within-tier ordering is now stable and producer-readable.
+
+### Photo upload column removed from Shortlist; photos live on Review only
+
+Producer-flow simplification: photos are a deck-prep concern, not a shortlist concern. The Shortlist column added affordance noise + made the matrix wider (1740 -> 1580 in 4.10.2 -> 1450 in 4.10.4). Drop the column, drop the modal, drop the photoCounts state. Review.tsx keeps the full photo grid + PhotoUploadModal per 4.7.1-port. VS Pro divergence: VS Pro kept both surfaces; HQ collapses to one.
+
+### Notes/Feedback editor added to Review Selects
+
+VS Pro never surfaced `vs_candidate_venues.notes` for producer edit (notes always landed via the SourcingReport / Shortlist NotesModal). Phase 4.10.4 adds a per-row textarea on Review bound to the same column via debounceSave. Already factored into the venue_overview prompt as `Producer notes: ${v.notes ?? "(none)"}` on vs-compile-summaries:452 (so the producer's last-minute context shapes Pass 2 output without ever landing on the deck itself). Coral descriptor + a title-descriptor sentence make the contract explicit ("not displayed on the deck but is considered in generating the Overview paragraph").
+
+### Confirm + Compile flush widened to include `notes`
+
+`confirmCompile` already flushes pending debounce timers before navigating to /compiling. The flush payload's column list now includes `notes` so a producer who types into the textarea, hits Confirm immediately, and races the 600ms debounce doesn't lose the edit (the optimistic state already updated, but the DB UPDATE hadn't fired yet). Matches the pattern for the other inline-edit fields on Review.
+
+### Venue Overview prompt tuned via schema descriptions; OVERVIEW_SYSTEM untouched
+
+Per memory rule `feedback_tool_choice_collapse`, system prompts on the venue-scout AI surfaces stay frozen. Tuning levers are (1) `OVERVIEW_TOOL.description`, (2) `OVERVIEW_TOOL.input_schema.properties.venue_overview.description`, (3) `maxLength`. Phase 4.10.4 swaps the description from "5-8 sentences" to "3-4 sentences, ~80 words" and embeds positive examples from Jimmie's reference set (standout-features snippets + three full overview paragraphs). `maxLength: 600` is a soft signal but Claude generally honors it. If smoke output stays too long, the next lever is dropping maxLength to 500/450 OR adding more concrete examples — NOT editing the system prompt.
+
+### Compiling + Generating loading copy refined
+
+Compiling: "~ 60 seconds" replaces "30 to 60 seconds" (real-world variance from smoke testing closes around the 60s mark; the producer reads the lower end as a commitment, not an estimate). Generating: "2-5 minutes" replaces "1 to 2 minutes" (Google Slides API + photo-insert latency runs longer than the VS Pro source's optimistic estimate). Both updates also resolve copy ambiguities surfaced during smoke.
+
+### Deck Prep bottom nav: venue-name list replaces slide count
+
+The "X slides will be generated" string was redundant with the in-page slide tally above the matrix. Replaced with a bulleted list of each INCLUDED venue's name (in pitched/order sequence) underneath a bumped "X Venues" count. The list scrolls internally (max-h-40 + overflow-y-auto) when long, so the floating-nav footprint stays predictable. Producer can now confirm at-a-glance which venues are going into the deck without scrolling the matrix.
+
+### Deck Prep notes consolidated above the table
+
+The four asterisk-prefixed amber pills below the table required scrolling past the matrix to read. Consolidated into a single bulleted card above the table (white text on bg-input, coral bullet markers). Copy preserved verbatim; the visual restructure is the only change. Below-table block deleted.
+
+### Deck Prep cell line-breaks for neighborhood / size / capacity
+
+VS Pro rendered these three meta fields inline with `·` separators in the venue summary cell. Producer feedback during smoke: hard to scan, harder to edit because the contenteditable spans bleed into each other on narrow widths. Switched to flex-col with explicit `Field:` labels. Null fields skip their row entirely (no orphan "Neighborhood:" line); when all three are null, the stack container itself doesn't render. VS Pro divergence. Editing surfaces stay (Review owns the canonical input path; DeckPrep allows on-the-fly tweaks).
+
 ## Phase 4.10.3-port (URL validation + Recs/Considerations tuning + 3-tier sort + venue_type popover + pipeline_error rename + storage reconciliation + AI surface consolidation)
 
 ### AI surface consolidation: sheet enrichment moves into vs-research-venues

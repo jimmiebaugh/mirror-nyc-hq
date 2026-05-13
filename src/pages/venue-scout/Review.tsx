@@ -44,6 +44,13 @@ type Venue = {
   website_url: string | null;
   venue_overview: string | null;
   pitched: boolean;
+  // Phase 4.10.4-port: producer-editable notes / feedback per pitched venue.
+  // Bound to vs_candidate_venues.notes (column has existed since 4.7.1; we
+  // just didn't render it on Review). The compile-summaries Pass 2 already
+  // injects this string into the venue_overview prompt as
+  // "Producer notes: ${v.notes ?? '(none)'}" so the text is factored in,
+  // even though it never lands on the deck.
+  notes: string | null;
 };
 
 // Display strings for size/capacity that allow free-form input
@@ -80,7 +87,7 @@ export default function Review() {
       supabase
         .from("vs_candidate_venues")
         .select(
-          "id, name, address, neighborhood, venue_type, size_sq_ft, capacity, website_url, venue_overview, pitched",
+          "id, name, address, neighborhood, venue_type, size_sq_ft, capacity, website_url, venue_overview, pitched, notes",
         )
         .eq("scout_id", scoutId)
         .eq("pitched", true)
@@ -240,6 +247,10 @@ export default function Review() {
             capacity: v.capacity,
             website_url: v.website_url,
             venue_overview: v.venue_overview,
+            // Phase 4.10.4-port: include producer notes in the flush so a
+            // last-second edit to a row's Notes textarea doesn't get
+            // dropped by Confirm + Compile racing the debounce.
+            notes: v.notes,
           })
           .eq("id", id);
       });
@@ -260,6 +271,13 @@ export default function Review() {
     }
     nav(`/venue-scout/scouts/${scoutId}/sourcing/compiling`);
   }
+
+  // Phase 4.10.4-port: producer-tone descriptor sentence appended to the
+  // page-intro paragraph + a copy of the same explanation rendered in coral
+  // under each per-row notes textarea. Hoisted to a const so the two
+  // surfaces stay in lock-step if the copy needs to shift later.
+  const notesPerVenueExplainer =
+    "This info is factored into the overview but not displayed directly in the deck.";
 
   const fullPhotoSets = venues.filter((v) => (photoCounts[v.id] ?? 0) >= 4).length;
   const shortlistPath = `/venue-scout/scouts/${scoutId}/sourcing/shortlist`;
@@ -284,7 +302,9 @@ export default function Review() {
             <h1 className="h-page">Review Selects</h1>
             <p className="text-sm text-muted-foreground max-w-3xl">
               Final pass before deck compilation. One card per venue going into
-              the pitch. Review summaries, confirm photos, edit if needed.
+              the pitch. Review summaries, confirm photos, edit if needed. Notes
+              / Feedback field is not displayed on the deck but is considered in
+              generating the Overview paragraph.
             </p>
           </div>
           <div className="flex items-end gap-3">
@@ -451,6 +471,28 @@ export default function Review() {
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* Phase 4.10.4-port: producer-editable notes / feedback,
+                    bound to vs_candidate_venues.notes. Uncontrolled
+                    (`defaultValue` + onChange) so the textarea owns its DOM
+                    value while debounceSave writes through. The 600ms
+                    debounce + Confirm-flush keep the value durable. The coral
+                    descriptor underneath re-iterates that this field feeds
+                    the Overview prompt (vs-compile-summaries:452) but never
+                    lands on the deck itself. */}
+                <div className="mt-5">
+                  <textarea
+                    className="w-full min-h-[60px] bg-input border border-transparent rounded px-2 py-1.5 text-sm leading-snug text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none transition-colors resize-y"
+                    placeholder="Notes / feedback for this venue"
+                    defaultValue={v.notes ?? ""}
+                    onChange={(e) =>
+                      debounceSave(v.id, { notes: e.target.value || null })
+                    }
+                  />
+                  <p className="mt-1 text-[11px] text-primary leading-snug">
+                    {notesPerVenueExplainer}
+                  </p>
                 </div>
               </div>
             );

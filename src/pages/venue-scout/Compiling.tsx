@@ -177,8 +177,8 @@ export default function Compiling() {
       </div>
       <h1 className="h-page text-center">Compiling Deck Preview</h1>
       <p className="text-sm text-muted-foreground text-center mt-4 max-w-md">
-        Assembling your pitched venues, summaries, and photos into the deck.
-        This typically takes 30 to 60 seconds.
+        Assembling your pitched venues, summaries, and photos into a deck
+        preview. This typically takes ~ 60 seconds.
       </p>
       {/* Progress bar (track uses bg-input per design-system § 12 rule 1). */}
       <div className="w-full max-w-md mt-8 h-1 bg-input rounded-full overflow-hidden">

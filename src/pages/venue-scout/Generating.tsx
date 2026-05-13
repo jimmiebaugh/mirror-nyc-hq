@@ -158,9 +158,9 @@ export default function Generating() {
       <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin mb-8" />
       <h1 className="h-page">Generating Venue Deck</h1>
       <p className="text-sm text-muted-foreground mt-3 max-w-xl">
-        Copying the Mirror template into your Drive folder, populating slides
-        with project + venue data, and inserting your photos. This typically
-        takes 1 to 2 minutes.
+        Copying the deck template into the Drive output folder, populating
+        slides with project + venue data, and inserting your photos. This
+        typically takes 2-5 minutes.
       </p>
     </div>
   );
