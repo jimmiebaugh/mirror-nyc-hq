@@ -18,6 +18,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowUp, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import {
+  ScoutSettingsLink,
+  ScoutStepThroughNav,
+} from "@/components/venue-scout/ScoutChrome";
 
 export default function SheetPrompt() {
   const { id: scoutId } = useParams();
@@ -45,15 +49,19 @@ export default function SheetPrompt() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <div className="text-[14px] font-mono uppercase tracking-widest text-primary">
-          Sourcing
+      <header className="flex items-end justify-between gap-5">
+        <div className="space-y-2">
+          <div className="text-[14px] font-mono uppercase tracking-widest text-primary">
+            Sourcing
+          </div>
+          <h1 className="h-page">Sourcing Sheet</h1>
+          <p className="text-sm text-muted-foreground">
+            Do you have a venue sourcing sheet to upload?
+          </p>
         </div>
-        <h1 className="h-page">Sourcing Sheet</h1>
-        <p className="text-sm text-muted-foreground">
-          Do you have a venue sourcing sheet to upload?
-        </p>
+        {scoutId && <ScoutSettingsLink scoutId={scoutId} />}
       </header>
+      {scoutId && <ScoutStepThroughNav scoutId={scoutId} />}
 
       <div className="mx-auto grid max-w-3xl grid-cols-1 gap-6 md:grid-cols-2">
         <button

@@ -34,7 +34,8 @@ import Review from "./pages/venue-scout/Review";
 import Compiling from "./pages/venue-scout/Compiling";
 import DeckPrep from "./pages/venue-scout/DeckPrep";
 import Generating from "./pages/venue-scout/Generating";
-import ErrorStateStub from "./pages/venue-scout/ErrorStateStub";
+import ErrorState from "./pages/venue-scout/ErrorState";
+import ScoutSettings from "./pages/venue-scout/ScoutSettings";
 
 const queryClient = new QueryClient();
 
@@ -158,6 +159,10 @@ const App = () => (
               <Route path="/venue-scout/scouts/new" element={<NewScout />} />
               <Route path="/venue-scout/scouts/:id/brief" element={<Brief />} />
               <Route
+                path="/venue-scout/scouts/:id/settings"
+                element={<ScoutSettings />}
+              />
+              <Route
                 path="/venue-scout/scouts/:id/sourcing/sheet-prompt"
                 element={<SheetPrompt />}
               />
@@ -195,11 +200,11 @@ const App = () => (
               />
               <Route
                 path="/venue-scout/scouts/:id/deck/error/:errorKey"
-                element={<ErrorStateStub />}
+                element={<ErrorState />}
               />
               <Route
                 path="/venue-scout/scouts/:id/sourcing/error/:errorKey"
-                element={<ErrorStateStub />}
+                element={<ErrorState />}
               />
             </Route>
             <Route path="*" element={<NotFound />} />

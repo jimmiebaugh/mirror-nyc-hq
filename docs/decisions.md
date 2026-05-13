@@ -2,6 +2,40 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.9-port (Scout Settings + full ErrorState + per-scout chrome)
+
+### Settings page is HQ-from-scratch
+
+VS Pro has no Settings analog; it surfaces Start Over inside `PageHeader.tsx` as a per-page button. Port plan § 9 directs an HQ-from-scratch consolidation: rename + project link + Start Over all live in one Settings surface, reached via a persistent gear icon. Same arch decision as 4.3-port Brief (also HQ-from-scratch where VS Pro had a stub). Closest HQ analog used as a layout template: `RoleSettings.tsx` (Talent Scout) for the edit-form + sticky-save-bar + cancel-leave dialog + danger-zone pattern.
+
+### `start_over_scout` is an RPC, not inline supabase calls
+
+A single transactional reset replaces three sequential client-side writes (DELETE candidate venues + UPDATE scout + clear brief_data timestamps). Atomic + cleaner. Pattern matches HQ's other RPCs. `SECURITY INVOKER` so caller RLS applies; no separate grant work.
+
+### Start Over keeps `generated_decks`
+
+History is preserved across resets. If a producer Starts Over after generating a deck, the previous deck row stays in the jsonb array. Re-completion appends another row; the post-completion nav strip surfaces the latest one. Avoids destroying audit trail just because the producer is iterating.
+
+### Storage objects NOT cleaned up inline
+
+Photos in `vs_venue_photos` bucket and sheets in `sourcing_sheets` bucket orphan after the table DELETEs run. Future cron sweep handles cleanup. Same precedent as 4.7.1-port photo storage and TS `candidate_attachments`. Trade-off: simpler RPC + faster Start Over vs slightly delayed reclaim of bucket bytes.
+
+### ErrorState surfaces `research_error` in a `<details>` section
+
+Producer can expand the collapsed-by-default summary to see the raw `<CODE>: <message>` from `vs_scouts.research_error`. Copy + forward to team for triage. Not auto-expanded; subtle. Replaces the stub's "static message" with the actual error text. Same `research_error` column carries research / compile / deck errors today (rename deferred to 4.10.3 per the prior decision).
+
+### Per-scout chrome (gear + step-through nav) on every action page, NOT on loading screens
+
+The shared `<ScoutSettingsLink />` + `<ScoutStepThroughNav />` components land in `src/components/venue-scout/ScoutChrome.tsx` and import into 8 pages: Brief, SheetPrompt, SheetUpload, SourcingReport, Shortlist, Review, DeckPrep, ErrorState. Loading screens (Researching, Compiling, Generating) are excluded by design: producers wait on mid-flight AI work, they can't take Settings or step-through actions during those phases. Producer's read 2026-05-12.
+
+### Step-through nav strip conditional on `current_step === 'completed'`
+
+Always-mounted (the chrome lives on every action page) but only renders when the scout is finished. Pre-completion: silent. Post-completion: 5 step chips + 1 latest-deck chip. The deck chip is an `<a target="_blank">` to the Drive `edit_url`; absent if `generated_decks` is empty or the latest entry has no edit URL.
+
+### Pages without an existing `vs_scouts` query let the chrome self-query
+
+SheetPrompt + SheetUpload don't already read the scout. Rather than forcing them to wire up a meta-fetch they don't otherwise need, the `<ScoutStepThroughNav />` component supports an optional `scout` prop: pages that have the data pass it; pages that don't omit the prop and the component fires its own select(`current_step, generated_decks`). One small extra round-trip on those two pages, but they're navigation surfaces where producers rarely linger.
+
 ## Phase 4.8.3-port (deck-output correctness hotfix)
 
 ### Slide-index mismatch fix
