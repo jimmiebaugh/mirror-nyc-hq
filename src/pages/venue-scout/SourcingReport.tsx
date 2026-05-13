@@ -12,13 +12,13 @@ import {
   VStack,
   Pill,
   Bullets,
-  RankDisplay,
   NotesCellButton,
   parseTypes,
   TYPE_STYLES,
   TYPE_FALLBACK_STYLE,
-  EditableVenueName,
-  WebsiteArrow,
+  EditableField,
+  EditableTextarea,
+  VenueIdentityStack,
 } from "@/components/venue-scout/matrix/primitives";
 import {
   ScoutSettingsLink,
@@ -53,7 +53,19 @@ type Venue = {
   considerations: string[] | null;
   rank: number | null;
   shortlisted: boolean;
+  // Phase 4.10.2-port: producer-visible Source pill in col2 + manual-at-top
+  // sort. `source` is one of 'sheet' / 'research' / 'manual'; SourcePill
+  // defensively renders 'Manual' for any non-canonical value.
+  source: string | null;
   notes: string | null;
+};
+
+// Phase 4.10.2-port: shared shape for debounced inline-edit patches. Wider
+// than VS Pro's manual-row inputs since SourcingReport now writes name,
+// address, neighborhood, key_features from any row (not just manual). Mirrors
+// Shortlist's VenuePatch shape so both pages stay consistent.
+type VenuePatch = Partial<Omit<Venue, "key_features">> & {
+  key_features?: string[] | string | null;
 };
 
 export default function SourcingReport() {
@@ -71,7 +83,12 @@ export default function SourcingReport() {
   >(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const [activeVenue, setActiveVenue] = useState<Venue | null>(null);
-  const nameTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Phase 4.10.2-port: per-venue 600ms debounce timer for inline edits.
+  // Same shape as Shortlist + DeckPrep `debounceSave`. Replaces 4.6-port's
+  // narrower `nameTimers` since col2 + col3 + col4 are all editable now.
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
 
   const load = useCallback(async () => {
     if (!scoutId) return;
@@ -84,7 +101,7 @@ export default function SourcingReport() {
       supabase
         .from("vs_candidate_venues")
         .select(
-          "id, name, neighborhood, address, venue_type, key_features, website_url, derived_attrs, recommendations, considerations, rank, shortlisted, notes",
+          "id, name, neighborhood, address, venue_type, key_features, website_url, derived_attrs, recommendations, considerations, rank, shortlisted, source, notes",
         )
         .eq("scout_id", scoutId)
         .order("rank", { ascending: false, nullsFirst: false }),
@@ -108,14 +125,29 @@ export default function SourcingReport() {
     load();
   }, [load]);
 
-  // Cleanup any pending debounced name-saves on unmount so we don't write
+  // Cleanup any pending debounced saves on unmount so we don't write
   // through after the producer has navigated away.
   useEffect(() => {
-    const timers = nameTimers.current;
+    const timers = debounceTimers.current;
     return () => {
       Object.values(timers).forEach((t) => clearTimeout(t));
     };
   }, []);
+
+  // Phase 4.10.2-port: client-side manual-at-top sort. Within each group
+  // (manual / non-manual), rank desc with nulls last. Mirrors Shortlist's
+  // existing pattern but here we read from a SQL-ordered list and re-sort
+  // anyway so the manual-at-top invariant holds on every state change.
+  const sortedVenues = useMemo(() => {
+    const arr = [...venues];
+    arr.sort((a, b) => {
+      const aManual = a.source === "manual" ? 0 : 1;
+      const bManual = b.source === "manual" ? 0 : 1;
+      if (aManual !== bManual) return aManual - bManual;
+      return (b.rank ?? -1) - (a.rank ?? -1);
+    });
+    return arr;
+  }, [venues]);
 
   const shortlistedCount = useMemo(
     () => venues.filter((v) => v.shortlisted).length,
@@ -137,17 +169,36 @@ export default function SourcingReport() {
     }
   }
 
-  function saveName(id: string, name: string) {
+  // Phase 4.10.2-port: generalized debounceSave covering every inline-edit
+  // field on the matrix (name / address / neighborhood / key_features). Same
+  // shape as Shortlist's existing debounceSave so consistency holds across
+  // pages. `key_features` may arrive as a raw delimited string from the
+  // Features textarea; we split-and-trim at the boundary so the in-memory
+  // Venue keeps its array shape.
+  function debounceSave(id: string, patch: VenuePatch) {
+    const normalized: Partial<Venue> = (() => {
+      if (typeof patch.key_features !== "string") {
+        return patch as Partial<Venue>;
+      }
+      const arr = patch.key_features
+        .split(/[,;|\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return { ...patch, key_features: arr } as Partial<Venue>;
+    })();
     setVenues((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, name } : v)),
+      prev.map((v) => (v.id === id ? ({ ...v, ...normalized } as Venue) : v)),
     );
-    clearTimeout(nameTimers.current[id]);
-    nameTimers.current[id] = setTimeout(async () => {
+    clearTimeout(debounceTimers.current[id]);
+    debounceTimers.current[id] = setTimeout(async () => {
       const { error } = await supabase
         .from("vs_candidate_venues")
-        .update({ name })
+        .update(normalized)
         .eq("id", id);
-      if (error) toast.error(error.message);
+      if (error) {
+        toast.error(error.message);
+        load();
+      }
     }, 600);
   }
 
@@ -204,15 +255,23 @@ export default function SourcingReport() {
       </header>
       {scoutId && <ScoutStepThroughNav scoutId={scoutId} scout={scoutMeta} />}
 
+      {/*
+        Phase 4.10.2-port column overhaul: 8 -> 7 columns.
+        Alignment | Rank column dropped; Rank moved into the Venue | Address
+        cell stack via VenueIdentityStack. Col2 widened from 180px to 220px
+        to absorb the rank bar + source pill. Total matrix width 1740 -> 1580.
+        `columns` (derived alignment columns) stays read off vs_scouts but is
+        no longer rendered; kept on the load() path so future surfaces can
+        consume it without a re-fetch.
+      */}
       <div className="bg-surface-alt rounded-md overflow-hidden border border-border">
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full min-w-[1740px] border-collapse text-[12.5px]">
+          <table className="w-full min-w-[1580px] border-collapse text-[12.5px]">
             <colgroup>
               <col style={{ width: 60 }} />
-              <col style={{ width: 180 }} />
+              <col style={{ width: 220 }} />
               <col style={{ width: 150 }} />
               <col style={{ width: 230 }} />
-              <col style={{ width: 200 }} />
               <col style={{ width: 290 }} />
               <col style={{ width: 290 }} />
               <col style={{ width: 230 }} />
@@ -223,7 +282,6 @@ export default function SourcingReport() {
                 <Th sticky="col2"><HdrStack a="Venue" b="Address" /></Th>
                 <Th><HdrStack a="Neighborhood" b="Type" /></Th>
                 <Th>Features</Th>
-                <Th><HdrStack a="Alignment" b="Rank" /></Th>
                 <Th>Recommendations</Th>
                 <Th>Considerations</Th>
                 <Th>Notes /<br />Feedback</Th>
@@ -233,28 +291,24 @@ export default function SourcingReport() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="px-6 py-16 text-center text-muted-foreground"
                   >
                     Loading…
                   </td>
                 </tr>
-              ) : venues.length === 0 ? (
+              ) : sortedVenues.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="px-6 py-16 text-center text-muted-foreground"
                   >
                     No candidates yet.
                   </td>
                 </tr>
               ) : (
-                venues.map((v) => {
+                sortedVenues.map((v) => {
                   const types = parseTypes(v.venue_type);
-                  const addrParts = (v.address ?? "")
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean);
                   const note = v.notes ?? undefined;
                   return (
                     <tr
@@ -273,36 +327,38 @@ export default function SourcingReport() {
                         />
                       </Td>
                       <Td noPadX noPadY sticky="col2">
-                        <VStack
-                          top={
-                            <EditableVenueName
-                              id={v.id}
-                              name={v.name}
-                              onChange={(n) => saveName(v.id, n)}
-                            />
+                        <VenueIdentityStack
+                          venueId={v.id}
+                          name={v.name}
+                          onNameChange={(n) =>
+                            debounceSave(v.id, { name: n })
                           }
-                          bot={
-                            <div className="flex flex-col items-center gap-[2px] text-muted-foreground">
-                              {addrParts.length ? (
-                                addrParts.map((p, i) => <div key={i}>{p}</div>)
-                              ) : (
-                                <div>-</div>
-                              )}
-                              {v.website_url ? (
-                                <div className="pt-[10px]">
-                                  <WebsiteArrow url={v.website_url} />
-                                </div>
-                              ) : null}
-                            </div>
+                          address={v.address ?? ""}
+                          onAddressChange={(a) =>
+                            debounceSave(v.id, {
+                              address: a.trim() || null,
+                            })
                           }
+                          website={v.website_url}
+                          rank={v.rank}
+                          source={v.source}
                         />
                       </Td>
                       <Td noPadX noPadY>
                         <VStack
+                          dividerPad={18}
                           top={
-                            <div className="text-foreground">
-                              {v.neighborhood ?? "-"}
-                            </div>
+                            <EditableField
+                              id={`${v.id}-neigh`}
+                              value={v.neighborhood ?? ""}
+                              onChange={(n) =>
+                                debounceSave(v.id, {
+                                  neighborhood: n.trim() || null,
+                                })
+                              }
+                              variant="neighborhood"
+                              placeholder="(no neighborhood)"
+                            />
                           }
                           bot={
                             <div className="flex flex-col items-center gap-[7px]">
@@ -325,38 +381,14 @@ export default function SourcingReport() {
                         />
                       </Td>
                       <Td vCenter>
-                        <Bullets items={v.key_features ?? []} />
-                      </Td>
-                      <Td noPadX noPadY>
-                        <VStack
-                          dividerPad={10}
-                          top={
-                            <div className="flex flex-wrap gap-[5px] items-center justify-center">
-                              {columns.map((c) => {
-                                const val = v.derived_attrs?.[c.id];
-                                if (val === "yes")
-                                  return (
-                                    <Pill
-                                      key={c.id}
-                                      className="bg-green-400/15 text-green-400 border-green-400/35"
-                                    >
-                                      {c.label}
-                                    </Pill>
-                                  );
-                                if (val === "maybe")
-                                  return (
-                                    <Pill
-                                      key={c.id}
-                                      className="bg-amber-400/15 text-amber-400 border-amber-400/35"
-                                    >
-                                      {c.label}
-                                    </Pill>
-                                  );
-                                return null;
-                              })}
-                            </div>
+                        <EditableTextarea
+                          id={`${v.id}-features`}
+                          value={(v.key_features ?? []).join(", ")}
+                          onChange={(raw) =>
+                            debounceSave(v.id, { key_features: raw })
                           }
-                          bot={<RankDisplay score={v.rank} />}
+                          placeholder="(no features)"
+                          rows={6}
                         />
                       </Td>
                       <Td vCenter>
