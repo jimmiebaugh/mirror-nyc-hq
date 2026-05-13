@@ -62,7 +62,9 @@ JSON key stored as a Supabase secret (`GOOGLE_SERVICE_ACCOUNT_JSON`). Used by ed
 
 `scripts/verify-service-account.ts` runs a per-scope JWT bearer flow and smoke-tests `messages.list` and `files.list` to verify delegation; re-run any time scopes are changed in the Workspace Admin Console.
 
-`supabase/functions/_shared/gmailServiceAccount.ts` is the template for service-account auth in any Edge Function — same JWT bearer flow with the right scopes for the API in question.
+`supabase/functions/_shared/googleServiceAccount.ts` (Phase 4.8.1-port) is the generic JWT-bearer helper: `getGoogleAccessToken(scopes, { impersonateUser? })` supports both impersonation flows (Gmail) and non-impersonation flows (Drive + Slides). `supabase/functions/_shared/gmailServiceAccount.ts` is a thin Gmail-scoped wrapper that delegates to it and impersonates `jobs@mirrornyc.com`.
+
+Drive + Slides API access (used by `vs-generate-deck`, lands in 4.8.2-port) calls `getGoogleAccessToken` with scopes `presentations` + `drive` and no impersonation. The service account itself owns those API calls; deck files land in a Mirror Shared Drive folder the service account is a member of.
 
 ## Edge Function self-invocation auth
 

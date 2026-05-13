@@ -4,9 +4,9 @@ Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-12
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
-**Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `67fc75b` (Phase 4.7.2-port squashed from `claude/vs-port-4-7-2-compile`).
-**Current phase:** Phase 4.7.2-port DONE on `vs-port-fresh`; next: Phase 4.8-port (Deck Prep + Generate + `vs-generate-deck`). Phase 4.7 was split into two passes at spec time; both have now squashed.
+**Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. Active worktree: `claude/vs-port-4-8-1-deck-prep` (Phase 4.8.1-port awaiting squash).
+**Latest commit on `vs-port-fresh`:** `<TBD-4.8.1-port-squash>` (Phase 4.8.1-port squashed from `claude/vs-port-4-8-1-deck-prep`).
+**Current phase:** Phase 4.8.1-port DONE on `vs-port-fresh`; next: Phase 4.8.2-port (Generating + `vs-generate-deck`). Phase 4.7 was split into two passes (both shipped). Phase 4.8 split into two passes at spec time (4.8.1 frontend + infra, 4.8.2 generate flow) because combined scope was ~1,000 lines source including the largest single function in the port.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
@@ -63,6 +63,7 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
+<TBD-4.8.1-port-squash>  [skip netlify] Phase 4.8.1-port: Deck Prep + googleServiceAccount cherry-pick + gmailServiceAccount delegation refactor (squash-merged from claude/vs-port-4-8-1-deck-prep)
 67fc75b  [skip netlify] Phase 4.7.2-port: Compiling page + vs-compile-summaries edge function + compile-failed error key (squash-merged from claude/vs-port-4-7-2-compile)
 c98e6a3  [skip netlify] Backfill e198f46 squash hash into CHECKPOINT.md
 e198f46  [skip netlify] Phase 4.7.1-port: Review + PhotoUploadModal + vs_venue_photos bucket + Shortlist photo unstub (squash-merged from claude/vs-port-4-7-1-review-photos)
@@ -102,9 +103,9 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 ## Next up
 
-**Phase 4.8-port** per `docs/venue-scout-port-plan.md`: Deck Prep page + Generate page + `vs-generate-deck` edge function rebuild. 4.7.2-port closed the `/sourcing/compiling` 404 window 4.7.1-port pointed at; the Compiling page success path navigates to `/venue-scout/scouts/:id/deck/prep`, which 404s until 4.8-port lands. `dnd-kit/sortable` + `/utilities` deps were installed in 4.7.1-port specifically to prime VS Pro DeckPrep.tsx's drag-to-reorder behavior; no new deps required for 4.8-port itself.
+**Phase 4.8.2-port** per `docs/venue-scout-port-plan.md`: Generating page + `vs-generate-deck` edge function + four new ErrorStateStub keys (AUTH_FAILED / TEMPLATE_COPY_FAILED / SLIDES_API_FAILED / NO_VENUES_INCLUDED) + secrets verification (`GOOGLE_TEMPLATE_FILE_ID`, `GOOGLE_OUTPUT_FOLDER_ID`). 4.8.1-port closed the `/deck/prep` 404 window 4.7.2-port pointed at; the Deck Prep Generate button navigates to `/deck/generating`, which 404s until 4.8.2-port lands. `_shared/googleServiceAccount.ts` is in place (cherry-picked from failed-attempt main `be30168`); `vs-generate-deck` will consume it with scopes `presentations` + `drive` and no impersonation.
 
-`vs-port-fresh` is published on origin (HEAD `6c98137` after the 4.4-port post-squash push). Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
+`vs-port-fresh` is published on origin. Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
 
 **Production wiring for Phase 3.8** still pending (GUCs, db push, 12 edge function deploys). Can happen in parallel since it's all out-of-band (no Netlify). Full step-by-step in `NEXT_STEPS.md`.
 
