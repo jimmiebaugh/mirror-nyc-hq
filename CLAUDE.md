@@ -46,7 +46,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 
 ## Current phase
 
-See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.7.2-port (Compiling page + vs-compile-summaries edge function + compile-failed error key)** squashed onto `vs-port-fresh` at `67fc75b`. **Phase 4.8-port (Deck Prep + Generate + vs-generate-deck)** is next per `docs/venue-scout-port-plan.md`. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
+See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.8.1-port (Deck Prep + googleServiceAccount cherry-pick + gmailServiceAccount delegation refactor)** squashed onto `vs-port-fresh` at `a1bc102`. **Phase 4.8.2-port (Generating + vs-generate-deck + secrets verification)** is next per `docs/venue-scout-port-plan.md`. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
 
 ## Working with this repo
 

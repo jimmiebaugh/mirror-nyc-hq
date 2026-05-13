@@ -97,8 +97,11 @@ Use 1-hour prompt caching (`cache_control: { type: 'ephemeral', ttl: '1h' }`) on
 ### `internalAuth.ts` — `requireInternalOrUserAuth(req)`
 Three-path auth check for self-invoking Edge Functions. See `docs/auth-model.md` § Edge Function self-invocation auth.
 
+### `googleServiceAccount.ts` — Phase 4.8.1-port
+Generic Google OAuth2 access-token helper via service account JWT bearer flow. `getGoogleAccessToken(scopes, { impersonateUser? })` supports both domain-wide-delegation impersonation (Gmail) and non-impersonation flows (Drive + Slides). Reads `GOOGLE_SERVICE_ACCOUNT_KEY` from Supabase secrets, mints an RS256-signed JWT, exchanges it for an access token. Module-level cache keyed by `${impersonateUser ?? ""}|${sortedScopes}`, 5-minute pre-expiry buffer. Used by `_shared/gmailServiceAccount.ts` (Gmail impersonation of `jobs@mirrornyc.com`) and `vs-generate-deck` (Drive + Slides, no impersonation; lands in 4.8.2-port). Cherry-picked from failed-attempt main `be30168`.
+
 ### `gmailServiceAccount.ts`
-JWT bearer flow against Google's token endpoint with the requested scope (`gmail.readonly`, `gmail.send`, `drive`, `presentations`). Template for any service-account-authenticated Google API call.
+Gmail-scoped wrapper around `googleServiceAccount.ts`. `getGmailAccessToken()` calls `getGoogleAccessToken([gmail.readonly, gmail.send], { impersonateUser: 'jobs@mirrornyc.com' })`. Public API preserved at the 4.8.1-port refactor; internal implementation thinner (~30 lines vs ~130 pre-refactor). Callers: `ts-pull-candidates`, `ts-evaluate-candidate`, `_shared/sendEmail.ts`, `_shared/packetRender.ts`. Template for any service-account-authenticated Google API call.
 
 ### `sendEmail.ts` — Phase 3.8
 Generic Gmail send helper for transactional notifications outside the packet path. `sendGmail({to, subject, bodyText, bodyHtml?, fromName?})` builds a MIME message (plain or `multipart/alternative`), gets a Gmail token via `gmailServiceAccount.ts`, POSTs to `users/me/messages/send`. Returns `boolean` — never throws. Also exports `getAdminEmail(sb)` which finds the oldest active admin in `public.users`. Used by `_shared/anthropic.ts` (cap alerts) and `ts-send-pull-notification`. The packet-render module keeps its own `sendPacketEmail` since it appends the signed-URL footer.

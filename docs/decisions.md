@@ -2,6 +2,24 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.8.1-port (Deck Prep + googleServiceAccount infra)
+
+### Phase 4.8-port split into two passes (4.8.1 frontend + infra, 4.8.2 generate flow)
+
+Combined 4.8-port scope was ~1,000 lines of source across DeckPrep + Generating + `vs-generate-deck` (the largest single function in the port). Splitting isolates the Google Slides population logic for its own review cycle, lets the `googleServiceAccount` cherry-pick land independently of slide-template complexity, and lets 4.8.2 wait on secrets verification (`GOOGLE_TEMPLATE_FILE_ID`, `GOOGLE_OUTPUT_FOLDER_ID`) without blocking 4.8.1. 4.8.1-port ships DeckPrep + the shared service-account helper + the gmailServiceAccount delegation refactor. 4.8.2-port ships Generating + `vs-generate-deck` + the four new ErrorStateStub keys.
+
+### `_shared/googleServiceAccount.ts` cherry-picked from failed-attempt main `be30168`
+
+The failed-attempt Phase 4.6 already built the generic Google access-token helper with the exact shape the port needs: module-level cache keyed by `${impersonateUser ?? ""}|${sortedScopes}`, optional `impersonateUser` for domain-wide-delegation flows, supports both Gmail (impersonates `jobs@mirrornyc.com`) and Drive + Slides (no impersonation; service account owns the API call). Rewriting from scratch would produce the same file. Cherry-picked verbatim with header comment refreshed to reference Phase 4.8.1-port and em-dashes swapped to comma per voice rule. No behavioral changes.
+
+### `gmailServiceAccount.ts` refactored to delegate
+
+Pre-4.8.1 file was ~130 lines with its own copy of `loadServiceAccountKey` / `importRsaPrivateKey` / `signJwt` / `base64Url*` helpers and a private token cache. Post-refactor: ~30 lines. Public API (`getGmailAccessToken(): Promise<string>`) preserved exactly; all four callers (`ts-pull-candidates`, `ts-evaluate-candidate`, `_shared/sendEmail.ts`, `_shared/packetRender.ts`) keep their existing import. Internal implementation delegates to `getGoogleAccessToken(SCOPES, { impersonateUser: 'jobs@mirrornyc.com' })`. Smoke-tested against TS pull/evaluate to confirm no regression before squash.
+
+### DeckPrep `current_step` writes deferred to server-side (vs-generate-deck, 4.8.2-port)
+
+VS Pro's DeckPrep has a stub `current_step='deck_generated'` write inside an unreachable `try` block; the live flow already deferred to server-side. Port matches: 4.8.1-port frontend only writes `deck_order` + `include_in_deck` flags. `current_step='completed'` is written by `vs-generate-deck` on success (lands in 4.8.2-port), parallel to 4.5-port and 4.7.2-port EdgeRuntime.waitUntil patterns where server-side state transitions are atomic with the actual work.
+
 ## Phase 4.7.2-port (Compiling + vs-compile-summaries)
 
 ### Reuse `vs_scouts.research_error` column for compile errors
