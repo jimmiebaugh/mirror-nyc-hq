@@ -45,7 +45,11 @@ type Venue = {
 };
 type Photo = { candidate_venue_id: string; slot: number; storage_path: string };
 
-const FRONT_MATTER_SLIDES = 5;
+// Mirror's deck template has 6 front-matter slides (cover, project info
+// across slides 2-3, event overview, section title, venue map / legend)
+// plus 2 per-venue slides (detail + floor plan). Bumped from 5 to 6 in
+// 4.8.3-port after first real producer test verified the template count.
+const FRONT_MATTER_SLIDES = 6;
 const PER_VENUE_SLIDES = 2;
 
 export default function DeckPrep() {

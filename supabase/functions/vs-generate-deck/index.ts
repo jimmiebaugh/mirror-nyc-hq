@@ -1,4 +1,4 @@
-// vs-generate-deck (Phase 4.8.2-port)
+// vs-generate-deck (Phase 4.8.2-port; slide indices corrected 4.8.3-port)
 //
 // Google Slides pitch-deck generation. Lifts the entire VS Pro
 // `generate-deck` function (~565 lines) with these locked deltas per port
@@ -33,9 +33,14 @@
 //      (hyphen). VS Pro used an em dash which violates the voice rule.
 //
 // VS Pro source: supabase/functions/generate-deck/index.ts (~565 lines).
-// Slide-population logic (slides 2/3/5 globals, per-venue duplicate +
+// Slide-population logic (front-matter globals, per-venue duplicate +
 // scoped replacements, image alt-text replacement, "Website" hyperlink,
-// template slide 6+7 deletion, final slide count) lifts verbatim.
+// template per-venue slide deletion, final slide count) lifts verbatim
+// modulo a one-slot index shift applied in 4.8.3-port: Mirror's actual
+// template has 6 front-matter slides (cover, project info, event overview,
+// section title, venue map with venue-name legend) whereas VS Pro's
+// template had 5. Per-venue templates therefore live at slides 7 + 8 in
+// Mirror's template instead of slides 6 + 7.
 //
 // Memory rules in force:
 //   - feedback_port_fidelity: match VS Pro layout/data exactly except for
@@ -455,14 +460,22 @@ Deno.serve(async (req) => {
         const pres: any = await getPresentation(deckId, token);
         // deno-lint-ignore no-explicit-any
         const slides: any[] = pres.slides ?? [];
-        // Slides 1..N in order. Slide 6 = index 5, slide 7 = index 6.
-        const templateSlide6 = slides[5]?.objectId;
+        // Slides 1..N in order. Mirror template (verified via .pptx parse
+        // 2026-05-12) has 6 front-matter slides: cover (1), project info
+        // (2-3), event overview (4), section title (5), venue map with
+        // 7-slot venue-name legend (6). Slide 7 = per-venue detail template,
+        // slide 8 = per-venue floor plan template. Both per-venue templates
+        // are duplicated once per venue and the originals deleted at the end.
+        // 4.8.3-port shifted every index by one after first real producer
+        // test revealed the VS Pro lift assumed 5 front-matter slides.
+        const legendSlideId = slides[5]?.objectId;
         const templateSlide7 = slides[6]?.objectId;
-        if (!templateSlide6 || !templateSlide7) {
-          throw new Error("Template missing slide 6 or 7");
+        const templateSlide8 = slides[7]?.objectId;
+        if (!legendSlideId || !templateSlide7 || !templateSlide8) {
+          throw new Error("Template missing slide 6, 7, or 8");
         }
 
-        // Slide 2 + 3 + 5 global text replacements.
+        // Slide 2 + 3 + 4 global text replacements (across the front matter).
         const guestCount =
           (scout.brief_data as Record<string, unknown> | null)
             ?.expected_guest_count ?? "TBD";
@@ -479,104 +492,114 @@ Deno.serve(async (req) => {
           ),
         ];
 
-        // Slide 5 legend names (cap at 7). Empty slots intentionally left
+        // Slide 6 legend names (cap at 7). Empty slots intentionally left
         // blank per VS Pro line 354-374 comment ("leaving empty labels in
         // place is acceptable"). We replace with "" for slots beyond
         // venues.length so the template tokens disappear; we don't try to
-        // delete the placeholder shapes.
+        // delete the placeholder shapes. Scoped to legendSlideId so we don't
+        // accidentally touch any other slide that re-uses the token.
         for (let i = 1; i <= 7; i++) {
           const v = venues[i - 1];
           globalReqs.push(
             repText(
               `{{venue_${i}_name}}`,
               v ? ((v.name as string) ?? "") : "",
+              [legendSlideId],
             ),
           );
         }
         await batchUpdate(deckId, globalReqs, token);
 
-        // Per-venue: duplicate slides 6 + 7 once per venue.
+        // Per-venue: duplicate slides 7 + 8 once per venue.
         // deno-lint-ignore no-explicit-any
         const dupReqs: any[] = [];
         venues.forEach((_, idx) => {
-          const k6 = `dup6_${idx}`;
           const k7 = `dup7_${idx}`;
-          dupReqs.push({
-            duplicateObject: {
-              objectId: templateSlide6,
-              objectIds: { [templateSlide6]: k6 },
-            },
-          });
+          const k8 = `dup8_${idx}`;
           dupReqs.push({
             duplicateObject: {
               objectId: templateSlide7,
               objectIds: { [templateSlide7]: k7 },
             },
           });
+          dupReqs.push({
+            duplicateObject: {
+              objectId: templateSlide8,
+              objectIds: { [templateSlide8]: k8 },
+            },
+          });
         });
         // deno-lint-ignore no-explicit-any
         const dupRes: any = await batchUpdate(deckId, dupReqs, token);
-        // Map duplicate keys to returned object IDs (alternating 6/7).
-        const slide6Ids: string[] = [];
+        // Map duplicate keys to returned object IDs (alternating 7/8).
         const slide7Ids: string[] = [];
+        const slide8Ids: string[] = [];
         // deno-lint-ignore no-explicit-any
         dupRes.replies.forEach((r: any, i: number) => {
           const id = r.duplicateObject?.objectId;
-          if (i % 2 === 0) slide6Ids.push(id);
-          else slide7Ids.push(id);
+          if (i % 2 === 0) slide7Ids.push(id);
+          else slide8Ids.push(id);
         });
 
         // Per-venue scoped replacements + Website hyperlink + photo
-        // replacement.
+        // replacement. {{venue_name}} gets ALL-CAPS treatment per producer
+        // feedback 2026-05-12 (4.8.3-port); other tokens keep original
+        // casing. Replacement is scoped to the duplicated detail slide s7
+        // and floor-plan slide s8 for {{venue_name}} (both have it in the
+        // header), and to s7 only for the rest of the body tokens.
         for (let i = 0; i < venues.length; i++) {
           const v = venues[i];
           const padded = String(i + 1).padStart(2, "0");
-          const s6 = slide6Ids[i];
           const s7 = slide7Ids[i];
+          const s8 = slide8Ids[i];
           const features = (
             (v.key_features as string[] | null | undefined) ?? []
           ).join("\n");
 
           // deno-lint-ignore no-explicit-any
           const reqs: any[] = [
-            repText("{{venue_name}}", (v.name as string) ?? "", [s6, s7]),
-            repText("{{venue_id_padded}}", padded, [s6]),
-            repText("{{venue_address}}", (v.address as string) ?? "", [s6]),
+            repText(
+              "{{venue_name}}",
+              ((v.name as string) ?? "").toUpperCase(),
+              [s7, s8],
+            ),
+            repText("{{venue_id_padded}}", padded, [s7]),
+            repText("{{venue_address}}", (v.address as string) ?? "", [s7]),
             repText(
               "{{venue_neighborhood}}",
               (v.neighborhood as string) ?? "",
-              [s6],
+              [s7],
             ),
             repText(
               "{{venue_overview}}",
               (v.venue_overview as string) ?? "",
-              [s6],
+              [s7],
             ),
             repText(
               "{{venue_size}}",
               fmtNum(v.size_sq_ft as number | null, "X,XXX"),
-              [s6],
+              [s7],
             ),
             repText(
               "{{venue_capacity}}",
               fmtNum(v.capacity as number | null, "XXXX"),
-              [s6],
+              [s7],
             ),
-            repText("{{venue_features}}", features, [s6]),
-            repText("{{venue_website}}", "Website", [s6]),
+            repText("{{venue_features}}", features, [s7]),
+            repText("{{venue_website}}", "Website", [s7]),
           ];
           await batchUpdate(deckId, reqs, token);
 
-          // Hyperlink the "Website" text run on slide 6.
+          // Hyperlink the "Website" text run on slide 7 (per-venue detail).
           if (v.website_url) {
             // deno-lint-ignore no-explicit-any
             const dupPres: any = await getPresentation(deckId, token);
-            const els = findTextElementsByContent(dupPres, s6, "Website");
+            const els = findTextElementsByContent(dupPres, s7, "Website");
             for (const objId of els) {
               // deno-lint-ignore no-explicit-any
               const page = dupPres.slides.find(
                 // deno-lint-ignore no-explicit-any
-                (s: any) => s.objectId === s6,
+                (s: any) => s.objectId === s7,
               );
               // deno-lint-ignore no-explicit-any
               const findEl = (els: any[]): any => {
@@ -638,12 +661,13 @@ Deno.serve(async (req) => {
             }
           }
 
-          // Replace photos by alt text img_1..img_4.
+          // Replace photos by alt text img_1..img_4 on slide 7
+          // (per-venue detail).
           const venuePhotos = photosByVenue[v.id as string] ?? [];
           if (venuePhotos.length) {
             // deno-lint-ignore no-explicit-any
             const dupPres: any = await getPresentation(deckId, token);
-            const imgMap = findImagesByAltText(dupPres, s6);
+            const imgMap = findImagesByAltText(dupPres, s7);
             // deno-lint-ignore no-explicit-any
             const imgReqs: any[] = [];
             for (const ph of venuePhotos) {
@@ -662,12 +686,14 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Delete the original template slides 6 + 7.
+        // Delete the original template slides 7 + 8 (the per-venue
+        // detail + floor-plan source slides). The duplicates created above
+        // are what populate the deck output.
         await batchUpdate(
           deckId,
           [
-            { deleteObject: { objectId: templateSlide6 } },
             { deleteObject: { objectId: templateSlide7 } },
+            { deleteObject: { objectId: templateSlide8 } },
           ],
           token,
         );

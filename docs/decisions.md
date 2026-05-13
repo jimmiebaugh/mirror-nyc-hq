@@ -2,6 +2,20 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.8.3-port (deck-output correctness hotfix)
+
+### Slide-index mismatch fix
+
+VS Pro's `generate-deck` was written against a template with 5 front-matter slides (cover, project info, event overview, section title, venue map at slide 5), where slide 6 = per-venue detail and slide 7 = per-venue floor plan. Phase 4.8.2-port lifted the function verbatim per port-fidelity and shipped feature-complete without exercising the deck output against Mirror's actual template until first real producer test 2026-05-12. Mirror's production template (verified via .pptx parse) has 6 front-matter slides with the venue map at slide 6, per-venue detail at slide 7, per-venue floor plan at slide 8. The off-by-one meant the function duplicated slide 6 (venue map) thinking it was per-venue detail, wrote per-venue tokens to those duplicates (silent no-ops because slide 6 doesn't have the body tokens), wrote photo replacements against alt text that doesn't exist on the legend slide, and never duplicated slide 8 at all. Hotfix shifts every slide-index reference by one: `legendSlideId = slides[5]` (venue map), `templateSlide7 = slides[6]` (detail), `templateSlide8 = slides[7]` (floor plan). Legend repText calls scoped to `legendSlideId` while we're touching them, both because that's the correct shape and so the new variable doesn't sit unused.
+
+### `{{venue_name}}` uppercase treatment
+
+Producer feedback at first-run: venue names in deck headers feel weak in mixed case; ALL CAPS reads cleaner against the Mirror brand visual hierarchy. Single `(v.name ?? "").toUpperCase()` call before the `repText` write. Only on `{{venue_name}}`; other tokens (`{{venue_address}}`, `{{venue_neighborhood}}`, `{{venue_overview}}`, etc.) keep their original casing. Applies to both the per-venue detail slide and the per-venue floor plan slide (both share the same `{{venue_name}}` header).
+
+### Loading-page copy refresh
+
+"Compiling Pitch Deck" → "Compiling Deck Preview" (Compiling.tsx); "Generating Pitch Deck" → "Generating Venue Deck" (Generating.tsx). Closer match to what the producer is actually waiting for. The output is a preview deck for internal venue review, not a fully designed pitch deck handed to a client. Description paragraphs underneath unchanged.
+
 ## Phase 4.8.2-port (Generating + vs-generate-deck)
 
 ### Phase 4 port feature-complete after 4.8.2

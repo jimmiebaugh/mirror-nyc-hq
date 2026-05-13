@@ -156,7 +156,7 @@ export default function Generating() {
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
       {/* VS Pro spinner verbatim (single ring, no border-border underlay). */}
       <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin mb-8" />
-      <h1 className="h-page">Generating Pitch Deck</h1>
+      <h1 className="h-page">Generating Venue Deck</h1>
       <p className="text-sm text-muted-foreground mt-3 max-w-xl">
         Copying the Mirror template into your Drive folder, populating slides
         with project + venue data, and inserting your photos. This typically
