@@ -5,7 +5,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 **Last updated:** 2026-05-13
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
 **Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `<TBD-4.10.2-port-squash>` (Phase 4.10.2-port squashed from `claude/vs-port-4-10-2-matrix-overhaul`). Prior: `1ac3f6f` (Phase 4.10.1-port).
+**Latest commit on `vs-port-fresh`:** `a36eb3d` (Phase 4.10.2-port squashed from `claude/vs-port-4-10-2-matrix-overhaul`). Prior: `1ac3f6f` (Phase 4.10.1-port).
 **Current phase:** Phase 4.10.2-port DONE on `vs-port-fresh`; matrix UX overhaul shipped: inline editing on every field on SourcingReport + Shortlist + DeckPrep, Source pill (Uploaded / Sourced / Manual) at the bottom of the Venue | Address cell, Alignment column dropped with Rank moved into the cell stack, manual venues pinned to the top of the matrix. Next: Phase 4.10.3-port (URL validation hotfix + per-venue enrichment progress + consolidated polish). Phase 4.7 was split into two passes (both shipped). Phase 4.8 was split into 4.8.1 / 4.8.2 + 4.8.3 hotfix (all shipped). 4.9 landed Settings page + full ErrorState.tsx (replacing the 4.4-port stub) + post-completion step-through nav + always-visible gear icon. 4.10 split into three polish sub-phases at spec time (4.10.1 enrichment + 4.10.2 matrix overhaul shipped; 4.10.3 queued).
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
@@ -63,7 +63,7 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
-<TBD-4.10.2-port-squash>  [skip netlify] Phase 4.10.2-port: matrix UX overhaul — inline editing across SourcingReport + Shortlist + DeckPrep + Source pill in col2 + Alignment column removed (Rank moved into Venue|Address cell stack) + manual-at-top sort (squash-merged from claude/vs-port-4-10-2-matrix-overhaul)
+a36eb3d  [skip netlify] Phase 4.10.2-port: matrix UX overhaul — inline editing across SourcingReport + Shortlist + DeckPrep + Source pill in col2 + Alignment column removed (Rank moved into Venue|Address cell stack) + manual-at-top sort (squash-merged from claude/vs-port-4-10-2-matrix-overhaul)
 1ac3f6f  [skip netlify] Phase 4.10.1-port: vs-parse-sheet AI enrichment + _shared/venueFill.ts + vs-compile-summaries Pass 1 sheet-row backfill + SheetUpload enriching state (squash-merged from claude/vs-port-4-10-1-sheet-enrich)
 19c0683  [skip netlify] Phase 4.9-port: Scout Settings page + full ErrorState.tsx + post-completion step-through nav strip + always-visible gear icon (squash-merged from claude/vs-port-4-9-settings-error)
 b75a106  [skip netlify] Phase 4.8.3-port: deck-output correctness hotfix (slide-index shift in vs-generate-deck + DeckPrep FRONT_MATTER_SLIDES bump + ALL-CAPS venue_name + loading-page copy refresh) (squash-merged from claude/vs-port-4-8-3-deck-fixes)
