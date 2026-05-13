@@ -85,3 +85,10 @@ verify_jwt = true
 # vs-parse-* / vs-research-venues sibling pattern.
 [functions.vs-compile-summaries]
 verify_jwt = true
+
+# Phase 4.8.2-port: Google Slides deck generation. User-invoked from the
+# Generating page; same EdgeRuntime.waitUntil + Realtime pattern as
+# vs-compile-summaries. No self-invoke. verify_jwt = true matches the
+# vs-* sibling pattern.
+[functions.vs-generate-deck]
+verify_jwt = true

@@ -5,8 +5,8 @@ Living-state doc. Update on every meaningful merge to `main`.
 **Last updated:** 2026-05-12
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
 **Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `a1bc102` (Phase 4.8.1-port squashed from `claude/vs-port-4-8-1-deck-prep`).
-**Current phase:** Phase 4.8.1-port DONE on `vs-port-fresh`; next: Phase 4.8.2-port (Generating + `vs-generate-deck`). Phase 4.7 was split into two passes (both shipped). Phase 4.8 split into two passes at spec time (4.8.1 frontend + infra, 4.8.2 generate flow) because combined scope was ~1,000 lines source including the largest single function in the port.
+**Latest commit on `vs-port-fresh`:** `7a55dc2` (Phase 4.8.2-port squashed from `claude/vs-port-4-8-2-generate`).
+**Current phase:** Phase 4.8.2-port DONE on `vs-port-fresh`; **Phase 4 port feature-complete.** Next: Phase 4.9-port (Settings + Start Over + full ErrorState.tsx). Phase 4.7 was split into two passes (both shipped). Phase 4.8 was split into two passes at spec time (4.8.1 frontend + infra, 4.8.2 generate flow); both shipped.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
@@ -48,7 +48,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 
 - `auto_rejected` enum value is deprecated (Phase 3.7.2.1 backfilled to `reject` + `manually_reviewed=false`) but kept in the enum for safety. New writes never use it. Cleanup requires enum rebuild — not worth it now.
 - Packet path needs end-to-end verification after the WORKER_RESOURCE_LIMIT fix (signed-URL email body, no MIME attachment) before the UI flag flips back on. `ts-final-review` itself is verified end-to-end.
-- **Failed-attempt Venue Scout artifacts still in production until cutover:** two orphaned edge functions remain (`vs-start-sourcing`, `vs-generate-deck`); `vs-parse-brief` (4.3-port), `vs-parse-sheet` (4.4-port), and `vs-compile-summaries` (4.7.2-port) have been rebuilt in place at the same slot. Storage buckets `briefs`, `sourcing_sheets`, `venue_photos` retain their objects. Phase 4.1-port migration dropped the failed-attempt vs_* tables and the nine `phase_4_*` migration history rows are repaired to `reverted` in the supabase schema_migrations table. Edge function deletion + bucket cleanup are queued for the cutover commit (see port plan § "Done when").
+- **Failed-attempt Venue Scout artifacts still in production until cutover:** one orphaned edge function remains (`vs-start-sourcing`); `vs-parse-brief` (4.3-port), `vs-parse-sheet` (4.4-port), `vs-compile-summaries` (4.7.2-port), and `vs-generate-deck` (4.8.2-port) have all been rebuilt in place at the same slot. Storage buckets `briefs`, `sourcing_sheets`, `venue_photos` retain their objects. Phase 4.1-port migration dropped the failed-attempt vs_* tables and the nine `phase_4_*` migration history rows are repaired to `reverted` in the supabase schema_migrations table. Edge function deletion + bucket cleanup are queued for the cutover commit (see port plan § "Done when").
 
 ## Recent commits (main)
 
@@ -63,7 +63,10 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
+7a55dc2  [skip netlify] Phase 4.8.2-port: Generating page + vs-generate-deck edge function + four deck error keys (squash-merged from claude/vs-port-4-8-2-generate)
+51585c0  [skip netlify] Backfill a1bc102 squash hash into CHECKPOINT.md + CLAUDE.md
 a1bc102  [skip netlify] Phase 4.8.1-port: Deck Prep + googleServiceAccount cherry-pick + gmailServiceAccount delegation refactor (squash-merged from claude/vs-port-4-8-1-deck-prep)
+97cf734  [skip netlify] Backfill 67fc75b squash hash into CHECKPOINT.md + CLAUDE.md
 67fc75b  [skip netlify] Phase 4.7.2-port: Compiling page + vs-compile-summaries edge function + compile-failed error key (squash-merged from claude/vs-port-4-7-2-compile)
 c98e6a3  [skip netlify] Backfill e198f46 squash hash into CHECKPOINT.md
 e198f46  [skip netlify] Phase 4.7.1-port: Review + PhotoUploadModal + vs_venue_photos bucket + Shortlist photo unstub (squash-merged from claude/vs-port-4-7-1-review-photos)
@@ -103,7 +106,7 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 ## Next up
 
-**Phase 4.8.2-port** per `docs/venue-scout-port-plan.md`: Generating page + `vs-generate-deck` edge function + four new ErrorStateStub keys (AUTH_FAILED / TEMPLATE_COPY_FAILED / SLIDES_API_FAILED / NO_VENUES_INCLUDED) + secrets verification (`GOOGLE_TEMPLATE_FILE_ID`, `GOOGLE_OUTPUT_FOLDER_ID`). 4.8.1-port closed the `/deck/prep` 404 window 4.7.2-port pointed at; the Deck Prep Generate button navigates to `/deck/generating`, which 404s until 4.8.2-port lands. `_shared/googleServiceAccount.ts` is in place (cherry-picked from failed-attempt main `be30168`); `vs-generate-deck` will consume it with scopes `presentations` + `drive` and no impersonation.
+**Phase 4.9-port** per `docs/venue-scout-port-plan.md`: Scout Settings page (rename, project link, Start Over flow) + full `ErrorState.tsx` port (replaces 4.4-port's `ErrorStateStub.tsx`, surfaces `vs_scouts.research_error` for debug visibility). Phase 4 port is **feature-complete** after 4.8.2-port; remaining sub-phases are non-blocking polish. 4.8.2-port closed the `/deck/generating` 404 window 4.8.1-port opened. End-to-end producer flow now functions: Brief -> Sheet Prompt -> Sheet Upload / Researching -> Sourcing Report -> Shortlist -> Review -> Compiling -> Deck Prep -> Generating -> `/brief` landing for completed scouts. `vs-generate-deck` deployed at `amipjjmphblfxpghjnel`; secrets confirmed (`GOOGLE_TEMPLATE_FILE_ID`, `GOOGLE_OUTPUT_FOLDER_ID`, service account Editor on both).
 
 `vs-port-fresh` is published on origin. Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
 
@@ -111,7 +114,8 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 **Carried-forward cleanup queued:**
 - Verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix, then flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`.
-- Cutover deletion of failed-attempt edge functions: `vs-start-sourcing`, `vs-generate-deck`. (`vs-parse-brief` was rebuilt in place at 4.3-port, `vs-parse-sheet` at 4.4-port, and `vs-compile-summaries` at 4.7.2-port; all three reduce to "verify the port version is current rather than delete." 4.5-port's `vs-research-venues` is a NEW function name and does not slot-replace anything; `vs-start-sourcing` remains queued for deletion.) Defer until vs-port-fresh squash-merges (or hard-resets) onto main.
+- Cutover deletion of failed-attempt edge functions: `vs-start-sourcing` only. (`vs-parse-brief` was rebuilt in place at 4.3-port, `vs-parse-sheet` at 4.4-port, `vs-compile-summaries` at 4.7.2-port, and `vs-generate-deck` at 4.8.2-port; all four reduce to "verify the port version is current rather than delete." 4.5-port's `vs-research-venues` is a NEW function name and does not slot-replace anything; `vs-start-sourcing` remains queued for deletion.) Defer until vs-port-fresh squash-merges (or hard-resets) onto main.
+- Smoke test of `vs-generate-deck` against a real scout (DeckPrep -> Generate -> Generating -> Drive deck appears -> /brief landing). Function is deployed and ready; producer-side validation pending.
 
 ## How to update this file
 
