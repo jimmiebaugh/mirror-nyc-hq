@@ -26,14 +26,9 @@ import {
  *     visible (no expand/collapse). Final Overview field removed
  *     entirely (was too noisy in this surface — see decisions doc).
  *   - "Re-Review" calls ts-final-review (HQ name).
- *   - "Download Packet" calls ts-final-review-packet.
+ *   - "Generate Packet" calls ts-final-review-packet with include_all: true —
+ *     always packets every ranked candidate; no top-N input.
  */
-
-// Phase 3.6.12: packet generation is hidden in the UI while the path is
-// being stabilized. Flip back to `true` once the review-scoped packet flow
-// is verified end-to-end. Logic (downloadPacket, packet state, AlertDialog)
-// stays in place so re-enabling is one line.
-const PACKET_FEATURE_ENABLED = false;
 
 type FinalRanking = {
   candidate_id: string;
@@ -281,8 +276,8 @@ export default function FinalReviewDetail() {
           </div>
         </div>
         {/* Phase 3.6.3: Generate Packet up top with Re-Review inline left.
-             Phase 3.6.12: packet button + Open last packet caption gated on
-             PACKET_FEATURE_ENABLED while the path is broken. */}
+             Packet always includes all ranked candidates (include_all: true).
+             No top-N input — the Final Review pool is the packet pool. */}
         <div className="flex flex-col items-end gap-2 flex-shrink-0">
           <div className="flex items-center gap-2">
             <button
@@ -292,23 +287,21 @@ export default function FinalReviewDetail() {
               <RefreshCw className="h-3.5 w-3.5" />
               Re-Review
             </button>
-            {PACKET_FEATURE_ENABLED && (
-              <button
-                onClick={review.packet_url ? () => setShowPacketRegen(true) : downloadPacket}
-                disabled={generatingPacket}
-                className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-sm bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
-              >
-                {generatingPacket ? (
-                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
-                ) : review.packet_url ? (
-                  <><Download className="h-3.5 w-3.5" /> Re-generate Packet</>
-                ) : (
-                  <><Download className="h-3.5 w-3.5" /> Download Packet</>
-                )}
-              </button>
-            )}
+            <button
+              onClick={review.packet_url ? () => setShowPacketRegen(true) : downloadPacket}
+              disabled={generatingPacket}
+              className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-sm bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
+            >
+              {generatingPacket ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+              ) : review.packet_url ? (
+                <><Download className="h-3.5 w-3.5" /> Re-generate Packet</>
+              ) : (
+                <><Download className="h-3.5 w-3.5" /> Generate Packet</>
+              )}
+            </button>
           </div>
-          {PACKET_FEATURE_ENABLED && review.packet_url && (
+          {review.packet_url && (
             <button onClick={downloadPacket} className="text-[12px] font-mono font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground">
               ↓ Open last packet
             </button>
