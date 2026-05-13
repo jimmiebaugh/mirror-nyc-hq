@@ -2,11 +2,11 @@
 
 Living-state doc. Update on every meaningful merge to `main`.
 
-**Last updated:** 2026-05-12
+**Last updated:** 2026-05-13
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
 **Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `b75a106` (Phase 4.8.3-port squashed from `claude/vs-port-4-8-3-deck-fixes`). Prior: `7a55dc2` (Phase 4.8.2-port).
-**Current phase:** Phase 4.8.3-port DONE on `vs-port-fresh`; **Phase 4 port feature-complete with correct deck output.** Next: Phase 4.9-port (Settings + Start Over + full ErrorState.tsx). Phase 4.7 was split into two passes (both shipped). Phase 4.8 was split into two passes at spec time (4.8.1 frontend + infra, 4.8.2 generate flow); both shipped. 4.8.3 inserted as a hotfix after first real producer run revealed Mirror's template has 6 front-matter slides (not 5), shifting every per-venue slide index by one in `vs-generate-deck`.
+**Latest commit on `vs-port-fresh`:** `<TBD-4.9-port-squash>` (Phase 4.9-port squashed from `claude/vs-port-4-9-settings-error`). Prior: `b75a106` (Phase 4.8.3-port).
+**Current phase:** Phase 4.9-port DONE on `vs-port-fresh`; **Phase 4 port feature-complete + producer has Settings + Start Over + full error recovery.** Next: Phase 4.10.1-port (sheet upload AI enrichment). Phase 4.7 was split into two passes (both shipped). Phase 4.8 was split into two passes at spec time (4.8.1 frontend + infra, 4.8.2 generate flow); both shipped + 4.8.3 hotfix. 4.9 lands Settings page + full ErrorState.tsx (replacing the 4.4-port stub) + post-completion step-through nav + always-visible gear icon across every per-scout action page.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
@@ -63,6 +63,7 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
+<TBD-4.9-port-squash>  [skip netlify] Phase 4.9-port: Scout Settings page + full ErrorState.tsx + post-completion step-through nav strip + always-visible gear icon (squash-merged from claude/vs-port-4-9-settings-error)
 b75a106  [skip netlify] Phase 4.8.3-port: deck-output correctness hotfix (slide-index shift in vs-generate-deck + DeckPrep FRONT_MATTER_SLIDES bump + ALL-CAPS venue_name + loading-page copy refresh) (squash-merged from claude/vs-port-4-8-3-deck-fixes)
 1bfe135  [skip netlify] Backfill 7a55dc2 squash hash into CHECKPOINT.md + CLAUDE.md
 7a55dc2  [skip netlify] Phase 4.8.2-port: Generating page + vs-generate-deck edge function + four deck error keys (squash-merged from claude/vs-port-4-8-2-generate)
@@ -92,6 +93,7 @@ dd38577  [skip netlify] Phase 4.1 Cowork-side doc state (port branch base)
 ## Recent migrations
 
 ```
+20260513000000_phase_4_9_port_start_over_rpc.sql                Phase 4.9-port — start_over_scout(target_scout_id uuid) RPC for Scout Settings Danger Zone. Transactional cascade-delete of vs_candidate_venues (photos cascade via FK), reset scout state back to sheet_prompt + clear research_error / derived_columns / sheet_storage_path / deck_order + strip brief_data idempotency timestamps. Keeps brief fields, project_id, generated_decks history, brief_data.uploaded_files. SECURITY INVOKER; GRANT EXECUTE TO authenticated. (APPLIED)
 20260512240000_phase_4_7_1_port_vs_venue_photos_bucket.sql      Phase 4.7.1-port — CREATE vs_venue_photos storage bucket (private) + 4 RLS policies (SELECT/INSERT/UPDATE/DELETE gated on is_producer_or_admin()). Bucket carries Venue Scout deck photos uploaded via PhotoUploadModal; reads use createSignedUrl(path, 3600). Distinct from the public venue_photos bucket reserved for HQ Core's master venues table. (APPLIED)
 20260512230000_phase_4_6_port_shortlist_sync_trigger.sql        Phase 4.6-port — re-introduce vs_candidate_venues_shortlist_sync trigger at simplified shape (shortlisted false→true only). Matches HQ venues by website_url first, then case-insensitive name+neighborhood. SECURITY DEFINER; INSERTs new venues rows when no match. (APPLIED)
 20260512220000_phase_4_5_port_research_error.sql                Phase 4.5-port — ALTER TABLE vs_scouts ADD COLUMN research_error text (persisted error channel for the EdgeRuntime.waitUntil + Realtime flow on vs-research-venues) (APPLIED)
@@ -108,7 +110,7 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 ## Next up
 
-**Phase 4.9-port** per `docs/venue-scout-port-plan.md`: Scout Settings page (rename, project link, Start Over flow) + full `ErrorState.tsx` port (replaces 4.4-port's `ErrorStateStub.tsx`, surfaces `vs_scouts.research_error` for debug visibility). Phase 4 port is **feature-complete** after 4.8.2-port and produces a correct deck after 4.8.3-port's slide-index hotfix; remaining sub-phases are non-blocking polish. End-to-end producer flow now functions and the generated deck output matches Mirror's template: Brief -> Sheet Prompt -> Sheet Upload / Researching -> Sourcing Report -> Shortlist -> Review -> Compiling -> Deck Prep -> Generating -> `/brief` landing for completed scouts. `vs-generate-deck` redeployed post-4.8.3 at `amipjjmphblfxpghjnel`; secrets confirmed (`GOOGLE_TEMPLATE_FILE_ID`, `GOOGLE_OUTPUT_FOLDER_ID`, service account Editor on both).
+**Phase 4.10.1-port** per `docs/venue-scout-port-plan.md`: sheet-upload AI enrichment. Phase 4 port is **feature-complete + has full Settings / Start Over / error-recovery surface** after 4.9-port. Producer can rename a scout, change its project link, Start Over (transactional cascade reset via `start_over_scout` RPC), recover from any of the 9 error states with full guidance + raw `research_error` debug detail, and step through any post-completion scout's prior phases via the inline nav strip. End-to-end producer flow: Brief -> Sheet Prompt -> Sheet Upload / Researching -> Sourcing Report -> Shortlist -> Review -> Compiling -> Deck Prep -> Generating -> `/brief` landing for completed scouts. Settings reachable via persistent gear icon on every action page (loading screens excluded). `vs-generate-deck` deployed at `amipjjmphblfxpghjnel`; `start_over_scout` RPC applied via `supabase db push --linked`.
 
 `vs-port-fresh` is published on origin. Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
 

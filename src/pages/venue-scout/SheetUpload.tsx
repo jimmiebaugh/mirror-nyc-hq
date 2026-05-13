@@ -29,6 +29,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DropZone } from "@/components/ui/DropZone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import {
+  ScoutSettingsLink,
+  ScoutStepThroughNav,
+} from "@/components/venue-scout/ScoutChrome";
 
 type Status = "idle" | "uploading" | "parsing" | "done" | "error";
 
@@ -165,15 +169,19 @@ export default function SheetUpload() {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <div className="text-[14px] font-mono uppercase tracking-widest text-primary">
-          Sourcing
+      <header className="flex items-end justify-between gap-5">
+        <div className="space-y-2">
+          <div className="text-[14px] font-mono uppercase tracking-widest text-primary">
+            Sourcing
+          </div>
+          <h1 className="h-page">Upload Sourcing Sheet</h1>
+          <p className="text-sm text-muted-foreground">
+            Drop your existing venue sourcing sheet. We'll parse the venues into the candidate list.
+          </p>
         </div>
-        <h1 className="h-page">Upload Sourcing Sheet</h1>
-        <p className="text-sm text-muted-foreground">
-          Drop your existing venue sourcing sheet. We'll parse the venues into the candidate list.
-        </p>
+        {scoutId && <ScoutSettingsLink scoutId={scoutId} />}
       </header>
+      {scoutId && <ScoutStepThroughNav scoutId={scoutId} />}
 
       <Card className="bg-surface-alt">
         <CardContent className="p-8">

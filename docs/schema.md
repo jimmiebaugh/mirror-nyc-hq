@@ -258,6 +258,10 @@ Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSi
 - `updated_at_auto`: standard updated_at trigger on every table with the column.
 - `handle_new_user`: on `auth.users` INSERT, mirror to `public.users` with `permission_role = 'member'`. Runs as service role.
 
+## Postgres functions (RPCs)
+
+- `start_over_scout(target_scout_id uuid) RETURNS jsonb` (Phase 4.9-port, migration `20260513000000_phase_4_9_port_start_over_rpc.sql`): transactional reset of a scout to `current_step='sheet_prompt'`. Cascade-deletes `vs_candidate_venues` (photos cascade via FK ON DELETE CASCADE). Resets `status` to `'draft'`, clears `research_error`, `derived_columns` (-> `[]`), `sheet_storage_path`, `deck_order` (-> `[]`), and strips idempotency timestamps (`research_started_at`, `compile_started_at`, `deck_generation_started_at`) from `brief_data`. Keeps brief fields, `project_id`, `generated_decks` history, `brief_data.uploaded_files`. `SECURITY INVOKER`. `GRANT EXECUTE TO authenticated`.
+
 ## Conventions for future migrations
 
 - **Always include explicit GRANTs** to `authenticated` and `service_role` for new tables. Auto-expose stays off as the project security default. See `supabase/migrations/20260506065157_grant_data_api_access.sql` for the canonical pattern.

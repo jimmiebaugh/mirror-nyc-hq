@@ -28,6 +28,10 @@ import {
   TYPE_STYLES,
   type CanonicalType,
 } from "@/lib/venue-scout/venueTypes";
+import {
+  ScoutSettingsLink,
+  ScoutStepThroughNav,
+} from "@/components/venue-scout/ScoutChrome";
 
 type Venue = {
   id: string;
@@ -62,18 +66,39 @@ export default function Review() {
   const [photoOpen, setPhotoOpen] = useState(false);
   const [activeVenue, setActiveVenue] = useState<Venue | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // Phase 4.9-port: meta for <ScoutStepThroughNav />. Pulled in parallel
+  // with the candidate-venues fetch so the chrome can render without a
+  // second mount-time round-trip.
+  const [scoutMeta, setScoutMeta] = useState<
+    { current_step: string | null; generated_decks: unknown } | null
+  >(null);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const load = useCallback(async () => {
     if (!scoutId) return;
-    const { data: vs } = await supabase
-      .from("vs_candidate_venues")
-      .select(
-        "id, name, address, neighborhood, venue_type, size_sq_ft, capacity, website_url, venue_overview, pitched",
-      )
-      .eq("scout_id", scoutId)
-      .eq("pitched", true)
-      .order("created_at", { ascending: true });
+    const [{ data: vs }, { data: scoutRow }] = await Promise.all([
+      supabase
+        .from("vs_candidate_venues")
+        .select(
+          "id, name, address, neighborhood, venue_type, size_sq_ft, capacity, website_url, venue_overview, pitched",
+        )
+        .eq("scout_id", scoutId)
+        .eq("pitched", true)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("vs_scouts")
+        .select("current_step, generated_decks")
+        .eq("id", scoutId)
+        .maybeSingle(),
+    ]);
+    setScoutMeta(
+      scoutRow
+        ? {
+            current_step: (scoutRow.current_step as string | null) ?? null,
+            generated_decks: scoutRow.generated_decks,
+          }
+        : null,
+    );
     const list = ((vs ?? []) as unknown) as Venue[];
     setVenues(list);
 
@@ -262,14 +287,18 @@ export default function Review() {
               the pitch. Review summaries, confirm photos, edit if needed.
             </p>
           </div>
-          <Link
-            to={shortlistPath}
-            className="text-[13px] font-mono uppercase tracking-wider text-primary hover:underline"
-          >
-            ← Edit Selections
-          </Link>
+          <div className="flex items-end gap-3">
+            <Link
+              to={shortlistPath}
+              className="text-[13px] font-mono uppercase tracking-wider text-primary hover:underline"
+            >
+              ← Edit Selections
+            </Link>
+            {scoutId && <ScoutSettingsLink scoutId={scoutId} />}
+          </div>
         </div>
       </header>
+      {scoutId && <ScoutStepThroughNav scoutId={scoutId} scout={scoutMeta} />}
 
       {venues.length === 0 ? (
         <div className="bg-surface-alt border border-border rounded-md p-10 text-center text-sm text-muted-foreground">

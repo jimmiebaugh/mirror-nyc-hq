@@ -20,6 +20,10 @@ import {
   EditableVenueName,
   WebsiteArrow,
 } from "@/components/venue-scout/matrix/primitives";
+import {
+  ScoutSettingsLink,
+  ScoutStepThroughNav,
+} from "@/components/venue-scout/ScoutChrome";
 
 // Lifted from VS Pro (src/pages/sourcing/SourcingReport.tsx) per port plan
 // § 9 + Phase 4.6-port spec. Adapts:
@@ -59,6 +63,12 @@ export default function SourcingReport() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [columns, setColumns] = useState<DerivedColumn[]>([]);
   const [loading, setLoading] = useState(true);
+  // Phase 4.9-port: meta for <ScoutStepThroughNav />. Only the two columns
+  // the chrome cares about are pulled (current_step + generated_decks); the
+  // rest of vs_scouts stays out of this page's working set.
+  const [scoutMeta, setScoutMeta] = useState<
+    { current_step: string | null; generated_decks: unknown } | null
+  >(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const [activeVenue, setActiveVenue] = useState<Venue | null>(null);
   const nameTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -68,7 +78,7 @@ export default function SourcingReport() {
     const [scoutResp, vsResp] = await Promise.all([
       supabase
         .from("vs_scouts")
-        .select("derived_columns, current_step")
+        .select("derived_columns, current_step, generated_decks")
         .eq("id", scoutId)
         .maybeSingle(),
       supabase
@@ -83,6 +93,14 @@ export default function SourcingReport() {
     const derived = (scoutResp.data?.derived_columns ?? []) as DerivedColumn[];
     setColumns(Array.isArray(derived) ? derived : []);
     setVenues(((vsResp.data ?? []) as unknown) as Venue[]);
+    setScoutMeta(
+      scoutResp.data
+        ? {
+            current_step: (scoutResp.data.current_step as string | null) ?? null,
+            generated_decks: scoutResp.data.generated_decks,
+          }
+        : null,
+    );
     setLoading(false);
   }, [scoutId]);
 
@@ -170,17 +188,21 @@ export default function SourcingReport() {
             </div>
             <h1 className="h-page">Candidate Venues</h1>
           </div>
-          <div className="text-[13px] text-muted-foreground">
-            <strong className="text-foreground font-bold">
-              {shortlistedCount}
-            </strong>{" "}
-            selected of{" "}
-            <strong className="text-foreground font-bold">
-              {venues.length}
-            </strong>
+          <div className="flex items-end gap-4">
+            <div className="text-[13px] text-muted-foreground">
+              <strong className="text-foreground font-bold">
+                {shortlistedCount}
+              </strong>{" "}
+              selected of{" "}
+              <strong className="text-foreground font-bold">
+                {venues.length}
+              </strong>
+            </div>
+            {scoutId && <ScoutSettingsLink scoutId={scoutId} />}
           </div>
         </div>
       </header>
+      {scoutId && <ScoutStepThroughNav scoutId={scoutId} scout={scoutMeta} />}
 
       <div className="bg-surface-alt rounded-md overflow-hidden border border-border">
         <div className="overflow-x-auto scrollbar-thin">
