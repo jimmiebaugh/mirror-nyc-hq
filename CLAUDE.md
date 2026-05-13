@@ -46,7 +46,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 
 ## Current phase
 
-See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.7.2-port (Compiling page + vs-compile-summaries edge function + compile-failed error key)** squashed onto `vs-port-fresh` at `67fc75b`. **Phase 4.8-port (Deck Prep + Generate + vs-generate-deck)** is next per `docs/venue-scout-port-plan.md`. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
+See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.8.3-port (deck-output correctness hotfix)** squashed onto `vs-port-fresh` at `b75a106` (prior 4.8.2-port at `7a55dc2`). **Phase 4 port is feature-complete and produces a correct deck.** Full producer journey works end-to-end (Brief through deck Generation to /brief landing), and 4.8.3 corrected the slide-index off-by-one against Mirror's actual 6-front-matter-slide template. Remaining sub-phases are non-blocking polish: **Phase 4.9-port** (Settings + Start Over + full ErrorState.tsx) is next per `docs/venue-scout-port-plan.md`. The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
 
 ## Working with this repo
 

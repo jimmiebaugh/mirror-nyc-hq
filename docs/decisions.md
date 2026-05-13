@@ -2,6 +2,72 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.8.3-port (deck-output correctness hotfix)
+
+### Slide-index mismatch fix
+
+VS Pro's `generate-deck` was written against a template with 5 front-matter slides (cover, project info, event overview, section title, venue map at slide 5), where slide 6 = per-venue detail and slide 7 = per-venue floor plan. Phase 4.8.2-port lifted the function verbatim per port-fidelity and shipped feature-complete without exercising the deck output against Mirror's actual template until first real producer test 2026-05-12. Mirror's production template (verified via .pptx parse) has 6 front-matter slides with the venue map at slide 6, per-venue detail at slide 7, per-venue floor plan at slide 8. The off-by-one meant the function duplicated slide 6 (venue map) thinking it was per-venue detail, wrote per-venue tokens to those duplicates (silent no-ops because slide 6 doesn't have the body tokens), wrote photo replacements against alt text that doesn't exist on the legend slide, and never duplicated slide 8 at all. Hotfix shifts every slide-index reference by one: `legendSlideId = slides[5]` (venue map), `templateSlide7 = slides[6]` (detail), `templateSlide8 = slides[7]` (floor plan). Legend repText calls scoped to `legendSlideId` while we're touching them, both because that's the correct shape and so the new variable doesn't sit unused.
+
+### `{{venue_name}}` uppercase treatment
+
+Producer feedback at first-run: venue names in deck headers feel weak in mixed case; ALL CAPS reads cleaner against the Mirror brand visual hierarchy. Single `(v.name ?? "").toUpperCase()` call before the `repText` write. Only on `{{venue_name}}`; other tokens (`{{venue_address}}`, `{{venue_neighborhood}}`, `{{venue_overview}}`, etc.) keep their original casing. Applies to both the per-venue detail slide and the per-venue floor plan slide (both share the same `{{venue_name}}` header).
+
+### Loading-page copy refresh
+
+"Compiling Pitch Deck" → "Compiling Deck Preview" (Compiling.tsx); "Generating Pitch Deck" → "Generating Venue Deck" (Generating.tsx). Closer match to what the producer is actually waiting for. The output is a preview deck for internal venue review, not a fully designed pitch deck handed to a client. Description paragraphs underneath unchanged.
+
+## Phase 4.8.2-port (Generating + vs-generate-deck)
+
+### Phase 4 port feature-complete after 4.8.2
+
+The 4.8 split shipped 4.8.1 (Deck Prep + `googleServiceAccount` infra) and 4.8.2 (Generating + `vs-generate-deck` + four new ErrorStateStub keys). End-to-end producer flow now works: Brief → Sheet Prompt → Sheet Upload / Researching → Sourcing Report → Shortlist → Review → Compiling → Deck Prep → Generating → `/brief` landing for completed scouts. Remaining sub-phases (4.9-port Settings + Start Over + full ErrorState, 4.10-port polish + side-by-side reconciliation) are non-blocking for the core workflow.
+
+### `vs-generate-deck` uses `getGoogleAccessToken` without impersonation
+
+VS Pro's inline ~60 lines of JWT-mint + token-exchange code deleted; the function imports `getGoogleAccessToken(["https://www.googleapis.com/auth/presentations", "https://www.googleapis.com/auth/drive"])` from `_shared/googleServiceAccount.ts` (cherry-picked in 4.8.1-port). No `impersonateUser` parameter because the service account itself owns the Drive + Slides calls and is a member of the Mirror Shared Drive that holds the template + output folder. Matches the `googleServiceAccount.ts` header-comment design intent. Cache-keyed by `${impersonateUser ?? ""}|${sortedScopes}` means the Gmail token and the Drive+Slides token coexist in the same module-level cache without collisions.
+
+### Error code surfacing pattern: `research_error` formatted as `<CODE>: <message>`
+
+VS Pro returned `{ error, code }` synchronously to a sync caller. The port uses `EdgeRuntime.waitUntil` so the response is gone before failure surfaces; the only channel back to the page is `vs_scouts.research_error`. Encoding shape: `${ErrCode}: ${message}` where `ErrCode ∈ { AUTH_FAILED, TEMPLATE_COPY_FAILED, SLIDES_API_FAILED, NO_VENUES_INCLUDED, UNKNOWN }`. The Generating page parses with `^([A-Z_]+):` regex and routes to `/deck/error/<code>`. Fall-through is `UNKNOWN`. Simple, no schema change, no separate `research_error_code` column. Alternative considered: a typed jsonb column. Rejected as over-engineering for five error codes; the regex parse is one line and the column is already in place.
+
+### Failure path leaves `current_step='deck_prep'` (matches 4.7.2 pattern)
+
+On any failure, `vs-generate-deck` writes `status='failed'` + `research_error=<CODE>: <message>` but does NOT touch `current_step`. The producer can re-trigger Generate from DeckPrep without manually walking the scout back through the funnel. Same disposition as 4.7.2-port leaving at `compiling` on failure: the loading/error page is a transient state, not a step the producer dwells in.
+
+### `vs_scouts.status='complete'` is the final state
+
+4.8.2-port is the first sub-phase that writes `status='complete'`. The text column already accepts arbitrary values; the documented enum (`draft / in_progress / complete / failed`) gains its third reachable value here. Sticks until Start Over (4.9-port) resets the scout to `draft`. Scout Index status pill (4.2-port) reads from this column and will need a `complete` pill style alongside the existing `draft` / `in_progress` / `failed`.
+
+### `brief_data.deck_generation_started_at` canonical jsonb idempotency key
+
+Joins the canonical `brief_data` jsonb key list alongside `expected_guest_count`, `notes`, `uploaded_files`, `research_started_at`, `compile_started_at`. 90-second grace window matches 4.5 / 4.7.2. Cleared on next successful run (the success write sets `research_error: null` but does NOT delete this key; left in place so a future audit can reconstruct kickoff timing). Schema-flex jsonb means no migration.
+
+### Deck name hyphen, not em dash
+
+VS Pro deck name template was `${event_name} — Venue Pitch Deck v${version}` (em dash). Voice rule (design-system § 12 rule 1) bans em dashes. Port template: `${event_name} - Venue Pitch Deck v${version}` (hyphen). The deck file itself, named at copy time, carries the hyphen.
+
+### `failWithCode` writes are idempotent on the row
+
+The outer `try { Promise.race(generateWork, timeout) } catch` calls `failWithCode("UNKNOWN", ...)` even if `generateWork` already wrote a more specific code before throwing into the outer scope. The double-write is fine: each call replaces `status` and `research_error` atomically, the latest write wins, and `last_touched_at` advances. No state is lost. Simplifies the error path; no need to thread a "did-we-already-fail" flag.
+
+## Phase 4.8.1-port (Deck Prep + googleServiceAccount infra)
+
+### Phase 4.8-port split into two passes (4.8.1 frontend + infra, 4.8.2 generate flow)
+
+Combined 4.8-port scope was ~1,000 lines of source across DeckPrep + Generating + `vs-generate-deck` (the largest single function in the port). Splitting isolates the Google Slides population logic for its own review cycle, lets the `googleServiceAccount` cherry-pick land independently of slide-template complexity, and lets 4.8.2 wait on secrets verification (`GOOGLE_TEMPLATE_FILE_ID`, `GOOGLE_OUTPUT_FOLDER_ID`) without blocking 4.8.1. 4.8.1-port ships DeckPrep + the shared service-account helper + the gmailServiceAccount delegation refactor. 4.8.2-port ships Generating + `vs-generate-deck` + the four new ErrorStateStub keys.
+
+### `_shared/googleServiceAccount.ts` cherry-picked from failed-attempt main `be30168`
+
+The failed-attempt Phase 4.6 already built the generic Google access-token helper with the exact shape the port needs: module-level cache keyed by `${impersonateUser ?? ""}|${sortedScopes}`, optional `impersonateUser` for domain-wide-delegation flows, supports both Gmail (impersonates `jobs@mirrornyc.com`) and Drive + Slides (no impersonation; service account owns the API call). Rewriting from scratch would produce the same file. Cherry-picked verbatim with header comment refreshed to reference Phase 4.8.1-port and em-dashes swapped to comma per voice rule. No behavioral changes.
+
+### `gmailServiceAccount.ts` refactored to delegate
+
+Pre-4.8.1 file was ~130 lines with its own copy of `loadServiceAccountKey` / `importRsaPrivateKey` / `signJwt` / `base64Url*` helpers and a private token cache. Post-refactor: ~30 lines. Public API (`getGmailAccessToken(): Promise<string>`) preserved exactly; all four callers (`ts-pull-candidates`, `ts-evaluate-candidate`, `_shared/sendEmail.ts`, `_shared/packetRender.ts`) keep their existing import. Internal implementation delegates to `getGoogleAccessToken(SCOPES, { impersonateUser: 'jobs@mirrornyc.com' })`. Smoke-tested against TS pull/evaluate to confirm no regression before squash.
+
+### DeckPrep `current_step` writes deferred to server-side (vs-generate-deck, 4.8.2-port)
+
+VS Pro's DeckPrep has a stub `current_step='deck_generated'` write inside an unreachable `try` block; the live flow already deferred to server-side. Port matches: 4.8.1-port frontend only writes `deck_order` + `include_in_deck` flags. `current_step='completed'` is written by `vs-generate-deck` on success (lands in 4.8.2-port), parallel to 4.5-port and 4.7.2-port EdgeRuntime.waitUntil patterns where server-side state transitions are atomic with the actual work.
+
 ## Phase 4.7.2-port (Compiling + vs-compile-summaries)
 
 ### Reuse `vs_scouts.research_error` column for compile errors

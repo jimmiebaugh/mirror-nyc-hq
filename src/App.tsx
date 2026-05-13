@@ -32,6 +32,8 @@ import SourcingReport from "./pages/venue-scout/SourcingReport";
 import Shortlist from "./pages/venue-scout/Shortlist";
 import Review from "./pages/venue-scout/Review";
 import Compiling from "./pages/venue-scout/Compiling";
+import DeckPrep from "./pages/venue-scout/DeckPrep";
+import Generating from "./pages/venue-scout/Generating";
 import ErrorStateStub from "./pages/venue-scout/ErrorStateStub";
 
 const queryClient = new QueryClient();
@@ -182,6 +184,18 @@ const App = () => (
               <Route
                 path="/venue-scout/scouts/:id/sourcing/compiling"
                 element={<Compiling />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/deck/prep"
+                element={<DeckPrep />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/deck/generating"
+                element={<Generating />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/deck/error/:errorKey"
+                element={<ErrorStateStub />}
               />
               <Route
                 path="/venue-scout/scouts/:id/sourcing/error/:errorKey"
