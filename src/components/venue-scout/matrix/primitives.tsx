@@ -22,6 +22,11 @@ import {
   parseTypes,
   canonicalizeType,
 } from "@/lib/venue-scout/venueTypes";
+import {
+  Popover as PopoverRoot,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 // Re-export so matrix consumers (SourcingReport, Shortlist) can import
 // everything from a single module, matching VS Pro's import shape.
@@ -509,5 +514,107 @@ export function WebsiteArrow({ url }: { url: string | null }) {
         <path d="M7 17 17 7" /><path d="M8 7h9v9" />
       </svg>
     </a>
+  );
+}
+
+// Phase 4.10.3-port: producer-editable venue_type cell.
+//
+// 4.10.2 collapsed manual-row inputs into the shared VenueIdentityStack
+// pattern and the manual `<input>` for type went with it. The producer's
+// path to set venue_type on any row disappeared. Per the port-plan locked
+// direction (all rows editable except recs/considerations), this brings
+// type editing back across the matrix.
+//
+// UX: click the type-pill cell -> popover with the 8 canonical types as
+// toggleable checkboxes. Active types are pre-checked. Toggle returns a new
+// CanonicalType[]; the caller serializes to `${types.join(" / ")}` or null
+// and persists via debounceSave.
+//
+// Empty state shows a muted "+ Set type" placeholder so the affordance is
+// discoverable on manual rows that come in with venue_type=null.
+export function TypeTogglePopover({
+  currentTypes,
+  onChange,
+}: {
+  currentTypes: CanonicalType[];
+  onChange: (next: CanonicalType[]) => void;
+}) {
+  return (
+    <PopoverRoot>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex flex-col items-center gap-[7px] cursor-pointer hover:opacity-80 transition-opacity"
+        >
+          {currentTypes.length > 0 ? (
+            currentTypes.map((t, i) => (
+              <Pill
+                key={`${t}-${i}`}
+                className={TYPE_STYLES[t] ?? TYPE_FALLBACK_STYLE}
+              >
+                {t}
+              </Pill>
+            ))
+          ) : (
+            <span className="text-muted-foreground text-[11px] italic">
+              + Set type
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-48 p-2 bg-surface-alt border border-border"
+        align="center"
+      >
+        <div className="space-y-1">
+          {CANONICAL_TYPES.map((t) => {
+            const active = currentTypes.includes(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                role="checkbox"
+                aria-checked={active}
+                onClick={() =>
+                  onChange(
+                    active
+                      ? currentTypes.filter((x) => x !== t)
+                      : [...currentTypes, t],
+                  )
+                }
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-left transition-colors ${
+                  active
+                    ? "bg-input text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-input/50"
+                }`}
+              >
+                <span className="w-4 h-4 flex items-center justify-center">
+                  {active && <CheckIcon />}
+                </span>
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </PopoverRoot>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m5 12 5 5L20 7" />
+    </svg>
   );
 }

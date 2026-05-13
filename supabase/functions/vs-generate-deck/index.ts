@@ -24,7 +24,7 @@
 //      slow; typical runs are 1-2 minutes per VS Pro description; 60-second
 //      buffer.
 //   7. Error signaling: VS Pro returns { error, code } synchronously. Port
-//      writes status='failed' + research_error=`${CODE}: ${message}`. The
+//      writes status='failed' + pipeline_error=`${CODE}: ${message}`. The
 //      Generating page parses the code and routes to /deck/error/<code>.
 //      current_step stays 'deck_prep' so Resume / Re-generate from
 //      DeckPrep is the recovery path (same pattern as 4.7.2 leaving at
@@ -246,7 +246,7 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // failWithCode: write status='failed' + research_error=`${code}: ${message}`.
+  // failWithCode: write status='failed' + pipeline_error=`${code}: ${message}`.
   // The Generating page parses the code with a regex and routes to
   // /deck/error/<code>. current_step stays 'deck_prep' so Re-generate
   // from DeckPrep is the recovery path. Logs the underlying update error
@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
       .from("vs_scouts")
       .update({
         status: "failed",
-        research_error: `${code}: ${message}`,
+        pipeline_error: `${code}: ${message}`,
         last_touched_at: new Date().toISOString(),
       })
       .eq("id", scout_id);
@@ -317,7 +317,7 @@ Deno.serve(async (req) => {
         ...briefData,
         deck_generation_started_at: new Date().toISOString(),
       },
-      research_error: null,
+      pipeline_error: null,
     })
     .eq("id", scout_id);
 
@@ -737,7 +737,7 @@ Deno.serve(async (req) => {
             generated_decks: [...freshExisting, meta],
             current_step: "completed",
             status: "complete",
-            research_error: null,
+            pipeline_error: null,
             last_touched_at: new Date().toISOString(),
           })
           .eq("id", scout_id);

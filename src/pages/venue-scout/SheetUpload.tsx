@@ -34,26 +34,16 @@ import {
   ScoutStepThroughNav,
 } from "@/components/venue-scout/ScoutChrome";
 
-// Phase 4.10.1-port: `enriching` step added between `parsing` and `done`.
-// vs-parse-sheet now runs AI enrichment in-flight (single synchronous call).
-// We can't observe the parse->enrich boundary from the client, so the UI
-// toggles to `enriching` after a fixed delay (PARSING_TO_ENRICHING_MS).
-// In practice the function is usually past parse + insert by then and into
-// the Claude phase, so the producer sees a smooth Parsing -> Enriching ->
-// Done sequence.
+// Phase 4.10.3-port: AI enrichment moved out of vs-parse-sheet and into
+// vs-research-venues (Phase A). The "enriching" state + 3-second timer
+// that toggled the UI from Parsing -> Enriching mid-call is gone; parse
+// is now a sub-second operation. Producer sees Parsing -> Done.
 type Status =
   | "idle"
   | "uploading"
   | "parsing"
-  | "enriching"
   | "done"
   | "error";
-
-// How long to leave the "Parsing venues..." message on screen before
-// switching to "Enriching missing fields...". Parsing + insert is fast
-// (typically 1-2s); after that vs-parse-sheet spends the bulk of the call
-// on chunked AI enrichment.
-const PARSING_TO_ENRICHING_MS = 3000;
 
 const MAX_SHEET_SIZE_MB = 25;
 const ALLOWED_EXTS = new Set(["pdf", "xlsx", "csv"]);
@@ -125,27 +115,14 @@ export default function SheetUpload() {
       }
 
       setStatus("parsing");
-      // Phase 4.10.1-port: vs-parse-sheet now runs synchronous AI
-      // enrichment after parse + insert. Toggle the visible status to
-      // "enriching" after a short delay so the producer sees a coherent
-      // Parsing -> Enriching -> Done sequence instead of one long
-      // "Parsing venues..." while the function is actually mid-Claude.
-      // parseGenRef guard inside the timer prevents a stale upload from
-      // flipping the UI of a newer one.
-      const enrichingTimer = window.setTimeout(() => {
-        if (myGen === parseGenRef.current) setStatus("enriching");
-      }, PARSING_TO_ENRICHING_MS);
-      let data: unknown = null;
-      let error: { message: string } | null = null;
-      try {
-        const res = await supabase.functions.invoke("vs-parse-sheet", {
-          body: { scout_id: scoutId, storage_path: path },
-        });
-        data = res.data;
-        error = res.error;
-      } finally {
-        window.clearTimeout(enrichingTimer);
-      }
+      // Phase 4.10.3-port: vs-parse-sheet is now parse-only (AI enrichment
+      // moved to vs-research-venues Phase A). The call typically returns
+      // in under a second; no need for the 4.10.1 "Parsing -> Enriching"
+      // toggle.
+      const { data, error } = await supabase.functions.invoke(
+        "vs-parse-sheet",
+        { body: { scout_id: scoutId, storage_path: path } },
+      );
       if (myGen !== parseGenRef.current) return;
 
       if (error) {
@@ -241,11 +218,6 @@ export default function SheetUpload() {
           )}
           {status === "parsing" && (
             <div className="mt-4 text-xs text-muted-foreground">Parsing venues…</div>
-          )}
-          {status === "enriching" && (
-            <div className="mt-4 text-xs text-muted-foreground">
-              Enriching missing fields…
-            </div>
           )}
           {status === "done" && count != null && (
             <div className="mt-4 rounded-md bg-input px-4 py-3 text-sm">

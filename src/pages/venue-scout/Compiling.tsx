@@ -22,7 +22,7 @@
 // Researching page. The Realtime subscription is the channel through
 // which the page learns about completion or failure. vs-compile-summaries
 // writes vs_scouts.current_step='deck_prep' on success or
-// status='failed'+research_error on failure; this page reacts to either.
+// status='failed'+pipeline_error on failure; this page reacts to either.
 //
 // Active step starts at "summaries" because the producer just confirmed
 // "selects" on the Review page. The 4-step animation walks through
@@ -47,7 +47,7 @@ type ScoutRow = {
   id: string;
   current_step: string | null;
   status: string | null;
-  research_error: string | null;
+  pipeline_error: string | null;
 };
 
 export default function Compiling() {
@@ -73,7 +73,7 @@ export default function Compiling() {
     const fetchScout = async () => {
       const { data } = await supabase
         .from("vs_scouts")
-        .select("id, current_step, status, research_error")
+        .select("id, current_step, status, pipeline_error")
         .eq("id", scoutId)
         .maybeSingle();
       if (!cancelled && data) setScout(data as unknown as ScoutRow);
@@ -156,7 +156,7 @@ export default function Compiling() {
       );
       return () => clearTimeout(t);
     }
-    if (scout.status === "failed" && scout.research_error) {
+    if (scout.status === "failed" && scout.pipeline_error) {
       navigate(
         `/venue-scout/scouts/${scoutId}/sourcing/error/compile-failed`,
       );
