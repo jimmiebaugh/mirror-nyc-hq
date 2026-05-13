@@ -175,7 +175,7 @@ export default function Compiling() {
         <div className="absolute inset-0 rounded-full border-2 border-border" />
         <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
       </div>
-      <h1 className="h-page text-center">Compiling Pitch Deck</h1>
+      <h1 className="h-page text-center">Compiling Deck Preview</h1>
       <p className="text-sm text-muted-foreground text-center mt-4 max-w-md">
         Assembling your pitched venues, summaries, and photos into the deck.
         This typically takes 30 to 60 seconds.

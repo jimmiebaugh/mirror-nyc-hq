@@ -5,8 +5,8 @@ Living-state doc. Update on every meaningful merge to `main`.
 **Last updated:** 2026-05-12
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
 **Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `7a55dc2` (Phase 4.8.2-port squashed from `claude/vs-port-4-8-2-generate`).
-**Current phase:** Phase 4.8.2-port DONE on `vs-port-fresh`; **Phase 4 port feature-complete.** Next: Phase 4.9-port (Settings + Start Over + full ErrorState.tsx). Phase 4.7 was split into two passes (both shipped). Phase 4.8 was split into two passes at spec time (4.8.1 frontend + infra, 4.8.2 generate flow); both shipped.
+**Latest commit on `vs-port-fresh`:** `b75a106` (Phase 4.8.3-port squashed from `claude/vs-port-4-8-3-deck-fixes`). Prior: `7a55dc2` (Phase 4.8.2-port).
+**Current phase:** Phase 4.8.3-port DONE on `vs-port-fresh`; **Phase 4 port feature-complete with correct deck output.** Next: Phase 4.9-port (Settings + Start Over + full ErrorState.tsx). Phase 4.7 was split into two passes (both shipped). Phase 4.8 was split into two passes at spec time (4.8.1 frontend + infra, 4.8.2 generate flow); both shipped. 4.8.3 inserted as a hotfix after first real producer run revealed Mirror's template has 6 front-matter slides (not 5), shifting every per-venue slide index by one in `vs-generate-deck`.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
@@ -63,6 +63,8 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
+b75a106  [skip netlify] Phase 4.8.3-port: deck-output correctness hotfix (slide-index shift in vs-generate-deck + DeckPrep FRONT_MATTER_SLIDES bump + ALL-CAPS venue_name + loading-page copy refresh) (squash-merged from claude/vs-port-4-8-3-deck-fixes)
+1bfe135  [skip netlify] Backfill 7a55dc2 squash hash into CHECKPOINT.md + CLAUDE.md
 7a55dc2  [skip netlify] Phase 4.8.2-port: Generating page + vs-generate-deck edge function + four deck error keys (squash-merged from claude/vs-port-4-8-2-generate)
 51585c0  [skip netlify] Backfill a1bc102 squash hash into CHECKPOINT.md + CLAUDE.md
 a1bc102  [skip netlify] Phase 4.8.1-port: Deck Prep + googleServiceAccount cherry-pick + gmailServiceAccount delegation refactor (squash-merged from claude/vs-port-4-8-1-deck-prep)
@@ -106,7 +108,7 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 ## Next up
 
-**Phase 4.9-port** per `docs/venue-scout-port-plan.md`: Scout Settings page (rename, project link, Start Over flow) + full `ErrorState.tsx` port (replaces 4.4-port's `ErrorStateStub.tsx`, surfaces `vs_scouts.research_error` for debug visibility). Phase 4 port is **feature-complete** after 4.8.2-port; remaining sub-phases are non-blocking polish. 4.8.2-port closed the `/deck/generating` 404 window 4.8.1-port opened. End-to-end producer flow now functions: Brief -> Sheet Prompt -> Sheet Upload / Researching -> Sourcing Report -> Shortlist -> Review -> Compiling -> Deck Prep -> Generating -> `/brief` landing for completed scouts. `vs-generate-deck` deployed at `amipjjmphblfxpghjnel`; secrets confirmed (`GOOGLE_TEMPLATE_FILE_ID`, `GOOGLE_OUTPUT_FOLDER_ID`, service account Editor on both).
+**Phase 4.9-port** per `docs/venue-scout-port-plan.md`: Scout Settings page (rename, project link, Start Over flow) + full `ErrorState.tsx` port (replaces 4.4-port's `ErrorStateStub.tsx`, surfaces `vs_scouts.research_error` for debug visibility). Phase 4 port is **feature-complete** after 4.8.2-port and produces a correct deck after 4.8.3-port's slide-index hotfix; remaining sub-phases are non-blocking polish. End-to-end producer flow now functions and the generated deck output matches Mirror's template: Brief -> Sheet Prompt -> Sheet Upload / Researching -> Sourcing Report -> Shortlist -> Review -> Compiling -> Deck Prep -> Generating -> `/brief` landing for completed scouts. `vs-generate-deck` redeployed post-4.8.3 at `amipjjmphblfxpghjnel`; secrets confirmed (`GOOGLE_TEMPLATE_FILE_ID`, `GOOGLE_OUTPUT_FOLDER_ID`, service account Editor on both).
 
 `vs-port-fresh` is published on origin. Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
 
