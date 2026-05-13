@@ -239,13 +239,10 @@
      #BE4E44 = rgb(190, 78, 68). */
   .tier-badge--bonus { background: rgba(190, 78, 68, 0.15); color: hsl(var(--primary)); border-color: rgba(190, 78, 68, 0.4); }
 
-  .manual-tag {
-    @apply inline-block text-[9.5px] font-bold uppercase px-[6px] py-[2px] rounded-[3px] ml-2 align-middle;
-    font-family: var(--font-mono);
-    letter-spacing: 0.06em;
-    color: hsl(var(--primary));
-    background: rgba(190, 78, 68, 0.12);
-  }
+  /* Phase 4.10.2-port: .manual-tag removed. Was used by Shortlist's
+     manual-row branch to label rows "Manual" inline; the new
+     <SourcePill source="manual" /> handles that affordance with the
+     three-source palette (Uploaded / Sourced / Manual). */
 
   .surface {
     background: hsl(var(--surface));

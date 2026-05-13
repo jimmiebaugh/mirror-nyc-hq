@@ -222,6 +222,70 @@ export function NotesCellButton({
   );
 }
 
+// Phase 4.10.2-port: `EditableVenueName` generalized into `EditableField` so
+// the same contenteditable behavior is reused for name + address +
+// neighborhood (and any future single-line editable cell). The original
+// `EditableVenueName` is kept as a thin wrapper for backward compatibility
+// (no call sites broken if anything outside the matrix imports it).
+export type EditableFieldVariant = "name" | "address" | "neighborhood";
+
+const EDITABLE_VARIANT_CLASSES: Record<EditableFieldVariant, string> = {
+  name: "text-[16px] font-bold leading-[1.25] text-foreground",
+  address: "text-[12px] text-muted-foreground leading-[1.4]",
+  neighborhood: "text-[12.5px] text-foreground leading-[1.4]",
+};
+
+export function EditableField({
+  id,
+  value,
+  onChange,
+  variant = "name",
+  placeholder,
+  autoFocusOnMount = false,
+}: {
+  id: string;
+  value: string;
+  onChange: (next: string) => void;
+  variant?: EditableFieldVariant;
+  placeholder?: string;
+  autoFocusOnMount?: boolean;
+}) {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  // Imperatively keep textContent in sync with `value` only when the prop
+  // differs from the current DOM text. Skips re-writing while the user is
+  // typing (DOM == prop during a normal input cycle), and survives external
+  // state revert (e.g. save failure rolls the venue back).
+  React.useEffect(() => {
+    if (ref.current && ref.current.textContent !== value) {
+      ref.current.textContent = value;
+    }
+  }, [id, value]);
+  // Phase 4.10.2-port: optional autofocus, used by the manual-add row on
+  // Shortlist to drop the cursor into the new row's name field on insert.
+  React.useEffect(() => {
+    if (autoFocusOnMount && ref.current) {
+      ref.current.focus();
+    }
+    // Intentionally empty deps: fire once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div className="max-w-full px-2 text-center">
+      <span
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        spellCheck={false}
+        data-placeholder={placeholder ?? ""}
+        onInput={(e) => onChange((e.currentTarget.textContent ?? "").trim())}
+        className={`bg-transparent border border-transparent rounded px-1 py-[2px] hover:bg-input focus:bg-input focus:border-primary focus:outline-none transition-colors break-words [overflow-wrap:anywhere] inline empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/40 ${EDITABLE_VARIANT_CLASSES[variant]}`}
+      />
+    </div>
+  );
+}
+
+// Backward-compatible wrapper. EditableVenueName predates EditableField; keep
+// the same shape so any existing import keeps working without a rename.
 export function EditableVenueName({
   id,
   name,
@@ -231,24 +295,193 @@ export function EditableVenueName({
   name: string;
   onChange: (next: string) => void;
 }) {
-  const ref = React.useRef<HTMLSpanElement>(null);
-  React.useEffect(() => {
-    if (ref.current && ref.current.textContent !== name) {
-      ref.current.textContent = name;
-    }
-  }, [id, name]);
   return (
-    <div className="max-w-full px-2 text-center">
-      <span
-        ref={ref}
-        contentEditable
-        suppressContentEditableWarning
-        spellCheck={false}
-        onInput={(e) => onChange((e.currentTarget.textContent ?? "").trim())}
-        className="bg-transparent border border-transparent rounded px-1 py-[2px] text-[16px] font-bold leading-[1.25] text-foreground hover:bg-input focus:bg-input focus:border-primary focus:outline-none transition-colors break-words [overflow-wrap:anywhere] inline"
-      />
+    <EditableField
+      id={id}
+      value={name}
+      onChange={onChange}
+      variant="name"
+      placeholder="Venue name"
+    />
+  );
+}
+
+// Phase 4.10.2-port: textarea-based editable for long-form fields and the
+// Features column on SourcingReport + Shortlist. Contenteditable handles
+// single-line cells well but gets clumsy for multi-line free text;
+// `<textarea>` is the right primitive there.
+//
+// Imperative-sync pattern (mirrors EditableField): the textarea is
+// uncontrolled at the DOM level (`defaultValue` for first mount), but a
+// useEffect compares the textarea's current `value` against the prop and
+// imperatively overwrites only when they differ. That way:
+//   - typing produces onChange -> parent state update -> next render passes
+//     the same value back; the effect skip-while-equal preserves the caret.
+//   - an out-of-band revert (e.g. load() after a save error rolls the venue
+//     back) does differ from the textarea's stale value, so the effect
+//     pushes the corrected value back into the DOM. Caret is lost on
+//     revert, which is acceptable because the producer's typed value was
+//     itself the rejected write.
+export function EditableTextarea({
+  id,
+  value,
+  onChange,
+  placeholder,
+  rows = 4,
+}: {
+  id: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  rows?: number;
+}) {
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+  React.useEffect(() => {
+    if (ref.current && ref.current.value !== value) {
+      ref.current.value = value;
+    }
+  }, [id, value]);
+  return (
+    <textarea
+      ref={ref}
+      defaultValue={value}
+      placeholder={placeholder}
+      rows={rows}
+      onChange={(e) => onChange(e.target.value)}
+      className="ghost-input w-full text-[12.5px] leading-relaxed resize-none overflow-y-auto"
+    />
+  );
+}
+
+// Phase 4.10.2-port: source-of-origin pill. Replaces the hardcoded "Manual"
+// label that used to live on Shortlist's manual rows. Three labels mapped to
+// the three `vs_candidate_venues.source` values:
+//   - 'sheet'    -> "Uploaded" (amber)
+//   - 'research' -> "Sourced"  (muted gray)
+//   - 'manual'   -> "Manual"   (electric blue, matches the ReferralPill
+//                   convention from Talent Scout per design-system § 12)
+// Rendered at the bottom of <VenueIdentityStack> on SourcingReport +
+// Shortlist; NOT rendered on DeckPrep (producer is past sourcing-origin
+// distinction at deck-prep time).
+type SourceValue = "sheet" | "research" | "manual";
+
+const SOURCE_LABEL: Record<SourceValue, string> = {
+  sheet: "Uploaded",
+  research: "Sourced",
+  manual: "Manual",
+};
+
+const SOURCE_PILL_CLASSES: Record<SourceValue, string> = {
+  sheet: "bg-amber-400/10 text-amber-400 border-amber-400/30",
+  research: "bg-input text-muted-foreground border-border",
+  manual: "bg-blue-400/10 text-blue-300 border-blue-400/30",
+};
+
+const SOURCE_PILL_BASE =
+  "inline-flex items-center px-2 py-[2px] rounded-[3px] text-[9px] font-bold uppercase tracking-[0.12em] leading-[1.2] border whitespace-nowrap";
+
+export function SourcePill({ source }: { source: string | null }) {
+  // Defensive fallback: any non-canonical value (incl. null / undefined) reads
+  // as "Manual". Producer-typed manual rows are the most likely null path
+  // since the legacy schema accepted nullable source on insert.
+  const key = (
+    source === "sheet" || source === "research" || source === "manual"
+      ? source
+      : "manual"
+  ) as SourceValue;
+  return (
+    <span className={`${SOURCE_PILL_BASE} ${SOURCE_PILL_CLASSES[key]}`}>
+      {SOURCE_LABEL[key]}
+    </span>
+  );
+}
+
+// Phase 4.10.2-port: vertical stack for the Venue | Address cell (col2 on
+// SourcingReport + Shortlist). Replaces the old 2-element VStack for that
+// cell to absorb Rank + Source pill from the removed Alignment column.
+// Layout: name (no divider) -> address -> divider -> website (if any) ->
+// divider -> rank -> source pill (no divider; the 24px gap is enough).
+//
+// Vertical rhythm: `gap-[24px]` between children gives 24px of breathing
+// room above and below each <StackDivider />. Matches the `dividerPad={18}`
+// hint passed to the sibling VStack in the Neighborhood | Type column so
+// both sticky-area cells read with the same dividers-as-breathing-marks
+// cadence (per Jimmie's 2026-05-13 smoke calls: divider spacing 1.5x'd from
+// the first pass; dedicated divider above website; no divider between name
+// and address since the two read as one venue-identity block; no divider
+// between rank and source pill since the pill's size + color already
+// reads as a separate footer-tag rather than another stack element).
+export function VenueIdentityStack({
+  venueId,
+  name,
+  onNameChange,
+  address,
+  onAddressChange,
+  website,
+  rank,
+  source,
+  autoFocusName = false,
+}: {
+  venueId: string;
+  name: string;
+  onNameChange: (next: string) => void;
+  address: string;
+  onAddressChange: (next: string) => void;
+  website: string | null;
+  rank: number | null;
+  source: string | null;
+  autoFocusName?: boolean;
+}) {
+  return (
+    <div className="h-full flex flex-col justify-center px-2 py-5 gap-[24px]">
+      {/* Name + Address wrapped in their own flex column so the gap
+          between them is TIGHT (4px) -- they read as one venue-identity
+          block. The parent's 24px gap still applies between this block
+          and the next divider so the overall stack rhythm holds. */}
+      <div className="flex flex-col gap-[4px]">
+        <EditableField
+          id={`${venueId}-name`}
+          value={name}
+          onChange={onNameChange}
+          variant="name"
+          placeholder="Venue name"
+          autoFocusOnMount={autoFocusName}
+        />
+        <EditableField
+          id={`${venueId}-addr`}
+          value={address}
+          onChange={onAddressChange}
+          variant="address"
+          placeholder="(no address)"
+        />
+      </div>
+
+      {/* Website (own row + divider so it sits in the same rhythm as the
+          other stack elements; only rendered when a URL is present) */}
+      {website ? (
+        <>
+          <StackDivider />
+          <div className="flex justify-center">
+            <WebsiteArrow url={website} />
+          </div>
+        </>
+      ) : null}
+      <StackDivider />
+
+      {/* Rank */}
+      <RankDisplay score={rank} />
+
+      {/* Source pill (no divider above; the 24px gap from the flex
+          container is the breathing room). */}
+      <div className="flex justify-center">
+        <SourcePill source={source} />
+      </div>
     </div>
   );
+}
+
+function StackDivider() {
+  return <div className="w-1/2 mx-auto h-px bg-[#333]" />;
 }
 
 export function WebsiteArrow({ url }: { url: string | null }) {

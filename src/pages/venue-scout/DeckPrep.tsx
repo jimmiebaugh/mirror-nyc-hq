@@ -29,9 +29,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { PhotoUploadModal } from "@/components/venue-scout/PhotoUploadModal";
+import {
+  EditableField,
+  EditableTextarea,
+} from "@/components/venue-scout/matrix/primitives";
 import {
   ScoutSettingsLink,
   ScoutStepThroughNav,
@@ -46,6 +51,18 @@ type Venue = {
   capacity: number | null;
   website_url: string | null;
   venue_overview: string | null;
+};
+// Phase 4.10.2-port: shared patch shape for the inline-edit save on this
+// page. Kept at module scope (rather than inside the component) so DeckRow
+// can reference it via the `onSave` prop type without re-declaring.
+type FieldPatch = {
+  name?: string;
+  address?: string | null;
+  neighborhood?: string | null;
+  size_sq_ft?: number | null;
+  capacity?: number | null;
+  website_url?: string | null;
+  venue_overview?: string | null;
 };
 type Photo = { candidate_venue_id: string; slot: number; storage_path: string };
 
@@ -78,6 +95,13 @@ export default function DeckPrep() {
     { venueId: string; venueName: string } | null
   >(null);
   const orderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Phase 4.10.2-port: per-venue 600ms debounce for inline edits on the
+  // venue summary cell (name / address / neighborhood / size / cap /
+  // website) + the venue_overview cell. Same shape as Shortlist + the
+  // new SourcingReport debounceSave.
+  const fieldTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -175,8 +199,42 @@ export default function DeckPrep() {
   useEffect(() => {
     return () => {
       if (orderTimer.current) clearTimeout(orderTimer.current);
+      // Phase 4.10.2-port: drop any pending inline-edit timers on unmount
+      // (producer navigates away before the 600ms debounce fires). Mirrors
+      // SourcingReport + Shortlist cleanup behavior.
+      Object.values(fieldTimers.current).forEach((t) => clearTimeout(t));
     };
   }, []);
+
+  // Phase 4.10.2-port: inline-edit save for the DeckPrep venue summary +
+  // overview cells. Optimistic state update, then 600ms debounced UPDATE.
+  // Patch fields are coerced (numbers, null-on-empty) at the call site so
+  // the in-memory Venue keeps its typed shape. `website_url` validation
+  // deferred to 4.10.3-port (URL hot patch).
+  function debounceSave(id: string, patch: FieldPatch) {
+    setVenues((prev) =>
+      prev.map((v) => (v.id === id ? ({ ...v, ...patch } as Venue) : v)),
+    );
+    clearTimeout(fieldTimers.current[id]);
+    fieldTimers.current[id] = setTimeout(async () => {
+      const { error } = await supabase
+        .from("vs_candidate_venues")
+        .update(patch)
+        .eq("id", id);
+      if (error) {
+        toast.error(error.message);
+        load();
+      }
+    }, 600);
+  }
+  // Helper: parse a raw string ("25,000 sq ft" / "1500") into an int or
+  // null. Strips non-digit characters so producers can type with units.
+  function parseIntOrNull(raw: string): number | null {
+    const cleaned = raw.replace(/[^\d]/g, "");
+    if (!cleaned) return null;
+    const n = parseInt(cleaned, 10);
+    return Number.isFinite(n) ? n : null;
+  }
 
   function persistOrder(next: Venue[]) {
     if (!scoutId) return;
@@ -408,6 +466,8 @@ export default function DeckPrep() {
                   onOpenPhotos={() =>
                     setPhotoModal({ venueId: v.id, venueName: v.name })
                   }
+                  onSave={(patch) => debounceSave(v.id, patch)}
+                  parseIntOrNull={parseIntOrNull}
                 />
               ))}
             </SortableContext>
@@ -479,6 +539,8 @@ function DeckRow({
   photoUrls,
   onSwapPhotos,
   onOpenPhotos,
+  onSave,
+  parseIntOrNull,
 }: {
   venue: Venue;
   orderNum: number;
@@ -488,6 +550,10 @@ function DeckRow({
   photoUrls: Record<number, string>;
   onSwapPhotos: (fromSlot: number, toSlot: number) => void;
   onOpenPhotos: () => void;
+  // Phase 4.10.2-port: debounced inline-edit callback. Already partial-applied
+  // with this row's venue id; DeckRow just builds the patch.
+  onSave: (patch: FieldPatch) => void;
+  parseIntOrNull: (raw: string) => number | null;
 }) {
   const sortable = useSortable({ id: venue.id });
   const style = {
@@ -495,15 +561,9 @@ function DeckRow({
     transition: sortable.transition,
     opacity: sortable.isDragging ? 0.5 : 1,
   };
-  const meta = [
-    venue.neighborhood,
-    venue.size_sq_ft != null
-      ? `${venue.size_sq_ft.toLocaleString()} sq ft`
-      : null,
-    venue.capacity != null ? `~${venue.capacity} cap` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const sizeDisplay =
+    venue.size_sq_ft != null ? `${venue.size_sq_ft.toLocaleString()} sq ft` : "";
+  const capacityDisplay = venue.capacity != null ? `${venue.capacity}` : "";
 
   return (
     <div
@@ -541,24 +601,72 @@ function DeckRow({
           className="h-[18px] w-[18px] accent-primary cursor-pointer"
         />
       </div>
-      <div className="px-3 py-5">
+      {/*
+        Phase 4.10.2-port: editable venue summary stack. Before: static name +
+        meta line. After: editable name, NEW editable address row, editable
+        neighborhood + size + capacity inline (size + cap parse to int with
+        unit suffix tolerated), editable website_url (external-link icon
+        kept). All saves go through onSave -> debounceSave (600ms).
+      */}
+      <div className="px-3 py-5 space-y-1.5">
+        <EditableField
+          id={`${venue.id}-name-deck`}
+          value={venue.name}
+          onChange={(n) => onSave({ name: n })}
+          variant="name"
+          placeholder="(untitled)"
+        />
+        <EditableField
+          id={`${venue.id}-addr-deck`}
+          value={venue.address ?? ""}
+          onChange={(a) => onSave({ address: a.trim() || null })}
+          variant="address"
+          placeholder="(no address)"
+        />
+        <div className="flex items-baseline flex-wrap gap-x-1 gap-y-1 text-[11.5px] text-muted-foreground">
+          <EditableField
+            id={`${venue.id}-neigh-deck`}
+            value={venue.neighborhood ?? ""}
+            onChange={(n) => onSave({ neighborhood: n.trim() || null })}
+            variant="neighborhood"
+            placeholder="(neighborhood)"
+          />
+          <span aria-hidden>·</span>
+          <EditableField
+            id={`${venue.id}-size-deck`}
+            value={sizeDisplay}
+            onChange={(raw) => onSave({ size_sq_ft: parseIntOrNull(raw) })}
+            variant="neighborhood"
+            placeholder="(sq ft)"
+          />
+          <span aria-hidden>·</span>
+          <EditableField
+            id={`${venue.id}-cap-deck`}
+            value={capacityDisplay}
+            onChange={(raw) => onSave({ capacity: parseIntOrNull(raw) })}
+            variant="neighborhood"
+            placeholder="(cap)"
+          />
+        </div>
         <div className="flex items-center gap-1.5">
-          <span className="font-bold text-[15px]">
-            {venue.name || "(untitled)"}
-          </span>
-          {venue.website_url && (
+          <EditableField
+            id={`${venue.id}-url-deck`}
+            value={venue.website_url ?? ""}
+            onChange={(u) => onSave({ website_url: u.trim() || null })}
+            variant="address"
+            placeholder="(no website)"
+          />
+          {venue.website_url ? (
             <a
               href={venue.website_url}
               target="_blank"
               rel="noreferrer"
               className="text-muted-foreground hover:text-primary"
+              title="Open website"
             >
               <ExternalLink className="h-3 w-3" />
             </a>
-          )}
-        </div>
-        <div className="text-[11.5px] text-muted-foreground mt-1.5 leading-snug">
-          {meta || "-"}
+          ) : null}
         </div>
       </div>
       <div className="px-3 py-5">
@@ -570,14 +678,20 @@ function DeckRow({
           onOpen={onOpenPhotos}
         />
       </div>
-      <div className="px-3 py-5 text-[12.5px] leading-relaxed text-foreground/90">
-        {venue.venue_overview ? (
-          venue.venue_overview
-        ) : (
-          <span className="text-muted-foreground italic">
-            Summary will appear after compile.
-          </span>
-        )}
+      {/*
+        Phase 4.10.2-port: editable overview via <EditableTextarea>. Replaces
+        the read-only render of venue_overview. The textarea is uncontrolled
+        (defaultValue keyed on venue.id) so optimistic state updates from
+        debounceSave don't fight the producer's caret.
+      */}
+      <div className="px-3 py-5">
+        <EditableTextarea
+          id={`${venue.id}-overview-deck`}
+          value={venue.venue_overview ?? ""}
+          onChange={(t) => onSave({ venue_overview: t })}
+          placeholder="Summary will appear after compile."
+          rows={6}
+        />
       </div>
     </div>
   );
