@@ -5,8 +5,8 @@ Living-state doc. Update on every meaningful merge to `main`.
 **Last updated:** 2026-05-12
 **Latest commit on `main`:** `6532235` (URL-quality patch + Phase 4.6 stack). The failed-attempt Phase 4 work (Scout Dashboard through Deck Prep) is archived on `main` and is no longer the canonical Venue Scout. See `OUTPUTS/COWORK_SYNC.md` 2026-05-11 for the pivot trail.
 **Active feature branch:** `vs-port-fresh` (branched off `dd38577`). Accumulates the 1:1 port from `mirror-nyc-venue-scout-pro` per `docs/venue-scout-port-plan.md`. No active sub-phase worktree.
-**Latest commit on `vs-port-fresh`:** `dd6a700` (Phase 4.6-port squashed from `claude/vs-port-4-6-matrix`).
-**Current phase:** Phase 4.6-port DONE on `vs-port-fresh`; next: Phase 4.7-port (Review + PhotoUploadModal + vs-compile-summaries rebuild) per port plan.
+**Latest commit on `vs-port-fresh`:** `67fc75b` (Phase 4.7.2-port squashed from `claude/vs-port-4-7-2-compile`).
+**Current phase:** Phase 4.7.2-port DONE on `vs-port-fresh`; next: Phase 4.8-port (Deck Prep + Generate + `vs-generate-deck`). Phase 4.7 was split into two passes at spec time; both have now squashed.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). The port branch does NOT deploy until cutover; see port plan § "Done when".
 
 ## What's live in production
@@ -48,7 +48,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 
 - `auto_rejected` enum value is deprecated (Phase 3.7.2.1 backfilled to `reject` + `manually_reviewed=false`) but kept in the enum for safety. New writes never use it. Cleanup requires enum rebuild — not worth it now.
 - Packet path needs end-to-end verification after the WORKER_RESOURCE_LIMIT fix (signed-URL email body, no MIME attachment) before the UI flag flips back on. `ts-final-review` itself is verified end-to-end.
-- **Failed-attempt Venue Scout artifacts still in production until cutover:** three orphaned edge functions remain (`vs-start-sourcing`, `vs-compile-summaries`, `vs-generate-deck`); `vs-parse-brief` (4.3-port) and `vs-parse-sheet` (4.4-port) have been rebuilt in place at the same slot. Storage buckets `briefs`, `sourcing_sheets`, `venue_photos` retain their objects. Phase 4.1-port migration dropped the failed-attempt vs_* tables and the nine `phase_4_*` migration history rows are repaired to `reverted` in the supabase schema_migrations table. Edge function deletion + bucket cleanup are queued for the cutover commit (see port plan § "Done when").
+- **Failed-attempt Venue Scout artifacts still in production until cutover:** two orphaned edge functions remain (`vs-start-sourcing`, `vs-generate-deck`); `vs-parse-brief` (4.3-port), `vs-parse-sheet` (4.4-port), and `vs-compile-summaries` (4.7.2-port) have been rebuilt in place at the same slot. Storage buckets `briefs`, `sourcing_sheets`, `venue_photos` retain their objects. Phase 4.1-port migration dropped the failed-attempt vs_* tables and the nine `phase_4_*` migration history rows are repaired to `reverted` in the supabase schema_migrations table. Edge function deletion + bucket cleanup are queued for the cutover commit (see port plan § "Done when").
 
 ## Recent commits (main)
 
@@ -63,6 +63,10 @@ e855ffb  Phase 3.8 + 3.9: cron + watchdogs + pull notification (squash-merged fr
 ## Recent commits (vs-port-fresh, NOT on main yet)
 
 ```
+67fc75b  [skip netlify] Phase 4.7.2-port: Compiling page + vs-compile-summaries edge function + compile-failed error key (squash-merged from claude/vs-port-4-7-2-compile)
+c98e6a3  [skip netlify] Backfill e198f46 squash hash into CHECKPOINT.md
+e198f46  [skip netlify] Phase 4.7.1-port: Review + PhotoUploadModal + vs_venue_photos bucket + Shortlist photo unstub (squash-merged from claude/vs-port-4-7-1-review-photos)
+cce0065  [skip netlify] Backfill dd6a700 squash hash into CHECKPOINT.md
 dd6a700  [skip netlify] Phase 4.6-port: Sourcing Report + Shortlist + matrix primitives (squash-merged from claude/vs-port-4-6-matrix)
 13d057c  [skip netlify] Backfill 49e03e6 squash hash into CHECKPOINT.md
 49e03e6  [skip netlify] Phase 4.5-port: Researching + vs-research-venues rebuild (squash-merged from claude/vs-port-4-5-researching)
@@ -82,6 +86,7 @@ dd38577  [skip netlify] Phase 4.1 Cowork-side doc state (port branch base)
 ## Recent migrations
 
 ```
+20260512240000_phase_4_7_1_port_vs_venue_photos_bucket.sql      Phase 4.7.1-port — CREATE vs_venue_photos storage bucket (private) + 4 RLS policies (SELECT/INSERT/UPDATE/DELETE gated on is_producer_or_admin()). Bucket carries Venue Scout deck photos uploaded via PhotoUploadModal; reads use createSignedUrl(path, 3600). Distinct from the public venue_photos bucket reserved for HQ Core's master venues table. (APPLIED)
 20260512230000_phase_4_6_port_shortlist_sync_trigger.sql        Phase 4.6-port — re-introduce vs_candidate_venues_shortlist_sync trigger at simplified shape (shortlisted false→true only). Matches HQ venues by website_url first, then case-insensitive name+neighborhood. SECURITY DEFINER; INSERTs new venues rows when no match. (APPLIED)
 20260512220000_phase_4_5_port_research_error.sql                Phase 4.5-port — ALTER TABLE vs_scouts ADD COLUMN research_error text (persisted error channel for the EdgeRuntime.waitUntil + Realtime flow on vs-research-venues) (APPLIED)
 20260512210000_phase_4_1_port_drop_orphan_helper.sql            Phase 4.1-port follow-up — DROP _jsonb_array_to_text_array (orphan helper from failed Phase 4.3.1's create_scout_with_brief, missed by the main port migration; surfaced by code-reviewer) (APPLIED)
@@ -97,7 +102,7 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 ## Next up
 
-**Phase 4.7-port** per `docs/venue-scout-port-plan.md`: Review + PhotoUploadModal + NotesModal write-back + Compile. 4.7-port lands the photo upload modal that 4.6-port stubbed (button state machine renders but click is a toast), the `/sourcing/review` page (Shortlist Continue target; currently 404s once 4.6-port lands), and the `vs-compile-summaries` rebuild that 4.5-port research and 4.6-port producer notes feed into.
+**Phase 4.8-port** per `docs/venue-scout-port-plan.md`: Deck Prep page + Generate page + `vs-generate-deck` edge function rebuild. 4.7.2-port closed the `/sourcing/compiling` 404 window 4.7.1-port pointed at; the Compiling page success path navigates to `/venue-scout/scouts/:id/deck/prep`, which 404s until 4.8-port lands. `dnd-kit/sortable` + `/utilities` deps were installed in 4.7.1-port specifically to prime VS Pro DeckPrep.tsx's drag-to-reorder behavior; no new deps required for 4.8-port itself.
 
 `vs-port-fresh` is published on origin (HEAD `6c98137` after the 4.4-port post-squash push). Pushes to this branch do not deploy; only `main` fires Netlify. Future per-sub-phase squashes accumulate on `vs-port-fresh` until the eventual cutover to `main` after Phase 4.10-port.
 
@@ -105,7 +110,7 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 **Carried-forward cleanup queued:**
 - Verify `ts-final-review-packet` end-to-end after the WORKER_RESOURCE_LIMIT fix, then flip `PACKET_FEATURE_ENABLED` to `true` in `PullDetail.tsx` and `FinalReviewDetail.tsx`.
-- Cutover deletion of failed-attempt edge functions: `vs-start-sourcing`, `vs-compile-summaries`, `vs-generate-deck`. (`vs-parse-brief` was rebuilt in place at 4.3-port and `vs-parse-sheet` at 4.4-port; both reduce to "verify the port version is current rather than delete." 4.5-port's `vs-research-venues` is a NEW function name and does not slot-replace anything; `vs-start-sourcing` remains queued for deletion.) Defer until vs-port-fresh squash-merges (or hard-resets) onto main.
+- Cutover deletion of failed-attempt edge functions: `vs-start-sourcing`, `vs-generate-deck`. (`vs-parse-brief` was rebuilt in place at 4.3-port, `vs-parse-sheet` at 4.4-port, and `vs-compile-summaries` at 4.7.2-port; all three reduce to "verify the port version is current rather than delete." 4.5-port's `vs-research-venues` is a NEW function name and does not slot-replace anything; `vs-start-sourcing` remains queued for deletion.) Defer until vs-port-fresh squash-merges (or hard-resets) onto main.
 
 ## How to update this file
 

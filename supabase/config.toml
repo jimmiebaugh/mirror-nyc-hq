@@ -78,3 +78,10 @@ verify_jwt = true
 # candidate at a glance.
 [functions.vs-research-venues]
 verify_jwt = true
+
+# Phase 4.7.2-port: two-pass AI compile (fill + overview). User-invoked
+# from the Compiling page; same EdgeRuntime.waitUntil + Realtime pattern
+# as vs-research-venues. No self-invoke. verify_jwt = true matches the
+# vs-parse-* / vs-research-venues sibling pattern.
+[functions.vs-compile-summaries]
+verify_jwt = true
