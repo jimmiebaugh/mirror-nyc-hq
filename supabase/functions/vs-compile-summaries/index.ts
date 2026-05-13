@@ -1,4 +1,4 @@
-// vs-compile-summaries (Phase 4.7.2-port)
+// vs-compile-summaries (Phase 4.7.2-port + Phase 4.10.1-port refactor)
 //
 // Two-pass AI compile for the pitched-venue set. Lifted from VS Pro
 // `compile-summaries` with these locked deltas per port plan § 6:
@@ -15,6 +15,16 @@
 //   4. Payload simplified from VS Pro's { project_id, venue_ids } to
 //      { scout_id }; function queries pitched venues itself. Notes flow
 //      collapsed: producer notes come back inline from vs_candidate_venues.
+//
+// Phase 4.10.1-port refactor:
+//   - FILL_TOOL + FILL_SYSTEM + buildFillUserMsg moved to
+//     _shared/venueFill.ts so vs-parse-sheet (4.10.1) reuses the same
+//     prompt + schema. Single source of truth. OVERVIEW_TOOL +
+//     OVERVIEW_SYSTEM stay local; only compile-summaries uses them.
+//   - Pass 1 needsFill condition extended to fire for source='sheet'
+//     rows that are missing derived_attrs. vs-parse-sheet enrichment
+//     never fills derived_attrs (vs_scouts.derived_columns doesn't
+//     exist at parse time); this catch-all backfills them at compile.
 //
 // Auth posture: verify_jwt = true. User-invoked synchronous handshake; no
 // self-invoke. The handshake returns before the AI work starts so the
@@ -40,10 +50,15 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callClaude, type ClaudeTool } from "../_shared/anthropic.ts";
 import {
-  CANONICAL_TYPES,
   canonicalizeType,
   sanitizeWebsiteUrl,
 } from "../_shared/venueTypes.ts";
+import {
+  buildFillUserMsg,
+  FILL_SYSTEM,
+  FILL_TOOL,
+  type ScoutBrief,
+} from "../_shared/venueFill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,46 +86,9 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-// FILL_TOOL -- lifted from VS Pro with one rename: `type` -> `venue_type`
-// to match the HQ column rename. Sanitization downstream maps tool input
-// `venue_type` to the `vs_candidate_venues.venue_type` column. No minItems
-// changes per the tool_choice_collapse memory rule.
-const FILL_TOOL: ClaudeTool = {
-  name: "fill_venue",
-  description:
-    "Fill in missing venue research fields. Honor any pre-set fields the producer entered.",
-  input_schema: {
-    type: "object",
-    properties: {
-      venue_type: {
-        type: "string",
-        description: `Slash-separated values from canonical list: ${CANONICAL_TYPES.join(", ")}`,
-      },
-      website_url: { type: "string" },
-      size_sq_ft: { type: "number" },
-      capacity: { type: "number" },
-      key_features: { type: "array", items: { type: "string" } },
-      derived_attrs: {
-        type: "object",
-        additionalProperties: { type: "string" },
-      },
-      recommendations: {
-        type: "array",
-        items: { type: "string" },
-        minItems: 2,
-        maxItems: 4,
-      },
-      considerations: {
-        type: "array",
-        items: { type: "string" },
-        minItems: 2,
-        maxItems: 4,
-      },
-      ranking_score: { type: "number" },
-    },
-    required: ["recommendations", "considerations", "ranking_score"],
-  },
-};
+// FILL_TOOL + FILL_SYSTEM + buildFillUserMsg now live in _shared/venueFill.ts
+// (Phase 4.10.1-port). vs-parse-sheet and this function both import them so
+// the Pass 1 prompt + schema never drift.
 
 const OVERVIEW_TOOL: ClaudeTool = {
   name: "write_overview",
@@ -123,13 +101,10 @@ const OVERVIEW_TOOL: ClaudeTool = {
   },
 };
 
-// FILL_SYSTEM and OVERVIEW_SYSTEM lifted verbatim from VS Pro. Do NOT
-// edit either per feedback_tool_choice_collapse memory rule. Output
-// quality levers live on schema descriptions and post-emission
-// sanitization.
-const FILL_SYSTEM =
-  `You are a venue researcher for Mirror NYC. Fill in missing structured fields for a single venue. Type must use ONLY values from this canonical list: ${CANONICAL_TYPES.join(", ")}. Multiple types separated by " / " allowed. Prefer Retail for ground-floor commercial / storefront / vacancy spaces. Never set website_url to a listing-database URL (thestorefront.com, peerspace.com, propertyshark.com, loopnet.com, crexi.com).`;
-
+// OVERVIEW_SYSTEM lifted verbatim from VS Pro. Do NOT edit per
+// feedback_tool_choice_collapse memory rule. Output quality levers live
+// on schema descriptions and post-emission sanitization (compile-only;
+// FILL_SYSTEM is in _shared/venueFill.ts under the same rule).
 const OVERVIEW_SYSTEM =
   `You are a producer at Mirror NYC writing venue summaries for a pitch deck. Tone: declarative, third-person, specific to the brief. 5-8 sentences. Mention how the venue serves the specific event (foot traffic, back-of-house, capacity, neighborhood fit). No marketing fluff. Forbidden words: "perfect", "ideal", "premier", "elevated experience", "world-class", "stunning", "amazing".`;
 
@@ -243,9 +218,11 @@ Deno.serve(async (req) => {
 
   const venues = venuesData ?? [];
 
-  // Brief block reused across every Pass 1 and Pass 2 user message.
-  // Fallback strings normalized to "(not set)" (VS Pro used em dashes
-  // which violate the voice rule).
+  // Brief block for Pass 2 overview user messages. Pass 1's brief block is
+  // built inside _shared/venueFill.ts buildFillUserMsg (Phase 4.10.1-port
+  // extraction); fallback strings stay aligned with this block to keep
+  // both passes seeing the same brief shape. Fallback strings normalized
+  // to "(not set)" (VS Pro used em dashes which violate the voice rule).
   const briefBlock =
     `Client: ${scout.client_name ?? "(not set)"}
 Event: ${scout.event_name ?? "(not set)"}
@@ -297,27 +274,41 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
       for (const v of venues) {
         const patch: Record<string, unknown> = {};
 
-        // Pass 1: fill missing structured fields. Only fires for manual
-        // venues that lack recommendations or ranking_score (VS Pro
-        // tolerance: research-sourced venues already have all fields).
+        // Pass 1: fill missing structured fields.
+        //
+        // Original (4.7.2-port): only manual venues missing recs or rank
+        // (research-sourced venues already have all fields from
+        // vs-research-venues).
+        //
+        // Extended (4.10.1-port): also fire for sheet-source venues
+        // missing derived_attrs. vs-parse-sheet's enrichment never fills
+        // derived_attrs because vs_scouts.derived_columns doesn't exist
+        // at parse time. Pass 1's per-field guards prevent overwriting
+        // the already-enriched recs / rank / type / etc.; only the
+        // derived_attrs slot lands in the typical sheet-row case. Also
+        // catches sheet rows whose parse-time enrichment failed
+        // mid-flight (recs empty or rank null) as a fallback recovery.
         const recsArr = Array.isArray(v.recommendations)
           ? v.recommendations
           : [];
+        const derivedAttrsEmpty =
+          !v.derived_attrs ||
+          Object.keys(v.derived_attrs as Record<string, unknown>).length === 0;
         const needsFill =
-          v.source === "manual" && (recsArr.length === 0 || v.rank == null);
+          (v.source === "manual" || v.source === "sheet") &&
+          (recsArr.length === 0 || v.rank == null || derivedAttrsEmpty);
         if (needsFill) {
-          const fillUserMsg =
-            `BRIEF
-${briefBlock}
-
-VENUE (producer-entered, do not overwrite filled fields):
-Name: ${v.name}
-Address: ${v.address ?? "?"}
-Neighborhood: ${v.neighborhood ?? "?"}
-Type (if set): ${v.venue_type ?? "(missing, set from canonical list)"}
-Producer notes: ${v.notes ?? "(none)"}
-
-Fill in missing structured fields. Type must use canonical list values only.`;
+          // Pass 1 user message comes from the shared builder so
+          // vs-parse-sheet's enrichment and this backfill stay in lock
+          // step. Producer notes go through too (manual rows collect
+          // them; sheet rows pre-pitch typically don't have notes yet).
+          const fillUserMsg = buildFillUserMsg(scout as ScoutBrief, {
+            name: v.name,
+            address: v.address,
+            neighborhood: v.neighborhood,
+            venue_type: v.venue_type,
+            notes: v.notes,
+          });
 
           try {
             const fillResult = await callClaude(

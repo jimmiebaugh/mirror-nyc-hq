@@ -2,6 +2,40 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.10.1-port (sheet upload AI enrichment)
+
+### Sheet upload enrichment is synchronous, not waitUntil
+
+vs-parse-sheet now does parse + insert + AI enrichment in a single call. SheetUpload awaits the full response before navigating. Locked over `EdgeRuntime.waitUntil` because the producer's mental model is "drop sheet -> wait -> ready." Backgrounding the enrichment would let the producer click Continue mid-enrichment and land on SourcingReport with half-enriched rows next to fully-enriched ones. One coherent waiting state on SheetUpload is cleaner than two-stage navigation with a Realtime subscription.
+
+### Parallel-chunked Claude calls, CHUNK_SIZE = 5
+
+15 venues sequentially at ~5s/call would be ~75s. All-parallel risks Anthropic rate-limit and concurrent-connection issues. Chunks of 5 with `Promise.all` inside, sequential across chunks, lands at ~15-20s for a 15-venue sheet and scales linearly to ~50-65s for 50 venues -- well under the Supabase Edge Function ~150s soft cap. Tuning lever in `supabase/functions/vs-parse-sheet/index.ts`: drop to 3 if rate-limit errors show up in logs.
+
+### Per-row Claude failures tolerated; never fail the whole call
+
+Each enrichOne() returns `{ enriched: boolean }`; failures are logged + counted but the loop continues. SourcingReport renders sheet-only data for failed rows next to fully-enriched siblings; no crashes. compile-summaries Pass 1 (extended condition below) catches the orphans at pitch time. Response includes `enriched_count` + `failed_count` for future telemetry / debug UI without grep'ing logs.
+
+### `derived_attrs` filled later, not at parse-sheet time
+
+`vs_scouts.derived_columns` doesn't exist until `vs-research-venues` runs (the next step in the producer flow). vs-parse-sheet has no way to know which derived-attr keys to fill, so the FILL_TOOL output's `derived_attrs` is dropped at parse time. vs-compile-summaries Pass 1 condition extended to fire for `source='sheet' AND derived_attrs IS EMPTY` so the backfill happens at compile time after the producer pitches.
+
+### `FILL_TOOL` + `FILL_SYSTEM` + `buildFillUserMsg` extracted to `_shared/venueFill.ts`
+
+Both vs-parse-sheet (4.10.1) and vs-compile-summaries Pass 1 (4.7.2 + 4.10.1) use the same Pass-1 prompt + schema. Pulling them into a shared module is single-source-of-truth: a future schema-description tweak (the `feedback_tool_choice_collapse` lever) lands once, applies everywhere. `OVERVIEW_TOOL` + `OVERVIEW_SYSTEM` stay local to vs-compile-summaries because only compile uses them.
+
+### Inline `canonicalizeMulti` in vs-parse-sheet (not lifted to venueTypes.ts)
+
+`_shared/venueTypes.ts` already exports a `canonicalizeMultiType` helper, but it returns the trimmed input on no-match (so the frontend matrix can render an unknown-type fallback pill). Server-side enrichment wants null-on-no-match so the patch-guard skips the venue_type write rather than persisting non-canonical strings. Different semantics; kept inline in vs-parse-sheet matching the existing inline copies in vs-compile-summaries and vs-research-venues. Consolidating these three inline copies into a strict `canonicalizeMultiTypeStrict` shared helper is queued for a future cleanup; out of scope for 4.10.1.
+
+### HQ port-side improvement over VS Pro
+
+VS Pro's `parse-sheet` does not enrich. Sheet rows land with sheet-only data and the matrix renders them next to fully-populated research rows. The producer's 2026-05-12 first-run test surfaced the gap; port plan § 9 locked enrichment as part of 4.10.1. Per `feedback_port_fidelity`, this is a port-plan-locked backend improvement, not a fidelity regression -- the exception the memory rule explicitly carves out.
+
+### Frontend `enriching` state is optimistic, not signal-driven
+
+SheetUpload toggles its visible status from "parsing" to "enriching" via a 3-second timer (`PARSING_TO_ENRICHING_MS`), not a Realtime signal from vs-parse-sheet. The function is usually past parse + insert by that point and into the Claude phase, so the producer sees a smooth Parsing -> Enriching -> Done sequence. A real progress channel (per-venue "enriched N/M") would need `vs_candidate_venues` added to `supabase_realtime` publication + a frontend subscription; deferred to 4.10.3 polish if producers ask for it.
+
 ## Phase 4.9-port (Scout Settings + full ErrorState + per-scout chrome)
 
 ### Settings page is HQ-from-scratch
