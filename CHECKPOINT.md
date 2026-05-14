@@ -4,7 +4,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 
 **Last updated:** 2026-05-14
 **Latest commit on `main`:** `4fa489e` ([skip netlify] vs-research-venues: raise Phase B max_tokens to 12000). Fixes "tool input missing venues array" on research-only (no-sheet) scouts: the `targetNet=10` payload plus interleaved web_search rounds was overflowing the prior 5000-token ceiling and truncating `tool_use` mid-emission. Bumped to 12000; `stop_reason` added to the success diagnostic + the missing-venues failure message. Edge function already deployed to `amipjjmphblfxpghjnel` out-of-band ahead of the commit. Followed by an administrative CHECKPOINT.md backfill commit (`[skip netlify]`).
-**Active feature branch:** none. `vs-port-fresh` is fully merged into main as of cutover and no longer needs separate tracking. Future Phase 5 work spawns its own branches.
+**Active feature branch:** `claude/phase-4-revision-intake` (Phase 4 Revision - Intake). Feature commit lands on the worktree branch; awaiting squash-approval gate. Migration `20260514110000` + edge function deploys (`vs-generate-brief-overview` new, `vs-parse-brief` + `vs-research-venues` redeployed) already applied to `amipjjmphblfxpghjnel` out-of-band; the intake UI ships on the squash-merge to main.
 **Current phase:** **Phase 4 (Venue Scout port) shipped to production 2026-05-13.** Cutover complete. Main contains the full 1:1 port from `mirror-nyc-venue-scout-pro` (Phase 4.1-port through 4.10.6-port) plus the two parallel TS commits that landed on main during the port window (`6775429` Generate Packet button restore + `7cd27ed` packet email template + layout fixes + email-as-cover-letter fallback). The 4a8a5c6 TS-wizard Stepper-migration commit was excluded from the cutover (it depended on a `ui/Stepper.tsx` file introduced by the failed Phase 4.3.1 commit that we dropped); the TS wizard keeps its local `talent-scout/Stepper.tsx`. Next: **Phase 5 (HQ Core)**.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). Auto-deploys on push to main.
 
@@ -39,6 +39,7 @@ Living-state doc. Update on every meaningful merge to `main`.
 - Phase 3.8 migrations need to be pushed: `supabase db push --linked`.
 - HQ Core pages beyond `/projects` are stubs (Phase 5).
 - In-app notifications bell (Phase 5). Pull-completion email is live; bell + per-user prefs come later.
+- **Phase 4 Revision - Intake UI** (3-step brief stepper: BriefEvent / BriefVenue / BriefReport + the `/brief` redirect index, the always-visible Revisit nav, the `vs-generate-brief-overview` call site) is built on `claude/phase-4-revision-intake` but NOT live in production until the squash-merge to main fires a Netlify deploy. The backing migration (`20260514110000`, `brief` step value + default) and the three edge function deploys are already applied out-of-band, so production scouts read `current_step` defaults of `brief` and the redeployed `vs-parse-brief` / `vs-research-venues` are backward-compatible with the still-live old single-page Brief.
 
 ## Known issues / drift
 
@@ -61,6 +62,7 @@ The 2026-05-13 cutover replaced the failed-attempt Phase 4 stack on main with th
 ## Recent migrations
 
 ```
+20260514110000_phase_4_revision_intake_current_step.sql              Phase 4 Revision - Intake: DROP + re-ADD vs_scouts_current_step_check with a 10th value `brief` prepended; ALTER COLUMN current_step SET DEFAULT 'brief'. Additive -- existing rows untouched. `brief` is the in-flight 3-step intake step; Step 3 Confirm flips it to `sheet_prompt`. (APPLIED)
 20260514100000_phase_4_10_6_port_reset_scout_for_deck_regenerate.sql  Phase 4.10.6-port: reset_scout_for_deck_regenerate(target_scout_id uuid) RPC for the Deck Prep regenerate flow. Atomic single-statement UPDATE that sets current_step='deck_prep', strips deck_generation_started_at from brief_data via the jsonb `-` operator, clears status + pipeline_error, bumps last_touched_at. Replaces a frontend read-then-write that had a TOCTOU race window. SECURITY INVOKER; GRANT EXECUTE TO authenticated. (APPLIED)
 20260514000002_phase_4_10_3_port_vs_storage_policies.sql        Phase 4.10.3-port: relax storage policies for briefs / sourcing_sheets / vs_venue_photos buckets from is_producer_or_admin() to authenticated. Matches vs_* table RLS posture per port plan § 8.6 (collaborative agency-wide workflow). vs_venue_photos collapsed from 4 split policies to a single FOR ALL policy. IF EXISTS on DROPs handles Studio-side rename drift. (APPLIED)
 20260514000001_phase_4_10_3_port_start_over_scout_pipeline_error.sql  Phase 4.10.3-port: CREATE OR REPLACE start_over_scout to clear pipeline_error instead of research_error post-rename. Body otherwise unchanged from 4.9-port migration. (APPLIED)

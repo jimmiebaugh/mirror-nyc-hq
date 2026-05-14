@@ -64,6 +64,12 @@ verify_jwt = false
 [functions.vs-parse-brief]
 verify_jwt = true
 
+# Phase 4 Revision - Intake: Event Overview generator. User-invoked
+# synchronous from the Brief report surface; no self-invoke. Same explicit
+# verify_jwt = true pattern as vs-parse-brief.
+[functions.vs-generate-brief-overview]
+verify_jwt = true
+
 # Phase 4.4-port: sourcing-sheet parser (XLSX / CSV / PDF). User-invoked
 # synchronous from the SheetUpload page; no self-invoke. Same explicit
 # verify_jwt = true pattern as vs-parse-brief.
