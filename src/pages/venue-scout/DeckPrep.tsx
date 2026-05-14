@@ -88,9 +88,9 @@ export default function DeckPrep() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   // Phase 4.9-port: meta for <ScoutStepThroughNav />. Extends the existing
-  // deck_order fetch to also pull current_step + generated_decks.
+  // deck_order fetch to also pull current_step.
   const [scoutMeta, setScoutMeta] = useState<
-    { current_step: string | null; generated_decks: unknown } | null
+    { current_step: string | null } | null
   >(null);
   const [photoModal, setPhotoModal] = useState<
     { venueId: string; venueName: string } | null
@@ -135,7 +135,7 @@ export default function DeckPrep() {
     if (!scoutId) return;
     const { data: scout } = await supabase
       .from("vs_scouts")
-      .select("deck_order, current_step, generated_decks")
+      .select("deck_order, current_step")
       .eq("id", scoutId)
       .maybeSingle();
     const savedOrder = ((scout?.deck_order as unknown) ?? []) as string[];
@@ -143,7 +143,6 @@ export default function DeckPrep() {
       scout
         ? {
             current_step: (scout.current_step as string | null) ?? null,
-            generated_decks: scout.generated_decks,
           }
         : null,
     );
