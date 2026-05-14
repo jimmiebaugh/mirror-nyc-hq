@@ -12,6 +12,7 @@
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 import { getGmailAccessToken } from "./gmailServiceAccount.ts";
+import { MIRROR_LOGO_ASPECT, drawMirrorLogo } from "./mirrorLogo.ts";
 
 // ============================================================================
 // Layout constants — US Letter portrait, 72 dpi.
@@ -218,17 +219,18 @@ export function addCoverPage(ctx: PacketCtx, opts: {
   const cx = PAGE_W / 2;
   let y = PAGE_H * 0.62;
 
-  // Big "M" wordmark approximation: huge bold M
-  const logoSize = 96;
-  const logoW = ctx.helvBold.widthOfTextAtSize("M", logoSize);
-  ctx.page.drawText("M", {
-    x: cx - logoW / 2, y,
-    size: logoSize, font: ctx.helvBold, color: C_WHITE,
-  });
-  // White underbar matching the brand mark
-  ctx.page.drawRectangle({
-    x: cx - logoW / 2, y: y - 12,
-    width: logoW, height: 6, color: C_WHITE,
+  // Real Mirror M wordmark, drawn from canonical SVG path data via
+  // pdf-lib drawSvgPath. Replaces the prior Helvetica-M + white-rectangle
+  // approximation. Phase 3.6.16. The brand asset's M body and underbar
+  // are encoded in _shared/mirrorLogo.ts so the function bundle is fully
+  // self-contained (no binary asset to lose, no base64 bloat).
+  const logoH = 96;
+  const logoW = logoH * MIRROR_LOGO_ASPECT;
+  drawMirrorLogo(ctx.page, {
+    x: cx - logoW / 2,
+    topY: y + 84,
+    height: logoH,
+    color: C_WHITE,
   });
   y -= 60;
 

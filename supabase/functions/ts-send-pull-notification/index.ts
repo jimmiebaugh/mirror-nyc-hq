@@ -113,29 +113,53 @@ Deno.serve(async (req) => {
   const triggerWord = round.triggered_by === "scheduled" ? "Scheduled" : "Manual";
   const link = `${APP_URL}/talent-scout/roles/${roleId}/pulls/${roundId}`;
   const managerName = (role as any).hiring_manager?.full_name ?? "there";
+  const firstName = managerName.split(" ")[0];
+  const candidateNoun = tally.total === 1 ? "candidate" : "candidates";
 
   // ASCII-only separators — em dashes garble in some Gmail clients when the
   // subject MIME header isn't strictly RFC 2047-encoded. Pipe + hyphen are
   // safe across every client and align with the project's no-em-dashes rule.
   const subject = `[Mirror HQ] R${round.round_number} pull complete | ${role.title}`;
+
+  // Plain text fallback — plaintext clients still get the URL inline.
   const bodyText = [
-    `Hi ${managerName.split(" ")[0]},`,
+    `Hi ${firstName},`,
     ``,
     `${triggerWord} pull R${round.round_number} just finished for "${role.title}".`,
     ``,
-    `  ${tally.total} candidate${tally.total === 1 ? "" : "s"} ingested`,
+    `  ${tally.total} ${candidateNoun} ingested`,
     `  ${tally.fast_track} fast-track`,
     `  ${tally.interview} interview`,
     `  ${tally.consider} consider`,
     `  ${tally.reject} reject`,
     ``,
-    `Open the round in HQ:`,
-    `${link}`,
+    `Open the round in Talent Scout: ${link}`,
     ``,
     `- Mirror HQ`,
   ].join("\n");
 
-  const sent = await sendGmail({ to: managerEmail, subject, bodyText });
+  // HTML version — round-deep-link rendered as a coral hyperlink matching the
+  // packet email's "Download Final Review packet" styling (color #BE4E44,
+  // underline, font-weight 600). Phase 3.9.1.
+  const escHtml = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const escAttr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const bodyHtml = `<!DOCTYPE html>
+<html><body style="font-family:-apple-system,system-ui,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.55;color:#1a1a1a;">
+<p>Hi ${escHtml(firstName)},</p>
+<p>${escHtml(triggerWord)} pull R${round.round_number} just finished for "${escHtml(role.title ?? "")}".</p>
+<ul style="list-style:none;padding-left:16px;margin:8px 0;">
+  <li>${tally.total} ${candidateNoun} ingested</li>
+  <li>${tally.fast_track} fast-track</li>
+  <li>${tally.interview} interview</li>
+  <li>${tally.consider} consider</li>
+  <li>${tally.reject} reject</li>
+</ul>
+<p style="margin:16px 0;"><a href="${escAttr(link)}" style="color:#BE4E44;text-decoration:underline;font-weight:600;">Open the round in Talent Scout</a></p>
+<p style="margin-top:24px;">- Mirror HQ</p>
+</body></html>`;
+
+  const sent = await sendGmail({ to: managerEmail, subject, bodyText, bodyHtml });
   if (!sent) {
     return new Response(JSON.stringify({ ok: false, reason: "send_failed" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
