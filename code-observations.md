@@ -42,6 +42,7 @@ Only things actually encountered during a task. Do not go hunting:
 
 | # | Date | File | Hash | V | R | Severity | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2026-05-14 | `src/lib/venue-scout/briefForm.ts` (`computeOverviewSourceHash`) | `n/a` | ☑ | ☐ | [low] | Phase 4 Revision pass 3: the overview-staleness hash includes `budget_text` + `expected_guest_count` as raw producer display strings, while the server (`vs-generate-brief-overview`) recomputes them from the canonicalized DB number; if a producer types a non-canonical form (comma in guest count, missing `$` in budget) and resubmits within the same in-memory session before any `fromScout` re-seed, the hashes diverge into one wasted (self-healing) Claude regen. Bounded per spec § 3 risk tolerance; flagged by code-reviewer, deferred. Proper fix: hash `toUpdate(state)` output (the DB representation) instead of raw form strings. |
 
 ## Edge Functions
 
@@ -50,6 +51,7 @@ Only things actually encountered during a task. Do not go hunting:
 | # | Date | File | Hash | V | R | Severity | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 2026-05-14 | `supabase/functions/vs-research-venues/index.ts:601-621` | `49e03e6` | ☑ | ☐ | [med] | Duplicate-invocation race confirmed live (scout 25b5c921, 4 boots / 2 parallel callClaude runs same scout id); the in_flight check reads `brief_data.research_started_at` then writes it non-atomically, so concurrent invocations both pass before either records the kickoff. Downstream CAS guards mask the DB-write conflict but double-spend tokens. Carry-forward from 2026-05-13 cutover; proper fix is a Postgres advisory lock or a kickoff CAS on `research_started_at`. |
+| 2 | 2026-05-14 | `supabase/functions/vs-generate-brief-overview/index.ts` (`hashFormatBudget`) | `n/a` | ☑ | ☐ | [low] | Phase 4 Revision pass 3: client (`briefForm.ts`) + server budget canonicalization for the overview-source hash both rely on `Number.prototype.toLocaleString("en-US", ...)`; identical on V8 (browser + Deno) today but a silent parity risk if either runtime's ICU output ever shifts. Flagged by security-auditor + code-reviewer, deferred; a pure-JS comma formatter would remove the runtime coupling. |
 
 ## Database
 

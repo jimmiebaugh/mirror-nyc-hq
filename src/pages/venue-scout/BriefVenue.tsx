@@ -4,9 +4,11 @@
 // sourcing prompt needs (Target Neighborhoods, Venue Type, Ideal Features,
 // Event Priorities, square-footage constraints). Back returns to /brief/event
 // without persisting -- briefIntakeStore keeps the in-memory form. Submit
-// Brief persists everything via toUpdate and navigates to /brief/report,
-// which fires the Event Overview generation on first arrival. current_step is
-// NOT touched here.
+// Brief persists everything via toUpdate, then conditionally invokes
+// vs-generate-brief-overview (Phase 4 Revision pass 3: only when the overview
+// is missing or the brief fields that drive it changed since the last
+// generation, gated on a hash stored in brief_data.overview_source_hash), and
+// navigates to /brief/report. current_step is NOT touched here.
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,8 @@ import { Stepper } from "@/components/venue-scout/Stepper";
 import { TagInput } from "@/components/venue-scout/TagInput";
 import { ChipMultiSelect } from "@/components/venue-scout/ChipMultiSelect";
 import {
+  buildOverviewStub,
+  computeOverviewSourceHash,
   fromScout,
   toUpdate,
   type BriefFormState,
@@ -55,7 +59,12 @@ export default function BriefVenue() {
   const [scout, setScout] = useState<VsScoutRow | null>(null);
   const [initial, setInitial] = useState<BriefFormState | null>(null);
   const [form, setForm] = useState<BriefFormState | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  // false = idle. "submitting" = persisting the brief. "generating" = the
+  // conditional vs-generate-brief-overview call is in flight (two-stage
+  // spinner; the second stage only appears when a regen is actually needed).
+  const [submitting, setSubmitting] = useState<
+    false | "submitting" | "generating"
+  >(false);
 
   useEffect(() => {
     if (!scoutId) return;
@@ -125,21 +134,25 @@ export default function BriefVenue() {
 
   const goBack = () => navigate(`/venue-scout/scouts/${scout.id}/brief/event`);
 
+  // Submit Brief: persist the form, then conditionally (re)generate the Event
+  // Overview. The brief itself always persists; the overview regenerates only
+  // when it's missing, has no recorded source hash, or the hash no longer
+  // matches the brief fields that drive it.
   const requestSubmit = async () => {
     if (submitting) return;
     if (invalid) {
       toast({ title: "City is required", variant: "destructive" });
       return;
     }
-    setSubmitting(true);
-    const payload = {
-      ...toUpdate(form),
-      last_touched_at: new Date().toISOString(),
-      updated_by: user?.id ?? null,
-    };
+    setSubmitting("submitting");
+
     const { error } = await supabase
       .from("vs_scouts")
-      .update(payload)
+      .update({
+        ...toUpdate(form),
+        last_touched_at: new Date().toISOString(),
+        updated_by: user?.id ?? null,
+      })
       .eq("id", scout.id);
     if (error) {
       setSubmitting(false);
@@ -150,8 +163,87 @@ export default function BriefVenue() {
       });
       return;
     }
-    briefIntake.commit(scoutId, form);
-    setInitial(form);
+
+    // Decide whether the persisted overview is stale.
+    const newHash = await computeOverviewSourceHash(form);
+    const existingHash =
+      typeof form.brief_data.overview_source_hash === "string"
+        ? form.brief_data.overview_source_hash
+        : null;
+    const needGen =
+      form.event_overview.trim() === "" ||
+      existingHash === null ||
+      existingHash !== newHash;
+
+    let nextForm = form;
+
+    if (needGen) {
+      setSubmitting("generating");
+      const { data, error: fnError } = await supabase.functions.invoke(
+        "vs-generate-brief-overview",
+        { body: { scout_id: scout.id } },
+      );
+      const responseError =
+        fnError?.message ??
+        (data as { error?: string } | null)?.error ??
+        null;
+      if (responseError) {
+        // The function never produced an overview. Persist a client-side stub
+        // with the freshly-computed hash so the next Submit Brief doesn't loop
+        // on the same unchanged fields; the producer can retry via the
+        // Regenerate link on the report.
+        const stub = buildOverviewStub(form);
+        nextForm = {
+          ...form,
+          event_overview: stub,
+          brief_data: { ...form.brief_data, overview_source_hash: newHash },
+        };
+        const { error: stubErr } = await supabase
+          .from("vs_scouts")
+          .update({
+            ...toUpdate(nextForm),
+            last_touched_at: new Date().toISOString(),
+            updated_by: user?.id ?? null,
+          })
+          .eq("id", scout.id);
+        if (stubErr) {
+          console.warn(
+            `[BriefVenue] scout=${scout.id} stub persist failed: ${stubErr.message}`,
+          );
+        }
+        toast({
+          title: "Overview generation failed",
+          description: "Filled a basic overview you can edit on the report.",
+          variant: "destructive",
+        });
+      } else {
+        // The function persisted event_overview + overview_source_hash
+        // atomically. Sync local state with what it returned.
+        const overview =
+          typeof (data as { event_overview?: unknown } | null)
+            ?.event_overview === "string"
+            ? (data as { event_overview: string }).event_overview
+            : "";
+        const returnedHash =
+          typeof (data as { overview_source_hash?: unknown } | null)
+            ?.overview_source_hash === "string"
+            ? (data as { overview_source_hash: string }).overview_source_hash
+            : newHash;
+        nextForm = {
+          ...form,
+          event_overview: overview,
+          brief_data: {
+            ...form.brief_data,
+            overview_source_hash: returnedHash,
+          },
+        };
+      }
+    }
+
+    briefIntake.commit(scoutId, nextForm);
+    setForm(nextForm);
+    setInitial(nextForm);
+    setSubmitting(false);
     navigate(`/venue-scout/scouts/${scout.id}/brief/report`);
   };
 
@@ -367,9 +459,13 @@ export default function BriefVenue() {
             )}
             <Button
               onClick={requestSubmit}
-              disabled={submitting || invalid || isArchived}
+              disabled={!!submitting || invalid || isArchived}
             >
-              {submitting ? "Saving…" : "Submit Brief"}
+              {submitting === "generating"
+                ? "Generating overview…"
+                : submitting === "submitting"
+                  ? "Submitting…"
+                  : "Submit Brief"}
             </Button>
           </div>
         </div>
