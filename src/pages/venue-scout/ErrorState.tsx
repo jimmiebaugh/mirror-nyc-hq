@@ -50,8 +50,13 @@ type Cfg = {
   help: React.ReactNode;
   primaryLabel?: string;
   primaryAction: PrimaryAction;
-  secondaryLabel: string;
-  secondaryHref: (scoutId: string) => string;
+  // Secondary action is optional. Round-20: dropped on the four deck
+  // error configs where it had been wired to a misleading "Contact
+  // the team" button that just routed back to /deck/prep (no actual
+  // contact path). Help-text bullets keep the informational guidance
+  // about contacting the team where relevant.
+  secondaryLabel?: string;
+  secondaryHref?: (scoutId: string) => string;
 };
 
 const CONFIGS: Record<string, Cfg> = {
@@ -172,8 +177,6 @@ const CONFIGS: Record<string, Cfg> = {
     ),
     primaryLabel: "← Back to Deck Prep",
     primaryAction: "back-to-deck-prep",
-    secondaryLabel: "Contact the team",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/deck/prep`,
   },
   SLIDES_API_FAILED: {
     icon: "x",
@@ -189,8 +192,6 @@ const CONFIGS: Record<string, Cfg> = {
     ),
     primaryLabel: "← Back to Deck Prep",
     primaryAction: "back-to-deck-prep",
-    secondaryLabel: "Contact the team",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/deck/prep`,
   },
   NO_VENUES_INCLUDED: {
     icon: "warn",
@@ -206,8 +207,6 @@ const CONFIGS: Record<string, Cfg> = {
     ),
     primaryLabel: "← Back to Deck Prep",
     primaryAction: "back-to-deck-prep",
-    secondaryLabel: "Contact the team",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/deck/prep`,
   },
   UNKNOWN: {
     icon: "block",
@@ -223,8 +222,6 @@ const CONFIGS: Record<string, Cfg> = {
     ),
     primaryLabel: "← Back to Deck Prep",
     primaryAction: "back-to-deck-prep",
-    secondaryLabel: "Contact the team",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/deck/prep`,
   },
 };
 
@@ -392,9 +389,11 @@ export default function ErrorState() {
 
         {/* ---- Action buttons ---- */}
         <div className="mt-8 flex items-center gap-3">
-          <Link to={cfg.secondaryHref(id)}>
-            <Button variant="ghost">{cfg.secondaryLabel}</Button>
-          </Link>
+          {cfg.secondaryHref && cfg.secondaryLabel && (
+            <Link to={cfg.secondaryHref(id)}>
+              <Button variant="ghost">{cfg.secondaryLabel}</Button>
+            </Link>
+          )}
           {cfg.primaryAction !== "none" && cfg.primaryLabel && (
             <Button
               onClick={() => void onPrimary()}

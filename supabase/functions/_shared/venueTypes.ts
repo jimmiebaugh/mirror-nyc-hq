@@ -180,3 +180,61 @@ export function stripPlaceholders(items: unknown): string[] {
     .filter((s) => !isPlaceholderString(s))
     .map((s) => s.trim());
 }
+
+// Post-4.10.4 hot patch round 13: pick a URL from web_search results
+// that best matches a given venue. Used as a fallback when Claude's
+// tool output left website_url null but the search results clearly
+// contained valid URLs for the venue.
+//
+// Algorithm: tokenize the venue name into meaningful words (drop common
+// suffixes like "venue", "space", "studio", "the"). For each search
+// result, score by how many venue tokens appear in the result's title
+// (case-insensitive). Pick the highest-scoring result whose URL passes
+// sanitizeWebsiteUrl. Ties broken by earliest position in the results
+// list (search-engine-relevance order).
+//
+// Returns null when no result has at least one matching token, or all
+// matching results have URLs that the sanitizer rejects.
+const NAME_NOISE_WORDS = new Set([
+  "the", "a", "an", "and", "of", "at", "in", "on", "for", "with",
+  "venue", "space", "spaces", "studio", "studios", "loft", "lofts",
+  "gallery", "galleries", "warehouse", "warehouses", "building",
+  "center", "centre", "place", "house", "hall", "room", "rooms",
+  "events", "event", "rental", "rentals", "vacancy", "storefront",
+  "retail", "ground", "floor", "lower", "upper", "main",
+]);
+
+function tokenizeVenueName(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !NAME_NOISE_WORDS.has(t));
+}
+
+export function findBestSearchResultUrl(
+  venueName: string,
+  results: ReadonlyArray<{ url: string; title: string }>,
+): string | null {
+  const venueTokens = tokenizeVenueName(venueName);
+  if (venueTokens.length === 0) return null;
+  let best: { url: string; score: number; index: number } | null = null;
+  for (let i = 0; i < results.length; i += 1) {
+    const r = results[i];
+    const titleLower = r.title.toLowerCase();
+    const score = venueTokens.reduce(
+      (acc, t) => acc + (titleLower.includes(t) ? 1 : 0),
+      0,
+    );
+    if (score === 0) continue;
+    const cleaned = sanitizeWebsiteUrl(r.url);
+    if (!cleaned) continue;
+    if (
+      best === null ||
+      score > best.score ||
+      (score === best.score && i < best.index)
+    ) {
+      best = { url: cleaned, score, index: i };
+    }
+  }
+  return best?.url ?? null;
+}

@@ -50,8 +50,17 @@ import {
   createClient,
   type SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callClaude, type ClaudeTool } from "../_shared/anthropic.ts";
-import { canonicalizeType, stripPlaceholders } from "../_shared/venueTypes.ts";
+import {
+  callClaude,
+  extractWebSearchResults,
+  findVenueWebsite,
+  type ClaudeTool,
+} from "../_shared/anthropic.ts";
+import {
+  canonicalizeType,
+  findBestSearchResultUrl,
+  stripPlaceholders,
+} from "../_shared/venueTypes.ts";
 import {
   validateWebsiteUrl,
   validateWebsiteUrls,
@@ -172,6 +181,27 @@ async function enrichSheetVenue(
     // sheet row. Producer-entered values are preserved untouched.
     const patch: Record<string, unknown> = {};
 
+    // Round 15 hot patch: address + neighborhood are now in FILL_TOOL.
+    // Fill them when the producer left them blank. Common case: the
+    // producer enters just an address-style venue NAME (e.g. "238 N
+    // Canon Drive") without the address column populated; web_search
+    // resolves the full canonical address from the brief's city.
+    if (
+      (!row.address || row.address.trim().length === 0) &&
+      typeof f.address === "string" &&
+      f.address.trim().length > 0
+    ) {
+      patch.address = f.address.trim();
+    }
+
+    if (
+      (!row.neighborhood || row.neighborhood.trim().length === 0) &&
+      typeof f.neighborhood === "string" &&
+      f.neighborhood.trim().length > 0
+    ) {
+      patch.neighborhood = f.neighborhood.trim();
+    }
+
     if (!row.venue_type && typeof f.venue_type === "string") {
       const cleaned = canonicalizeMulti(f.venue_type);
       if (cleaned) patch.venue_type = cleaned;
@@ -179,7 +209,26 @@ async function enrichSheetVenue(
 
     if (!row.website_url) {
       const cleaned = await validateWebsiteUrl(f.website_url);
-      if (cleaned) patch.website_url = cleaned;
+      if (cleaned) {
+        patch.website_url = cleaned;
+      } else {
+        // Round 13 hot patch: fallback. If Claude's tool output didn't
+        // include a usable website_url, try to recover one from the
+        // web_search results blocks themselves. They're already
+        // surfaced in the response content; we just need to read them.
+        const searchResults = extractWebSearchResults(result.content ?? []);
+        const fallbackUrl = findBestSearchResultUrl(row.name, searchResults);
+        if (fallbackUrl) {
+          // HEAD-validate the fallback so we don't insert dead URLs.
+          const validated = await validateWebsiteUrl(fallbackUrl);
+          if (validated) {
+            patch.website_url = validated;
+            console.log(
+              `[vs-research-venues:fill] scout=${scout_id} venue=${row.id} website_url fallback from search results: ${validated}`,
+            );
+          }
+        }
+      }
     }
 
     if (row.size_sq_ft == null && typeof f.size_sq_ft === "number") {
@@ -380,7 +429,11 @@ const TOOL: ClaudeTool = {
         items: {
           type: "object",
           properties: {
-            name: { type: "string" },
+            name: {
+              type: "string",
+              description:
+                "Just the venue's actual name. Use the venue's brand / property name as it appears in directories or on its own site. Do NOT add descriptive suffixes like 'Storefront', 'Vacancy', 'Vacant Retail', 'Ground-Floor Retail', 'Ground-Floor Storefront', 'Retail Vacancy', 'Event Suite', or any other modifier that describes WHAT the space is. Those belong in venue_type / key_features. Examples of good: 'Palihouse West Hollywood', 'Westfield Century City', 'The Sunset', 'Platform Culver City'. Examples of BAD: 'Palihouse West Hollywood - Ground-Floor Event Suite', 'Westfield Century City - Ground Level Retail Space', 'Vacant Retail - Larchmont Village Storefront'. If the property is genuinely an unbranded vacancy with no name, use just the address (e.g. '10250 Santa Monica Blvd').",
+            },
             neighborhood: { type: "string" },
             address: { type: "string" },
             type: {
@@ -826,11 +879,40 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
       // invented listing IDs that 4xx or soft-404 to a homepage) get
       // dropped before INSERT. ~15-20 URLs in parallel, 5s timeout each,
       // adds ~2-3s total. Network errors keep the URL (producer can edit).
+      //
+      // Round 14 hot patch: replaced round-13's findBestSearchResultUrl
+      // (cheap title-matching against the broad batch's search results)
+      // with findVenueWebsite (a NEW targeted Claude call per venue
+      // using just `name + address`). Round 13's match-from-batch
+      // approach was producing wrong URLs because the batch's search
+      // results were broad / off-target. Targeted per-venue search is
+      // more expensive (~10-15s per venue, parallel) but the URL
+      // signal is cleaner. Combined with the round-14 schema tightening
+      // on `name` (forbid descriptive suffixes), the search query
+      // itself is now much more specific.
       const rawUrls = cleanVenues.map((v) => v.website_url);
       const validatedUrls = await validateWebsiteUrls(rawUrls);
+      const fallbackUrls = await Promise.all(
+        cleanVenues.map(async (v, i) => {
+          if (validatedUrls[i] !== null) return validatedUrls[i];
+          const candidate = await findVenueWebsite(
+            "venue_scout",
+            { name: v.name, address: v.address, city: scout.city ?? null },
+            { fn_name: "vs-research-venues:url-fallback" },
+          );
+          if (!candidate) return null;
+          const validated = await validateWebsiteUrl(candidate);
+          if (validated) {
+            console.log(
+              `[vs-research-venues] scout=${scout_id} venue="${v.name}" website_url fallback from targeted search: ${validated}`,
+            );
+          }
+          return validated;
+        }),
+      );
       const venuesForInsert = cleanVenues.map((v, i) => ({
         ...v,
-        website_url: validatedUrls[i],
+        website_url: fallbackUrls[i],
       }));
 
       const { error: insErr } = await sb

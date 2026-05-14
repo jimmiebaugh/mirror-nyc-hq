@@ -25,6 +25,7 @@ import {
 import {
   SortableContext,
   arrayMove,
+  rectSortingStrategy,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -357,13 +358,37 @@ export default function DeckPrep() {
       clearTimeout(orderTimer.current);
       orderTimer.current = null;
     }
-    // Persist any pending order, then mark each venue's include_in_deck flag
-    // to match the current UI selection so vs-generate-deck only generates
-    // what the producer expects.
+
+    // Phase 4.10.6-port: reset scout state for a clean regenerate.
+    //
+    // When the scout has already been through a successful generate
+    // cycle, current_step='completed' and brief_data.deck_generation_started_at
+    // holds the prior kickoff timestamp. Both gate vs-generate-deck from
+    // running again:
+    //   - if (scout.current_step !== "deck_prep") return skipped
+    //   - if (deck_generation_started_at < grace window) return in_flight
+    // Without a reset here, clicking Generate again silently no-ops and
+    // Generating.tsx sees the unchanged success state, treating the
+    // prior deck as a fresh result.
+    //
+    // Uses the reset_scout_for_deck_regenerate RPC (migration
+    // 20260514100000) so the brief_data jsonb minus is atomic in a
+    // single SQL statement -- no TOCTOU window between a read and a
+    // write. The RPC sets current_step='deck_prep', strips
+    // deck_generation_started_at via jsonb `-` operator, and resets
+    // status + pipeline_error. deck_order is persisted in a separate
+    // UPDATE since it isn't part of the reset semantics.
+    await supabase.rpc("reset_scout_for_deck_regenerate", {
+      target_scout_id: scoutId,
+    });
     await supabase
       .from("vs_scouts")
       .update({ deck_order: venues.map((v) => v.id) })
       .eq("id", scoutId);
+
+    // Mark each venue's include_in_deck flag to match the current UI
+    // selection so vs-generate-deck only generates what the producer
+    // expects.
     await Promise.all(
       venues.map((v) =>
         supabase
@@ -800,13 +825,21 @@ function PhotoSlotRow({
 
   const slotIds = [1, 2, 3, 4].map((n) => `${venueId}-slot-${n}`);
 
+  // Post-4.10.4 hot patch round 17: switched strategy from
+  // verticalListSortingStrategy to rectSortingStrategy. The slots are
+  // laid out in a `grid grid-cols-4` (horizontal row, or 2x2 grid on
+  // narrow widths), not a vertical list. verticalListSortingStrategy
+  // computes the shift animation for vertical-only motion, so dragging
+  // a photo sideways gave no visual feedback and the drop hit zones
+  // felt broken. rectSortingStrategy handles arbitrary grid arrangements
+  // and animates neighbors in whichever direction the drag is heading.
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragEnd={onDragEnd}
     >
-      <SortableContext items={slotIds} strategy={verticalListSortingStrategy}>
+      <SortableContext items={slotIds} strategy={rectSortingStrategy}>
         <div className="grid grid-cols-4 gap-2">
           {[1, 2, 3, 4].map((slotNum) => {
             const photo = photos.find((p) => p.slot === slotNum);
