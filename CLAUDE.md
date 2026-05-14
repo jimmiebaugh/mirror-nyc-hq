@@ -46,7 +46,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 
 ## Current phase
 
-See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.10.6-port (URL acquisition fallbacks + deck flow polish)** squashed onto `vs-port-fresh` at `a31a73a` (prior 4.10.5-port at `1287478`, 4.10.4-port at `50cba30`, 4.10.3-port at `9bc27e8`, 4.10.2-port at `a36eb3d`, 4.10.1-port at `1ac3f6f`). **4.10.5-port** restored AI surface stability after Anthropic environment changes: pivoted to `claude-sonnet-4-6 + web_search_20250305`, added `pause_turn` continuation to `callClaude`, `writeFailure` CAS guards on all 3 AI edge functions, timeout sizing for Supabase Pro plan, trimmed `brief_data` JSON dump from user messages, placeholder-string sanitizer, dropped forced `tool_choice` on Phase A. **4.10.6-port** layered on URL fallback infrastructure + deck flow polish: new `extractWebSearchResults` / `findVenueWebsite` / `findBestSearchResultUrl` helpers, tightened `submit_research.name` schema, added `address` + `neighborhood` to `FILL_TOOL`, post-generation new-tab open + return to Deck Prep, `reset_scout_for_deck_regenerate` RPC (migration `20260514100000`) for atomic regenerate state reset, slide 2 ALL CAPS, per-slide `updateSlidesPosition` for canonical interleaved-forward venue slide order, success-path CAS guard on vs-generate-deck, photo dnd switched to `rectSortingStrategy`, "Contact the team" ghost button dropped from 4 deck-error configs. One new migration applied. vs-research-venues v24 / vs-compile-summaries v29 / vs-generate-deck v13 / vs-parse-sheet v18 / vs-parse-brief v14 — all redeployed at `amipjjmphblfxpghjnel`. **VS Pro port is feature-complete and cutover-ready.** Next: **cutover** per `docs/venue-scout-port-plan.md` § "Done when" (cherry-pick `f24d3f5` must-carry set, verify via `git show --stat` diff equivalence, hard-reset main to vs-port-fresh HEAD; fires Netlify deploy). The failed-attempt Phase 4 stack on `main` (Scout Dashboard through Deck Prep + URL-quality hot patch) is archived; do not extend it.
+See `CHECKPOINT.md` for live state. As of this writing: **Phase 4 (Venue Scout port) shipped to production 2026-05-13.** Cutover complete. Main is at `7cd27ed` and contains the full 1:1 port from `mirror-nyc-venue-scout-pro` (Phase 4.1-port through 4.10.6-port) plus two parallel TS commits cherry-picked during the cutover (`6775429` Generate Packet button restore + `7cd27ed` packet email template + layout fixes + email-as-cover-letter fallback). The failed-attempt Phase 4 stack that previously lived on main (Scout Dashboard through Deck Prep + URL-quality hot patches) was intentionally dropped via `--force-with-lease` push. Next: **Phase 5 (HQ Core)**.
 
 ## Working with this repo
 
@@ -57,7 +57,27 @@ See `CHECKPOINT.md` for live state. As of this writing: **Phase 4.10.6-port (URL
 5. **After merging to main**, update `CHECKPOINT.md` (latest commit, recent commits, known drift).
 6. **Phase boundaries** → summarize the finished phase to one line in `docs/roadmap.md`, expand the next phase with full detail.
 7. **Decisions worth preserving** → add to `docs/decisions.md` with rationale, don't bury in commit messages.
-8. **Deploy policy (Phase 3.X — active).** Netlify charges credits per deploy. All Phase 3.X feature work lives on a feature branch (e.g. `phase-3-7-candidates-ux`). Commits stay local; the only Netlify-deploy event per phase is the eventual squash-merge to `main`, and Jimmie has to explicitly approve that. Do NOT push to `main` or to any remote feature branch (origin pushes can fire deploy previews) until Jimmie says go. Edge function deploys (`supabase functions deploy`) and DB migrations (`supabase db push --linked`) are out-of-band and fine to apply during feature work — they don't burn Netlify credits.
+8. **Deploy policy.** Netlify charges credits per deploy. Feature work lives on a feature branch (e.g. `phase-5-1-notifications`). Commits stay local; the only Netlify-deploy event per phase is the eventual squash-merge to `main`, and Jimmie has to explicitly approve that. Do NOT push to `main` or to any remote feature branch (origin pushes can fire deploy previews) until Jimmie says go. Edge function deploys (`supabase functions deploy`) and DB migrations (`supabase db push --linked`) are out-of-band and fine to apply during feature work; they don't burn Netlify credits.
+9. **Two-session discipline.** Cowork (spec drafting) and Code (implementation) both edit files. To avoid clobbering, Cowork is read-only on the repo while any `claude/*` feature branch is active; doc-update intent queues in `OUTPUTS/REPO_DOC_UPDATES.md` for Code to apply. Pre-flight check + full rule in `docs/working-with-claude.md` § Two-session discipline. Read at the start of every session.
+
+## Code observations
+
+After completing each task, log noteworthy findings you encountered while reading or working with the codebase into [code-observations.md](code-observations.md). The file persists across sessions so the team can triage during dedicated cleanup passes. See the file's header for entry format, severity tags, and the verify or resolve lifecycle.
+
+**What to look for** (only things you actually encountered; do not go hunting):
+
+- **Unfinished implementations**: TODOs, stubs, placeholder logic, partially implemented features.
+- **Dead code**: unused functions, unreachable branches, commented-out blocks.
+- **Possible bugs**: unchecked errors, race conditions, off-by-ones, logic errors.
+- **Unusual patterns**: inconsistent conventions, surprising workarounds, anti-patterns.
+
+**How to log:**
+
+1. Append a row to the matching section's table in `code-observations.md` (Frontend / Edge Functions / Database / Build & Tooling / Docs / Other). The header at the top of that file documents the exact column format, severity tags, and the `☐` / `☑` status glyphs.
+2. Get the introducing commit's short hash via `git blame -L <line>,<line> <file>` and put it in the Hash column (backtick-wrapped). For non-code observations write `n/a`.
+3. Append-only. Never reorder or delete rows. Use the V / R status columns and strikethrough rules defined in the file for state changes.
+
+**In your end-of-turn response**, mention findings only if directly relevant to the current task. Otherwise say "N new observations logged" so the user knows the log moved without re-listing everything. If there is nothing to log this turn, skip the section entirely.
 
 ## Notes
 

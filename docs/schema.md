@@ -2,7 +2,7 @@
 
 Single source of truth for the Mirror NYC HQ Postgres schema. All timestamp columns use `timestamptz` (timezone-aware). Date-only columns use `date`. UUIDs use `gen_random_uuid()` defaults.
 
-Migrations live in `supabase/migrations/`. The current migration set was applied through Phase 3.5; see `docs/roadmap.md` for the timeline.
+Migrations live in `supabase/migrations/`. The current migration set was applied through Phase 4.10.6-port (cutover 2026-05-13). See `CHECKPOINT.md` § Recent migrations for the live list and `docs/roadmap.md` for the phase timeline.
 
 ## HQ Core
 
@@ -58,8 +58,9 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `created_by` (uuid, FK)
 - `created_at`, `updated_at`
 
-### venue_types (lookup; values pending from Jimmie at Phase 4)
+### venue_types (lookup; free-text canonicalization)
 - `id` (uuid, PK), `name` (text, unique, not null), `created_at`
+- Free-text canonicalization. Producer's sheet supplies any string; `vs-parse-sheet` maps to the canonical list (Retail, Event Venue, Industrial, Warehouse, Gallery, Studio, Outdoor, Mobile) via substring matching. No lookup table writes needed for Venue Scout. See `docs/templates/venue-scout-sheet-template.md`.
 
 ### tasks
 - `id` (uuid, PK)
@@ -114,14 +115,14 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 - `tier` (text), `internal_notes_at_time` (text)
 - `evaluated_at` (timestamptz), `triggered_by` (FK to users)
 - Index on `(candidate_id, evaluated_at DESC)` for the candidate-detail timeline.
-- INSERT-only by default. Bulk re-eval is the one exception — it deletes prior rows for the candidate before inserting via the `overwrite_history: true` flag on `ts-evaluate-candidate`. See `docs/decisions.md` for why.
+- INSERT-only by default. Bulk re-eval is the one exception; it deletes prior rows for the candidate before inserting via the `overwrite_history: true` flag on `ts-evaluate-candidate`. See `docs/decisions.md` for why.
 
 ### ts_candidates
 - `id`, `pull_round_id` (FK), `role_id` (FK; denormalized)
 - `name`, `email` (text), `applied_date` (date), `gmail_message_id` (text)
 - `location` (text, nullable): extracted by Claude from candidate materials, persisted on initial pull / re-eval.
 - `score` (numeric)
-- `status` (enum: `consider`, `interview`, `reject`, `fast_track`, `auto_rejected`). `interview` was renamed from the original spec's `promote` in Phase 3.5. `auto_rejected` is **deprecated** since Phase 3.7.2.1 — backfilled to `reject` + `manually_reviewed=false` and never written by new code; the enum value is kept for safety. Admins pick the four manual statuses via `StatusDropdown` or the bulk action bar.
+- `status` (enum: `consider`, `interview`, `reject`, `fast_track`, `auto_rejected`). `interview` was renamed from the original spec's `promote` in Phase 3.5. `auto_rejected` is **deprecated** since Phase 3.7.2.1 (backfilled to `reject` + `manually_reviewed=false` and never written by new code; the enum value is kept for safety). Admins pick the four manual statuses via `StatusDropdown` or the bulk action bar.
 - `manually_reviewed` (bool, default false; Phase 3.7.2): one-way flip from auto → manual. AI eval / re-eval leaves it false; user actions flip it to true (status-dropdown change or re-select-same, click on the AUTO pill, bulk action). When true, single + bulk re-eval update score / breakdown / strengths / gaps / overview but do NOT touch status. Bulk re-eval's default `not_manually_rejected` filter is `status.neq.reject,manually_reviewed.eq.false`.
 - `is_referral` (bool, default false; Phase 3.7.7), `referrer_email` (text, nullable; Phase 3.7.7): set by `ts-pull-candidates` when a `*@mirrornyc.com` manager forwards a candidate to jobs@. Identity on the row stays the original applicant's; `referrer_email` captures the outermost forwarder. Eval is blind to referral status.
 - `recruiter_overview` (text)
@@ -218,7 +219,7 @@ Lifted from VS Pro with HQ rename. ON DELETE CASCADE so a Start Over (which dele
 - `file_name`, `file_size_bytes` (text / int, nullable)
 - `created_at`
 
-Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSignedUrl(path, 3600)`, storage RLS gated on `is_producer_or_admin()`). Created in 4.7.1-port (`20260512240000_phase_4_7_1_port_vs_venue_photos_bucket.sql`). Distinct from the public `venue_photos` bucket reserved for HQ Core's master `venues` table.
+Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSignedUrl(path, 3600)`). Storage RLS: single `FOR ALL TO authenticated` policy (USING true / WITH CHECK true), relaxed from the original `is_producer_or_admin()` gate in Phase 4.10.3-port (`20260514000002_phase_4_10_3_port_vs_storage_policies.sql`) to match the open-authenticated `vs_*` table RLS. Bucket created in 4.7.1-port (`20260512240000_phase_4_7_1_port_vs_venue_photos_bucket.sql`). Distinct from the public `venue_photos` bucket reserved for HQ Core's master `venues` table.
 
 ## Cross-cutting
 
@@ -236,7 +237,7 @@ Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSi
 - `default_drive_folder_for_standalone_vs_decks` (text)
 - `venue_research_priority_sites` (text[]; admin-configurable, NOT a hard restriction)
 - `talent_scout_packet_default_count` (int, default 15)
-- `talent_scout_competitor_list` (text[], Phase 3.7.5): global default competitor company list applied to every Talent Scout role unless overridden per-role on `ts_roles.competitor_bonus`. Seeded with Mirror's canonical 19-entry default; editable from `/talent-scout/settings` (admin only). Postgres `text[]` rather than jsonb because the value is a flat array — per-role `competitor_bonus` stays jsonb because it carries a `bonus_points` scalar alongside the array.
+- `talent_scout_competitor_list` (text[], Phase 3.7.5): global default competitor company list applied to every Talent Scout role unless overridden per-role on `ts_roles.competitor_bonus`. Seeded with Mirror's canonical 19-entry default; editable from `/talent-scout/settings` (admin only). Postgres `text[]` rather than jsonb because the value is a flat array; per-role `competitor_bonus` stays jsonb because it carries a `bonus_points` scalar alongside the array.
 - `email_notifications_enabled`, `in_app_notifications_enabled` (bool)
 - `updated_at`
 
@@ -252,7 +253,7 @@ Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSi
 
 ## Postgres triggers
 
-- `vs_candidate_venues_shortlist_sync`: re-introduced in Phase 4.6-port (migration `20260512230000_phase_4_6_port_shortlist_sync_trigger.sql`) at a simplified shape after being dropped in Phase 4.1-port. BEFORE UPDATE on `vs_candidate_venues`, fires only when `shortlisted` flips false to true. Matches HQ `venues` by `website_url` first, then by case-insensitive `name + neighborhood`; sets `linked_venue_id` on match. If no match, INSERTs a new HQ `venues` row (carrying `name`, `address`, `neighborhood`, `website_url`, `features` from `key_features`, and `created_by` pulled from the parent `vs_scouts` row) and sets `linked_venue_id`. SECURITY DEFINER so the INSERT bypasses RLS on `venues`. Never updates an existing HQ venue row — the master `venues` table is treated as append-only by this trigger.
+- `vs_candidate_venues_shortlist_sync`: re-introduced in Phase 4.6-port (migration `20260512230000_phase_4_6_port_shortlist_sync_trigger.sql`) at a simplified shape after being dropped in Phase 4.1-port. BEFORE UPDATE on `vs_candidate_venues`, fires only when `shortlisted` flips false to true. Matches HQ `venues` by `website_url` first, then by case-insensitive `name + neighborhood`; sets `linked_venue_id` on match. If no match, INSERTs a new HQ `venues` row (carrying `name`, `address`, `neighborhood`, `website_url`, `features` from `key_features`, and `created_by` pulled from the parent `vs_scouts` row) and sets `linked_venue_id`. SECURITY DEFINER so the INSERT bypasses RLS on `venues`. Never updates an existing HQ venue row; the master `venues` table is treated as append-only by this trigger.
 - `tasks_completed_at_set`: when `tasks.status` flips to `done`, set `completed_at = now()`.
 - `activity_log_writer`: on insert/update/status-change to projects, venues, tasks, write an activity_log row.
 - `updated_at_auto`: standard updated_at trigger on every table with the column.

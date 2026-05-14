@@ -11,7 +11,7 @@ A code-level audit (`audit-trail.md`) listing every drifted color and every fix,
 ## Why this trade
 
 To capture matched side-by-sides from the agent CLI, both apps need:
-1. **Auth bypassed.** Both run Google OAuth on `@mirrornyc.com` with admin gating on `/talent-scout/*`. Headless Chrome can't complete that flow without either (a) a stubbed auth provider, or (b) a pre-injected Supabase session token. Source repo also says "REVERT the stub before you finish; source repo stays untouched" — so any source-side stub is throwaway work.
+1. **Auth bypassed.** Both run Google OAuth on `@mirrornyc.com` with admin gating on `/talent-scout/*`. Headless Chrome can't complete that flow without either (a) a stubbed auth provider, or (b) a pre-injected Supabase session token. Source repo also says "REVERT the stub before you finish; source repo stays untouched": so any source-side stub is throwaway work.
 2. **Comparable seed data.** Source has its own roles + candidates in its own Supabase project (`raydkeiesqorkxukllch`). HQ has different roles in HQ's project (`amipjjmphblfxpghjnel`). Side-by-side shots end up showing different content, which is noise for a color/typography audit.
 3. **Both dev servers running.** Two Vite instances on different ports, both with backend connectivity, both rendering target pages without flakes.
 
@@ -19,14 +19,14 @@ Plumbing all that took ~60 min of estimated setup with multiple failure modes, a
 
 - You're already going to `git checkout phase-3-5b-visual-brand && npm run dev` to approve the merge.
 - Your browser has your real session, real role data, and real candidates.
-- The audit-trail in `audit-trail.md` lists every change with file path, line context, and what to look for — it's a checklist for a 10-minute click-through.
+- The audit-trail in `audit-trail.md` lists every change with file path, line context, and what to look for: it's a checklist for a 10-minute click-through.
 
 ## What's in `docs/visual-audit/` instead
 
-- `token-diff.md` — the design token drift map from HQ's pre-pass state to source canonical.
-- `audit-trail.md` — every file/line that was changed in the brand pass with before/after values.
-- `structural-drift.md` — what I noticed as structural differences (out of scope this phase) for a future review.
-- This file — why no live screenshots.
+- `token-diff.md`: the design token drift map from HQ's pre-pass state to source canonical.
+- `audit-trail.md`: every file/line that was changed in the brand pass with before/after values.
+- `structural-drift.md`: what I noticed as structural differences (out of scope this phase) for a future review.
+- This file: why no live screenshots.
 
 ## If you want screenshots later
 

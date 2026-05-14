@@ -1,3 +1,5 @@
+> **Status: Locked 2026-05-11, executed 2026-05-13. Body retained as the locked plan; § "Done when" carries the executed cutover log.**
+
 # Venue Scout port plan
 
 **Status:** Locked 2026-05-11. Ready for Code to commit as the first entry on `vs-port-fresh` (off `dd38577`). All six open questions answered; § 8 carries the locked decisions.
@@ -367,7 +369,7 @@ Producer-driven iteration to restore live URL fetching + venue research quality 
 
 ### Phase 4.10.6-port: URL acquisition fallbacks + deck flow polish
 
-Two-theme follow-up after 4.10.5 stabilized the AI surface. **URL acquisition:** new `extractWebSearchResults(content)` + `findVenueWebsite(app, {name, address, city})` + `findBestSearchResultUrl(name, results)` helpers harvest URLs directly from Claude's `web_search_tool_result` blocks (or via a targeted per-venue Claude call for Phase B) when the model leaves `website_url` null on the tool output despite usable URLs being visible in search results. Tightened the `submit_research` `name` schema description to forbid descriptive suffixes ("Storefront", "Vacancy", "Ground-Floor Retail", etc.). Added `address` + `neighborhood` to FILL_TOOL schema with patch guards in Phase A + Pass 1 — fills addresses when producer left them blank, especially when the venue name is itself an address-style string. **Deck flow polish:** post-deck-generation now opens the deck's edit_url in a new tab + navigates back to Deck Prep (was /brief). DeckPrep regenerate uses a new `reset_scout_for_deck_regenerate(uuid)` RPC (migration `20260514100000`) that atomically resets `current_step='deck_prep'` + strips `deck_generation_started_at` from brief_data via `jsonb -` operator + clears failure state. Slide 2 ALL CAPS for `client_name` / `event_name` / `event_live_date` / `event_location` via scoped pre-pass. Venue slide ordering: per-slide `updateSlidesPosition` requests force canonical `[V1_detail, V1_fp, V2_detail, V2_fp, ...]` layout (single batched call was rejected by API for "not in presentation order"). vs-generate-deck success path now has `.eq("current_step", "deck_prep")` CAS so parallel successes don't both append to `generated_decks`. ErrorState dropped misleading "Contact the team" secondary buttons (routed to /deck/prep same as primary). Photo dnd strategy on Deck Prep switched from `verticalListSortingStrategy` to `rectSortingStrategy` so the 4-col grid gets proper neighbor animations. One migration applied to remote.
+Two-theme follow-up after 4.10.5 stabilized the AI surface. **URL acquisition:** new `extractWebSearchResults(content)` + `findVenueWebsite(app, {name, address, city})` + `findBestSearchResultUrl(name, results)` helpers harvest URLs directly from Claude's `web_search_tool_result` blocks (or via a targeted per-venue Claude call for Phase B) when the model leaves `website_url` null on the tool output despite usable URLs being visible in search results. Tightened the `submit_research` `name` schema description to forbid descriptive suffixes ("Storefront", "Vacancy", "Ground-Floor Retail", etc.). Added `address` + `neighborhood` to FILL_TOOL schema with patch guards in Phase A + Pass 1; fills addresses when producer left them blank, especially when the venue name is itself an address-style string. **Deck flow polish:** post-deck-generation now opens the deck's edit_url in a new tab + navigates back to Deck Prep (was /brief). DeckPrep regenerate uses a new `reset_scout_for_deck_regenerate(uuid)` RPC (migration `20260514100000`) that atomically resets `current_step='deck_prep'` + strips `deck_generation_started_at` from brief_data via `jsonb -` operator + clears failure state. Slide 2 ALL CAPS for `client_name` / `event_name` / `event_live_date` / `event_location` via scoped pre-pass. Venue slide ordering: per-slide `updateSlidesPosition` requests force canonical `[V1_detail, V1_fp, V2_detail, V2_fp, ...]` layout (single batched call was rejected by API for "not in presentation order"). vs-generate-deck success path now has `.eq("current_step", "deck_prep")` CAS so parallel successes don't both append to `generated_decks`. ErrorState dropped misleading "Contact the team" secondary buttons (routed to /deck/prep same as primary). Photo dnd strategy on Deck Prep switched from `verticalListSortingStrategy` to `rectSortingStrategy` so the 4-col grid gets proper neighbor animations. One migration applied to remote.
 
 **End-user win:** producer-grade end-to-end flow: real URLs land on every venue, regenerate-from-Deck-Prep actually produces a new deck, slide 2 renders ALL CAPS, slides are in correct interleaved order, error states no longer have dead buttons.
 
@@ -383,7 +385,7 @@ When each item becomes relevant in a sub-phase, cherry-pick the corresponding co
 | Phase 4.5-port (`vs-research-venues`) | failed Phase 4.4 commit | `_shared/anthropic.ts` tools + tool_choice extension. Additive, no regression. |
 | Phase 4.5-port (`vs-research-venues`) | failed Phase 4.4 commit | `_shared/venueTypes.ts` server-side mirror with `canonicalizeType`, `sanitizeWebsiteUrl`, and the search-page pattern detection from the URL-quality hot patch. |
 | Phase 4.8-port (`vs-generate-deck`) | failed Phase 4.6 commit | `_shared/googleServiceAccount.ts` generic scope-keyed JWT helper. |
-| Whenever first wizard ports | `4a8a5c6` | TS Stepper backport. Replaces the local `src/components/talent-scout/Stepper.tsx` (fixed 3-step) with `src/components/ui/Stepper.tsx` (canonical, arbitrary `steps`). The new HQ wizard surfaces (if any) use the canonical one. |
+| ~~Whenever first wizard ports~~ | ~~`4a8a5c6`~~ | ~~TS Stepper backport~~ (DROPPED at 2026-05-13 cutover; see § "Done when"). |
 
 The other commits on main that landed during the failed Phase 4 attempt (Phase 4 build-through mode codification, doc audit cleanup, `mirror-style-guide.md` relocation) are optional. Cherry-pick whichever pieces stay relevant; skip the rest.
 
@@ -401,6 +403,18 @@ The 10 sub-phases above land on `vs-port-fresh`. Then:
 - Delete the five orphaned edge functions on production: `vs-parse-brief`, `vs-parse-sheet`, `vs-start-sourcing`, `vs-compile-summaries`, `vs-generate-deck` (all from the failed attempt; the new port replaces them).
 - Drop the abandoned `vs_briefs`, `vs_sourcing_rounds`, `vs_pitch_decks` tables in production if they were left in place per the Code-recommended Option A (one cleanup migration on the new main).
 - Update `docs/roadmap.md`, `CHECKPOINT.md`, `docs/decisions.md` to reflect the port-completed state. The roadmap's failed Phase 4 entries become "Abandoned, replaced by Phase 4-port."
+
+### Cutover complete: 2026-05-13
+
+Main was hard-reset to `vs-port-fresh` HEAD via `git push origin vs-port-fresh:main --force-with-lease`. Sequence executed:
+1. Cherry-picked `6775429` (TS Final Review re-enable Generate Packet) and `f24d3f5` (TS Final Review packet email template + layout fixes + email-as-cover-letter fallback) from origin/main onto vs-port-fresh; both diffstats verified byte-equal to source via `git show --stat`.
+2. Considered `4a8a5c6` (TS wizard migrates to canonical Stepper) for cherry-pick but dropped it: it imports from `src/components/ui/Stepper.tsx`, a file introduced by the failed Phase 4.3.1 squash (`564ff9e`) that the cutover discards. Carrying the file standalone was the alternative; chose the cleaner zero-contamination path. The TS wizard pages keep their import of the local `talent-scout/Stepper.tsx`.
+3. `npx tsc --noEmit` and `npm run build` both clean.
+4. Verified `git log --cherry-pick --left-only --no-merges main...vs-port-fresh` listed only the 42 commits we intended to drop (failed Phase 4 squashes 4.1 through 4.6 + URL-quality hot patches + their backfills + 4a8a5c6 + Phase 4.3.1 follow-ups + assorted doc-only commits). Cherry-picked `6775429` and `f24d3f5` were correctly excluded as patch-equivalent.
+5. Push fired Netlify deploy on `hq.mirrornyc.com`. Production VS went live as the build completed.
+6. Post-cutover cleanup: `vs-start-sourcing` orphan edge function deleted via `supabase functions delete`. The 4.1-port migration's DROP TABLE statements for `vs_briefs` / `vs_sourcing_rounds` / `vs_pitch_decks` were already applied (migration `20260512200000` is on the production ledger), so no additional DB cleanup migration was needed.
+
+Main HEAD after cutover: `7cd27ed`. Final post-cutover doc sweep landed in a follow-on `[skip netlify]` commit.
 
 ---
 

@@ -14,5 +14,6 @@ metadata:
 4. Use `callClaude('app', ...)` for any Anthropic call (NEVER raw fetch)
 5. Use `_shared/sendEmail.ts` for transactional email (NEVER raw Gmail API)
 6. Document in `docs/edge-functions.md`
-7. Deploy: `supabase functions deploy <name>`
-8. If imports `_shared/prompts.ts`, also re-deploy other consumers (`ts-pull-candidates`, `ts-evaluate-candidate`, `ts-bulk-reevaluate`, `ts-final-review`, `ts-generate-scorecard`, `ts-refine-scorecard`)
+7. **Run `security-auditor` subagent on the function before deploy.** Address every MUST FIX. Note any deferred SHOULD FIX items in the commit message.
+8. Deploy: `supabase functions deploy <name>`
+9. If imports `_shared/prompts.ts`, also re-deploy other consumers (`ts-pull-candidates`, `ts-evaluate-candidate`, `ts-bulk-reevaluate`, `ts-final-review`, `ts-generate-scorecard`, `ts-refine-scorecard`)

@@ -1,11 +1,11 @@
-# Mirror NYC HQ — proposed style guide
+# Mirror NYC HQ: proposed style guide
 
 Pre-implementation proposal for Jimmie's review. Synthesized from three inputs:
-- The Mirror NYC blank deck template (`BLANK DECK TEMPLATE (2026).pptx`) — **brand authority**
-- The Talent Scout source app — reference for component patterns, not brand authority
-- The current HQ build — preserves the compactness and density Jimmie likes
+- The Mirror NYC blank deck template (`BLANK DECK TEMPLATE (2026).pptx`): **brand authority**
+- The Talent Scout source app: reference for component patterns, not brand authority
+- The current HQ build: preserves the compactness and density Jimmie likes
 
-The deck template's master slide settings nail down exact font families, weights, and hex values. Everything below is sourced from those — no guesswork.
+The deck template's master slide settings nail down exact font families, weights, and hex values. Everything below is sourced from those: no guesswork.
 
 ## Design philosophy
 
@@ -13,7 +13,7 @@ The deck template's master slide settings nail down exact font families, weights
 
 **Density stays.** Mirror's deck is a presentation; HQ is a dashboard. The deck has space because it's a slide, not because Mirror loves whitespace. HQ keeps its compact stat tiles, tight tables, thin header bar.
 
-**Coral is an accent, not a color scheme.** In the deck, coral appears on three things: section numerals, the "DATE | LOCATION" eyebrow caption, and one full-bleed background pop page. That's it. HQ should feel similarly restrained — coral on primary actions, accent text, the active brand mark — but most of the UI reads in white-on-black with mono captions doing the labeling work.
+**Coral is an accent, not a color scheme.** In the deck, coral appears on three things: section numerals, the "DATE | LOCATION" eyebrow caption, and one full-bleed background pop page. That's it. HQ should feel similarly restrained: coral on primary actions, accent text, the active brand mark: but most of the UI reads in white-on-black with mono captions doing the labeling work.
 
 ## 1. Color palette
 
@@ -37,11 +37,11 @@ All values from `BLANK DECK TEMPLATE (2026).pptx` slide-master XML.
 | `--warn` | `#F59E0B` | `38 92% 50%` | Running / In Pool / In progress |
 | `--destructive` | `#EF4444` | `0 84% 60%` | Failed / Stalled / Closed / T1 / Reject |
 
-**Notes on coral:** The deck's coral is `#BE4E44` — duskier and more terracotta than the source app's `#ef5b5b`. On a black background it reads more "Mirror branded" and less "consumer-tech CTA red." This is the single biggest token change vs Phase 3.5b's current branch.
+**Notes on coral:** The deck's coral is `#BE4E44`: duskier and more terracotta than the source app's `#ef5b5b`. On a black background it reads more "Mirror branded" and less "consumer-tech CTA red." This is the single biggest token change vs Phase 3.5b's current branch.
 
-The deck also has the `#BE4E44` muted-coral as a full-bleed background fill on the "Event Vibe" pop page. HQ's only equivalent surface that could use this treatment is the Coming Soon landing page — keep on pure black for now; reserve the pop-coral background for a future mood/marketing page if needed.
+The deck also has the `#BE4E44` muted-coral as a full-bleed background fill on the "Event Vibe" pop page. HQ's only equivalent surface that could use this treatment is the Coming Soon landing page: keep on pure black for now; reserve the pop-coral background for a future mood/marketing page if needed.
 
-**Restraint test:** if more than 8% of any HQ screen is coral, you're using too much. Look at the deck — coral is a 16pt caption + a 110pt numeral + nothing else.
+**Restraint test:** if more than 8% of any HQ screen is coral, you're using too much. Look at the deck: coral is a 16pt caption + a 110pt numeral + nothing else.
 
 ## 2. Typography
 
@@ -87,11 +87,11 @@ The deck uses 36pt for hero titles and 16pt for accent captions on a presentatio
 | Button label | Roboto Mono 700 | 12px | 0.06em | UPPERCASE |
 | Inline timestamp / metadata | Roboto Mono 400 | 12px | normal | as-is |
 | Table header | Roboto Mono 700 | 11px | 0.06em | UPPERCASE |
-| Table cell | Roboto 400 | 13–14px | normal | Sentence case |
+| Table cell | Roboto 400 | 13-14px | normal | Sentence case |
 
 ### Why all-caps everywhere
 
-It's not "Mirror loves yelling." All-caps + Roboto Mono is the deck's caption system — every navigation eyebrow, every page-numeric, every label-on-content-slide is mono caps. Adopting that across HQ's labels gets the brand DNA without changing any layout. Body paragraphs and table data stay sentence case — those aren't captions.
+It's not "Mirror loves yelling." All-caps + Roboto Mono is the deck's caption system: every navigation eyebrow, every page-numeric, every label-on-content-slide is mono caps. Adopting that across HQ's labels gets the brand DNA without changing any layout. Body paragraphs and table data stay sentence case: those aren't captions.
 
 ## 3. Component conventions
 
@@ -137,16 +137,16 @@ className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border
            font-mono font-bold uppercase text-[10.5px] tracking-[0.06em]"
 ```
 
-All pills get a 6px round dot prefix (`<span className="h-1.5 w-1.5 rounded-full bg-current" />`) — that's the deck's micro-marker pattern.
+All pills get a 6px round dot prefix (`<span className="h-1.5 w-1.5 rounded-full bg-current" />`): that's the deck's micro-marker pattern.
 
 ### Tier badges (scorecard)
 
 | Tier | Color | Visual |
 | --- | --- | --- |
-| Tier 1 — Must-Haves | Destructive red `#EF4444` | `bg-destructive/10 border-destructive/30 text-destructive` |
-| Tier 2 — Strong Differentiators | Warn amber `#F59E0B` | `bg-warn/10 border-warn/30 text-warn` |
-| Tier 3 — Nice-to-Haves | Success green `#4ADE80` | `bg-success/10 border-success/30 text-success` |
-| Bonus — Competitor Experience | Coral primary `#BE4E44` | `bg-primary/15 border-primary/40 text-primary` |
+| Tier 1: Must-Haves | Destructive red `#EF4444` | `bg-destructive/10 border-destructive/30 text-destructive` |
+| Tier 2: Strong Differentiators | Warn amber `#F59E0B` | `bg-warn/10 border-warn/30 text-warn` |
+| Tier 3: Nice-to-Haves | Success green `#4ADE80` | `bg-success/10 border-success/30 text-success` |
+| Bonus: Competitor Experience | Coral primary `#BE4E44` | `bg-primary/15 border-primary/40 text-primary` |
 
 ### StatusDropdown (candidate status)
 
@@ -158,7 +158,7 @@ All pills get a 6px round dot prefix (`<span className="h-1.5 w-1.5 rounded-full
 | Reject | Destructive red | `#EF4444` |
 | Auto-Rejected | Muted destructive (red-400 at 80%) | (disabled state) |
 
-These don't appear in the deck (deck doesn't have status dropdowns), so this is "source-aligned with brand-friendly neutrals" — interview cyan and fast-track purple are bright but not in the brand palette, used only on inline controls where they need to be quickly distinguishable.
+These don't appear in the deck (deck doesn't have status dropdowns), so this is "source-aligned with brand-friendly neutrals": interview cyan and fast-track purple are bright but not in the brand palette, used only on inline controls where they need to be quickly distinguishable.
 
 ### Inputs
 
@@ -171,7 +171,7 @@ className="w-full h-11 px-3 rounded-sm bg-surface-alt border border-border-stron
 
 - **Height:** 44px (deck's input metric).
 - **Radius:** 4px.
-- **Focus ring:** 3px coral at 15% — the deck's accent treatment.
+- **Focus ring:** 3px coral at 15%: the deck's accent treatment.
 - **Filled state:** add `border-l-2 border-l-primary` to indicate completed-step inputs in wizard flows.
 
 ### Cards / panels
@@ -180,8 +180,8 @@ className="w-full h-11 px-3 rounded-sm bg-surface-alt border border-border-stron
 className="rounded-sm bg-surface border border-border p-5"
 ```
 
-- 4px radius. Pure flat — no shadow.
-- Background `--surface` (`#0A0A0A` — barely lifted off black) so cards are visible against `#000` page.
+- 4px radius. Pure flat: no shadow.
+- Background `--surface` (`#0A0A0A`: barely lifted off black) so cards are visible against `#000` page.
 - 20px padding internal (`p-5`). Tighter than source, matching HQ's compactness.
 
 ### Header / nav
@@ -214,7 +214,7 @@ Use this above every page title to create the deck's hierarchy of "small mono ca
 </h1>
 ```
 
-For role names, candidate names, settings titles — same treatment.
+For role names, candidate names, settings titles: same treatment.
 
 ### Side rail (optional decorative, not a system pattern)
 
@@ -224,9 +224,9 @@ The deck's vertical "STRATEGY / DESIGN / PRODUCTION" + "MIRROR NYC" rail with a 
 
 The current `phase-3-5b-visual-brand` branch did most things right but on the WRONG coral and the WRONG font. To land this style guide cleanly:
 
-1. **Update `src/index.css`** — swap `--primary` from coral `0 83% 65%` to dusty coral `4 47% 51%`. Adjust `--primary-hover`. Change Google Fonts import from Inter to Montserrat + Roboto + Roboto Mono. Add `--font-display`, `--font-body`, `--font-mono` variables.
-2. **Update `tailwind.config.ts`** — swap `fontFamily.sans` from Inter to Roboto. Add `fontFamily.display: ['Montserrat', ...]` and `fontFamily.mono: ['Roboto Mono', ...]`.
-3. **Update component-layer utilities** in `src/index.css` — `.btn-primary`, `.input-base`, `.tier-badge`, `.status-pill`, `.h-page`, `.label-section`, `.crumb` all keep their structure but switch to `--font-display` / `--font-mono` as appropriate.
+1. **Update `src/index.css`**: swap `--primary` from coral `0 83% 65%` to dusty coral `4 47% 51%`. Adjust `--primary-hover`. Change Google Fonts import from Inter to Montserrat + Roboto + Roboto Mono. Add `--font-display`, `--font-body`, `--font-mono` variables.
+2. **Update `tailwind.config.ts`**: swap `fontFamily.sans` from Inter to Roboto. Add `fontFamily.display: ['Montserrat', ...]` and `fontFamily.mono: ['Roboto Mono', ...]`.
+3. **Update component-layer utilities** in `src/index.css`: `.btn-primary`, `.input-base`, `.tier-badge`, `.status-pill`, `.h-page`, `.label-section`, `.crumb` all keep their structure but switch to `--font-display` / `--font-mono` as appropriate.
 4. **JSX-level changes** (a couple dozen files):
     - Page titles → `<h1 className="font-display font-extrabold uppercase ...">` + ALL CAPS labels in code.
     - Section labels → add `font-mono` to existing `font-bold uppercase tracking-wider` classes.
@@ -239,17 +239,17 @@ The current `phase-3-5b-visual-brand` branch did most things right but on the WR
 1. **Coral hex confirmed:** `#BE4E44` (dusty terracotta) instead of `#ef5b5b` (bright). Confirm. CONFIRMED.
 2. **Display font confirmed:** Montserrat ExtraBold + Montserrat regular. (Deck uses both as a paired display in "CLIENT NAME / PROJECT NAME"; HQ might only need ExtraBold for now and pull regular when needed.) Confirm. CONFIRMED.
 3. **Caption font confirmed:** Roboto Mono for every uppercase tracked label across HQ. Confirm or push back if Roboto Mono feels too "code-y" outside the deck context. CONFIRMED.
-4. **Body font confirmed:** Roboto for prose paragraphs (recruiter overview, internal notes, etc.). Or keep Inter for body and only use Montserrat + Roboto Mono for display/captions. Lighter touch — fewer fonts loaded — but slightly off-brand. USE ROBOTO FOR PROSE.
-5. **All-caps page titles:** ALL CAPS for "OPEN ROLES" / "TEST EVENTS PRODUCER" / "JOE FAMULARO" — feels brand-correct or feels like shouting? The deck does this consistently; comfortable to adopt? YES LET'S TRY IT. 
-6. **All-caps button labels:** "+ NEW ROLE", "PULL NEW CANDIDATES", "GENERATE SCORECARD →" — feels strong or feels too presentational for a working app? FEELS TOO STRONG
+4. **Body font confirmed:** Roboto for prose paragraphs (recruiter overview, internal notes, etc.). Or keep Inter for body and only use Montserrat + Roboto Mono for display/captions. Lighter touch: fewer fonts loaded: but slightly off-brand. USE ROBOTO FOR PROSE.
+5. **All-caps page titles:** ALL CAPS for "OPEN ROLES" / "TEST EVENTS PRODUCER" / "JOE FAMULARO": feels brand-correct or feels like shouting? The deck does this consistently; comfortable to adopt? YES LET'S TRY IT. 
+6. **All-caps button labels:** "+ NEW ROLE", "PULL NEW CANDIDATES", "GENERATE SCORECARD →": feels strong or feels too presentational for a working app? FEELS TOO STRONG
 7. **Side rail pattern:** keep off the dashboard? OK on the landing page only? WE MIGHT EXPLORE IN THE CORE HQ BUT FINE TO LEAVE OUT OF TALENT SCOUT.
 8. **Coral restraint:** is "max 8% coral coverage per screen" a meaningful constraint, or should coral keep its current frequency (every primary CTA, every eyebrow, every R-round pill)? LET'S LEAVE WHAT WE HAVE FOR NOW. 
 
-These answers determine the actual code changes. Once locked, applying takes maybe 60-90 minutes — most of it is JSX label swaps, not architectural work.
+These answers determine the actual code changes. Once locked, applying takes maybe 60-90 minutes: most of it is JSX label swaps, not architectural work.
 
 ## 6. What this style guide does NOT cover
 
-- Accessibility (color contrast against pure black for muted-foreground was checked: 78% white on 0% black hits ~14:1, AAA — fine. Coral `#BE4E44` against black is 4.6:1, AA only. For text >= 18px or 14px-bold, this passes; for smaller body text on coral, use white on coral instead.)
+- Accessibility (color contrast against pure black for muted-foreground was checked: 78% white on 0% black hits ~14:1, AAA: fine. Coral `#BE4E44` against black is 4.6:1, AA only. For text >= 18px or 14px-bold, this passes; for smaller body text on coral, use white on coral instead.)
 - Motion / transitions (defer to Phase 5 polish)
 - Marketing surfaces (deck is its own thing; future mirrornyc.com refresh is out of scope)
 - Email templates (Phase 3.8)

@@ -12,7 +12,7 @@ This file is a Lovable-scaffold artifact: a centered "Welcome to Your Blank App"
 
 I ported source's `@layer components` block (`.h-page`, `.label-section`, `.btn-primary`, `.tier-badge`, `.status-pill`, etc.) into `src/index.css` so they're available, but no HQ component currently uses them. HQ components style with raw Tailwind utilities + tokens.
 
-This isn't "wrong" — both approaches reach the same visual outcome — but it means an HQ component lifted from source verbatim won't pick up source's exact button/input metrics unless we either (a) update the lifted component to use the new utility classes, or (b) keep using raw Tailwind. Pick a posture deliberately when porting Phase 3.6 / 3.7 components.
+This isn't "wrong": both approaches reach the same visual outcome: but it means an HQ component lifted from source verbatim won't pick up source's exact button/input metrics unless we either (a) update the lifted component to use the new utility classes, or (b) keep using raw Tailwind. Pick a posture deliberately when porting Phase 3.6 / 3.7 components.
 
 ### 3. Source uses a different breadcrumb pattern
 
@@ -24,7 +24,7 @@ Source: `interview / fast_track / consider / reviewed / hired / rejected / auto_
 
 HQ: `interview / fast_track / consider / reject / auto_rejected`.
 
-HQ deliberately trimmed this in Phase 3.5 — `reviewed` and `hired` aren't part of HQ's review workflow. Documented in `docs/decisions.md`. Don't fix.
+HQ deliberately trimmed this in Phase 3.5: `reviewed` and `hired` aren't part of HQ's review workflow. Documented in `docs/decisions.md`. Don't fix.
 
 ### 5. Source `RoleStatusPill` "Active" label
 

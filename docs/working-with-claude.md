@@ -1,45 +1,95 @@
 # Working with Claude on Mirror NYC HQ
 
-A playbook for setting up Code + Cowork sessions to ship Phase 4 (Venue Scout) and Phase 5 (Cross-cutting) cleanly. Tailored to Jimmie's role (Senior Producer, not a developer) and the way we've built HQ through Phases 1 to 3.11.
+Living playbook for setting up Code + Cowork sessions to ship HQ work cleanly. Tailored to Jimmie's role (Senior Producer, not a developer) and the patterns built up through Phases 1 to 4.
 
-**Workflow change as of 2026-05-08:** Lovable is no longer used for UI scaffolding. All UX/UI design now happens directly in Claude (Cowork for wireframing + design specs, Code for implementation). The Talent Scout pattern set is the design system foundation for everything new — see `docs/design-system.md` for canonical layout, component, and behavioral references.
-
-The premise from the articles: most people use Claude as a faster autocomplete. The leverage is in treating it as **programmable infrastructure** you configure once and re-use forever. You've already done a lot of this implicitly (CLAUDE.md, layered docs, deploy policy, CHECKPOINT). This doc closes the gaps and adds the next-tier setup so the upcoming phases run smoother than 3.X did.
+Phase 4 (Venue Scout port) shipped to production 2026-05-13. Phase 5 (HQ Core) is the next major build. All UX/UI design happens directly in Claude (Cowork for wireframing + design specs, Code for implementation). Lovable is no longer in the toolchain. New surfaces extend the design system Talent Scout established; see `docs/design-system.md`.
 
 ---
 
 ## 1. Two surfaces, two jobs
 
-You're already running this pattern informally. Make it explicit.
-
-| Surface | Job | When you reach for it |
+| Surface | Job | When to reach for it |
 | --- | --- | --- |
-| **Cowork** (Claude desktop app) | Planning, prompt-drafting, exploration, "what should we build," wireframes | Before opening a Code session, drafting specs, refining requirements, recapping a phase |
-| **Code** (Claude desktop app) | Execution, implementation, anything that touches files / DB / edge fns | Once the spec is clear and you want me to do the work |
+| **Cowork** (Claude desktop app) | Planning, prompt-drafting, exploration, "what should we build," wireframes. | Before opening a Code session, drafting specs, refining requirements, recapping a phase. |
+| **Code** (Claude desktop app) | Execution, implementation, anything that touches files, DB, or edge functions. | Once the spec is clear and you want the work done. |
 
-**How to open Code:** launch the Claude desktop app, switch to Code mode, and open the `mirror-nyc-hq` folder directly in the app. Do NOT use `cd` + `claude` in a terminal -- Jimmie does not use the CLI.
+**How to open Code:** launch the Claude desktop app, switch to Code mode, open the `mirror-nyc-hq` folder directly in the app. Jimmie does not use the CLI. Never instruct `cd` + `claude` in a terminal.
 
-**The mistake to avoid:** using Code for ideation. Code sessions burn context fast, and it's easy to lose architectural decisions in the noise of file edits. Use Cowork to think; arrive in Code with a tight prompt.
+**The mistake to avoid:** using Code for ideation. Code burns context fast and loses architectural decisions in the noise of file edits. Use Cowork to think; arrive in Code with a tight prompt.
 
 **The cleanest sequence for any new feature:**
-1. Cowork session: brainstorm + interview-style spec (use Extended Thinking on Opus 4.6)
-2. Cowork outputs a markdown spec → save to `OUTPUTS/` or paste back into a Code-session prompt
-3. Code session: paste the spec, ask me to validate/critique it FIRST, then implement
-4. After each sub-phase: paste Code's completion summary into Cowork. Cowork updates CHECKPOINT.md + decisions.md before anything else (see §1a below).
-5. End-of-feature: final doc sweep in Code (roadmap, edge-functions.md, any remaining decisions), then squash-merge.
 
-**§1a — Cowork as the sync enforcer**
+1. **Cowork session:** brainstorm + interview-style spec.
+2. **Cowork outputs a markdown spec** to `OUTPUTS/phase-X-Y-<surface>-spec.md`.
+3. **Code session:** paste the spec, ask Code to validate or critique it first, then implement.
+4. **After each sub-phase:** Code writes `OUTPUTS/COWORK_SYNC.md`. Cowork reads it at the start of the next session and updates docs as needed.
+5. **End-of-feature:** doc sweep in Code (roadmap, edge-functions.md, decisions, etc.), then squash-merge.
 
-Every time you paste a Code sub-phase summary into Cowork, Cowork's first action is a doc sync pass:
-1. Update `CHECKPOINT.md` — branch commit hash, current sub-phase, what's done vs. next.
-2. Update `docs/decisions.md` — any architectural decisions, conflict resolutions, or rationale captured in the Code output that isn't already in the doc.
-3. Flag if anything in the Code output contradicts existing docs (schema.md, edge-functions.md, auth-model.md) so it can be corrected before the next session starts.
+---
+
+## 2. Two-session discipline
+
+This project runs two parallel Claude sessions. Both sessions can edit files. Without discipline, they clobber each other.
+
+### The rule
+
+**Cowork is read-only on `/Users/jimmie/Code/mirror-nyc-hq` while any `claude/*` feature branch is active.** During active feature work:
+
+- Cowork doc-update intent goes into `OUTPUTS/REPO_DOC_UPDATES.md` (Cowork workspace, not the repo). Code consumes it on its branch.
+- Spec drafts go into `OUTPUTS/phase-X-Y-<surface>-spec.md` (Cowork workspace).
+- The `OUTPUTS/COWORK_SYNC.md` channel remains Code to Cowork. Code overwrites it after each sub-phase wrap-up.
+
+Cowork commits to repo `main` are allowed only when there are no active feature branches AND no uncommitted WIP on `main`. Same `[skip netlify]` pattern. Verify with the pre-flight check below.
+
+### Pre-flight check (start of every session, both Cowork and Code)
+
+```bash
+cd /Users/jimmie/Code/mirror-nyc-hq && \
+  echo "=== branch ===" && git branch --show-current && \
+  echo "=== status ===" && git status --short && \
+  echo "=== worktrees ===" && git worktree list && \
+  echo "=== unmerged claude branches ===" && (git branch | grep '^  claude/' || echo "(none)")
+```
+
+Decision tree on the output:
+
+- **Active worktree on `claude/*` AND uncommitted changes on `main`:** Cowork goes read-only. Surface the WIP files to Jimmie. Don't edit, don't stash.
+- **Active worktree, main clean:** Cowork goes read-only. Code is the writer.
+- **No active worktree, main has uncommitted changes:** previous session left WIP. Surface to Jimmie before any new work.
+- **No active worktree, main clean:** business as usual.
+
+### Pre-squash check (Code, before any `git checkout main && git merge --squash`)
+
+Hard gate. Run `git status --short` on `main` first. If output is non-empty, **stop**. Do not auto-stash. Do not auto-commit. Surface every modified or deleted file to Jimmie with the diff and let him decide.
+
+The Phase 4.3.1 main-checkout conflict was caught by exactly this check. Keep it.
+
+### Worktree hygiene
+
+After a sub-phase squash-merges, Code removes the worktree:
+
+```bash
+git worktree remove .claude/worktrees/<name>
+git branch -D claude/<name>
+```
+
+Stale worktrees make `git status` and `git branch -a` noisy. Clean up before declaring the sub-phase done.
+
+---
+
+## 3. Cowork as the sync enforcer
+
+Every time a Code sub-phase summary lands in Cowork (via `OUTPUTS/COWORK_SYNC.md` or manual paste), Cowork's first action is a doc sync pass:
+
+1. Update `CHECKPOINT.md`. Branch commit hash, current sub-phase, what's done vs. next.
+2. Update `docs/decisions.md`. Any architectural decisions, conflict resolutions, or rationale captured in the Code output that isn't already in the doc.
+3. Flag if anything in the Code output contradicts existing docs (`docs/schema.md`, `docs/edge-functions.md`, `docs/auth-model.md`) so it can be corrected before the next session starts.
 
 This makes Cowork the enforcing sync layer rather than relying on Code to defer to end-of-phase sweeps.
 
-**On auto-sync between Cowork and Code**
+### The COWORK_SYNC.md auto-bridge
 
-There is no native live bridge between the two sessions. The closest approximation: Code writes a `COWORK_SYNC.md` file to the workspace after each sub-phase completion (a structured summary of what landed, decisions made, open items). Cowork reads it at the start of the next session and updates the docs. This cuts the manual paste step -- you'd just open Cowork and say "sync from latest Code output" instead of copying the terminal wall of text. Add this instruction to the Code kickoff prompt to activate it:
+Code writes a structured summary to `OUTPUTS/COWORK_SYNC.md` after each sub-phase completion. Cowork reads it at session start instead of copying the terminal wall of text. Activate via the Code kickoff prompt:
 
 ```
 After each sub-phase commit, write a structured summary to /Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/COWORK_SYNC.md with:
@@ -51,609 +101,235 @@ After each sub-phase commit, write a structured summary to /Users/jimmie/Claude/
 Overwrite the file each time (Cowork reads the latest, not a log).
 ```
 
+### Phase-boundary check (roadmap.md)
+
+At every phase boundary (the squash-merge of the last sub-phase of a phase), Cowork verifies `docs/roadmap.md` reflects the new state:
+
+1. **Finishing phase summarizes to one line.** Per `docs/conventions.md`, completed phases collapse to a single-line `DONE` summary with shipped date and main HEAD hash. Phase 4 example: `Phase 4: Venue Scout port. DONE. Shipped to production 2026-05-13 (main at \`7cd27ed\`). Full 1:1 port from \`mirror-nyc-venue-scout-pro\`; 4.1-port through 4.10.6-port. Details in \`docs/venue-scout-port-plan.md\` and \`CHECKPOINT.md\`.`
+2. **Next phase expands to full active-phase detail.** Sub-phase candidates, ordering notes, dependencies between sub-phases.
+3. **Open questions section reconciled.** Anything answered by the finished phase moves to `docs/decisions.md` or is struck. Anything still open and forward-looking moves to the next phase's section.
+
+Two-session discipline applies. If a `claude/*` feature branch is still open at the moment of the check (rare; usually the last sub-phase is squashed before the phase formally closes), the roadmap edit queues in `OUTPUTS/REPO_DOC_UPDATES.md` instead of landing directly on `main`.
+
+The `TEMPLATES/phase-end-doc-sweep.md` template carries the full end-of-phase sweep list; the roadmap check is the Cowork-side enforcement of step 1 of that template.
+
 ---
 
-## 2. Cowork folder setup (one-time, ~30 min)
-
-The Cowork article is right that the folder system is the whole game. Set this up once and every session arrives with you-context already loaded.
+## 4. Standard new-surface workflow
 
 ```
-~/Claude/Mirror NYC HQ'
-├── ABOUT ME/
-│   ├── about-me.md           ← who you are, how you think, how you want output
-│   ├── anti-ai-writing-style.md  ← THE no-em-dashes file + other voice rules
-│   └── my-company.md         ← Mirror NYC priorities, this quarter's goals
-├── OUTPUTS/                  ← where Claude saves drafted specs, plans, decision memos
-└── TEMPLATES/                ← reusable session-prompt templates (see §6)
+For each new HQ surface:
+
+  1. Cowork session:
+     a. Run design-spec-builder subagent (or paste the prompt manually).
+     b. Subagent reads docs/design-system.md first to find the closest Talent Scout analog.
+     c. Drafts a spec mapping the new surface to existing patterns.
+        Calls out what's being lifted vs. adapted vs. invented.
+     d. Save to OUTPUTS/phase-X-Y-<surface>-spec.md.
+
+  2. Pause. Review and edit the spec yourself before any code is touched.
+
+  3. Code session: paste the spec.
+     "Implement exactly per the spec at OUTPUTS/phase-X-Y-<surface>-spec.md
+      (Cowork-workspace path /Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/...).
+      Reference docs/design-system.md and the closest Talent Scout component.
+      Ask before deviating."
+
+  4. After implementation: run code-reviewer subagent on the diff with cold context.
+     Subagent verifies design-system.md adherence + checks the brand-rules-that-bit-us list.
+
+  5. Iterate fixes. Squash-merge.
 ```
 
-### What to put in each ABOUT ME file
-
-**`about-me.md`** — under 2000 words. Have Claude interview you. Sample seed:
-> "Interview me to write the about-me.md. Ask 10-15 questions about my role at Mirror NYC, how I think about building products, my technical level (light HTML/CSS, fluent in AI workflow design, comfortable in Lovable, NOT a coder), my tone preferences (casual / direct / no filler / no em dashes), and how I want Claude to push back on me vs. defer."
-
-**`anti-ai-writing-style.md`** — codify the rules already in CLAUDE.md item "How to talk to Jimmie":
-- No em dashes anywhere. Use `,` or `(parentheses)` or `:` instead
-- No filler affirmations ("Great question!", "Absolutely!")
-- Recommend, don't present options. State the tradeoff
-- Reference only the latest version of anything we iterated on
-- Don't fill gaps; ask if unclear
-- Concise by default, deeper when the task warrants it
-
-**`my-company.md`** — 6-8 sharp questions, answered with focus. What's Mirror NYC building this quarter? What does HQ unlock for the team? What are you actively trying to avoid? Update quarterly."Interview me to write the my-company.md. Ask 10-12 questions Mirror NYC, team structure, workflow, internal and external tools utilized, tone preferences and immeadiate goals and priorities, and anything else you think would be relevant context about the company to the development and implementation of these tools and apps."
-
-### Global Instructions (Cowork settings → Edit Global Instructions)
-
-```
-You're working with Jimmie Baugh, Senior Producer at Mirror NYC.
-
-Folder structure:
-- ABOUT ME/ → who he is, voice rules, company prioritiABes. Read every session.
-- OUTPUTS/ → save substantive drafts (specs, plans, decision memos) here when work is worth keeping.
-- TEMPLATES/ → reusable session-prompt scaffolds for HQ work (Phase port plan, new edge function spec, new HQ surface page spec, etc.). Pull from here when starting a new task that fits a pattern.
-
-Always: read ABOUT ME on session start. Reference anti-ai-writing-style.md when drafting any text Jimmie will paste elsewhere. Update my-company.md if priorities shift mid-conversation.
-```
-
-**Why this matters specifically:** every Cowork session starts cold. Without this you're re-explaining tone, role, and project context every time. With it, you open a session and start with "draft a spec for the Notifications system" and it lands in your voice the first try.
+Adds 30 to 60 minutes of design upfront per surface but eliminates "built inconsistent with Talent Scout, redo" loops.
 
 ---
 
-## 3. Code-side setup (worth doing before Phase 4 starts)
+## 5. Code observations (passive logging)
 
-**Desktop app workflow:** open Claude Code desktop app, click "Open Folder," select `/Users/jimmie/Code/mirror-nyc-hq`. That's it -- no terminal needed. CLAUDE.md and subdirectory `.md` files load automatically. Subagents run from the same session with `/agent <name>`.
+After completing each task, Code logs noteworthy findings it encountered into `code-observations.md` at repo root. Persistent across sessions. Triaged on calm afternoons.
 
-The HQ repo already has a strong CLAUDE.md and docs structure. The gaps below are about layering in subagents, hooks, and slash commands so I operate more autonomously without losing accuracy.
+Workflow detail lives in `CLAUDE.md` § Code observations and the header of `code-observations.md`. Short version:
 
-### What you already have (don't change)
+- Append-only table per area (Frontend, Edge Functions, Database, Build & Tooling, Docs, Other).
+- Each row carries date, file, introducing commit hash (from `git blame`), severity tag, verify/resolve glyphs, and a one-sentence note.
+- In end-of-turn responses, Code mentions findings only if directly relevant to the current task; otherwise says "N new observations logged."
 
-- `CLAUDE.md` (project bible, lean, tone rules, deploy policy in item 8)
-- `docs/architecture.md` / `auth-model.md` / `schema.md` / `edge-functions.md` / `decisions.md` / `roadmap.md` / `conventions.md` / `cron-jobs.md` / `operations.md`
-- `CHECKPOINT.md` (living state)
-- `DECISIONS.md` / `NEXT_STEPS.md` / `PROJECT_STATUS.md` / `CONTEXT_FOR_NEXT_CHAT.md` (session-handoff)
-- The squash-merge-only-as-deploy-event policy (CLAUDE.md item 8)
+Don't derail the active task to fix what Code flags. Log it, keep moving. The verify step catches false positives later.
 
-### What to add (recommendations, prioritized)
-
-#### 3a. Subagents — one `.md` file per agent inside `.claude/agents/`
-
-Folder is `.claude/agents/`. The `*.md` shorthand below means "create individual `.md` files inside that folder" — `.claude/agents/code-reviewer.md`, `.claude/agents/security-auditor.md`, etc. The glob isn't literal.
-
-Per the playbook: subagents run in isolated context windows, return summaries, and are how you keep the main session clean. Worth defining for HQ:
-
-**`code-reviewer.md`** — the two-Claude review pattern. Especially valuable for Phase 5 since there's no reference repo to validate against.
-
-```markdown
----
-name: code-reviewer
-description: Reviews recent commits or staged diff cold, with no prior context. Use AFTER any substantive feature implementation, BEFORE squash-merge.
-tools: Read, Grep, Glob, Bash
-model: claude-opus-4-6
 ---
 
-You are a staff engineer reviewing this branch with no prior context. The implementer
-took shortcuts; you find them.
+## 6. Code-side setup (state of the playbook as of Phase 5)
 
-For each modified file, check:
-1. Correctness — does this do what the commit message claims?
-2. HQ-specific gotchas:
-   - Hooks above any early return (no "Rendered more hooks than during the previous render")
-   - useBlocker NOT used (HQ stays on plain BrowserRouter)
-   - JSX names imported (tsc + build don't catch all typos; runtime crashes do)
-   - bg-input not bg-secondary on slider/score-bar tracks (Mirror grey card surfaces)
-   - mailto: uses inline-block max-w-full truncate align-bottom
-3. Edge function specifics:
-   - verify_jwt setting in config.toml matches usage pattern
-   - requireInternalOrUserAuth for self-invoking functions
-   - callClaude wrapper used (never raw fetch to api.anthropic.com)
-4. Migration safety:
-   - timestamptz for time-of-event columns
-   - Realtime tables added to publication if UI subscribes
-   - Explicit GRANTs in migration
-5. Deploy policy:
-   - [skip netlify] on every commit unless explicit deploy
-   - No dual-pushed origin feature branches
+The HQ repo already has a strong `CLAUDE.md` and docs structure. The configuration below is what Code reads at session start.
 
-Output: structured report with MUST FIX, SHOULD FIX, CONSIDER. Be direct, no hedging.
-```
+### Subagents in `.claude/agents/`
 
-**`security-auditor.md`** — runs on any new edge function before it ships.
+Each `*.md` file defines a named subagent runnable via `/agent <name>`. Currently defined:
 
-```markdown
----
-name: security-auditor
-description: Audits a new or modified edge function for auth, secrets, and data exposure issues.
-tools: Read, Grep, Glob, Bash
-model: claude-opus-4-6
----
+- **`code-reviewer.md`**. Two-Claude review pattern. Run after any substantive feature implementation, before squash-merge. Verifies design-system adherence + brand-rules-that-bit-us list.
+- **`security-auditor.md`**. Runs on any new edge function before deploy. Wired into the `add-edge-function` skill at step 7.
+- **`design-spec-builder.md`**. Cowork-or-Code, drafts a new HQ surface spec before any implementation. Reads design-system.md and finds the closest Talent Scout analog. Save output to `OUTPUTS/phase-X-Y-<surface>-spec.md`.
+- **`migration-reviewer.md`**. Runs before any `supabase db push --linked`. Catches reversibility, RLS, GRANT, and cascade issues.
 
-You are auditing an HQ edge function. HQ runs on Supabase with admin-gated routes
-and shared INTERNAL_API_SECRET for cron paths.
+### Skills in `.agents/skills/<name>/SKILL.md`
 
-Check:
-1. Auth: requireInternalOrUserAuth used? config.toml verify_jwt setting matches
-   call pattern? Self-invoke uses internal-secret header?
-2. Secrets: no hardcoded keys, no service role exposed in response, no Vault values
-   echoed in logs.
-3. Data exposure: response payload doesn't leak unintended fields (esp. user PII or
-   other-tenant data via misjoined queries).
-4. Storage: signed URLs (not public) for any candidate_attachments / packets refs.
-5. RLS bypass justification: if function uses service role to bypass RLS, the
-   docstring explains WHY and what authorization replaces it.
-
-Output: MUST FIX (security), SHOULD FIX (defense-in-depth), notes.
-```
-
-**`design-spec-builder.md`** — Phase 4 + 5 specific. We design in Claude now (no Lovable), and Talent Scout is the design system foundation. Use this in Cowork OR Code mode before any new-surface implementation.
-
-```markdown
----
-name: design-spec-builder
-description: Drafts a detailed spec for a new HQ surface (page, edge function, or feature) before any implementation. Use when starting any new Phase 4 / 5 work.
-tools: Read, Grep, Glob
-model: claude-opus-4-6
----
-
-You're drafting a spec for a new HQ surface. The implementer (the main session)
-will follow this spec exactly, so under-specifying is worse than over-specifying.
-
-Read first (in this order):
-1. docs/design-system.md — the canonical layout / component / behavioral patterns
-   for any HQ surface. The new surface MUST extend these, not invent.
-2. The §11 "Talent Scout pages as design references" table in design-system.md
-   — find the closest analog and start from its structure.
-3. The actual reference file(s) in src/pages/talent-scout/ that match the new
-   surface type.
-4. docs/architecture.md, auth-model.md, schema.md, conventions.md.
-
-Then draft a spec covering:
-1. Closest Talent Scout analog (e.g. "this is a list/table page so it inherits
-   from RoleDashboard.tsx + CandidateTable.tsx structure"). State explicitly
-   what's being lifted vs. adapted vs. invented.
-2. Route + auth gate (ProtectedRoute / AdminRoute / ProducerRoute).
-3. Data model: which tables read/write, columns, RLS implications.
-4. UI layout: section-by-section, mapped to design-system.md primitives. Page
-   width (max-w-3xl / 4xl / 7xl), card surfaces (bg-surface-alt), header pattern
-   (back-link / h-page / muted description), action bar (sticky bottom for forms,
-   inline for non-form pages). Reference specific design-system.md sections.
-5. Components used: shadcn/ui primitives first, Talent-Scout-internal primitives
-   second (Stepper, TagInput, CriterionCard pattern), only invent NEW components
-   if the gap is real and the new component will be reused.
-6. State + behavior: dirty tracking, loading states, error handling, empty
-   states, confirmation dialogs. Map to design-system.md §9 behavioral patterns.
-7. Edge functions invoked (existing or new), their signatures, verify_jwt posture.
-8. Migrations needed, with timestamptz / GRANTs / Realtime publication notes.
-9. Re-eval / re-pull implications if the change can affect existing candidates.
-10. Test plan (manual checklist, since we don't run automated tests).
-11. The 5-8 brand rules from design-system.md §12 that specifically apply to
-    this surface (e.g. bg-input not bg-secondary on tracks, hooks above early
-    returns, JSX names imported).
-
-Output: a markdown spec ready to paste into Code as the implementation prompt.
-The implementer should be able to build the surface from this spec without
-re-reading every Talent Scout file.
-```
-
-**`migration-reviewer.md`** — runs before any `supabase db push --linked`.
-
-```markdown
----
-name: migration-reviewer
-description: Reviews a pending migration before db push. Catches reversibility, RLS, GRANT, and cascade issues.
-tools: Read, Grep, Bash
-model: claude-sonnet-4-6
----
-
-Read the pending migration file. Cross-check against docs/schema.md and existing
-migrations in supabase/migrations/.
-
-Check:
-1. Reversibility: is there a clear rollback path? If destructive (DROP COLUMN /
-   DROP TABLE / TRUNCATE), is it justified?
-2. RLS: new tables added to RLS-enforce list per docs/auth-model.md? Tier
-   correct (member / producer / admin)?
-3. GRANTs: explicit GRANT TO authenticated/service_role per the conventions in
-   docs/schema.md?
-4. Realtime: if frontend will subscribe via postgres_changes, is the table added
-   to supabase_realtime publication with REPLICA IDENTITY FULL?
-5. Cascade behavior: ON DELETE CASCADE / SET NULL appropriate for FKs?
-6. updated_at_auto trigger added if the table has updated_at?
-7. Data backfill: if column is NOT NULL with default, will existing rows accept it?
-
-Output: MUST FIX (blocks push), SHOULD FIX (post-push cleanup), CONSIDER.
-```
-
-#### 3b. Skills — one folder per skill inside `.agents/skills/<name>/SKILL.md`
-
-**Repo convention:** canonical skill content lives in `.agents/skills/<name>/SKILL.md` (tracked in git, with YAML frontmatter). The `.claude/skills/` directory is gitignored — it holds per-machine symlinks regenerated by tooling. So author skills in `.agents/skills/<name>/SKILL.md`, not `.claude/skills/<name>.md`.
+Repo convention: canonical skill content lives in `.agents/skills/<name>/SKILL.md` (tracked in git, with YAML frontmatter). The `.claude/skills/` directory is gitignored.
 
 Each `SKILL.md` starts with frontmatter:
+
 ```yaml
 ---
 name: skill-name
-description: "Use when <trigger description>. Triggers: <comma-separated keywords>."
+description: "Use when <trigger>. Triggers: <comma-separated keywords>."
 metadata:
   author: hq
   version: "1.0.0"
 ---
 ```
-The description's trigger keywords are how Claude decides when to load the skill on-demand.
 
+Currently shipped:
 
-**`add-edge-function.md`**:
-```
-1. Create supabase/functions/<name>/index.ts
-2. Decide verify_jwt setting (default true; false ONLY for self-invoking or cron-
-   called functions, then add requireInternalOrUserAuth)
-3. Add config.toml entry if verify_jwt = false
-4. Use callClaude('app', ...) for any Anthropic call (NEVER raw fetch)
-5. Use _shared/sendEmail.ts for transactional email (NEVER raw Gmail API)
-6. Document in docs/edge-functions.md
-7. Deploy: supabase functions deploy <name>
-8. If imports _shared/prompts.ts, also re-deploy other consumers
-   (ts-pull-candidates, ts-evaluate-candidate, ts-bulk-reevaluate, ts-final-review,
-   ts-generate-scorecard, ts-refine-scorecard)
-```
+- **`add-edge-function`**. Verify_jwt + config.toml + callClaude + sendEmail conventions. Step 7 invokes `security-auditor`.
+- **`add-migration`**. Migration file naming, types regen, schema.md update, re-eval flag.
+- **`ship-phase`**. The squash-merge dance (pre-merge checklist + squash + post-merge backfill).
+- **`new-hq-surface`**. Phase-5 specific. Pattern for a new page that has no existing template.
+- **`triage-observations`**. Turns the `code-observations.md` log into a summary, a prioritized fix plan with recommended phase/order, and a ready-to-paste Code prompt. Does not implement fixes.
 
-**`add-migration.md`**:
-```
-1. Create supabase/migrations/<YYYYMMDDHHMMSS>_<name>.sql
-2. Run migration-reviewer subagent before push
-3. supabase db push --linked
-4. supabase migration list --linked  (confirm Local = Remote)
-5. supabase gen types typescript --linked > /tmp/types.ts && test -s /tmp/types.ts
-   && mv /tmp/types.ts src/integrations/supabase/types.ts
-6. Update docs/schema.md in the SAME commit as the types regen
-7. If CHANGES re-eval-relevant fields (jd / hiring_priorities / scorecard /
-   evaluation_prompt), note in commit message that bulk re-eval will be triggered
-   on next role save
-```
+### Custom slash commands in `.claude/commands/`
 
-**`ship-phase.md`** — the squash-merge dance.
-```
-PRE-MERGE CHECKLIST (on feature branch):
-  - npx tsc --noEmit clean
-  - npm run build clean
-  - supabase migration list --linked (Local = Remote)
-  - All edge functions deployed at latest shared-module versions
-  - Doc sweep: roadmap.md (phase done summary), decisions.md (rationale), schema.md
-    (any column changes), edge-functions.md, CHECKPOINT.md (queued for backfill)
+- **`/ship`**. Pre-merge checklist + report.
+- **`/diagnose`**. Cron + edge fn health + migrations drift check.
+- **`/spec <surface>`**. Boot the design-spec-builder subagent. Save output to `OUTPUTS/phase-X-Y-<surface>-spec.md`.
+- **`/sync-prompts`**. Verify `src/lib/talent-scout/defaultEvalPrompt.ts` matches `supabase/functions/_shared/prompts.ts` DEFAULT_EVAL_PROMPT byte-for-byte.
+- **`/triage-observations`**. Run the `triage-observations` skill against `code-observations.md`: summary, prioritized fix plan, ready-to-paste Code prompt.
 
-SQUASH MERGE:
-  - git checkout main && git pull --ff-only
-  - git merge --squash <feature-branch>
-  - Unstage any session-handoff docs from the squash (PROJECT_STATUS.md /
-    NEXT_STEPS.md / DECISIONS.md / CONTEXT_FOR_NEXT_CHAT.md if they're in tree)
-  - git commit (NO [skip netlify] — this IS the deploy event)
-  - git push origin main → triggers Netlify build
+### Subdirectory CLAUDE.md files
 
-POST-MERGE:
-  - Backfill CHECKPOINT.md with new commit hash + push WITH [skip netlify]
-  - git branch -D <feature-branch>
-  - Deploy any pending edge functions
-  - Apply any pending GUC / Vault config in dashboard
-```
+Loaded on-demand when working in that directory:
 
-**`new-hq-surface.md`** — Phase 5 specific. The pattern for a brand-new page that has no existing template.
-```
-1. Run design-spec-builder subagent to draft the spec (don't skip)
-2. Schema + migration first if new tables involved (run migration-reviewer)
-3. Edge functions next if new ones needed
-4. Frontend last:
-   - Route in src/App.tsx (under ProtectedRoute or AdminRoute)
-   - Page in src/pages/<area>/<Name>.tsx
-   - Components extract to src/components/<area>/ once a piece is reused twice
-   - Brand: bg-surface-alt cards, coral primary, font-display for headers
-5. Run code-reviewer subagent before commit
-6. Hooks above any early return; double-check JSX imports
-```
+- **`src/components/talent-scout/CLAUDE.md`**. UI conventions (hooks above early return, bg-input on tracks, mailto styling, ReferralPill color history, StatusDropdown sizing).
+- **`supabase/functions/CLAUDE.md`**. Edge function conventions (self-invoke pattern, callClaude wrapper, sendEmail vs packetRender, types regen flow).
+- **`supabase/migrations/CLAUDE.md`**. Migration conventions (timestamptz, GRANTs, Realtime publication, updated_at trigger, Vault for GUCs).
 
-#### 3c. Hooks (`.claude/settings.json`)
+### Hooks (`.claude/settings.json`)
 
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if echo \"$CLAUDE_TOOL_FILE_PATH\" | grep -qE '\\.(ts|tsx)$'; then cd \"$CLAUDE_PROJECT_DIR\" && npx tsc --noEmit 2>&1 | head -20; fi"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block_dangerous.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+PostToolUse runs `npx tsc --noEmit` after any `.ts` or `.tsx` write. PreToolUse runs `block_dangerous.sh` to block force-push to main, accidental rm -rf, supabase db reset, and direct secrets writes that aren't paired with a Vault update.
 
-`.claude/hooks/block_dangerous.sh` — block force-push to main, accidental rm -rf, supabase db reset (would wipe local DB, but worth a confirm), and direct supabase secrets writes that aren't paired with a vault update.
-
-These hooks aren't strictly necessary (the harness sandbox already catches most of this) but they document intent and run regardless of model judgment.
-
-#### 3d. Custom slash commands — one `.md` file per command inside `.claude/commands/`
-**`/ship`** — run the pre-merge checklist + report. Equivalent of "before I squash-merge, what's not clean?"
-
-**`/diagnose`** — query cron + edge fn health + recent migrations against remote to surface drift.
-
-**`/spec <surface>`** — boot the design-spec-builder subagent for a named surface, save output to `docs/specs/<surface>.md`.
-
-**`/sync-prompts`** — verify `src/lib/talent-scout/defaultEvalPrompt.ts` matches `supabase/functions/_shared/prompts.ts` DEFAULT_EVAL_PROMPT byte-for-byte. (We've drifted on this twice. Worth a one-liner.)
-
-#### 3e. Subdirectory CLAUDE.md files
-
-Add lean per-area CLAUDE.md files with the gotchas that bit us. Loaded on-demand only when working in that directory. Keeps the root file under instruction budget.
-
-`src/components/talent-scout/CLAUDE.md`:
-```
-# Talent Scout UI conventions
-- Hooks above any early return (Phase 3.5 black-screen lesson)
-- Slider track: bg-input (not bg-secondary) on bg-surface-alt cards
-- Score bar track: same — bg-input
-- mailto: inline-block max-w-full truncate align-bottom (NOT block truncate)
-- ReferralPill stays electric blue (coral was tried in 3.7.8.8, reverted in 3.7.8.13)
-- StatusDropdown compact = h-9 text-[12px] (not h-8 text-[11px])
-- CriterionCard textarea auto-grows via scrollHeight effect
-```
-
-`supabase/functions/CLAUDE.md`:
-```
-# Edge function conventions
-- Self-invoking functions: verify_jwt = false in config.toml, requireInternalOrUserAuth in code
-- Anthropic: callClaude('talent_scout' | 'venue_scout' | 'hq', ...) — never raw fetch
-- Email: _shared/sendEmail.ts (general) or _shared/packetRender.ts sendPacketEmail (packet path)
-- Service-account Google: _shared/gmailServiceAccount.ts is the template
-- DO NOT pipe `supabase gen types --linked` directly into types.ts — use /tmp + test -s + mv
-```
-
-`supabase/migrations/CLAUDE.md`:
-```
-# Migration conventions
-- timestamptz for time-of-event, date for date-only
-- Explicit GRANTs to authenticated + service_role (see initial_schema.sql template)
-- Realtime tables: add to supabase_realtime publication + REPLICA IDENTITY FULL
-- Tables with updated_at: add the updated_at_auto trigger
-- Reversibility: prefer additive changes; flag destructive ones in PR description
-- ALTER DATABASE / ALTER ROLE on custom GUCs: BLOCKED in Supabase-hosted Postgres.
-  Use Vault (vault.create_secret) instead, with a SECURITY DEFINER helper that reads
-  vault.decrypted_secrets.
-```
+The hooks document intent and run regardless of model judgment. The sandbox catches most of this independently.
 
 ---
 
-## 4. Slash command muscle memory (in any active session)
+## 7. Slash command muscle memory
 
-The 14-commands article hits the high-leverage shortcuts. The ones that matter most for our workflow:
+The high-leverage shortcuts inside any active session:
 
 | Command | When | Why |
 | --- | --- | --- |
-| `/compact` | Hit ~50% context | Manually, before the auto-compact. Your control of what survives. |
+| `/compact` | Hit ~50% context | Manual compact before the auto. Controls what survives. |
 | `/cost` | Periodically | Fuel gauge. Know when to compact. |
-| `/model` | Architecture vs execution | Opus for spec / review / hard refactors; Sonnet (default) for execution; Haiku for quick lookups. Switch mid-session. |
-| `/clear` | Session goes off rails | Soft reset, preserves project context. Better than closing the tab. |
-| `!<cmd>` | Need shell output in context | Direct shell run inline, no copy-paste. |
-| `/btw` | Side question | Ask without losing main thread. We don't use this much yet — worth trying. |
+| `/model` | Architecture vs execution | Opus for spec, review, hard refactors. Sonnet (default) for execution. Haiku for quick lookups. |
+| `/clear` | Session goes off rails | Soft reset, preserves project context. |
+| `!<cmd>` | Need shell output | Direct shell run inline, no copy-paste. |
 | `/loop <interval> <prompt>` | Background poll | "Check the Netlify build every 5 min." Useful during phase squash-merges. |
 
 ---
 
-## 5. Phase 4 + 5 specific recommendations
+## 8. Phase 5 specific recommendations
 
-**Both phases follow the same workflow now.** Lovable is no longer in the toolchain. Cowork wireframes + drafts the spec; Code implements exactly per spec; the design system in `docs/design-system.md` is the canonical reference. The Talent Scout pages are the live design system — you read them as reference for layout, components, and behavior, not to port.
+Phase 5 is six cross-cutting surfaces with no reference repo to port from. This is the test of the spec-driven workflow.
 
-### The standard new-surface workflow (Phase 4 + 5)
+### The six surfaces
 
-```
-For each new surface:
-  1. Cowork session: 
-     a. Run design-spec-builder subagent (or paste the prompt manually).
-     b. Subagent reads docs/design-system.md FIRST to find the closest TS analog.
-     c. Drafts a spec mapping the new surface to existing patterns. Calls out
-        what's being lifted vs. adapted vs. invented.
-     d. Save to docs/specs/<surface>.md.
-  2. Pause. Review the spec yourself. Edit it before any code is touched.
-  3. Code session: paste the spec, "implement exactly per docs/specs/<surface>.md.
-     Reference docs/design-system.md and the closest Talent Scout component.
-     Ask before deviating."
-  4. After implementation: code-reviewer subagent on the diff with cold context.
-     Subagent verifies design-system.md adherence + checks the brand-rules-that-
-     bit-us list.
-  5. Iterate fixes. Squash-merge.
-```
+1. **Notifications dispatch.** Foundation. Folds in `ts-send-pull-notification` and the future bell. Provides the event pipeline before Dashboard tiles or in-app bell can wire to it.
+2. **Dashboard tile grid.** Main landing for authenticated users. Each tile links to a destination. Needs Projects to exist before it lands.
+3. **Real `/projects` page.** Highest-traffic HQ Core surface. Replaces the current stub.
+4. **`/venues`, `/clients`, `/tasks` pages.** Parallelizable once Projects pattern is set.
+5. **Activity log feed.** Cross-cutting. Hooks into project, venue, role, scout, and task triggers.
+6. **Admin pages.** User role management. Global settings UI for fields currently SQL-only.
 
-Adds 30-60 min of design upfront per surface but eliminates the "we built it inconsistent with Talent Scout, let's redo" loops.
+### Order matters
 
-### Phase 4 (Venue Scout)
+Dashboard depends on Projects (the tile is hollow without a destination). Notifications can ship in parallel since it's edge-function-plus-table groundwork; the bell wires after Dashboard. Activity log lands after enough event triggers exist to populate it.
 
-The Venue Scout Lovable draft exists but is reference for **functional scope only**, not for design. Don't port styling or layout from it. The screen-by-screen spec Jimmie has supplies the functional requirements; design-system.md supplies the look + feel.
+### Per-surface discipline
 
-Sub-phase pattern (mirrors Talent Scout port plan):
-1. **4.1 Inventory + spec** — write `docs/venue-scout-port-plan.md`. List every surface (brief upload, sourcing wizard, candidate venue list, venue detail, deck generation, scout dashboard). Map each to its Talent Scout analog per design-system.md §11.
-2. **4.2 Schema + edge function shells** — vs_* tables, vs-* edge functions stubbed.
-3. **4.3 Scout dashboard + brief upload** — first surface to ship. Match RoleDashboard.tsx structure.
-4. **4.4 Sourcing wizard** — match the new-role wizard pattern (3-step Stepper + wizardStore equivalent).
-5. **4.5 Candidate venue list + detail** — match CandidateTable + CandidateDetail.
-6. **4.6 Deck generation** — packet path equivalent. Reuse `_shared/packetRender.ts`.
+Each surface gets a Cowork-drafted spec before any code. Six surfaces will drift from each other (and from Talent Scout's patterns) without the spec discipline. The cleanup pass after a drifted batch is expensive.
 
-Same deploy policy: feature branch + `[skip netlify]` per commit, squash-merge as the single Netlify-deploy event.
+### Phase 4 context
 
-### Phase 5 (Cross-cutting — the hard one)
-
-Six new surfaces, no functional reference at all:
-1. **Notifications dispatch** (the foundation; folds in `ts-send-pull-notification`)
-2. **Dashboard tile grid** (main landing; needs something to link to from each tile)
-3. **Real `/projects` page** (highest-traffic HQ Core surface)
-4. **`/venues`, `/clients`, `/tasks` pages** (parallelizable once Projects pattern is set)
-5. **Activity log feed** (cross-cutting, hooks into project / venue / task triggers)
-6. **Admin pages** (user role management, global settings UI for any setting still managed via SQL)
-
-Each gets a Cowork-drafted spec before any code. The spec-driven workflow above is the discipline — without it, six surfaces will drift from each other AND from Talent Scout's patterns, and the cleanup pass will be expensive.
-
-**Order matters:** Dashboard depends on Projects existing first (the tile is hollow without a destination). Notifications can ship in parallel since it's an edge function + future bell UI; the bell wires up after Dashboard exists.
+Phase 4 shipped as a 1:1 port from `mirror-nyc-venue-scout-pro`. Reference: `docs/venue-scout-port-plan.md`. The functional scope of Venue Scout was inherited; HQ design tokens were applied. Phase 5 doesn't have that crutch: every surface is greenfield against the design system Talent Scout established.
 
 ---
 
-## 6. Templates worth creating in Cowork
-
-These belong in your **master Cowork folder** (single folder per person, not per project — see §2 for setup). Save under `<master-folder>/TEMPLATES/HQ/` if you want HQ-specific templates separated from cross-project ones, or flat in `TEMPLATES/` if you'd rather accumulate everything together. The folder name itself is whatever you chose for the master Cowork folder; the article's `Claude Cowork` is just an example.
-**`new-phase-kickoff.md`** — paste this at the start of a new phase Code session (open Claude Code desktop app, select the mirror-nyc-hq folder, paste into the chat):
-```
-We're starting Phase X.Y — <surface name>. Read the following IN ORDER before doing anything:
-1. docs/roadmap.md (full context on this phase)
-2. docs/decisions.md (most recent phase first)
-3. CHECKPOINT.md (latest commit, drift, deployed state)
-4. OUTPUTS/phase-X-Y-<surface>-spec.md (the spec drafted in Cowork)
-5. OUTPUTS/phase-X-Y-<surface>-wireframe.html (reference wireframe — treat as layout authority)
-6. docs/working-with-claude.md (this playbook)
-
-Then:
-a. Write the full sub-phase breakdown into docs/roadmap.md before touching any code (per conventions.md Documentation section).
-b. Propose: feature branch name and the FIRST sub-phase's implementation plan.
-c. Don't start coding until I approve the plan.
-
-After each sub-phase commit, write a structured summary to /Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/COWORK_SYNC.md:
-- Sub-phase number and commit hash
-- What landed (files created/modified, migrations applied, functions deployed)
-- Decisions made or confirmed
-- Open items / flags for me
-- Next sub-phase
-Overwrite the file each time.
-```
-
-Note: step 5 (wireframe) applies when a Cowork wireframe exists for the surface. Skip it if the phase has no wireframe output.
-
-**`new-edge-function.md`** — for spinning up a new function:
-```
-New edge function: <name>
-
-Body / behavior: <one paragraph>
-
-Auth posture: <verify_jwt true / false + reason>
-
-Required secrets: <list>
-
-Anthropic call: <yes/no — if yes, which app key>
-
-Reference functions: <which existing function in HQ has the closest pattern>
-
-Run add-edge-function skill, then security-auditor subagent before commit.
-```
-
-**`new-hq-surface.md`** — for a new page/route:
-```
-New HQ surface: <route path>
-
-Auth gate: <ProtectedRoute / AdminRoute / ProducerRoute>
-
-Run design-spec-builder subagent FIRST. Save output to docs/specs/<name>.md.
-Pause. I'll review and edit the spec before you implement.
-
-Then run new-hq-surface skill.
-```
-
-**`phase-end-doc-sweep.md`** — for end-of-phase documentation pass:
-```
-We're squash-merging Phase X.Y in the next 24 hours. Run the doc sweep:
-
-1. docs/roadmap.md → mark this phase DONE with one-line summary
-2. docs/decisions.md → make sure every meaningful decision in this phase is captured
-3. docs/schema.md → reflect any column / table changes
-4. docs/edge-functions.md → reflect any new / changed functions
-5. docs/conventions.md → if we discovered a new gotcha, add it
-6. CHECKPOINT.md → queue for backfill (don't update until post-merge)
-
-Net result: the doc state should let a fresh session pick up the next phase without
-asking us anything.
-```
-
----
-
-## 7. Anti-patterns I've seen in our work together (and how to avoid them in 4 + 5)
-
-These are honest. From reviewing how we operated through Phase 3.X.
+## 9. Anti-patterns to avoid (lessons from Phases 3 and 4)
 
 **1. Mid-phase scope creep.** Phase 3.7 was supposed to be candidates UX; it absorbed referral ingestion late and grew into 18 sub-phases. Phase 3.8 absorbed real-cap-alert email mid-stream.
 
-  *Fix:* if a "while we're here" idea comes up mid-phase, capture it in `NEXT_STEPS.md` for the next phase. Resist absorbing it into the active branch unless the branch hasn't been around long.
+*Fix:* if a "while we're here" idea comes up mid-phase, capture it in `CHECKPOINT.md` § Next-up for a future phase. Resist absorbing it into the active branch unless the branch is fresh.
 
-**2. Documentation drift on shared modules.** We had `src/lib/talent-scout/defaultEvalPrompt.ts` mirror `supabase/functions/_shared/prompts.ts`. Drifted twice. Each time it caused real eval differences.
+**2. Documentation drift on shared modules.** `src/lib/talent-scout/defaultEvalPrompt.ts` mirrors `supabase/functions/_shared/prompts.ts`. Drifted twice. Each drift caused real eval differences.
 
-  *Fix:* the `/sync-prompts` slash command above. Or a proper hook that fails on commit if they diverge.
+*Fix:* the `/sync-prompts` slash command.
 
-**3. Sandbox-permissive destructive actions.** Earlier today the sandbox correctly blocked me from auto-loading the Vault secret because that's a credential operation needing explicit confirmation. Good.
+**3. Long-running session context decay.** After 3+ /compact cycles, decisions from early in the session get fuzzy. Phase 3.8's 60-min stall threshold was wrong mid-session because the per-candidate heartbeat detail got lost.
 
-  *Fix:* keep the sandbox's destructive-action gates strict. When I propose an action it'll block, that's the signal to ask you first.
+*Fix:* end a session at phase boundaries. Start the next phase fresh, with the kickoff template. Capture decisions to `docs/decisions.md` live during the phase, not retroactively.
 
-**4. Long-running session context decay.** After 3+ /compact cycles in one session, decisions made early get fuzzy. The Phase 3.8 "60-min stall threshold" rationale was wrong because I forgot the per-candidate heartbeat detail mid-session.
+**4. Edge function deploy lag.** Repeatedly during Phase 3.X, code commits needed `supabase functions deploy <name>` to take effect, and the deploy lagged the commit by hours.
 
-  *Fix:* end a session at phase boundaries. Start the next phase fresh, with the kickoff template above. Capture decisions to `docs/decisions.md` LIVE during the phase, not retroactively.
+*Fix:* the `add-edge-function` skill includes the deploy step. The `ship-phase` skill explicitly lists which functions need re-deploy at squash-merge time. Use them.
 
-**5. Edge fn deploy lag.** Multiple times this week I committed code that needed `supabase functions deploy <name>` to actually take effect, and the deploy lagged behind the commit by hours.
+**5. Em dashes leaking back in.** Multiple times. The rule is in `CLAUDE.md` and `ABOUT ME/anti-ai-writing-style.md`. Voice still slips.
 
-  *Fix:* the `add-edge-function` skill above includes the deploy step. The `ship-phase` skill explicitly lists which functions need re-deploy at squash-merge time. Use them.
+*Fix:* the doc-audit sweep (2026-05-13) cleared the existing population. Catch new ones via the `grep -nP "[\x{2014}\x{2013}]"` check before any commit that adds docs.
 
-**6. Em dashes leaking back in.** Multiple times. The rule is in CLAUDE.md AND your tone preferences AND `anti-ai-writing-style.md`. I still slip.
+**6. Phase 4 failed-attempt branch.** The first Phase 4.1 through 4.6 attempt on `main` drifted enough from the Lovable source repo that producer testing exposed a stack of small UX regressions and rework cost grew nonlinearly. Recovery: hard-reset main to a fresh `vs-port-fresh` 1:1 port branch via `--force-with-lease` push.
 
-  *Fix:* a hook that greps committed files for em dashes and warns. Not blocking (sometimes they're in legacy content), just a heads-up.
+*Fix:* for port phases, hold port-fidelity tightly. Allowed divergences: HQ design tokens, port-plan-locked backend changes. Anything else is a bug, not a feature. Memory rule `feedback_port_fidelity`.
 
----
+**7. Tool-output collapse on AI surfaces.** Multiple sessions burned re-tuning system prompts when an LLM call returned empty payloads. Root cause: forced `tool_choice` plus per-item gating + schema mismatch.
 
-## 8. Day-by-day rollout (one week, ~4 hours total)
+*Fix:* don't edit system prompts to fix it. Move the lever to schema descriptions + post-emission sanitization. Memory rule `feedback_tool_choice_collapse`.
 
-You don't need all of this at once. Here's what moves the needle most per hour spent.
+**8. CHECKPOINT.md staleness.** The doc that's supposed to be the living state drifted from reality when post-squash backfill commits got delayed. Bit Cowork at 4.3.2 and 4.3.3 wrap-ups.
 
-| Day | Effort | Action |
-| --- | --- | --- |
-| 1 | 30 min | Cowork folder structure: ABOUT ME / OUTPUTS / TEMPLATES. Run the about-me.md interview. |
-| 1 | 15 min | Write anti-ai-writing-style.md from your CLAUDE.md tone rules. |
-| 2 | 30 min | Write my-company.md. Set Cowork Global Instructions. |
-| 2 | 30 min | Add the four subagents (.claude/agents/) — code-reviewer, security-auditor, design-spec-builder, migration-reviewer. |
-| 3 | 20 min | Add `.claude/settings.json` with the PostToolUse tsc hook. |
-| 3 | 20 min | Add the four subdirectory CLAUDE.md files. |
-| 4 | 30 min | Define the four custom slash commands (/ship, /diagnose, /spec, /sync-prompts). |
-| 4 | 30 min | Save the four Cowork TEMPLATES files. |
-| 5 | 30 min | Try it: open a Cowork session, draft a Phase 4 sub-phase spec. |
-| 5 | 30 min | Open Claude Code desktop app, select the mirror-nyc-hq folder, paste the new-phase-kickoff template. Verify the subagents run cleanly. |
-| 6-7 | — | Use the system on Phase 4. Iterate as gaps surface. |
-
-**Don't:**
-- Try to do all of this in one session
-- Add subagents you won't use; only define the ones that map to your real workflow
-- Bloat CLAUDE.md with everything in this doc; keep CLAUDE.md lean and reference this file from item 9 of the index
+*Fix:* the COWORK_SYNC two-write convention (pending in `OUTPUTS/REPO_DOC_UPDATES.md`). Until that lands, CHECKPOINT.md gets updated in the same commit as any sub-phase completion. Don't defer.
 
 ---
 
-## 9. The mindset shift
+## 10. Templates available
 
-The articles all converge on one point: you're not getting better at prompting, you're getting better at **system design**. You've already done this for HQ at the project level (CLAUDE.md, layered docs, deploy policy). The next layer is the same discipline applied to the Claude Code session itself.
+Pre-built session-prompt scaffolds in the Cowork workspace at `/Users/jimmie/Claude/Mirror NYC HQ/TEMPLATES/`:
 
-The question to ask before any new feature: "What automation can I set up ONCE that makes every future occurrence of this pattern smoother?" Not "what's the prompt for this task?" That's the difference between a faster autocomplete and a programmable engineering team.
+- **`new-phase-kickoff.md`**. Paste at the start of a new phase Code session.
+- **`new-edge-function.md`**. For spinning up a new edge function.
+- **`new-hq-surface.md`**. For a new page/route.
+- **`phase-end-doc-sweep.md`**. For end-of-phase documentation pass.
 
-Phase 4 is a known shape (port from Lovable, follows Talent Scout pattern). Phase 5 is the test — six new surfaces with no reference. The infrastructure above is what makes Phase 5 ship cleanly instead of grinding for weeks.
-
----
-
-## 10. Resources from the articles worth bookmarking
-
-- `code.claude.com/docs/en/best-practices` — Anthropic's official concise guide
-- `github.com/hesreallyhim/awesome-claude-code` — curated subagents / hooks / skills / MCP servers
-- `github.com/VoltAgent/awesome-claude-code-subagents` — 100+ pre-built subagent definitions; cherry-pick the ones that fit HQ
-- `github.com/obra/superpowers` — TDD-enforced 7-phase workflow. Heavier than HQ needs but worth reading for the discipline patterns.
-- `github.com/shanraisshan/claude-code-best-practice` — daily-use practitioner playbook from Anthropic engineers
-- `humanlayer.dev/blog/writing-a-good-claude-md` — the most rigorous CLAUDE.md instruction-budget analysis
+Each template is short and links into the appropriate skill or subagent.
 
 ---
 
-*This doc is the living playbook for our work together. Update it when patterns we discover deserve to be encoded. Keep it under 500 lines so it stays scannable.*
+## 11. The mindset shift
+
+The leverage isn't in better prompts. It's in better system design.
+
+For HQ at the project level: `CLAUDE.md`, layered docs, deploy policy, two-session discipline, code-observations log, CHECKPOINT.md as living state. For HQ at the session level: subagents, skills, hooks, slash commands, kickoff templates.
+
+The question before any new feature: "What automation can I set up once that makes every future occurrence of this pattern smoother?"
+
+Phase 4 was a known shape (port). Phase 5 is the real test. The infrastructure above is what makes Phase 5 ship cleanly instead of grinding for weeks.
+
+---
+
+## 12. Resources
+
+- `code.claude.com/docs/en/best-practices`. Anthropic's official guide.
+- `github.com/hesreallyhim/awesome-claude-code`. Curated subagents, hooks, skills, MCP servers.
+- `github.com/VoltAgent/awesome-claude-code-subagents`. 100+ pre-built subagent definitions.
+- `humanlayer.dev/blog/writing-a-good-claude-md`. CLAUDE.md instruction-budget analysis.
+
+---
+
+*Living playbook. Update when patterns we discover deserve to be encoded. Keep under 500 lines.*

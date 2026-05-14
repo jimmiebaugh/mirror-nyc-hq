@@ -19,7 +19,7 @@ The `/` route serves a stealth coming-soon landing for unauthenticated visitors 
 
 - URL: `https://amipjjmphblfxpghjnel.supabase.co`
 - Project ref ID: `amipjjmphblfxpghjnel`
-- API keys: project is on the new `sb_publishable_*` / `sb_secret_*` key system (not the legacy anon/service_role JWTs — those return 401 against `/auth/v1` endpoints as of Phase 3.6.16).
+- API keys: project is on the new `sb_publishable_*` / `sb_secret_*` key system (not the legacy anon/service_role JWTs; those return 401 against `/auth/v1` endpoints; migration completed in Phase 3.6.16).
   - **Publishable key** (client-side): `sb_publishable_*`. Read at build time from `VITE_SUPABASE_PUBLISHABLE_KEY` (Netlify + local `.env`) with a hardcoded fallback in `src/integrations/supabase/client.ts` so a missing env var doesn't break the app. Publishable keys are designed to be safely exposed in client bundles.
   - **Secret key** (server-side, Edge Functions only): `sb_secret_*`, stored as a Supabase secret on the server. Never inlined client-side.
 - DB password: in Jimmie's password manager
@@ -38,7 +38,7 @@ The `/` route serves a stealth coming-soon landing for unauthenticated visitors 
 - `/talent-scout/candidates/:id` → CandidateDetail
 - `*` → 404
 
-`/venue-scout/*` routes land in Phase 4.
+`/venue-scout/*` Venue Scout routes (live as of Phase 4, shipped 2026-05-13). See `docs/venue-scout-port-plan.md` for the full route map.
 
 ## Realtime
 
@@ -46,13 +46,13 @@ The `supabase_realtime` publication starts empty on this project. Tables that th
 1. Added to the publication: `alter publication supabase_realtime add table <name>;`
 2. `REPLICA IDENTITY FULL` so UPDATE events carry the full new row.
 
-Currently published: `ts_pull_rounds` (PullDetail subscribes for pull-progress UI). Other tables are unpublished by default; add as needed and document in `docs/schema.md`.
+Currently published: `ts_pull_rounds` (PullDetail subscribes for pull-progress UI), `ts_final_reviews` (FinalReviewDetail subscribes for ranking-progress UI), `vs_scouts` (Researching, Compiling, Generating subscribe for pipeline status). Other tables are unpublished by default; add and document in `docs/schema.md`.
 
 ## Storage
 
 Six private buckets, all behind RLS:
 - `candidate_attachments` (admin only, Talent Scout)
-- `packets` (admin only, Talent Scout — round + final-review packet PDFs, Phase 3.6)
+- `packets` (admin only, Talent Scout; round + final-review packet PDFs, Phase 3.6)
 - `briefs` (producer+, Venue Scout)
 - `sourcing_sheets` (producer+, Venue Scout)
 - `venue_photos` (read auth, write producer+, HQ + Venue Scout)
@@ -71,7 +71,7 @@ Netlify auto-deploys from GitHub `main` on every push. Per-branch preview URLs f
 
 Env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) live in the Netlify Dashboard, not in `netlify.toml`. Vite reads them at build time. `src/integrations/supabase/client.ts` carries the same values as a hardcoded fallback so a missing env var won't break the app.
 
-Production URL: `hq.mirrornyc.com` → resolves to `mirrornyc-hq.netlify.app`. Subdomain hookup done in Phase 6.3.
+Production URL: `hq.mirrornyc.com` → resolves to `mirrornyc-hq.netlify.app`. Subdomain `hq.mirrornyc.com` is live and serves the production deploy.
 
 ## Where things live
 
