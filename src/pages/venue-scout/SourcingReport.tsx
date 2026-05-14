@@ -75,11 +75,11 @@ export default function SourcingReport() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [columns, setColumns] = useState<DerivedColumn[]>([]);
   const [loading, setLoading] = useState(true);
-  // Phase 4.9-port: meta for <ScoutStepThroughNav />. Only the two columns
-  // the chrome cares about are pulled (current_step + generated_decks); the
-  // rest of vs_scouts stays out of this page's working set.
+  // Phase 4.9-port: meta for <ScoutStepThroughNav />. Only the one column
+  // the chrome cares about is pulled (current_step); the rest of vs_scouts
+  // stays out of this page's working set.
   const [scoutMeta, setScoutMeta] = useState<
-    { current_step: string | null; generated_decks: unknown } | null
+    { current_step: string | null } | null
   >(null);
   const [notesOpen, setNotesOpen] = useState(false);
   const [activeVenue, setActiveVenue] = useState<Venue | null>(null);
@@ -95,7 +95,7 @@ export default function SourcingReport() {
     const [scoutResp, vsResp] = await Promise.all([
       supabase
         .from("vs_scouts")
-        .select("derived_columns, current_step, generated_decks")
+        .select("derived_columns, current_step")
         .eq("id", scoutId)
         .maybeSingle(),
       supabase
@@ -114,7 +114,6 @@ export default function SourcingReport() {
       scoutResp.data
         ? {
             current_step: (scoutResp.data.current_step as string | null) ?? null,
-            generated_decks: scoutResp.data.generated_decks,
           }
         : null,
     );

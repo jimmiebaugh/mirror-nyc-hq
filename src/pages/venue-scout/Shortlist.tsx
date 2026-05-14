@@ -72,7 +72,7 @@ export default function Shortlist() {
   const [loading, setLoading] = useState(true);
   // Phase 4.9-port: meta for <ScoutStepThroughNav />.
   const [scoutMeta, setScoutMeta] = useState<
-    { current_step: string | null; generated_decks: unknown } | null
+    { current_step: string | null } | null
   >(null);
 
   const [notesOpen, setNotesOpen] = useState(false);
@@ -93,7 +93,7 @@ export default function Shortlist() {
     const [scoutResp, vsResp] = await Promise.all([
       supabase
         .from("vs_scouts")
-        .select("derived_columns, current_step, generated_decks")
+        .select("derived_columns, current_step")
         .eq("id", scoutId)
         .maybeSingle(),
       supabase
@@ -110,7 +110,6 @@ export default function Shortlist() {
       scoutResp.data
         ? {
             current_step: (scoutResp.data.current_step as string | null) ?? null,
-            generated_decks: scoutResp.data.generated_decks,
           }
         : null,
     );

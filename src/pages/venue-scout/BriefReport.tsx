@@ -40,7 +40,6 @@ import {
   ScoutSettingsLink,
   ScoutStepThroughNav,
 } from "@/components/venue-scout/ScoutChrome";
-import { Stepper } from "@/components/venue-scout/Stepper";
 import { TagInput } from "@/components/venue-scout/TagInput";
 import { ChipMultiSelect } from "@/components/venue-scout/ChipMultiSelect";
 import { stepToRoute } from "@/lib/venue-scout/format";
@@ -311,7 +310,6 @@ export default function BriefReport() {
         <ScoutSettingsLink scoutId={scout.id} />
       </header>
       <ScoutStepThroughNav scoutId={scout.id} scout={scout} />
-      <Stepper active={3} />
 
       {isArchived && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">

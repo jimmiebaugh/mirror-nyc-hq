@@ -154,7 +154,7 @@ const tools: ClaudeTool[] = [
           type: "array",
           items: { type: "string" },
           description:
-            "Short phrases capturing the goals of the activation (e.g. 'Brand awareness', 'Press moment', 'Premium positioning'). Omit if the brief states none.",
+            "Short tag-style phrases capturing the goals of the activation. Each item must be 1 to 5 words, no full sentences, no narrative. Aim for 3 to 6 distinct phrases (e.g. 'Brand awareness', 'Press moment', 'Premium positioning', 'Cultural relevance'). Each phrase goes into its own array item; do not return a single paragraph or a single string of comma-separated phrases. Omit the field if the brief states no objectives.",
         },
         target_audience: {
           type: "string",
@@ -201,6 +201,7 @@ const SYSTEM_PROMPT = [
   "- Event overview should be a 1-3 sentence summary in your own words, capturing what the activation is, who it's for, and the vibe.",
   "- additional_notes is for tone / references / must-haves / hard-nos that don't fit the structured fields. Skip the field when nothing extra is worth capturing.",
   "- For the venue-side fields (install/strike dates, activations_count, objectives, target_audience, vibe_aesthetic, target_neighborhoods, venue_types, ideal_features): fill them only when the brief states them explicitly. Omit any field the brief doesn't address rather than guessing.",
+  "- objectives must be returned as short tag-style phrases (1-5 words each), one phrase per array item. Aim for 3-6 items. Do not return a single narrative item, a paragraph split into bullets, or a comma-separated string.",
   "",
   "Return ONLY a tool call to submit_brief. Do not return text.",
 ].join("\n");
@@ -249,6 +250,26 @@ function sanitizeStringArray(raw: unknown): string[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
+// objectives needs extra defense beyond the generic string-array sanitizer:
+// the UI's TagInput expects short tag-style phrases, but the model sometimes
+// leaks a narrative paragraph as one item or a joined string. Split joined
+// items on "; " / " and ", drop paragraph-length items (>60 chars), then
+// trim / dedupe / drop empties. No hard count cap -- the producer prunes via
+// the TagInput.
+function sanitizeObjectives(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    for (const piece of v.split(/; | and /)) {
+      const t = piece.trim();
+      if (!t || t.length > 60) continue;
+      if (!out.includes(t)) out.push(t);
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 function sanitizeParsed(raw: Record<string, unknown>): ParsedBriefFields {
   const out: ParsedBriefFields = {};
 
@@ -270,7 +291,6 @@ function sanitizeParsed(raw: Record<string, unknown>): ParsedBriefFields {
   }
 
   const arrayKeys: (keyof ParsedBriefFields)[] = [
-    "objectives",
     "target_neighborhoods",
     "venue_types",
     "ideal_features",
@@ -279,6 +299,9 @@ function sanitizeParsed(raw: Record<string, unknown>): ParsedBriefFields {
     const v = sanitizeStringArray(raw[k]);
     if (v !== undefined) (out as Record<string, unknown>)[k] = v;
   }
+
+  const objectives = sanitizeObjectives(raw.objectives);
+  if (objectives !== undefined) out.objectives = objectives;
 
   const budget = sanitizeNumber(raw.budget);
   if (budget !== undefined) out.budget = budget;

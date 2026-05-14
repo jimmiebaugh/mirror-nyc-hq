@@ -233,7 +233,6 @@ const ALIASES: Record<string, string> = {
 type VsScoutMeta = {
   current_step: string | null;
   pipeline_error: string | null;
-  generated_decks: unknown;
 };
 
 export default function ErrorState() {
@@ -262,7 +261,7 @@ export default function ErrorState() {
     const tasks: Promise<unknown>[] = [
       supabase
         .from("vs_scouts")
-        .select("current_step, pipeline_error, generated_decks")
+        .select("current_step, pipeline_error")
         .eq("id", id)
         .maybeSingle()
         .then(({ data }) => {
