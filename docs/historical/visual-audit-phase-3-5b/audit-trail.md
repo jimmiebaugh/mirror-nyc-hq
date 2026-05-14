@@ -15,17 +15,17 @@ After Jimmie reviewed the first pass and supplied the brand-authoritative deck t
 - Side rail pattern: not on Talent Scout for now (revisit for HQ Core)
 - Coral frequency: keep current usage on CTAs / eyebrows / R-pills
 
-### `src/index.css` — wholesale Pass-2 rewrite
+### `src/index.css`: wholesale Pass-2 rewrite
 - Google Fonts import flipped from Inter to Montserrat (400, 800) + Roboto (300, 400, 500) + Roboto Mono (300, 400, 500, 700).
 - `--primary` flipped from `0 83% 65%` (#ef5b5b) → `4 47% 51%` (#BE4E44 dusty coral).
 - `--primary-hover` from `0 86% 71%` (#f47373) → `4 53% 56%` (#CC5C52, +5% lightness).
 - `--ring` mirrors new `--primary`.
 - New CSS vars: `--font-display` (Montserrat), `--font-body` (Roboto), `--font-mono` (Roboto Mono).
 - Body font-family swapped to `var(--font-body)` (Roboto) at 15px.
-- `--surface` lifted from `0 0% 8%` to `0 0% 4%` (#0A0A0A — barely off black, deck-aligned).
+- `--surface` lifted from `0 0% 8%` to `0 0% 4%` (#0A0A0A: barely off black, deck-aligned).
 - `--surface-alt` from `0 0% 11%` to `0 0% 8%` (#141414).
 - `--surface-raised` from `0 0% 14%` to `0 0% 12%` (#1F1F1F).
-- `--popover` updated to surface-raised (12% — was 8%).
+- `--popover` updated to surface-raised (12%: was 8%).
 - Sidebar tokens updated to match new dark palette.
 - Component utilities (`.h-page`, `.label-section`, `.crumb`, `.btn-base`, etc.) refactored to reference `var(--font-display)` / `var(--font-mono)` / `var(--font-body)`. New `.h-section` and `.eyebrow` utilities.
 - `.btn-base` casing left case-as-typed (no auto-uppercase) per Q6 review.
@@ -76,12 +76,12 @@ These big tabular numbers now hit Montserrat ExtraBold to match the deck's displ
 
 ### Pass-1 survivors (kept as-is)
 Pass-1 changes still in effect after Pass-2 layered on top:
-- StatusDropdown: cyan/purple/amber/red text colors at 500-shade. Still correct — these aren't deck colors but match source's StatusDropdown pattern, and the deck doesn't dictate dropdown affordances.
+- StatusDropdown: cyan/purple/amber/red text colors at 500-shade. Still correct: these aren't deck colors but match source's StatusDropdown pattern, and the deck doesn't dictate dropdown affordances.
 - CandidateTable bulk action buttons: 500-shade text colors. Same reasoning.
 - Tier T3 + Final Report + Latest + Scheduled: `green-400` (#4ADE80) instead of emerald. Matches source AND maps to the success token.
 - Tier T1 + Closed + Failed: red-500. Tier T2 + Stalled + Running: amber-500. Bonus tier: coral primary (now #BE4E44 via the new token).
 
-## Pass 1 (initial Phase 3.5b — pre-deck-review)
+## Pass 1 (initial Phase 3.5b: pre-deck-review)
 
 The original "match HQ to source" pass. Most of these changes still stand; the coral hex and font choices were superseded by Pass 2 above. Kept here for history.
 
@@ -99,7 +99,7 @@ Wholesale rewrite. Replaced HQ's emerald-on-blue-dark palette with source's cora
 - Added `--surface`, `--surface-alt`, `--surface-raised`, `--primary-hover`, `--subtle-foreground`, `--success`, `--warn`, `--border-strong` tokens.
 - Changed `--radius` from `0.5rem` to `0.25rem` (source's squarer 4px corners).
 - `--primary` flipped from emerald `158 64% 52%` to coral `0 83% 65%` (`#ef5b5b`).
-- `--accent` changed from being a duplicate of primary (emerald) to a surface color `0 0% 14%` — source's semantic of "accent = elevated surface", not a brand color highlight.
+- `--accent` changed from being a duplicate of primary (emerald) to a surface color `0 0% 14%`: source's semantic of "accent = elevated surface", not a brand color highlight.
 - Sidebar tokens preserved (the unused shadcn `<Sidebar />` primitive references them); aligned values to the new dark palette.
 - Added `@layer components` with source's full set of brand utilities: `.h-page`, `.label-section`, `.label-form`, `.crumb`, `.btn-base`/`.btn-primary`/`.btn-ghost`/`.btn-light`, `.input-base`/`.input-filled`/`.textarea-base`, `.tier-badge` + variants, `.manual-tag`, `.surface`/`.surface-alt`, `.status-pill` + variants. None used in HQ today; defining them keeps source-equivalent components pixel-aligned if/when ported.
 
@@ -145,7 +145,7 @@ Bulk action button text colors aligned to match StatusDropdown:
 
 ### `src/pages/talent-scout/NewRoleScorecard.tsx`
 - Same `TIER_META` swap as CandidateDetail (T1 red-500, T2 amber-500, T3 green-400).
-- "Bonus — Competitor Experience" pill: was `border-purple-500/30 bg-purple-500/10 text-purple-400`. Now `border-primary/40 bg-primary/15 text-primary` — coral primary, matching source's `tier-badge--bonus`.
+- "Bonus: Competitor Experience" pill: was `border-purple-500/30 bg-purple-500/10 text-purple-400`. Now `border-primary/40 bg-primary/15 text-primary`: coral primary, matching source's `tier-badge--bonus`.
 
 ### `src/pages/talent-scout/RoleDashboard.tsx`
 - "Scheduled" badge: `border-emerald-500/30 bg-emerald-500/10 text-emerald-400` → `border-green-400/30 bg-green-400/10 text-green-400`.
@@ -170,17 +170,17 @@ These showed up in the grep but weren't drift; they're intentional:
 
 Walk these pages on `localhost:8080` after `git checkout phase-3-5b-visual-brand && npm run dev`. Each takes ~30 seconds to eyeball:
 
-1. **Coming Soon** (`/`, signed out) — Mirror logo + STRATEGY/DESIGN/PRODUCTION line. Should look the same; the new tokens shouldn't have shifted anything since it's pure black + white.
-2. **Dashboard** (`/`, signed in) — header logo "HQ" suffix should be coral now, not green.
-3. **Talent Scout Index** (`/talent-scout`) — role rows; the open-role count text amber stays, all fonts should now be Inter.
-4. **Role Dashboard** — RoleStatusPill ("R3", "Final Report" if any, "Closed"); pull-round cards with "Latest" / "Failed" / "Stalled" badges; stat tiles; "Scheduled: Daily" badge if a role has it on.
-5. **Pull Round Dashboard** — same round cards, "Latest" badge on the most recent round.
-6. **Candidate Detail** — score pill (still uses scoreColor.ts thresholds, unchanged), tier badges in scorecard breakdown (T1 red, T2 amber, T3 green-400).
-7. **New Role wizard, step 3 (scorecard)** — three tier sections + bonus row (now coral, was purple).
-8. **Role Settings** — same tier display as scorecard step.
+1. **Coming Soon** (`/`, signed out): Mirror logo + STRATEGY/DESIGN/PRODUCTION line. Should look the same; the new tokens shouldn't have shifted anything since it's pure black + white.
+2. **Dashboard** (`/`, signed in): header logo "HQ" suffix should be coral now, not green.
+3. **Talent Scout Index** (`/talent-scout`): role rows; the open-role count text amber stays, all fonts should now be Inter.
+4. **Role Dashboard**: RoleStatusPill ("R3", "Final Report" if any, "Closed"); pull-round cards with "Latest" / "Failed" / "Stalled" badges; stat tiles; "Scheduled: Daily" badge if a role has it on.
+5. **Pull Round Dashboard**: same round cards, "Latest" badge on the most recent round.
+6. **Candidate Detail**: score pill (still uses scoreColor.ts thresholds, unchanged), tier badges in scorecard breakdown (T1 red, T2 amber, T3 green-400).
+7. **New Role wizard, step 3 (scorecard)**: three tier sections + bonus row (now coral, was purple).
+8. **Role Settings**: same tier display as scorecard step.
 
 Things to specifically look for:
 - Coral `#ef5b5b` everywhere "primary" appears (buttons, links, focus rings, "R3" pills).
-- T3 tier and "Final Report" / "Latest" pills should be a slightly lighter green than before — the new `#4ade80` is the source's success hue, where before HQ was on `#10b981` (deeper teal-green).
+- T3 tier and "Final Report" / "Latest" pills should be a slightly lighter green than before: the new `#4ade80` is the source's success hue, where before HQ was on `#10b981` (deeper teal-green).
 - StatusDropdown pill text should look slightly more saturated than before (500-shade vs 400-shade).
-- All text should render in Inter. If you see any system-font fallback (looks more "macOS native"), let me know — means the font import didn't reach that view.
+- All text should render in Inter. If you see any system-font fallback (looks more "macOS native"), let me know: means the font import didn't reach that view.

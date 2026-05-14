@@ -8,7 +8,7 @@ Architectural decisions worth preserving with their rationale. Newest at the top
 
 Producer-visible problem: every Phase B-sourced venue was landing in `vs_candidate_venues` with `website_url=NULL`, even for well-known venues whose URLs were clearly in Claude's `web_search_tool_result` blocks. Root cause: `FILL_SYSTEM` / research SYSTEM instructs Claude not to use listing-database URLs as the website_url output field, so Claude was conservatively returning null on the tool call even when usable URLs were visible in the search results.
 
-Two-stage fix, both as post-emission layers (per `feedback_tool_choice_collapse` memory rule — schema descriptions + post-emission sanitization are the levers, not SYSTEM):
+Two-stage fix, both as post-emission layers (per `feedback_tool_choice_collapse` memory rule; schema descriptions + post-emission sanitization are the levers, not SYSTEM):
 
 1. **`extractWebSearchResults(content)` in `_shared/anthropic.ts`** walks the response content blocks and pulls every `{ url, title }` from `web_search_tool_result` blocks.
 
@@ -22,7 +22,7 @@ Producers were seeing venue names polluted with descriptive suffixes ("Vacant Gr
 
 ### `address` + `neighborhood` added to `FILL_TOOL`
 
-Phase A wasn't filling addresses for sheet rows where the producer left address blank — because `FILL_TOOL` didn't have an `address` field at all (only `venue_type`, `website_url`, `size_sq_ft`, `capacity`, `key_features`, etc.). Common case: producer enters an address-style venue name like "238 N Canon Drive" and leaves the address column blank. Added `address` + `neighborhood` to FILL_TOOL with descriptions that explicitly call out the address-as-name case + the brief's city as context. Patch guards in Phase A + Pass 1 only fill when the existing row value is null/empty so producer-entered values remain authoritative.
+Phase A wasn't filling addresses for sheet rows where the producer left address blank; because `FILL_TOOL` didn't have an `address` field at all (only `venue_type`, `website_url`, `size_sq_ft`, `capacity`, `key_features`, etc.). Common case: producer enters an address-style venue name like "238 N Canon Drive" and leaves the address column blank. Added `address` + `neighborhood` to FILL_TOOL with descriptions that explicitly call out the address-as-name case + the brief's city as context. Patch guards in Phase A + Pass 1 only fill when the existing row value is null/empty so producer-entered values remain authoritative.
 
 ### Post-deck-generation flow: open in new tab, return to Deck Prep
 
@@ -34,7 +34,7 @@ Previously clicking Generate Deck on a scout with `current_step='completed'` sil
 
 ### `updateSlidesPosition` per-slide moves for venue slide ordering
 
-Slides API rejected a single `updateSlidesPosition` request with all duplicates listed in desired-final order: "The slides should be in presentation order, with no duplicates." The parameter requires `slideObjectIds` to match current presentation order — it relocates a contiguous already-ordered block, it doesn't reorder. Fixed by emitting one `updateSlidesPosition` per slide (a single-element list is trivially in order). `insertionIndex = FRONT_MATTER_SLIDES + K` for each slide's target final position. Slides API processes batchUpdate requests sequentially, so cumulative result = canonical interleaved-forward layout `[V1_detail, V1_fp, V2_detail, V2_fp, ...]`.
+Slides API rejected a single `updateSlidesPosition` request with all duplicates listed in desired-final order: "The slides should be in presentation order, with no duplicates." The parameter requires `slideObjectIds` to match current presentation order; it relocates a contiguous already-ordered block, it doesn't reorder. Fixed by emitting one `updateSlidesPosition` per slide (a single-element list is trivially in order). `insertionIndex = FRONT_MATTER_SLIDES + K` for each slide's target final position. Slides API processes batchUpdate requests sequentially, so cumulative result = canonical interleaved-forward layout `[V1_detail, V1_fp, V2_detail, V2_fp, ...]`.
 
 ### Slide 2 ALL CAPS via scoped pre-pass
 
@@ -46,7 +46,7 @@ Photos render in a `grid grid-cols-4` layout, not a vertical list. The vertical-
 
 ### "Contact the team" button removed from deck error states
 
-The four deck-side error configs (`TEMPLATE_COPY_FAILED`, `SLIDES_API_FAILED`, `NO_VENUES_INCLUDED`, `UNKNOWN`) rendered a "Contact the team" ghost button that routed back to `/deck/prep` — same destination as the primary "← Back to Deck Prep" button. Misleading affordance; the label promised a contact path that didn't exist. `Cfg.secondaryLabel` + `secondaryHref` are now optional; help-text bullets mentioning team contact remain as informational guidance.
+The four deck-side error configs (`TEMPLATE_COPY_FAILED`, `SLIDES_API_FAILED`, `NO_VENUES_INCLUDED`, `UNKNOWN`) rendered a "Contact the team" ghost button that routed back to `/deck/prep`; same destination as the primary "← Back to Deck Prep" button. Misleading affordance; the label promised a contact path that didn't exist. `Cfg.secondaryLabel` + `secondaryHref` are now optional; help-text bullets mentioning team contact remain as informational guidance.
 
 ### vs-generate-deck success path CAS guard
 
@@ -54,7 +54,7 @@ Mirror of the `writeFailure` CAS pattern from 4.10.5-port. Two parallel invocati
 
 ### Carry-forward debt: duplicate-invocation race in vs-research-venues
 
-Smoke testing revealed that vs-research-venues can be invoked twice in quick succession (likely React 18 strict-mode dev double-mount or Realtime hiccup) and both invocations execute Phase A + Phase B independently. The 4.10.5-port `writeFailure` CAS guards mask the symptom (failure-overwrites-success) and 4.10.6-port's success CAS on vs-generate-deck masks success-overwrites-success — but both invocations still burn Claude credits. Proper fix is a Postgres advisory lock or a kickoff CAS on `brief_data.research_started_at`. Deferred to cutover follow-up.
+Smoke testing revealed that vs-research-venues can be invoked twice in quick succession (likely React 18 strict-mode dev double-mount or Realtime hiccup) and both invocations execute Phase A + Phase B independently. The 4.10.5-port `writeFailure` CAS guards mask the symptom (failure-overwrites-success) and 4.10.6-port's success CAS on vs-generate-deck masks success-overwrites-success; but both invocations still burn Claude credits. Proper fix is a Postgres advisory lock or a kickoff CAS on `brief_data.research_started_at`. Deferred to cutover follow-up.
 
 ### Carry-forward debt: pause_turn continuation cap is conservative
 
@@ -64,7 +64,7 @@ Smoke testing revealed that vs-research-venues can be invoked twice in quick suc
 
 ### Model + web_search pivot: `claude-sonnet-4-6` + `web_search_20250305`
 
-Smoke testing 2026-05-13 surfaced `server_tool_uses=0` across every Phase A enrichment + Phase B sourcing call on the prior `claude-sonnet-4-5 + web_search_20250305` combo. Anthropic docs confirm the newer `web_search_20260209` tool (with dynamic filtering) lists Claude Sonnet 4.6, Opus 4.6+, and Mythos as supported models — 4.5 isn't on the list. Combined with web_search being enabled at the org level (Anthropic Console), pivoting to **4.6 restored web_search invocation**.
+Smoke testing 2026-05-13 surfaced `server_tool_uses=0` across every Phase A enrichment + Phase B sourcing call on the prior `claude-sonnet-4-5 + web_search_20250305` combo. Anthropic docs confirm the newer `web_search_20260209` tool (with dynamic filtering) lists Claude Sonnet 4.6, Opus 4.6+, and Mythos as supported models; 4.5 isn't on the list. Combined with web_search being enabled at the org level (Anthropic Console), pivoting to **4.6 restored web_search invocation**.
 
 Settled on the OLDER `web_search_20250305` tool version with the NEW model (4.6) after smoke showed the newer `20260209` dynamic-filter tool was billing 80k+ tokens per Phase A call (each web_search invocation runs a code_execution sandbox internally and bills cumulative context across multi-turn rounds). The simpler 20250305 tool with 4.6 invokes web_search reliably AND keeps per-turn token bloat bounded.
 
@@ -105,7 +105,7 @@ Replaced with selective field extraction in three call sites (`buildFillUserMsg`
 
 ### Placeholder string sanitizer
 
-After tightening FILL_TOOL schema to make `key_features` + `recommendations` + `considerations` required with minItems, Claude started filling arrays with literal `<UNKNOWN>` / `TBD` / `N/A` / `None` / `TODO` placeholder tokens when it didn't have real data — satisfying the schema structurally while signaling "I don't know."
+After tightening FILL_TOOL schema to make `key_features` + `recommendations` + `considerations` required with minItems, Claude started filling arrays with literal `<UNKNOWN>` / `TBD` / `N/A` / `None` / `TODO` placeholder tokens when it didn't have real data; satisfying the schema structurally while signaling "I don't know."
 
 Two-layer fix:
 1. **Schema-description layer** (primary, per `feedback_tool_choice_collapse` rule): tool descriptions + per-field descriptions + user-message trailer all explicitly forbid placeholder tokens with a list of common offenders.
@@ -141,7 +141,7 @@ VS Pro never surfaced `vs_candidate_venues.notes` for producer edit (notes alway
 
 ### Venue Overview prompt tuned via schema descriptions; OVERVIEW_SYSTEM untouched
 
-Per memory rule `feedback_tool_choice_collapse`, system prompts on the venue-scout AI surfaces stay frozen. Tuning levers are (1) `OVERVIEW_TOOL.description`, (2) `OVERVIEW_TOOL.input_schema.properties.venue_overview.description`, (3) `maxLength`. Phase 4.10.4 swaps the description from "5-8 sentences" to "3-4 sentences, ~80 words" and embeds positive examples from Jimmie's reference set (standout-features snippets + three full overview paragraphs). `maxLength: 600` is a soft signal but Claude generally honors it. If smoke output stays too long, the next lever is dropping maxLength to 500/450 OR adding more concrete examples — NOT editing the system prompt.
+Per memory rule `feedback_tool_choice_collapse`, system prompts on the venue-scout AI surfaces stay frozen. Tuning levers are (1) `OVERVIEW_TOOL.description`, (2) `OVERVIEW_TOOL.input_schema.properties.venue_overview.description`, (3) `maxLength`. Phase 4.10.4 swaps the description from "5-8 sentences" to "3-4 sentences, ~80 words" and embeds positive examples from Jimmie's reference set (standout-features snippets + three full overview paragraphs). `maxLength: 600` is a soft signal but Claude generally honors it. If smoke output stays too long, the next lever is dropping maxLength to 500/450 OR adding more concrete examples; NOT editing the system prompt.
 
 ### Compiling + Generating loading copy refined
 
@@ -384,7 +384,7 @@ Joins the canonical `brief_data` jsonb key list alongside `expected_guest_count`
 
 ### Deck name hyphen, not em dash
 
-VS Pro deck name template was `${event_name} — Venue Pitch Deck v${version}` (em dash). Voice rule (design-system § 12 rule 1) bans em dashes. Port template: `${event_name} - Venue Pitch Deck v${version}` (hyphen). The deck file itself, named at copy time, carries the hyphen.
+VS Pro deck name template used a literal em dash (U+2014) between `event_name` and the static suffix: `${event_name} [em dash] Venue Pitch Deck v${version}`. Voice rule (design-system § 12 rule 1) bans em dashes. Port template: `${event_name} - Venue Pitch Deck v${version}` (hyphen). The deck file itself, named at copy time, carries the hyphen.
 
 ### `failWithCode` writes are idempotent on the row
 
@@ -432,7 +432,7 @@ VS Pro requires the page to fetch pitched venue IDs first and pass them in. Port
 
 ### Testing `claude-sonnet-4-6` on compile-summaries (independent test from 4.5-port research-venues)
 
-Same posture as research-venues: take the wrapper default and watch the diagnostic log for the collapse signature. Different prompts may behave differently — research's `submit_research` with `web_search` had a known May 11 collapse pattern (out<200 + server_tool_uses=0); compile's `fill_venue` and `write_overview` are pure text-tool flows with no server tools, so the signal narrows to `out<200`. Pivot procedure to `claude-sonnet-4-5` is inline in the function. The memory note `project_sourcing_model_pin` covers the failed-attempt `vs-start-sourcing` and does NOT carry over to port-side functions.
+Same posture as research-venues: take the wrapper default and watch the diagnostic log for the collapse signature. Different prompts may behave differently; research's `submit_research` with `web_search` had a known May 11 collapse pattern (out<200 + server_tool_uses=0); compile's `fill_venue` and `write_overview` are pure text-tool flows with no server tools, so the signal narrows to `out<200`. Pivot procedure to `claude-sonnet-4-5` is inline in the function. The memory note `project_sourcing_model_pin` covers the failed-attempt `vs-start-sourcing` and does NOT carry over to port-side functions.
 
 ## Phase 4.7.1-port (Review + PhotoUploadModal + Shortlist photo unstub)
 
@@ -454,7 +454,7 @@ VS Pro's Review.tsx defined a small inline `Field` (10px uppercase muted-foregro
 
 ### PhotoSlot renders actual signed URL when `hasPhoto`
 
-VS Pro's Review.tsx PhotoSlot at line 272 hardcoded the placeholder for both states (`backgroundImage: hasPhoto ? "url(/mirror-placeholder.jpg)" : "url(/mirror-placeholder.jpg)"`); appears to be a stub awaiting real signed-URL wiring. Port fixes it: when `hasPhoto && photoUrl`, render `url(${photoUrl})`. Producers expect to see their photos at a glance on Review — a placeholder-for-everything makes the page useless for the "confirm photos" task. `photoUrls` state is populated on mount + refreshed via `refreshVenuePhotos(activeVenueId)` after PhotoUploadModal save.
+VS Pro's Review.tsx PhotoSlot at line 272 hardcoded the placeholder for both states (`backgroundImage: hasPhoto ? "url(/mirror-placeholder.jpg)" : "url(/mirror-placeholder.jpg)"`); appears to be a stub awaiting real signed-URL wiring. Port fixes it: when `hasPhoto && photoUrl`, render `url(${photoUrl})`. Producers expect to see their photos at a glance on Review; a placeholder-for-everything makes the page useless for the "confirm photos" task. `photoUrls` state is populated on mount + refreshed via `refreshVenuePhotos(activeVenueId)` after PhotoUploadModal save.
 
 ### Shortlist photo column unstub: real query + real modal open
 
@@ -500,11 +500,11 @@ VS Pro reads `bg-[hsl(var(--success))]/15` and `bg-[hsl(var(--warning))]/13` on 
 
 ### Shortlist sync trigger simplified to one condition
 
-The failed-attempt trigger fired on `(shortlisted false→true) OR (added_manually=true AND research_status='complete')`. Port schema doesn't carry `added_manually` (collapsed into `source='manual'`) or `research_status`. The 4.6-port re-introduction fires only on `shortlisted false→true`. Manual venues added on Shortlist enter with `shortlisted=false, source='manual'`; the page's `v.shortlisted || v.source==='manual'` filter makes them visible regardless. If a producer pitches a manual venue but never toggles shortlisted, the sync trigger never fires and no HQ `venues` row is created — known gap, acceptable for 4.6-port. A future migration could extend the trigger to also fire on `pitched false→true` or on `source='manual'` INSERT, but that's out of scope here.
+The failed-attempt trigger fired on `(shortlisted false→true) OR (added_manually=true AND research_status='complete')`. Port schema doesn't carry `added_manually` (collapsed into `source='manual'`) or `research_status`. The 4.6-port re-introduction fires only on `shortlisted false→true`. Manual venues added on Shortlist enter with `shortlisted=false, source='manual'`; the page's `v.shortlisted || v.source==='manual'` filter makes them visible regardless. If a producer pitches a manual venue but never toggles shortlisted, the sync trigger never fires and no HQ `venues` row is created; known gap, acceptable for 4.6-port. A future migration could extend the trigger to also fire on `pitched false→true` or on `source='manual'` INSERT, but that's out of scope here.
 
 ### Manual venue add row inserts `shortlisted: false`
 
-VS Pro's behavior. The page filter `v.shortlisted || v.source==='manual'` makes manual rows visible on Shortlist regardless, so auto-shortlisting them wouldn't change visibility — it would just fire the sync trigger on insert before the producer has confirmed details. Keeping `shortlisted=false` matches VS Pro and defers the sync to an explicit producer action (toggling shortlist back on `SourcingReport`, or extending the trigger later per the prior decision).
+VS Pro's behavior. The page filter `v.shortlisted || v.source==='manual'` makes manual rows visible on Shortlist regardless, so auto-shortlisting them wouldn't change visibility; it would just fire the sync trigger on insert before the producer has confirmed details. Keeping `shortlisted=false` matches VS Pro and defers the sync to an explicit producer action (toggling shortlist back on `SourcingReport`, or extending the trigger later per the prior decision).
 
 ## Phase 4.5-port (Researching + vs-research-venues)
 
@@ -607,7 +607,7 @@ VS Pro carried a `projects.phase` text column maintained in lockstep with `curre
 
 `/venue-scout/scouts/:id/sourcing/sheet-prompt` doesn't exist yet (lands in Phase 4.4-port). Post-create still navigates there because that's the correct eventual UX -- producer fills brief, then immediately walks into the sheet-prompt flow. The 404 window is short (4.3-port and 4.4-port land soon) and the alternative (bouncing back to `/venue-scout` and forcing a row click) reads as a regression once the sheet-prompt page exists.
 
-## Phase 4.1 (Scout Dashboard — first Venue Scout surface)
+## Phase 4.1 (Scout Dashboard; first Venue Scout surface)
 
 ### Venue Scout RLS: one permissive FOR ALL policy per vs_* table, no creator or role scoping
 
@@ -664,11 +664,11 @@ When `rounds.length === 0`, the shortlisted venues card doesn't render at all. T
 
 Shortlisted venue rows show a literal `IMG` placeholder box in 4.1.3. Real photo plumbing (`vs_venue_photos` table + storage reads) is deferred to Phase 4.5 (Shortlist + Review Selects phase), which is the first phase where photo management is actually part of the workflow. A TODO comment is in place.
 
-### Field.tsx extracted to src/components/ui/ — canonical design-system form label
+### Field.tsx extracted to src/components/ui/; canonical design-system form label
 
 Extracted a shared `Field.tsx` rather than letting each area define its own label pattern. Canonical form: 12px Roboto Mono foreground label, coral required asterisk, optional muted hint suffix. Two call sites updated in 4.1.2: `NewRoleDetails.tsx` and `RoleSettings.tsx`.
 
-Side effect: NewRoleDetails labels changed from 13px coral to 12px white. That's the correct design-system form — the old version was non-canonical. Visual change is minor but worth eyeballing in the new-role wizard at 4.1.4 before squash-merge.
+Side effect: NewRoleDetails labels changed from 13px coral to 12px white. That's the correct design-system form; the old version was non-canonical. Visual change is minor but worth eyeballing in the new-role wizard at 4.1.4 before squash-merge.
 
 Rule: any future form label should use `Field.tsx`, not a local copy.
 
@@ -676,7 +676,7 @@ Rule: any future form label should use `Field.tsx`, not a local copy.
 
 `CANONICAL_TYPES`, `TYPE_STYLES`, `TYPE_FALLBACK_STYLE`, `canonicalizeType()`, and `parseTypes()` were copied without modification from `mirror-nyc-venue-scout-pro/src/components/sourcing/matrix/primitives.tsx`. The canonicalization heuristics (regex patterns that map raw strings to canonical types) are intentionally preserved byte-for-byte so that AI research output from the existing VS Pro edge functions canonicalizes identically in HQ. Any future change to the heuristics needs to be coordinated across both repos until VS Pro is retired.
 
-### SourcingStatusPill returns null on "complete" — same convention as RoundStatusPill
+### SourcingStatusPill returns null on "complete"; same convention as RoundStatusPill
 
 When a sourcing round's status is `complete`, no pill renders. The assumption is that a complete round's status is conveyed by context (venue counts, CTA state) rather than a redundant "done" badge. `researching` = amber + pulsing dot; `failed` = red static. This matches `RoundStatusPill`'s null-on-complete behavior in Talent Scout.
 
@@ -692,12 +692,12 @@ Columns `key_features`, `derived_attrs`, `venue_overview`, `size_sq_ft`, `capaci
 
 ### Restored substantive `full_points_rubric` and added separate `summary` field
 
-The Phase 3.7 squash-merge (`2ab37c3`) added a "≤ 12 words, one sentence" cap to `full_points_rubric` in `scorecardGenerationPrompt`. The intent was good — block tiered point breakdowns inline like "10 pts: 5+ yrs · 5 pts: 2-4 yrs" — but the cap was over-aggressive and stripped concrete-signal evidence the per-candidate evaluator actually relies on. Recently-generated scorecards came back thin and abstract ("Strong portfolio") instead of rich and actionable ("5+ years of professional experience in graphic design with meaningful exposure to environmental, experiential, or spatial design contexts. Portfolio includes spatial graphics, signage systems, or large-scale environmental work.").
+The Phase 3.7 squash-merge (`2ab37c3`) added a "≤ 12 words, one sentence" cap to `full_points_rubric` in `scorecardGenerationPrompt`. The intent was good; block tiered point breakdowns inline like "10 pts: 5+ yrs · 5 pts: 2-4 yrs"; but the cap was over-aggressive and stripped concrete-signal evidence the per-candidate evaluator actually relies on. Recently-generated scorecards came back thin and abstract ("Strong portfolio") instead of rich and actionable ("5+ years of professional experience in graphic design with meaningful exposure to environmental, experiential, or spatial design contexts. Portfolio includes spatial graphics, signage systems, or large-scale environmental work.").
 
 Phase 3.11 fixes this additively, the way it should have been done in 3.7:
 
-1. **`full_points_rubric` restored to the substantive form** — 1-3 sentences (typically 25-60 words) of concrete signals: years expected, named tools, types of work / clients, where the signal lives in the candidate's materials. The per-candidate evaluator reads this field. Bad-example block keeps the "no tiered point breakdowns" prohibition since that was a real design constraint.
-2. **New `summary` field** — short (≤ 14 words) condensed recap used in compact UI surfaces (candidate detail score breakdown, packet matrix headers, recap views). Generated alongside `full_points_rubric` in the same Claude pass, never replaces it. The evaluator never reads `summary`.
+1. **`full_points_rubric` restored to the substantive form**; 1-3 sentences (typically 25-60 words) of concrete signals: years expected, named tools, types of work / clients, where the signal lives in the candidate's materials. The per-candidate evaluator reads this field. Bad-example block keeps the "no tiered point breakdowns" prohibition since that was a real design constraint.
+2. **New `summary` field**; short (≤ 14 words) condensed recap used in compact UI surfaces (candidate detail score breakdown, packet matrix headers, recap views). Generated alongside `full_points_rubric` in the same Claude pass, never replaces it. The evaluator never reads `summary`.
 
 Both fields are stored on the criterion (jsonb scorecard, no migration needed). Existing roles have only `full_points_rubric` populated (the post-3.7 short version); UI surfaces that want compact display fall back to truncating it when `summary` is empty. Re-running scorecard generation OR clicking "Process scorecard" on the wizard / Edit Role page (Phase 3.10) re-populates both fields with the new substantive shape.
 
@@ -714,7 +714,7 @@ When the user edits or adds criteria on the wizard step-3 page, the refine pass 
 
 ### Refinement preserves user scoring decisions via post-Claude merge, not prompt discipline alone
 
-The prompt asks Claude to leave `tier`, `weight`, `is_disqualifier`, and `is_manual` untouched, but the edge function's `mergeRefinedIntoOriginal` re-applies the user's input values for all four fields regardless of what the model returned. Belt + suspenders. The model is only trusted for `name` and `full_points_rubric`. A model that ignores the prompt and tries to "improve" weights (or add/remove criteria) can't break the user's intent — the merge silently restores the user values. Output count is also enforced at the same length as input.
+The prompt asks Claude to leave `tier`, `weight`, `is_disqualifier`, and `is_manual` untouched, but the edge function's `mergeRefinedIntoOriginal` re-applies the user's input values for all four fields regardless of what the model returned. Belt + suspenders. The model is only trusted for `name` and `full_points_rubric`. A model that ignores the prompt and tries to "improve" weights (or add/remove criteria) can't break the user's intent; the merge silently restores the user values. Output count is also enforced at the same length as input.
 
 This pattern is worth lifting if we ever build other "refine user input via Claude" features: trust the model for the field you're asking it to refine, mechanically restore the rest from input.
 
@@ -722,14 +722,14 @@ This pattern is worth lifting if we ever build other "refine user input via Clau
 
 Criteria with `weight=0` OR with both `name` and `full_points_rubric` empty/whitespace get dropped before `scorecardRefinementPrompt` ever sees them. Two reasons:
 
-1. The prompt is told to preserve every entry. Asking it to also "drop dead ones" is conflicting guidance — the model would either silently leave them in or aggressively remove things the user wanted to keep. Better to handle removal mechanically before the model is even asked.
+1. The prompt is told to preserve every entry. Asking it to also "drop dead ones" is conflicting guidance; the model would either silently leave them in or aggressively remove things the user wanted to keep. Better to handle removal mechanically before the model is even asked.
 2. Burning tokens to refine an empty entry is waste.
 
-The response includes `removed_count` so the wizard / RoleSettings toast can surface it. If a user has every criterion zeroed or empty, the function returns 400 ("nothing to refine") rather than crashing — the user fixes the input and re-tries.
+The response includes `removed_count` so the wizard / RoleSettings toast can surface it. If a user has every criterion zeroed or empty, the function returns 400 ("nothing to refine") rather than crashing; the user fixes the input and re-tries.
 
 ### Same edge function powers both scorecard surfaces
 
-`ts-refine-scorecard` is called by the wizard step-3 page (`NewRoleScorecard.tsx`) AND the Edit Role page (`RoleSettings.tsx`). Both surfaces share the wizard's "scorecard edited since last refine → Process button" pattern; on the Edit Role page, post-refine the button flips back to the existing **Save changes** flow that fires `ts-bulk-reevaluate`. One function, two call sites — no duplicated prompt or merge logic.
+`ts-refine-scorecard` is called by the wizard step-3 page (`NewRoleScorecard.tsx`) AND the Edit Role page (`RoleSettings.tsx`). Both surfaces share the wizard's "scorecard edited since last refine → Process button" pattern; on the Edit Role page, post-refine the button flips back to the existing **Save changes** flow that fires `ts-bulk-reevaluate`. One function, two call sites; no duplicated prompt or merge logic.
 
 ### Tier re-sort happens client-side, not in the prompt
 
@@ -741,11 +741,11 @@ After every refine, the frontend re-sorts each tier highest-weight first. The pr
 
 Pull = 5 min (Phase 3.11.1, was 60). Re-eval = 30 min. Final review = 20 min.
 
-The pull pipeline updates `ts_pull_rounds.updated_at` at every per-candidate completion (the `updated_at_auto` trigger fires on each row update). So `updated_at` = "last candidate completed at" — heartbeats fire per candidate, not per pool. A single candidate hanging >5 min is always a stall, regardless of total pool size. The earlier 60-min threshold was set under the misconception that large pools legitimately sit between heartbeats; they don't.
+The pull pipeline updates `ts_pull_rounds.updated_at` at every per-candidate completion (the `updated_at_auto` trigger fires on each row update). So `updated_at` = "last candidate completed at"; heartbeats fire per candidate, not per pool. A single candidate hanging >5 min is always a stall, regardless of total pool size. The earlier 60-min threshold was set under the misconception that large pools legitimately sit between heartbeats; they don't.
 
-Bulk re-eval and final review keep the looser thresholds. Bulk re-eval writes `ts_roles.reeval_last_progress_at` per chunk completion (a slower cadence than per-candidate), so 30 min is right. Final review is one Anthropic call wrapped in `EdgeRuntime.waitUntil` — at HARD_CAP=50 it lands in 5-10 min, so 20 catches dead workers without false-positives.
+Bulk re-eval and final review keep the looser thresholds. Bulk re-eval writes `ts_roles.reeval_last_progress_at` per chunk completion (a slower cadence than per-candidate), so 30 min is right. Final review is one Anthropic call wrapped in `EdgeRuntime.waitUntil`; at HARD_CAP=50 it lands in 5-10 min, so 20 catches dead workers without false-positives.
 
-Pull-watchdog cadence also bumped from every 5 min to every 2 min so detection lands within 5-7 min of stall onset (vs 5-10 min before). False-positive cost is low because the threshold is the actual signal of trouble — a candidate stuck >5 min won't recover on its own.
+Pull-watchdog cadence also bumped from every 5 min to every 2 min so detection lands within 5-7 min of stall onset (vs 5-10 min before). False-positive cost is low because the threshold is the actual signal of trouble; a candidate stuck >5 min won't recover on its own.
 
 Status name aligned with the other two watchdogs: pull-watchdog now flips to `failed` (was `stalled`). The user-facing surface treats both identically (manual retry decision) so the distinction wasn't earning its keep.
 
@@ -753,13 +753,13 @@ Status name aligned with the other two watchdogs: pull-watchdog now flips to `fa
 
 Watchdogs every 5 minutes. Scheduled pulls daily at 12:00 UTC (8am ET). Storage cleanup daily 03:00 UTC. Spend reset 1st of month 00:01 UTC.
 
-5-minute watchdog cadence is fine — they're cheap (one indexed query each). Faster cadence would catch stalls a few minutes earlier but pg_net call volume scales with cron firings, and the SLA on stalled-pull recovery is "before the user notices and asks", not seconds. The 12:00-UTC schedule for `ts-cron-scheduled-pulls` is intentionally early-morning ET and accepts the EDT/EST-drift hour: this is internal hiring tooling, not customer-facing, so a 1-hour shift twice a year doesn't matter.
+5-minute watchdog cadence is fine; they're cheap (one indexed query each). Faster cadence would catch stalls a few minutes earlier but pg_net call volume scales with cron firings, and the SLA on stalled-pull recovery is "before the user notices and asks", not seconds. The 12:00-UTC schedule for `ts-cron-scheduled-pulls` is intentionally early-morning ET and accepts the EDT/EST-drift hour: this is internal hiring tooling, not customer-facing, so a 1-hour shift twice a year doesn't matter.
 
 ### Cap-alert recipient lookup
 
 `getAdminEmail(sb)` returns the oldest active admin in `public.users` (ORDER BY `created_at` ASC LIMIT 1). Falls back to `jobs@mirrornyc.com` if no admin row exists.
 
-Picked oldest-admin over a hardcoded address so the alert routes correctly if Jimmie ever transfers admin ownership without anyone updating env vars. The fallback to `jobs@` means a misconfigured database (no admin user) still notifies *someone* who can act. This is one piece of plumbing that should be self-healing — the cap alert is what tells you something else is wrong.
+Picked oldest-admin over a hardcoded address so the alert routes correctly if Jimmie ever transfers admin ownership without anyone updating env vars. The fallback to `jobs@` means a misconfigured database (no admin user) still notifies *someone* who can act. This is one piece of plumbing that should be self-healing; the cap alert is what tells you something else is wrong.
 
 ### Pull-completion notification path: standalone in 3.9, fold into `notifications-dispatch` later
 
@@ -769,27 +769,27 @@ The notification is fired fire-and-forget via `EdgeRuntime.waitUntil` so a Gmail
 
 ### Storage cleanup is cron-only, no UI trigger
 
-`ts-cron-storage-cleanup` runs daily at 03:00 UTC with conservative retention windows (rejected attachments >30d, closed-role attachments >90d, hard-delete closed roles >60d). No Settings-page manual trigger — the daily cadence catches garbage well before it becomes a problem, and exposing a button to admins to run an aggressive out-of-cycle purge invites mistakes. If the admin ever needs to force-clean (post-recruiting-cycle Storage cleanup, etc.), the function can be invoked manually from the Supabase Functions dashboard with the cron defaults; no special API surface needed.
+`ts-cron-storage-cleanup` runs daily at 03:00 UTC with conservative retention windows (rejected attachments >30d, closed-role attachments >90d, hard-delete closed roles >60d). No Settings-page manual trigger; the daily cadence catches garbage well before it becomes a problem, and exposing a button to admins to run an aggressive out-of-cycle purge invites mistakes. If the admin ever needs to force-clean (post-recruiting-cycle Storage cleanup, etc.), the function can be invoked manually from the Supabase Functions dashboard with the cron defaults; no special API surface needed.
 
 ### `pg_cron` invocation through a SECURITY DEFINER helper, not inline `net.http_post`
 
 `public.invoke_edge_function(fn_name, body)` reads two GUCs (`app.supabase_url`, `app.internal_api_secret`) at call time and POSTs to `${base_url}/functions/v1/${fn_name}` with the internal-secret header. Cron schedules call this single helper.
 
-Rationale: keeps secrets out of `cron.job` rows (which are queryable by anyone with `pg_cron` permissions). GUC values stick around in the database config but require a separate `ALTER DATABASE` to inspect. Also makes the schedule SQL readable — `SELECT public.invoke_edge_function('ts-cron-pull-watchdog')` reads as "fire pull watchdog", not as a 6-line `net.http_post(url := ..., headers := ..., body := ...)`. Adding a new cron job is one line.
+Rationale: keeps secrets out of `cron.job` rows (which are queryable by anyone with `pg_cron` permissions). GUC values stick around in the database config but require a separate `ALTER DATABASE` to inspect. Also makes the schedule SQL readable; `SELECT public.invoke_edge_function('ts-cron-pull-watchdog')` reads as "fire pull watchdog", not as a 6-line `net.http_post(url := ..., headers := ..., body := ...)`. Adding a new cron job is one line.
 
-The GUCs are set out-of-band (Supabase SQL editor) before the migration applies in production. Without them, the helper warns and no-ops — the schedule rows still exist; they just don't actually call anything. This means the migration is safe to apply before the GUCs are populated.
+The GUCs are set out-of-band (Supabase SQL editor) before the migration applies in production. Without them, the helper warns and no-ops; the schedule rows still exist; they just don't actually call anything. This means the migration is safe to apply before the GUCs are populated.
 
 ## Phase 3.7 (Candidates UX + referral ingestion)
 
 ### `manually_reviewed` boolean as one-way flip; `auto_rejected` enum value deprecated
 
-Hiring managers needed a way to lock candidate decisions against future re-evals. Adding a per-candidate `manually_reviewed` (default false) on `ts_candidates` is the cleanest split: AI eval / re-eval leaves it false; user actions (status-dropdown change, re-select-same, AUTO-pill click, bulk action) flip it to true. Re-eval respects the flag — when true, score / strengths / gaps / overview update but status doesn't. Bulk re-eval defaults to `not_manually_rejected` (`status.neq.reject,manually_reviewed.eq.false`) so manually-rejected candidates aren't reconsidered.
+Hiring managers needed a way to lock candidate decisions against future re-evals. Adding a per-candidate `manually_reviewed` (default false) on `ts_candidates` is the cleanest split: AI eval / re-eval leaves it false; user actions (status-dropdown change, re-select-same, AUTO-pill click, bulk action) flip it to true. Re-eval respects the flag; when true, score / strengths / gaps / overview update but status doesn't. Bulk re-eval defaults to `not_manually_rejected` (`status.neq.reject,manually_reviewed.eq.false`) so manually-rejected candidates aren't reconsidered.
 
-The `auto_rejected` enum value (originally distinguishing AI-confirmed rejections from human ones) became redundant once `manually_reviewed=false + status=reject` carries the same semantics. Backfilled all existing `auto_rejected` rows in migration `20260507092912`. Enum value kept in place — dropping it requires a full enum rebuild, not worth it. New writes never use it.
+The `auto_rejected` enum value (originally distinguishing AI-confirmed rejections from human ones) became redundant once `manually_reviewed=false + status=reject` carries the same semantics. Backfilled all existing `auto_rejected` rows in migration `20260507092912`. Enum value kept in place; dropping it requires a full enum rebuild, not worth it. New writes never use it.
 
 ### Referral identity = original applicant; `referrer_email` captures the manager
 
-When a Mirror manager forwards a candidate to jobs@, the candidate row's identity is the **original applicant's** name + email — not the manager's. The manager's email goes on a separate `referrer_email` column, paired with `is_referral=true`. Eval is **blind** to referral status (same prompt). Referrals get a UI affordance (electric-blue ReferralPill) but no scoring lift. This keeps the dashboard's master-pool ordering meaningful regardless of source path.
+When a Mirror manager forwards a candidate to jobs@, the candidate row's identity is the **original applicant's** name + email; not the manager's. The manager's email goes on a separate `referrer_email` column, paired with `is_referral=true`. Eval is **blind** to referral status (same prompt). Referrals get a UI affordance (electric-blue ReferralPill) but no scoring lift. This keeps the dashboard's master-pool ordering meaningful regardless of source path.
 
 Tried `referral` as a status enum value first; rejected because referral isn't an outcome state, it's a source flag. A referred candidate can still be in any status.
 
@@ -803,7 +803,7 @@ Phase 3.7.8.16: managers often forward with their own context ("strong fit, sche
 
 ### `mirrornyc.com` blocked from portfolio URL extraction
 
-Manager email signatures embed `http://www.mirrornyc.com/` and `@mirror_nyc`. The portfolio scorer was promoting those as the candidate's portfolio. `mirrornyc.com` added to `BLOCKED_PORTFOLIO_DOMAINS` in `_shared/unwrapUrl.ts` so it's filtered at extraction time — never enters `detected_links`, never becomes `portfolio_path_or_url`.
+Manager email signatures embed `http://www.mirrornyc.com/` and `@mirror_nyc`. The portfolio scorer was promoting those as the candidate's portfolio. `mirrornyc.com` added to `BLOCKED_PORTFOLIO_DOMAINS` in `_shared/unwrapUrl.ts` so it's filtered at extraction time; never enters `detected_links`, never becomes `portfolio_path_or_url`.
 
 ### Global competitor list as `text[]` on `global_settings`; per-role override on `ts_roles.competitor_bonus`
 
@@ -811,15 +811,15 @@ Mirror has a canonical 19-entry list of competitor agencies that should bonus-cr
 
 ### Stepped pull-running checklist driven by existing signals, not new step_progress writes
 
-Source repo writes per-step state to a `step_progress` jsonb column on `pull_rounds`. HQ's port intentionally dropped that ornamentation in Phase 3.4 to keep `ts-pull-candidates` simple. For the stepped UI in 3.7.8.6, kept the simpler approach — derived a 4-step checklist (search / dedupe / process / save) from the existing `candidates_found` + `processed_count` + `status` columns. Less granular than the source's 6-step view but covers the practical UX (most of the running window is "processing X of N"), and avoided re-adding per-substep writes across the entire pull pipeline.
+Source repo writes per-step state to a `step_progress` jsonb column on `pull_rounds`. HQ's port intentionally dropped that ornamentation in Phase 3.4 to keep `ts-pull-candidates` simple. For the stepped UI in 3.7.8.6, kept the simpler approach; derived a 4-step checklist (search / dedupe / process / save) from the existing `candidates_found` + `processed_count` + `status` columns. Less granular than the source's 6-step view but covers the practical UX (most of the running window is "processing X of N"), and avoided re-adding per-substep writes across the entire pull pipeline.
 
 ### Toasts default to Mirror coral; ReferralPill stays electric blue
 
-Toasts site-wide flipped from black/red destructive variant to solid Mirror coral with white bold text — coral is the brand attention color. ReferralPill briefly tried coral too (3.7.8.8), reverted in 3.7.8.13 because too many other coral surfaces (Master Pool header, primary buttons, toasts) made the referral signal disappear. Back to the original electric blue, which stands cleanly apart from the muted-grey AUTO/MANUAL pill it sits beside.
+Toasts site-wide flipped from black/red destructive variant to solid Mirror coral with white bold text; coral is the brand attention color. ReferralPill briefly tried coral too (3.7.8.8), reverted in 3.7.8.13 because too many other coral surfaces (Master Pool header, primary buttons, toasts) made the referral signal disappear. Back to the original electric blue, which stands cleanly apart from the muted-grey AUTO/MANUAL pill it sits beside.
 
 ### Slider track + score bar track use `bg-input` on Mirror-grey card surfaces
 
-Phase 3.7.6 moved many cards to `bg-surface-alt` (#141414, Mirror grey). The shadcn slider track and `ScoreInline` bar track used `bg-secondary` (#141414) — same color, invisible against the new card surfaces. Made the empty portion of every slider and the unfilled portion of every score bar disappear. Flipped both to `bg-input` (#292929) so the track always reads against any card surface.
+Phase 3.7.6 moved many cards to `bg-surface-alt` (#141414, Mirror grey). The shadcn slider track and `ScoreInline` bar track used `bg-secondary` (#141414); same color, invisible against the new card surfaces. Made the empty portion of every slider and the unfilled portion of every score bar disappear. Flipped both to `bg-input` (#292929) so the track always reads against any card surface.
 
 ### Top nav reduced to Dashboard + Talent Scout
 
@@ -835,9 +835,9 @@ Split into `ts-packet-generate` + `ts-final-review-packet`, lift the shared infr
 
 ### `final_overview` field on each `ts_final_reviews.final_rankings` entry
 
-Source had no equivalent. Hiring managers reviewing the final pool need a comparative angle that the per-candidate `quick_overview` (generated during pull-time) doesn't provide — quick_overview is "what's in this candidate's materials"; final_overview is "what unique strengths or angles this candidate brings to Mirror NYC that distinguish them within this final pool."
+Source had no equivalent. Hiring managers reviewing the final pool need a comparative angle that the per-candidate `quick_overview` (generated during pull-time) doesn't provide; quick_overview is "what's in this candidate's materials"; final_overview is "what unique strengths or angles this candidate brings to Mirror NYC that distinguish them within this final pool."
 
-The AI generates 4-6 short headlines per candidate, framed as positives about the candidate (never by direct comparison to others — the comparative reading is what the hiring manager does, not the AI). Stored on the `final_rankings` jsonb entry. Surfaced in `FinalReviewDetail`'s candidate table where the dashboard CandidateTable would otherwise show Quick Overview.
+The AI generates 4-6 short headlines per candidate, framed as positives about the candidate (never by direct comparison to others; the comparative reading is what the hiring manager does, not the AI). Stored on the `final_rankings` jsonb entry. Surfaced in `FinalReviewDetail`'s candidate table where the dashboard CandidateTable would otherwise show Quick Overview.
 
 Final entry shape: `{candidate_id, final_rank, final_tier, rationale, recruiter_note, final_overview}`. `final_rank` kept (despite not being in Jimmie's literal spec) because deriving rank from tier + secondary sort is brittle; source's reasoning still applies.
 
@@ -858,17 +858,17 @@ Cheap insurance; prevents click-through routing through Google/Outlook/Mimecast 
 
 ### `include_fast_track` toggle on FinalReviewDetail
 
-Source had a checkbox; HQ surfaces the same toggle. Default `true` (full coverage — packet includes every fast-tracked candidate's pages even if they're outside the top-N tier). Hiring managers occasionally want a tighter top-tier-only packet; the toggle gives them that escape. Seeded from the review row's `packet_include_fast_track` if a packet has been generated before, so re-generation defaults to the previous preference.
+Source had a checkbox; HQ surfaces the same toggle. Default `true` (full coverage; packet includes every fast-tracked candidate's pages even if they're outside the top-N tier). Hiring managers occasionally want a tighter top-tier-only packet; the toggle gives them that escape. Seeded from the review row's `packet_include_fast_track` if a packet has been generated before, so re-generation defaults to the previous preference.
 
-### Tier subtotals in the packet matrix render `—` instead of `0` when score_breakdown is empty
+### Tier subtotals in the packet matrix render an em dash (U+2014) instead of `0` when score_breakdown is empty
 
-When a candidate's `score_breakdown` jsonb is empty (legacy candidate, or a candidate where the AI returned no per-criterion breakdown), the matrix used to show T1=0 / T2=0 / T3=0 / Bonus=total. That reads as "candidate scored zero on Tier 1" rather than "we don't have the breakdown." Misleading zeros are worse than honest missing data. Now renders `—` per missing tier; total still renders correctly (it lives on `ts_candidates.score`).
+When a candidate's `score_breakdown` jsonb is empty (legacy candidate, or a candidate where the AI returned no per-criterion breakdown), the matrix used to show T1=0 / T2=0 / T3=0 / Bonus=total. That reads as "candidate scored zero on Tier 1" rather than "we don't have the breakdown." Misleading zeros are worse than honest missing data. Now renders an em dash (U+2014) per missing tier; total still renders correctly (it lives on `ts_candidates.score`).
 
-Applies to the round packet's Top Candidate Comparison Matrix. Per-criterion display in CandidateDetail's score breakdown panel keeps existing "0 / X" behavior since each criterion has its own line item — viewer can tell at a glance whether the breakdown was populated.
+Applies to the round packet's Top Candidate Comparison Matrix. Per-criterion display in CandidateDetail's score breakdown panel keeps existing "0 / X" behavior since each criterion has its own line item; viewer can tell at a glance whether the breakdown was populated.
 
 ### Cron watchdog for stalled `ts_final_reviews` deferred to Phase 3.7
 
-Phase 3.7 is the dedicated cron + watchdog phase (`ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-storage-cleanup`). `ts-cron-final-review-watchdog` joins that batch — same pattern as the others (heartbeat detection, status flip to `failed` on stall, no auto-restart). Not bolted onto 3.6.
+Phase 3.7 is the dedicated cron + watchdog phase (`ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-storage-cleanup`). `ts-cron-final-review-watchdog` joins that batch; same pattern as the others (heartbeat detection, status flip to `failed` on stall, no auto-restart). Not bolted onto 3.6.
 
 ### HQ-specific: skip Gmail re-fetch at packet time, read attachments from Storage
 
@@ -876,7 +876,7 @@ Source's packet generators re-fetch attachments from Gmail using OAuth refresh t
 
 ### HQ-specific: email packet to hiring manager via Gmail service account
 
-Source's packet generators return a download URL only — the user manually shares the PDF afterward. HQ adds an email step: after upload, the function sends the packet PDF to the role's hiring manager from `jobs@mirrornyc.com` via the service account's `gmail.send` scope (added to `_shared/gmailServiceAccount.ts` SCOPES list in this phase). Best-effort: failures don't fail the overall request — the user still gets the download URL. Hiring manager email is read from `users` joined on `ts_roles.hiring_manager_id`.
+Source's packet generators return a download URL only; the user manually shares the PDF afterward. HQ adds an email step: after upload, the function sends the packet PDF to the role's hiring manager from `jobs@mirrornyc.com` via the service account's `gmail.send` scope (added to `_shared/gmailServiceAccount.ts` SCOPES list in this phase). Best-effort: failures don't fail the overall request; the user still gets the download URL. Hiring manager email is read from `users` joined on `ts_roles.hiring_manager_id`.
 
 ### HQ-specific: PDF coral stays at source's `#ef5b5b`, not deck-canonical `#BE4E44`
 
@@ -884,9 +884,9 @@ The Phase 3.5b brand pass moved HQ's UI coral to `#BE4E44` (deck-canonical). Ins
 
 ### `ts_candidates.email_body_text` column added; packet email page skipped when null
 
-Source's packet shows the candidate's original application email as a white "doc-slot" page inside their per-candidate section. HQ didn't persist email body text in Phase 3.4. This phase adds `email_body_text text` (nullable) and updates `ts-pull-candidates` to populate it (trimmed at 30k chars). The packet renders the email page only when the column is non-null — pre-3.6 candidates won't have it, but their title page + attachments still render correctly.
+Source's packet shows the candidate's original application email as a white "doc-slot" page inside their per-candidate section. HQ didn't persist email body text in Phase 3.4. This phase adds `email_body_text text` (nullable) and updates `ts-pull-candidates` to populate it (trimmed at 30k chars). The packet renders the email page only when the column is non-null; pre-3.6 candidates won't have it, but their title page + attachments still render correctly.
 
-## Talent Scout port (Phase 3) — locked Q1–Q6
+## Talent Scout port (Phase 3): locked Q1-Q6
 
 Resolutions to the six open questions in `docs/talent-scout-port-plan.md` § 8.
 
@@ -896,7 +896,7 @@ Resolutions to the six open questions in `docs/talent-scout-port-plan.md` § 8.
 
 **Bulk re-evaluate** (role-scoped or round-scoped "Re-Evaluate Pool") is the one exception: it implies the prompt or scorecard changed, so prior evals are no longer meaningful. The `overwrite_history: true` flag on `ts-evaluate-candidate` deletes prior `ts_evaluations` rows for the candidate before inserting.
 
-**Why both modes**: a single re-eval is usually the user fixing one candidate's classification or pulling new info — history matters. A bulk re-eval is the user changing the scoring rules — old scores aren't comparable, keeping them around just clutters the audit trail.
+**Why both modes**: a single re-eval is usually the user fixing one candidate's classification or pulling new info; history matters. A bulk re-eval is the user changing the scoring rules; old scores aren't comparable, keeping them around just clutters the audit trail.
 
 ### Q2: pending-candidate parking spot → jsonb on the round
 
@@ -916,7 +916,7 @@ Before writing `ts-packet-generate` in Phase 3.6, do a 30-min read of source's `
 
 ### Q6: anthropic-spend-tracker shape → explicit `callClaude(app, ...)` wrapper
 
-Single helper in `supabase/functions/_shared/anthropic.ts`. Selects key from `ANTHROPIC_API_KEY_TS` / `_VS` / `_HQ` based on the `app` argument. After each successful call, computes cost from the response usage block (incl. prompt-cache discounts) and increments `global_settings.anthropic_spend_current_month_usd`. Emails the admin once per cap crossing, gated by `cap_alert_sent_this_month`. **Does NOT refuse calls when over cap** — graceful degradation, not a hard failure.
+Single helper in `supabase/functions/_shared/anthropic.ts`. Selects key from `ANTHROPIC_API_KEY_TS` / `_VS` / `_HQ` based on the `app` argument. After each successful call, computes cost from the response usage block (incl. prompt-cache discounts) and increments `global_settings.anthropic_spend_current_month_usd`. Emails the admin once per cap crossing, gated by `cap_alert_sent_this_month`. **Does NOT refuse calls when over cap**; graceful degradation, not a hard failure.
 
 ## Phase 3.4 (pull pipeline)
 
@@ -936,7 +936,7 @@ Source repo kept small attachments in Gmail and let the dashboard fetch them on 
 
 ### `ts_pull_rounds` operational columns
 
-`candidates_found`, `processed_count`, `attempt`, `round_number` added so progress and round labels work without joining `ts_candidates` per render. Source's `step_progress` jsonb / `current_step` / `error_log` were dropped — simpler `processed_count / candidates_found` is enough; richer progress UI can be added back later if needed.
+`candidates_found`, `processed_count`, `attempt`, `round_number` added so progress and round labels work without joining `ts_candidates` per render. Source's `step_progress` jsonb / `current_step` / `error_log` were dropped; simpler `processed_count / candidates_found` is enough; richer progress UI can be added back later if needed.
 
 ## Phase 3.5 (candidate detail + re-eval)
 
@@ -946,7 +946,7 @@ See Q1 above. Implementation note: the candidate-detail UI shows only the latest
 
 ### `promote` → `interview` enum rename
 
-Original schema used `promote` as the "advance" status. Renamed to `interview` in Phase 3.5 — concrete next-stage action that maps to actual hiring workflow language. `ts_candidate_status` is now `(consider, interview, reject, fast_track, auto_rejected)`. Migration verified zero rows used `promote` before renaming.
+Original schema used `promote` as the "advance" status. Renamed to `interview` in Phase 3.5; concrete next-stage action that maps to actual hiring workflow language. `ts_candidate_status` is now `(consider, interview, reject, fast_track, auto_rejected)`. Migration verified zero rows used `promote` before renaming.
 
 ### Status priority is the primary sort everywhere
 
@@ -954,7 +954,7 @@ Original schema used `promote` as the "advance" status. Renamed to `interview` i
 
 ### Bulk re-eval split: role-scoped uses `ts-bulk-reevaluate`, round-scoped fans out
 
-`ts-bulk-reevaluate` (chunked self-invoke, `verify_jwt = false`) operates on the role's master pool with optional `status_filter`. PullDetail's "Re-Evaluate Pool" is round-scoped and skips the dedicated function — instead, it fans out parallel `ts-evaluate-candidate` calls (concurrency=6) with `overwrite_history: true` from the browser. Floating bottom-right widget shows progress; cancellable mid-run.
+`ts-bulk-reevaluate` (chunked self-invoke, `verify_jwt = false`) operates on the role's master pool with optional `status_filter`. PullDetail's "Re-Evaluate Pool" is round-scoped and skips the dedicated function; instead, it fans out parallel `ts-evaluate-candidate` calls (concurrency=6) with `overwrite_history: true` from the browser. Floating bottom-right widget shows progress; cancellable mid-run.
 
 ### Round-scoped state on `ts_pull_rounds`, role-scoped state on `ts_roles`
 
@@ -979,5 +979,5 @@ Every new table requires explicit `GRANT` to `authenticated` and `service_role`.
 Decisions still up in the air; revisit when the relevant phase starts.
 
 - **Project status enum trim.** Current 14 values may consolidate. Defer until Phase 5 polish.
-- **`venue_types` lookup values.** Jimmie provides before Venue Scout build (Phase 4).
-- **Talent Scout data extraction (Phase 6.2).** Plan: re-create active roles via Gmail re-pull, preserve closed roles as packet PDF archives. If Phase 6 inventory turns up data that doesn't fit, revisit then.
+- **`venue_types` lookup values.** **Resolution (2026-05-13, retroactive):** Shipped as a free-text canonicalization layer. The producer's sheet supplies an arbitrary string; the parser maps to the canonical list (Retail, Event Venue, Industrial, Warehouse, Gallery, Studio, Outdoor, Mobile) via substring matching. Lookup table not needed. See `docs/templates/venue-scout-sheet-template.md`.
+- **Talent Scout data extraction** (future cross-platform data extraction; not blocking Phase 5). Plan: re-create active roles via Gmail re-pull, preserve closed roles as packet PDF archives. If a future inventory turns up data that doesn't fit, revisit then.

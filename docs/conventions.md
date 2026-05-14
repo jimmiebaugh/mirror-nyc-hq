@@ -16,7 +16,7 @@ How we write code in this repo. Read this before adding tables, columns, edge fu
 
 - **Always use `timestamptz`** for time-of-event columns. **`date`** for date-only columns. Never `timestamp without time zone`.
 - **Always include explicit GRANTs** to `authenticated` and `service_role` for new tables. Auto-expose stays off as the project security default. See `supabase/migrations/20260506065157_grant_data_api_access.sql` for the canonical pattern.
-- Always include RLS policies for new tables — never leave RLS implicit. Default deny if unsure.
+- Always include RLS policies for new tables; never leave RLS implicit. Default deny if unsure.
 - UUID PKs default to `gen_random_uuid()`.
 - Foreign keys with cascading deletes where the child has no meaning without the parent (`ts_pull_rounds.role_id` → `ts_roles.id ON DELETE CASCADE`). Otherwise leave default RESTRICT.
 - New `updated_at` columns get the `updated_at_auto` trigger.
@@ -67,6 +67,7 @@ How we write code in this repo. Read this before adding tables, columns, edge fu
 - Update `docs/schema.md` in the same commit as any schema migration.
 - Update `docs/edge-functions.md` in the same commit as any new or modified edge function.
 - Update `CHECKPOINT.md` in the same commit as any sub-phase completion -- not deferred to end-of-phase. Required fields: latest branch commit hash, current sub-phase, what's done vs. next.
+- Passive code-quality findings encountered while working land in `code-observations.md` per the workflow in `CLAUDE.md` § Code observations. Do not derail the active task to fix; log and keep moving.
 - Decisions worth preserving go in `docs/decisions.md` with the rationale. Don't bury them in commit messages. Capture during the sub-phase, not retroactively.
 - The roadmap (`docs/roadmap.md`) gets the full sub-phase breakdown written at the START of a new phase (in the kickoff commit), not at the end. Finished sub-phases get a status + commit hash in the same commit they complete.
 - Before every commit, ask: does CHECKPOINT.md reflect what this commit did? If not, update it in the same commit.
