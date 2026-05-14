@@ -2,6 +2,68 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4 Revision - Intake (3-step brief stepper)
+
+Follow-on revision correcting the Phase 4.3-port + 4.9-port surfaces. Phase 4 stays DONE; this rebuilt the single-page Brief into a 3-step stepper (Event -> Venue -> Review) and gathered the venue-side fields the AI sourcing prompt needs. Spec: `OUTPUTS/phase-4-revision-intake-spec.md`. The five decision points below were resolved by Jimmie on 2026-05-14 and are binding.
+
+### A. Generated Decks section on the Brief report -> INCLUDE
+
+The Step 3 Brief report renders a Generated Decks section (newest-first, primary styling on the most recent, "Open in Google Slides" per entry, hidden when empty). `vs_scouts.generated_decks` already persists every field needed (`deck_name`, `version`, `generated_at`, `venue_count`, `slide_count`, `edit_url`); no schema change.
+
+### B. New `brief` current_step value + default -> APPLY
+
+Migration `20260514110000` adds `brief` to the `vs_scouts_current_step_check` constraint and flips the new-row default from `sheet_prompt` to `brief`. `brief` is the in-flight intake step; Step 3 Confirm & Continue flips it to `sheet_prompt`. The rest of the state machine is unchanged. Existing scouts on `sheet_prompt` are treated as post-intake (they passed the old single-page Brief) and the `/brief` redirect index sends them straight to the report view.
+
+### C. `city` is required -> REQUIRED
+
+Step 2's Submit Brief is disabled until `city` is non-empty, same blocking treatment as `client_name` / `event_name` on Step 1. Downstream sourcing needs the city; the old single-page Brief left it optional. Existing scouts with an empty city block on Step 2 the first time the brief is reopened.
+
+### D. Client logo on the hero band -> INITIALS PLACEHOLDER
+
+The Step 3 hero band shows the first two letters of `client_name` in a white logo block. Web-search-for-logo is a post-revision follow-up, not built here.
+
+### E. One "Brief" label everywhere -> RENAME
+
+`currentStepToLabel("brief")` and `currentStepToLabel("sheet_prompt")` both return "Brief". The Revisit chip, the Scout Index Phase column, and the canonical surface all read "Brief". The old "Brief & Setup" (`sheet_prompt`) and "Brief Report" wordings are gone. `sourcing_report` relabeled "Sourcing Report" -> "Sourcing" for chip parity; `Shortlist.tsx` breadcrumb updated to match.
+
+### briefForm.ts strips the 16 form-backed keys from the brief_data passthrough
+
+`fromScout` pulls the form-backed jsonb keys into dedicated form fields and keeps only the non-form keys (`uploaded_files`, the `*_started_at` idempotency flags, the legacy `notes`) in the `brief_data` passthrough; `toUpdate` rebuilds the form-backed keys from the form fields. This keeps `fromScout(toUpdate(state)) === state` a clean round-trip regardless of how `state` is constructed. The retired `notes` key is NOT stripped (it has no form field) so `toUpdate` preserves it on existing scouts.
+
+### Cross-step form state lives in a module store, not per-page DB reloads
+
+`src/lib/venue-scout/briefIntakeStore.ts` is a plain module-object store (same pattern as `src/lib/talent-scout/wizardStore.ts`), keyed by `scoutId`. Step 1's Continue persists to the DB before navigating, but Step 2's Back must "preserve form state in memory" -- so a producer who edits Step 2, clicks Back, then Continue doesn't lose the Step-2 edits. The store carries the working form + the dirty-tracking baseline across the three page mounts. The spec didn't enumerate this file; it's the conventions.md-mandated wizard-state mechanism the architecture required.
+
+### Stepper / TagInput / ChipMultiSelect built VS-side, not generalized
+
+`src/components/venue-scout/Stepper.tsx` is a 1:1 visual lift of the Talent Scout Stepper, parameterized to a 3-element steps array but kept VS-side. `TagInput.tsx` and `ChipMultiSelect.tsx` are new VS components. Generalizing the Stepper into a shared cross-surface component is deferred until a third surface needs it (spec § 2 out-of-scope).
+
+### Event Overview is generated, with a deterministic stub fallback
+
+`vs-generate-brief-overview` is a new `verify_jwt = true` edge function. It fires on first arrival at the Brief report (when `event_overview` is empty) and is re-invokable via a Regenerate link. On a Claude failure or empty response it writes a deterministic stub so the producer always lands on a non-empty, editable overview. The producer-facing intake form dropped the old Event Overview input and the Additional Notes input entirely; the overview is now produced + edited on Step 3.
+
+### Report-card editing uses explicit Save / Cancel, not pure blur-commit
+
+The Step 3 report cards flip to edit mode on click. The spec described "commits on blur or Enter," but the editor types are mixed (text input, textarea, TagInput, ChipMultiSelect, Slider, ToggleGroup) and blur doesn't map cleanly across all of them, so every card's edit mode uses an explicit Save / Cancel button pair plus Escape-to-cancel. The Event Overview block (a single textarea) keeps the spec's blur-or-explicit-Save behavior.
+
+### Pass 2: chip restructure, objectives tightening, Stepper hidden on the report
+
+Three corrections to what pass 1 shipped (`OUTPUTS/phase-4-revision-2-spec.md`, 2026-05-14). **Chip restructure:** the Brief chip now routes into the intake stepper at `/brief/event` ("edit brief" mode -- `briefIntakeStore` carries unsaved state across mounts), and a new Overview chip pinned last routes to the canonical Brief report at `/brief/report` (reachable once `current_step >= sheet_prompt`). The redundant trailing "Generated Deck" link is gone -- the deck is already linked from the report's Generated Decks section. Active-chip resolution flipped from step-based (furthest-reached) to route-based (`useLocation` prefix match): the highlight reflects where the producer is looking right now, not how far the scout has progressed, so a producer editing the Brief on a Shortlist-stage scout sees Brief highlighted, not Shortlist. **Objectives tightening:** `vs-parse-brief` (deployed v16) was returning narrative paragraphs instead of the tag-style phrases the report's `TagInput` expects; fixed via the tool schema description + a dedicated system-prompt rule + a `sanitizeObjectives` post-parse pass (split joined items on `; ` / ` and `, drop >60-char paragraph items, trim/dedupe). The lever stays on schema description + post-emission sanitization per `feedback_tool_choice_collapse`. **Stepper hidden on the report:** `BriefReport.tsx` dropped the `<Stepper active={3} />` line; the stepper belongs to the intake walkthrough (Steps 1-2 on `BriefEvent` / `BriefVenue`), and the report is now reached via the Overview chip / direct URL / post-Submit confirm, not as a visible "step 3 of 3."
+
+### Pass 3: Event Overview generation moves to Submit Brief, hash-gated
+
+`OUTPUTS/phase-4-revision-3-spec.md`, 2026-05-14. Pass 1/2 auto-fired `vs-generate-brief-overview` from a `BriefReport.tsx` first-render `useEffect` whenever `event_overview` was empty. Two failure modes against what the producer actually wants: (1) a producer who edited the AI-parsed objectives / target audience / aesthetic and then reached the report via the Brief chip never got a regenerated overview, because the report only fired on *empty*; (2) report entry could burn a Claude call on every fresh mount. The rule: generate on Submit Brief, regenerate only when the brief fields that drive the overview changed since the last generation.
+
+**Hash-gated regen.** `computeOverviewSourceHash` (a 16-char SHA-256 prefix over the 15 overview-driving brief fields, arrays sorted, empty-to-null normalized) lives in `src/lib/venue-scout/briefForm.ts` and is recomputed identically server-side in `vs-generate-brief-overview` (v2). The hash is stored in `brief_data.overview_source_hash`. Submit Brief (`BriefVenue.tsx`) persists the form, then invokes the function only when the overview is empty, the stored hash is missing, or the stored hash != a freshly-computed one. Two-stage spinner ("Submitting..." -> "Generating overview...") when a regen runs; single-stage when it's skipped. The function writes `event_overview` + `brief_data.overview_source_hash` in one atomic UPDATE and returns both so the caller's local state stays in sync.
+
+**Why a content hash, not a dirty flag.** A boolean "brief changed" flag would need every brief-field write path (the 3-step stepper, the report's inline cards, `vs-parse-brief` apply) to remember to set it, and would drift the first time one forgot. A content hash is derived state: it can't drift. The 15-field set matches exactly what the overview prompt consumes; the hash inputs and the prompt inputs must move in lockstep, and the client + server hash implementations must stay byte-for-byte reproducible (same field set, same canonical form, same object key order).
+
+**Trigger model after pass 3.** `BriefReport.tsx` dropped the auto-fire `useEffect` entirely. The Overview block renders an empty-state "Generate overview" button when `event_overview` is empty (manual fallback for legacy scouts or function failures); the Regenerate link on a populated overview is unchanged (unconditional re-invoke). Inline edits to the overview text do NOT touch the hash -- a producer can polish wording without the next Submit Brief treating it as stale; conversely, resubmitting after a field change overwrites an inline edit by intent.
+
+**`overview_source_hash` is a `brief_data` passthrough key, not a hoisted form field.** It is machine-written metadata with no producer-facing form field, the same shape as the `*_started_at` idempotency flags, so it rides in the `brief_data` passthrough untouched by `fromScout` / `toUpdate`. (Spec § 7 was ambiguous between "extend `BriefFormState`" and "passthrough"; Jimmie confirmed pure passthrough on 2026-05-14.)
+
+**No backfill migration.** Scouts that shipped under pass 1/2 carry no hash; their first post-pass-3 Submit Brief sees a missing hash and regenerates once. One Claude call per in-flight scout at cutover, bounded, documented.
+
 ## Phase 4.10.6-port (URL acquisition fallbacks + deck flow polish)
 
 ### URL extraction fallback layered onto Claude's tool output

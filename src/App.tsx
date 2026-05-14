@@ -24,7 +24,10 @@ import FinalReviewLoading from "./pages/talent-scout/FinalReviewLoading";
 import FinalReviewDetail from "./pages/talent-scout/FinalReviewDetail";
 import ScoutIndex from "./pages/venue-scout/ScoutIndex";
 import NewScout from "./pages/venue-scout/NewScout";
-import Brief from "./pages/venue-scout/Brief";
+import BriefIndex from "./pages/venue-scout/BriefIndex";
+import BriefEvent from "./pages/venue-scout/BriefEvent";
+import BriefVenue from "./pages/venue-scout/BriefVenue";
+import BriefReport from "./pages/venue-scout/BriefReport";
 import SheetPrompt from "./pages/venue-scout/SheetPrompt";
 import SheetUpload from "./pages/venue-scout/SheetUpload";
 import Researching from "./pages/venue-scout/Researching";
@@ -157,7 +160,22 @@ const App = () => (
               />
               <Route path="/venue-scout" element={<ScoutIndex />} />
               <Route path="/venue-scout/scouts/new" element={<NewScout />} />
-              <Route path="/venue-scout/scouts/:id/brief" element={<Brief />} />
+              <Route
+                path="/venue-scout/scouts/:id/brief"
+                element={<BriefIndex />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/brief/event"
+                element={<BriefEvent />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/brief/venue"
+                element={<BriefVenue />}
+              />
+              <Route
+                path="/venue-scout/scouts/:id/brief/report"
+                element={<BriefReport />}
+              />
               <Route
                 path="/venue-scout/scouts/:id/settings"
                 element={<ScoutSettings />}

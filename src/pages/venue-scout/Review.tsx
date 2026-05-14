@@ -77,7 +77,7 @@ export default function Review() {
   // with the candidate-venues fetch so the chrome can render without a
   // second mount-time round-trip.
   const [scoutMeta, setScoutMeta] = useState<
-    { current_step: string | null; generated_decks: unknown } | null
+    { current_step: string | null } | null
   >(null);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -94,7 +94,7 @@ export default function Review() {
         .order("created_at", { ascending: true }),
       supabase
         .from("vs_scouts")
-        .select("current_step, generated_decks")
+        .select("current_step")
         .eq("id", scoutId)
         .maybeSingle(),
     ]);
@@ -102,7 +102,6 @@ export default function Review() {
       scoutRow
         ? {
             current_step: (scoutRow.current_step as string | null) ?? null,
-            generated_decks: scoutRow.generated_decks,
           }
         : null,
     );

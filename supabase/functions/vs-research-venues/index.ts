@@ -644,10 +644,91 @@ Deno.serve(async (req) => {
   // uploaded_files file-metadata) that are pure noise to Claude and
   // inflated the input token count for every Phase B call. Trimmed
   // version focuses Claude on the search-relevant subset.
+  //
+  // Phase 4 Revision - Intake: the brief intake now collects venue-side
+  // fields (target_neighborhoods + strict flag, venue_types, ideal_features,
+  // priority_location / priority_cost, sq_ft_minimum, sq_ft_min / sq_ft_max,
+  // activations_count, target_audience, vibe_aesthetic). Inject them into the
+  // user message so the AI sourcing actually uses them. Still a user-message
+  // change only -- SYSTEM stays frozen per feedback_tool_choice_collapse.
   const phaseBBriefData =
     (scout.brief_data ?? {}) as Record<string, unknown>;
   const phaseBExpectedGuests = phaseBBriefData.expected_guest_count;
   const phaseBNotes = phaseBBriefData.notes;
+
+  const asArr = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v
+          .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+          .map((x) => x.trim())
+      : [];
+  const asNum = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  const asStr = (v: unknown): string =>
+    typeof v === "string" ? v.trim() : "";
+
+  const targetNeighborhoods = asArr(phaseBBriefData.target_neighborhoods);
+  const strictNeighborhoods = phaseBBriefData.strict_neighborhoods_only === true;
+  const venueTypes = asArr(phaseBBriefData.venue_types);
+  const idealFeatures = asArr(phaseBBriefData.ideal_features);
+  const priorityLocation = phaseBBriefData.priority_location;
+  const priorityCost = phaseBBriefData.priority_cost;
+  const sqFtMinimum = asNum(phaseBBriefData.sq_ft_minimum);
+  const sqFtMin = asNum(phaseBBriefData.sq_ft_min);
+  const sqFtMax = asNum(phaseBBriefData.sq_ft_max);
+  const activationsCount = asNum(phaseBBriefData.activations_count);
+  const targetAudience = asStr(phaseBBriefData.target_audience);
+  const vibeAesthetic = asStr(phaseBBriefData.vibe_aesthetic);
+
+  const requirementLines: string[] = [];
+  if (targetNeighborhoods.length > 0) {
+    requirementLines.push(
+      strictNeighborhoods
+        ? `Restrict candidates to these neighborhoods only: ${targetNeighborhoods.join(", ")}.`
+        : `Prefer candidates in these neighborhoods, but consider others: ${targetNeighborhoods.join(", ")}.`,
+    );
+  }
+  if (venueTypes.length > 0) {
+    requirementLines.push(
+      `Candidate venue must be one of these types: ${venueTypes.join(", ")}.`,
+    );
+  }
+  if (idealFeatures.length > 0) {
+    requirementLines.push(
+      `Prioritize venues with these features: ${idealFeatures.join(", ")}.`,
+    );
+  }
+  const priorityParts: string[] = [];
+  if (priorityLocation === "high_foot_traffic") {
+    priorityParts.push("Location: high foot traffic");
+  } else if (priorityLocation === "intimate_destination") {
+    priorityParts.push("Location: intimate destination");
+  }
+  if (priorityCost === "lower_cost") priorityParts.push("Cost: lower-cost");
+  else if (priorityCost === "premium") priorityParts.push("Cost: premium");
+  if (priorityParts.length > 0) {
+    requirementLines.push(`Sourcing priorities: ${priorityParts.join(". ")}.`);
+  }
+  if (sqFtMinimum !== null) {
+    requirementLines.push(
+      `Hard floor: do not surface venues smaller than ${sqFtMinimum.toLocaleString()} sq ft.`,
+    );
+  }
+  if (sqFtMin !== null || sqFtMax !== null) {
+    const lo = sqFtMin !== null ? `${sqFtMin.toLocaleString()} sq ft` : "any";
+    const hi = sqFtMax !== null ? `${sqFtMax.toLocaleString()} sq ft` : "any";
+    requirementLines.push(`Preferred size range: ${lo} to ${hi}.`);
+  }
+  if (activationsCount !== null) {
+    requirementLines.push(
+      `The event needs roughly ${activationsCount} distinct spaces / locations; surface options that can support that.`,
+    );
+  }
+  const venueRequirementsBlock =
+    requirementLines.length > 0
+      ? `\n\nVENUE REQUIREMENTS:\n${requirementLines.map((l) => `- ${l}`).join("\n")}`
+      : "";
+
   const userMsg =
     `PROJECT BRIEF
 Client: ${scout.client_name ?? "(not set)"}
@@ -662,11 +743,13 @@ Expected guests: ${
         : "(not set)"
     }
 Overview: ${scout.event_overview ?? "(not set)"}
+Target audience: ${targetAudience || "(not set)"}
+Vibe / aesthetic: ${vibeAesthetic || "(not set)"}
 Additional brief notes: ${
       typeof phaseBNotes === "string" && phaseBNotes.trim().length > 0
         ? phaseBNotes.trim()
         : "(none)"
-    }
+    }${venueRequirementsBlock}
 
 EXISTING VENUES (do not duplicate):
 ${(existing ?? [])

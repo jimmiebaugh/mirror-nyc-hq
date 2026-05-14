@@ -1,8 +1,8 @@
 // Phase 4.9-port: shared per-scout chrome used by every action page in the
-// Venue Scout flow (Brief, SheetPrompt, SheetUpload, SourcingReport,
-// Shortlist, Review, DeckPrep, ErrorState). Loading screens are excluded
-// by design (Researching, Compiling, Generating) -- producers wait on
-// those, they can't take Settings or step-through actions mid-flight.
+// Venue Scout flow (Brief intake pages, SheetPrompt, SheetUpload,
+// SourcingReport, Shortlist, Review, DeckPrep, ErrorState). Loading screens
+// are excluded by design (Researching, Compiling, Generating) -- producers
+// wait on those, they can't take Settings or step-through actions mid-flight.
 //
 // Two named exports:
 //
@@ -11,50 +11,130 @@
 //     /venue-scout/scouts/:id/settings.
 //
 //   <ScoutStepThroughNav scoutId={id} scout?={scout} />
-//     Conditional nav strip rendered below the page header. Renders ONLY
-//     when current_step === 'completed'. Pages already querying the scout
-//     pass the meta as the `scout` prop; pages without an existing query
-//     (SheetPrompt, SheetUpload) omit it and the component self-queries.
+//     Nav strip rendered below the page header. Phase 4 Revision: now ALWAYS
+//     visible for any scout with a defined current_step (was completed-only).
+//     Each chip is clickable once the scout has reached that step, and
+//     renders disabled (reduced opacity, no hover) until then. Pages already
+//     querying the scout pass the meta as the `scout` prop; pages without an
+//     existing query omit it and the component self-queries.
 //
-// Step-through chips:
-//   - 5 phase chips (sheet_prompt, sourcing_report, shortlist,
-//     review_selects, deck_prep) route via stepToRoute().
-//   - 1 deck chip (latest entry in generated_decks). Opens in a new tab
-//     via the entry's edit_url. Only renders when there's at least one
-//     entry with a Drive edit URL.
+// Step-through chips (Phase 4 Revision pass 2):
+//   - 6 chips (Brief, Sourcing, Shortlist, Final Review, Deck Prep, Overview).
+//     The Brief chip routes into the intake stepper at /brief/event ("edit
+//     brief" mode -- briefIntakeStore carries unsaved state across mounts).
+//     The Overview chip is pinned last and routes to the canonical Brief
+//     report at /brief/report; reachable once the scout is at sheet_prompt
+//     or past.
+//   - The active chip is route-based, not step-based: it reflects where the
+//     producer is right now (URL match), not how far the scout has
+//     progressed. Pages outside the chip set (Settings, ErrorState) highlight
+//     nothing.
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { ExternalLink, Settings } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { currentStepToLabel, stepToRoute } from "@/lib/venue-scout/format";
+import { stepToRoute } from "@/lib/venue-scout/format";
 
-// Loose shape so callers can pass anything that includes the two columns
-// we care about. The vs_scouts Row type pulls in too many unrelated
-// columns to be ergonomic here.
+// Loose shape so callers can pass anything that includes the one column we
+// care about. The vs_scouts Row type pulls in too many unrelated columns to
+// be ergonomic here.
 type ScoutMeta = {
   current_step: string | null;
-  generated_decks: unknown;
 };
 
-type DeckMeta = {
-  deck_id?: string;
-  deck_name?: string;
-  version?: number;
-  edit_url?: string;
-  embed_url?: string;
-};
-
-// Producer-visible step-through chips. Order matches the natural flow
-// (Brief -> Sourcing Report -> Shortlist -> Review -> Deck Prep) so the
-// strip reads left-to-right as the phases the producer would walk through.
-const STEP_KEYS_FOR_NAV = [
+// Ordered step machine. `isStepReached` compares positions: a chip is
+// reachable once the scout's current_step is at or past the chip's step.
+const STEP_ORDER = [
+  "brief",
   "sheet_prompt",
+  "sheet_upload",
+  "researching",
   "sourcing_report",
   "shortlist",
   "review_selects",
+  "compiling",
   "deck_prep",
+  "completed",
 ] as const;
+
+function isStepReached(currentStep: string, chipStep: string): boolean {
+  return STEP_ORDER.indexOf(currentStep as (typeof STEP_ORDER)[number]) >=
+    STEP_ORDER.indexOf(chipStep as (typeof STEP_ORDER)[number]);
+}
+
+// Producer-visible step-through chips. Order matches the natural flow so the
+// strip reads left-to-right as the phases the producer walks through, with
+// Overview pinned last. The Brief chip routes into the intake stepper at
+// /brief/event ("edit brief" mode); Overview routes to the canonical Brief
+// report at /brief/report; the middle chips route via stepToRoute().
+const NAV_CHIPS: {
+  label: string;
+  reachedAtStep: string;
+  route: (id: string) => string;
+}[] = [
+  {
+    label: "Brief",
+    reachedAtStep: "brief",
+    route: (id) => `/venue-scout/scouts/${id}/brief/event`,
+  },
+  {
+    label: "Sourcing",
+    reachedAtStep: "sourcing_report",
+    route: (id) => stepToRoute(id, "sourcing_report"),
+  },
+  {
+    label: "Shortlist",
+    reachedAtStep: "shortlist",
+    route: (id) => stepToRoute(id, "shortlist"),
+  },
+  {
+    label: "Final Review",
+    reachedAtStep: "review_selects",
+    route: (id) => stepToRoute(id, "review_selects"),
+  },
+  {
+    label: "Deck Prep",
+    reachedAtStep: "deck_prep",
+    route: (id) => stepToRoute(id, "deck_prep"),
+  },
+  {
+    label: "Overview",
+    reachedAtStep: "sheet_prompt",
+    route: (id) => `/venue-scout/scouts/${id}/brief/report`,
+  },
+];
+
+// Active-chip resolution is route-based: the chip whose path prefix matches
+// the current URL is active, independent of how far the scout has progressed.
+// Resolution order matters -- more specific prefixes first so /sourcing/review
+// resolves to Final Review, not the broad Sourcing prefix. Prefix (not exact)
+// matching keeps a chip active across sub-routes, hash fragments, and query
+// strings. Returns null on pages outside the chip set (Settings, ErrorState).
+function resolveActiveChip(pathname: string, scoutId: string): string | null {
+  const root = `/venue-scout/scouts/${scoutId}`;
+  const matches: { label: string; prefix: string }[] = [
+    { label: "Overview", prefix: `${root}/brief/report` },
+    { label: "Deck Prep", prefix: `${root}/deck/prep` },
+    { label: "Final Review", prefix: `${root}/sourcing/review` },
+    { label: "Shortlist", prefix: `${root}/sourcing/shortlist` },
+    { label: "Sourcing", prefix: `${root}/sourcing` },
+    { label: "Brief", prefix: `${root}/brief` },
+  ];
+  for (const m of matches) {
+    if (
+      pathname === m.prefix ||
+      pathname.startsWith(`${m.prefix}/`) ||
+      pathname.startsWith(`${m.prefix}?`)
+    ) {
+      return m.label;
+    }
+  }
+  return null;
+}
+
+const CHIP_BASE =
+  "inline-flex items-center rounded bg-input px-4 py-2 text-[13px] font-mono font-bold uppercase tracking-wider";
 
 export function ScoutSettingsLink({ scoutId }: { scoutId: string }) {
   return (
@@ -79,6 +159,7 @@ export function ScoutStepThroughNav({
   const [scout, setScout] = useState<ScoutMeta | null>(
     scoutProp === undefined ? null : scoutProp,
   );
+  const { pathname } = useLocation();
 
   useEffect(() => {
     if (scoutProp !== undefined) {
@@ -88,7 +169,7 @@ export function ScoutStepThroughNav({
     let cancelled = false;
     supabase
       .from("vs_scouts")
-      .select("current_step, generated_decks")
+      .select("current_step")
       .eq("id", scoutId)
       .maybeSingle()
       .then(({ data }) => {
@@ -100,40 +181,45 @@ export function ScoutStepThroughNav({
     };
   }, [scoutId, scoutProp]);
 
-  if (!scout || scout.current_step !== "completed") return null;
+  // Render for every scout with a defined current_step (Phase 4 Revision:
+  // was previously completed-only).
+  if (!scout || !scout.current_step) return null;
+  const currentStep = scout.current_step;
 
-  const decks = (Array.isArray(scout.generated_decks)
-    ? (scout.generated_decks as DeckMeta[])
-    : []) as DeckMeta[];
-  const latestDeck = decks.length > 0 ? decks[decks.length - 1] : undefined;
+  // Active chip reflects where the producer is viewing right now (URL match),
+  // not how far the scout has progressed. Null on pages outside the chip set.
+  const activeChipLabel = resolveActiveChip(pathname, scoutId);
 
   return (
-    <nav className="mb-6 flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface-alt p-3">
-      <span className="mr-1 text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-muted-foreground">
-        Revisit:
-      </span>
-      {STEP_KEYS_FOR_NAV.map((stepKey) => (
-        <Link
-          key={stepKey}
-          to={stepToRoute(scoutId, stepKey)}
-          className="inline-flex items-center rounded bg-input px-3 py-1.5 text-[11px] font-mono font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-        >
-          {currentStepToLabel(stepKey)}
-        </Link>
-      ))}
-      {latestDeck?.edit_url && (
-        <a
-          href={latestDeck.edit_url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded bg-primary/15 px-3 py-1.5 text-[11px] font-mono font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/25"
-        >
-          {typeof latestDeck.version === "number"
-            ? `Generated Deck v${latestDeck.version}`
-            : "Generated Deck"}
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      )}
+    <nav className="mb-6 flex flex-wrap items-center justify-center gap-2 rounded-md border border-border bg-surface-alt p-3">
+      {NAV_CHIPS.map((chip) => {
+        const reached = isStepReached(currentStep, chip.reachedAtStep);
+        if (reached) {
+          const isActive = chip.label === activeChipLabel;
+          return (
+            <Link
+              key={chip.label}
+              to={chip.route(scoutId)}
+              className={`${CHIP_BASE} transition-colors hover:bg-primary/10 ${
+                isActive
+                  ? "text-primary"
+                  : "text-foreground hover:text-primary"
+              }`}
+            >
+              {chip.label}
+            </Link>
+          );
+        }
+        return (
+          <span
+            key={chip.label}
+            aria-disabled="true"
+            className={`${CHIP_BASE} cursor-not-allowed text-muted-foreground/40 opacity-60`}
+          >
+            {chip.label}
+          </span>
+        );
+      })}
     </nav>
   );
 }

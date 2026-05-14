@@ -50,6 +50,7 @@ export function statusPill(status: string): StatusPill {
 }
 
 export type ScoutStep =
+  | "brief"
   | "sheet_prompt"
   | "sheet_upload"
   | "researching"
@@ -62,6 +63,10 @@ export type ScoutStep =
 
 export function stepToRoute(scoutId: string, step: string | null | undefined): string {
   switch (step) {
+    case "brief":
+      // The /brief redirect index dispatches to /brief/event mid-intake or
+      // /brief/report once the scout is past intake.
+      return `/venue-scout/scouts/${scoutId}/brief`;
     case "sheet_upload":
       return `/venue-scout/scouts/${scoutId}/sourcing/sheet-upload`;
     case "researching":
@@ -107,14 +112,19 @@ export const SOURCE_PRIORITY: Record<string, number> = {
 // place if copy needs to shift.
 export function currentStepToLabel(step: string | null | undefined): string {
   switch (step) {
+    // Phase 4 Revision: one "Brief" label covers both the in-flight intake
+    // step (`brief`) and the post-confirmation state (`sheet_prompt`), so the
+    // Scout Index Phase column mirrors the Revisit chip.
+    case "brief":
+      return "Brief";
     case "sheet_prompt":
-      return "Brief & Setup";
+      return "Brief";
     case "sheet_upload":
       return "Sheet Upload";
     case "researching":
       return "AI Sourcing";
     case "sourcing_report":
-      return "Sourcing Report";
+      return "Sourcing";
     case "shortlist":
       return "Shortlist";
     case "review_selects":
