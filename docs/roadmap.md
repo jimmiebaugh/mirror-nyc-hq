@@ -36,6 +36,8 @@ Lifted from `mirror-talent-scout`. Full pipeline ported and deployed. Sub-phase 
 
 Shipped to production 2026-05-13 (main at `7cd27ed`). Full 1:1 port from `mirror-nyc-venue-scout-pro`; 4.1-port through 4.10.6-port. Details in `docs/venue-scout-port-plan.md` and `CHECKPOINT.md`.
 
+**Phase 4 Revision - Intake.** Follow-on revision (2026-05-14): rebuilt the single-page Brief into a 3-step stepper (Event -> Venue -> Review), added the venue-side fields the AI sourcing prompt needs, added the `vs-generate-brief-overview` edge function + the `brief` `current_step` value, and made the Revisit nav always-visible. Spec: `OUTPUTS/phase-4-revision-intake-spec.md`. Phase 4 stays DONE; this is a correction, not a new phase.
+
 ### Phase 5: HQ Core (cross-cutting). ACTIVE.
 
 Six surfaces that connect Talent Scout, Venue Scout, and HQ-level concerns. No source repo to port from; each surface gets a Cowork-drafted spec before any code.

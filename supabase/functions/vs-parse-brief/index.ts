@@ -1,8 +1,15 @@
-// vs-parse-brief (Phase 4.3-port rebuild)
+// vs-parse-brief (Phase 4.3-port rebuild; Phase 4 Revision field widen)
 //
 // Replaces the failed-attempt vs-parse-brief in the deployed-function slot.
 // Different signature, different shape, different storage target -- but
 // occupies the same name so cutover doesn't need a separate delete step.
+//
+// Phase 4 Revision - Intake: the brief intake form grew venue-side fields, so
+// the submit_brief tool schema + sanitizer widen to return them when the PDF
+// mentions them (install/strike dates, activations count, objectives, target
+// audience, vibe/aesthetic, target neighborhoods, venue types, ideal
+// features). Producer judgment calls (priority toggles, strict-neighborhood
+// flag, square-footage sliders) are intentionally NOT parsed.
 //
 // Signature:
 //   POST { scout_id: string, storage_path: string } → { parsed_fields }
@@ -49,6 +56,16 @@ type ParsedBriefFields = {
   event_overview?: string;
   expected_guest_count?: number | null;
   additional_notes?: string;
+  // Phase 4 Revision - Intake: venue-side + event-detail fields.
+  install_dates?: string;
+  strike_dates?: string;
+  activations_count?: number | null;
+  objectives?: string[];
+  target_audience?: string;
+  vibe_aesthetic?: string;
+  target_neighborhoods?: string[];
+  venue_types?: string[];
+  ideal_features?: string[];
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -118,6 +135,55 @@ const tools: ClaudeTool[] = [
           description:
             "Any other context worth carrying into venue research: brand tone, must-have features, hard nos, references. Free text. Omit if no extra context worth capturing.",
         },
+        install_dates: {
+          type: "string",
+          description:
+            "Install / load-in date(s) verbatim as the brief expresses them. Omit if not stated.",
+        },
+        strike_dates: {
+          type: "string",
+          description:
+            "Strike / load-out date(s) verbatim as the brief expresses them. Omit if not stated.",
+        },
+        activations_count: {
+          type: ["number", "null"],
+          description:
+            "Number of distinct activations / spaces / zones the event needs, as a whole number. Use null if not specified.",
+        },
+        objectives: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Short phrases capturing the goals of the activation (e.g. 'Brand awareness', 'Press moment', 'Premium positioning'). Omit if the brief states none.",
+        },
+        target_audience: {
+          type: "string",
+          description:
+            "Who the activation is for: demographics, mindset, the people the client wants in the room. Omit if not described.",
+        },
+        vibe_aesthetic: {
+          type: "string",
+          description:
+            "The look and feel the venue should carry (e.g. 'raw and industrial', 'polished and intimate'). Omit if not described.",
+        },
+        target_neighborhoods: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Specific neighborhoods or districts the brief names as preferred locations. Omit if none named.",
+        },
+        venue_types: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Kinds of venue the brief calls for (e.g. 'Pop-up retail', 'Event venue', 'Industrial / warehouse', 'Gallery / white box', 'Outdoor spaces'). Omit if not specified.",
+        },
+        ideal_features: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Concrete physical or logistical features the brief wants in a venue (e.g. 'catering kitchen', 'parking', 'projection mapping', 'street-level frontage'). Omit if none stated.",
+        },
       },
       required: [],
     },
@@ -134,6 +200,7 @@ const SYSTEM_PROMPT = [
   "- Pull budget as a number with currency symbols and commas stripped. Use null when not specified.",
   "- Event overview should be a 1-3 sentence summary in your own words, capturing what the activation is, who it's for, and the vibe.",
   "- additional_notes is for tone / references / must-haves / hard-nos that don't fit the structured fields. Skip the field when nothing extra is worth capturing.",
+  "- For the venue-side fields (install/strike dates, activations_count, objectives, target_audience, vibe_aesthetic, target_neighborhoods, venue_types, ideal_features): fill them only when the brief states them explicitly. Omit any field the brief doesn't address rather than guessing.",
   "",
   "Return ONLY a tool call to submit_brief. Do not return text.",
 ].join("\n");
@@ -168,6 +235,20 @@ function sanitizeInteger(raw: unknown): number | null | undefined {
   return undefined;
 }
 
+// Trim + drop empties + dedupe. Returns undefined when nothing usable remains
+// so the key is omitted entirely (same omit-when-empty contract as the
+// scalar sanitizers).
+function sanitizeStringArray(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (t && !out.includes(t)) out.push(t);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 function sanitizeParsed(raw: Record<string, unknown>): ParsedBriefFields {
   const out: ParsedBriefFields = {};
 
@@ -178,9 +259,24 @@ function sanitizeParsed(raw: Record<string, unknown>): ParsedBriefFields {
     "city",
     "event_overview",
     "additional_notes",
+    "install_dates",
+    "strike_dates",
+    "target_audience",
+    "vibe_aesthetic",
   ];
   for (const k of stringKeys) {
     const v = sanitizeString(raw[k]);
+    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
+  }
+
+  const arrayKeys: (keyof ParsedBriefFields)[] = [
+    "objectives",
+    "target_neighborhoods",
+    "venue_types",
+    "ideal_features",
+  ];
+  for (const k of arrayKeys) {
+    const v = sanitizeStringArray(raw[k]);
     if (v !== undefined) (out as Record<string, unknown>)[k] = v;
   }
 
@@ -189,6 +285,9 @@ function sanitizeParsed(raw: Record<string, unknown>): ParsedBriefFields {
 
   const egc = sanitizeInteger(raw.expected_guest_count);
   if (egc !== undefined) out.expected_guest_count = egc;
+
+  const activations = sanitizeInteger(raw.activations_count);
+  if (activations !== undefined) out.activations_count = activations;
 
   return out;
 }

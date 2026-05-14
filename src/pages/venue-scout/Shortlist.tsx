@@ -288,7 +288,7 @@ export default function Shortlist() {
           to={`/venue-scout/scouts/${scoutId}/sourcing/report`}
           className="crumb"
         >
-          ← Sourcing Report
+          ← Sourcing
         </Link>
         <div className="flex items-end justify-between gap-5">
           <div className="space-y-2">
