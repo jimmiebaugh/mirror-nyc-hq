@@ -18,6 +18,7 @@ import {
   C_TIER3,
   StorageAttachment,
   addCandidateTitlePage,
+  addCoverLetterEmailPages,
   addCoverPage,
   addSectionDivider,
   createPacketCtx,
@@ -98,7 +99,7 @@ Deno.serve(async (req) => {
     const candIds = rankings.map((r) => r.candidate_id);
     const { data: cands } = await supabase
       .from("ts_candidates")
-      .select("id,name,email,location,applied_date,status,score,recruiter_overview,portfolio_path_or_url,detected_links")
+      .select("id,name,email,location,applied_date,status,score,recruiter_overview,portfolio_path_or_url,detected_links,email_body_text")
       .in("id", candIds);
     // deno-lint-ignore no-explicit-any
     const candMap: Record<string, any> = {};
@@ -291,14 +292,24 @@ Deno.serve(async (req) => {
       });
 
       for (const c of candidatesForPages) {
+        const candAtts = attsByCand[c.candidate_id] ?? [];
+        const hasCoverLetterAtt = candAtts.some(
+          (a) => a.attachment_type === "cover_letter" || /cover/i.test(a.file_name),
+        );
+        const emailBody = typeof c.email_body_text === "string" ? c.email_body_text.trim() : "";
+        const useEmailFallback = !hasCoverLetterAtt && emailBody.length > 0;
+
         addCandidateTitlePage(ctx, {
           candidate: {
             id: c.candidate_id, name: c.name, email: c.email,
             applied_date: c.applied_date, location: c.location,
             portfolio_path_or_url: c.portfolio_path_or_url,
             detected_links: c.detected_links,
+            // Title page uses this to decide between "(not submitted)" and
+            // the "Cover Letter Email" listing.
+            email_body_text: c.email_body_text ?? null,
           },
-          attachments: attsByCand[c.candidate_id] ?? [],
+          attachments: candAtts,
           rank: c.final_rank,
           tier: c.final_tier,
           tierLabel: TIER_LABEL[c.final_tier] ?? c.final_tier,
@@ -306,7 +317,21 @@ Deno.serve(async (req) => {
           roleTitle: role.title ?? "Role",
           contextLine: "Final Review · Mirror NYC",
         });
-        await mergePdfAttachments(ctx.doc, supabase, attsByCand[c.candidate_id] ?? []);
+
+        // Phase 3.6.14: if no cover letter attachment, render the
+        // application email body as a Cover Letter Email page sequence in
+        // the slot the cover letter PDF would have occupied. mergePdf-
+        // Attachments still runs afterward for resume + others.
+        if (useEmailFallback) {
+          addCoverLetterEmailPages(ctx, {
+            candidateName: c.name,
+            candidateEmail: c.email,
+            appliedDate: c.applied_date,
+            bodyText: emailBody,
+          });
+        }
+
+        await mergePdfAttachments(ctx.doc, supabase, candAtts);
       }
     }
 
@@ -333,10 +358,11 @@ Deno.serve(async (req) => {
     if (hm?.email) {
       await sendPacketEmail({
         to: hm.email,
-        subject: `Mirror · ${role.title ?? "Role"} · Final Review Packet`,
-        bodyText: `Hi ${hm.full_name?.split(/\s+/)[0] ?? "there"},\n\nThe final review packet for ${role.title ?? "the role"} is ready.\n\n${enriched.length} candidates analyzed across the master pool.\n\n— Mirror NYC HQ`,
+        subject: `[Mirror HQ] Final Review Packet | ${role.title ?? "Role"}`,
+        bodyText: `Hi ${hm.full_name?.split(/\s+/)[0] ?? "there"},\n\nThe final review packet for ${role.title ?? "the role"} is ready.\n\n${enriched.length} candidates analyzed across the master pool.\n\n- Mirror NYC HQ`,
         packetUrl: emailUrl,
         attachmentFilename: friendlyName,
+        downloadLinkLabel: "Download Final Review packet",
       });
     }
 

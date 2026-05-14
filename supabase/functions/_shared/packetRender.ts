@@ -239,7 +239,10 @@ export function addCoverPage(ctx: PacketCtx, opts: {
     x: cx - ebW / 2, y,
     size: ebSize, font: ctx.helvBold, color: C_CORAL,
   });
-  y -= 28;
+  // Drop enough that the 36pt title's ascender (~26pt) doesn't crowd the
+  // eyebrow baseline. 28pt gap was visibly tight; 48pt gives clean ~22pt
+  // visual break that matches the candidate title page rhythm.
+  y -= 48;
 
   // Title (huge white)
   const titleSize = 36;
@@ -591,6 +594,11 @@ export type CandidatePageInput = {
     location?: string | null;
     portfolio_path_or_url?: string | null;
     detected_links?: { url: string; type: string }[] | null;
+    /** Phase 3.6.14: when no cover_letter attachment exists, the candidate's
+     *  raw application email is rendered as a "Cover Letter Email" page
+     *  pair (see addCoverLetterEmailPages). Drives both the listing on the
+     *  title page and the rendered fallback. */
+    email_body_text?: string | null;
   };
   attachments: StorageAttachment[];
   rank: number;
@@ -613,7 +621,7 @@ export function addCandidateTitlePage(ctx: PacketCtx, input: CandidatePageInput)
     x: PAGE_W - MARGIN_X - markW, y: PAGE_H - 50,
     size: 9, font: ctx.helvBold, color: C_WHITE,
   });
-  // Rank tag
+  // Rank tag (eyebrow above the name)
   let y = PAGE_H * 0.55;
   const accent = tierColor(input.tier);
   const rankLine = `RANK #${input.rank} · ${input.tierLabel.toUpperCase()}`;
@@ -621,10 +629,13 @@ export function addCandidateTitlePage(ctx: PacketCtx, input: CandidatePageInput)
     x: MARGIN_X, y,
     size: 11, font: ctx.helvBold, color: accent,
   });
-  y -= 30;
+  // Drop enough that the 48pt name's ascender doesn't crash into the rank
+  // baseline. Helvetica-Bold@48 has an ascender of ~36pt, so the previous
+  // 30pt gap overlapped; bumped to 50pt for a clean 14pt visual break.
+  const nameSize = 48;
+  y -= 50;
   // Name (huge)
   const name = (input.candidate.name ?? input.candidate.email ?? "Candidate").toUpperCase();
-  const nameSize = 48;
   const nameLines = wrapText(name, ctx.helvBold, nameSize, CONTENT_W);
   for (const line of nameLines) {
     ctx.page.drawText(line, {
@@ -671,8 +682,16 @@ export function addCandidateTitlePage(ctx: PacketCtx, input: CandidatePageInput)
 
   if (resumeAtt) docs.push({ label: "Resume", reason: resumeAtt.file_name });
   else docs.push({ label: "Resume", reason: "(not submitted)", missing: true });
-  if (coverAtt) docs.push({ label: "Cover Letter", reason: coverAtt.file_name });
-  else docs.push({ label: "Cover Letter", reason: "(not submitted)", missing: true });
+  if (coverAtt) {
+    docs.push({ label: "Cover Letter", reason: coverAtt.file_name });
+  } else if (input.candidate.email_body_text && input.candidate.email_body_text.trim().length > 0) {
+    // Phase 3.6.14: fall back to the candidate's application email. The
+    // body is rendered as its own page sequence by addCoverLetterEmailPages
+    // (caller is responsible for that). Title-page listing just announces it.
+    docs.push({ label: "Cover Letter Email", reason: "from application email" });
+  } else {
+    docs.push({ label: "Cover Letter", reason: "(not submitted)", missing: true });
+  }
   for (const a of otherAtts) docs.push({ label: a.file_name, reason: a.attachment_type });
   for (const u of detected) {
     const t = u.type === "portfolio_site" ? "Portfolio Link"
@@ -706,6 +725,64 @@ export function addCandidateTitlePage(ctx: PacketCtx, input: CandidatePageInput)
   // Reset cursor for next-after-title content (ensures any further calls
   // start a fresh content page).
   ctx.y = MARGIN_BOTTOM - 1;
+}
+
+/**
+ * Phase 3.6.14: render the candidate's application email as a "Cover Letter
+ * Email" content-page sequence. Caller invokes this only when no
+ * cover_letter attachment exists AND email_body_text is non-empty. The
+ * pages live in the same slot the cover-letter PDF attachment would have
+ * occupied (between the candidate title page and the merged resume/etc.).
+ * drawParagraph auto-paginates via ensureSpace, so long emails grow into
+ * multiple pages with proper chrome on each.
+ */
+export function addCoverLetterEmailPages(ctx: PacketCtx, opts: {
+  candidateName: string | null;
+  candidateEmail: string | null;
+  appliedDate: string | null;
+  bodyText: string;
+}) {
+  newContentPage(ctx);
+  drawSectionTitle(ctx, "Cover Letter", "Email");
+
+  const subtitleParts: string[] = ["From application email"];
+  if (opts.candidateName) subtitleParts.push(opts.candidateName);
+  if (opts.appliedDate) {
+    try {
+      subtitleParts.push(fmtDateLong(new Date(opts.appliedDate)));
+    } catch {
+      // Bad date string; just skip the date piece silently.
+    }
+  }
+  drawSectionSub(ctx, subtitleParts.join(" · "));
+
+  // Letterhead block: From line + applied date in a muted card-style preface
+  // so the body reads like a real letter rather than a wall of text.
+  const senderLine = opts.candidateEmail
+    ? (opts.candidateName ? `${opts.candidateName} <${opts.candidateEmail}>` : opts.candidateEmail)
+    : (opts.candidateName ?? "Applicant");
+  ensureSpace(ctx, 36);
+  ctx.page.drawText("FROM", {
+    x: MARGIN_X, y: ctx.y - 10,
+    size: 8, font: ctx.helvBold, color: C_CORAL,
+  });
+  ctx.page.drawText(senderLine, {
+    x: MARGIN_X + 40, y: ctx.y - 10,
+    size: 11, font: ctx.helv, color: C_TEXT,
+  });
+  ctx.y -= 22;
+
+  // Hairline rule under the letterhead.
+  ctx.page.drawLine({
+    start: { x: MARGIN_X, y: ctx.y },
+    end: { x: MARGIN_X + 60, y: ctx.y },
+    thickness: 1, color: C_CORAL,
+  });
+  ctx.y -= 18;
+
+  // Body. Render verbatim with our standard body font/size; drawParagraph
+  // wraps on the content width and page-breaks as needed.
+  drawParagraph(ctx, opts.bodyText, { size: 11, lineHeight: 16 });
 }
 
 // ============================================================================
@@ -838,16 +915,74 @@ function base64Url(s: string): string {
   return s.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function buildLinkMime(opts: { to: string; from: string; subject: string; bodyText: string }): string {
+// Wrap a base64 string to 76-char lines per RFC 2045.
+function wrapBase64(s: string): string {
+  const lines: string[] = [];
+  for (let i = 0; i < s.length; i += 76) lines.push(s.slice(i, i + 76));
+  return lines.join("\r\n");
+}
+
+// HTML-escape user-supplied text for safe interpolation into the HTML part.
+function escHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Build a multipart/alternative MIME with a text/plain fallback and a
+// text/html version that hyperlinks the download URL. Phase 3.6.13:
+// switched from text/plain 7bit (which mojibakes any non-ASCII char and
+// shows the raw signed URL as ugly inline text) to multipart base64 so
+// the body renders the URL as a clickable "Download …" link in Gmail.
+function buildLinkMime(opts: {
+  to: string;
+  from: string;
+  subject: string;
+  bodyText: string;
+  downloadUrl: string;
+  downloadLinkLabel: string;
+}): string {
+  const boundary = `mirror_hq_${crypto.randomUUID().replace(/-/g, "")}`;
+
+  // Plain text body — keeps the URL inline as a fallback for plaintext clients.
+  const plainText = `${opts.bodyText}\n\nDownload: ${opts.downloadUrl}\n\nThis link expires in 7 days. Save the PDF locally for long-term reference.`;
+
+  // HTML body — body text is rendered with line breaks, URL becomes an <a>.
+  const htmlBodyLines = escHtml(opts.bodyText)
+    .split("\n")
+    .map((line) => (line.length ? line : "<br>"))
+    .join("<br>\n");
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:-apple-system,system-ui,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.55;color:#1a1a1a;">
+${htmlBodyLines}<br>
+<br>
+<p style="margin:16px 0;"><a href="${escHtml(opts.downloadUrl)}" style="color:#BE4E44;text-decoration:underline;font-weight:600;">${escHtml(opts.downloadLinkLabel)}</a></p>
+<p style="margin:16px 0;font-size:12px;color:#666;">This link expires in 7 days. Save the PDF locally for long-term reference.</p>
+</body></html>`;
+
+  const enc = new TextEncoder();
+  const plainB64 = wrapBase64(bytesToBase64(enc.encode(plainText)));
+  const htmlB64 = wrapBase64(bytesToBase64(enc.encode(html)));
+
   return [
     `From: ${opts.from}`,
     `To: ${opts.to}`,
     `Subject: ${opts.subject}`,
     "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: 7bit",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
     "",
-    opts.bodyText,
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    plainB64,
+    "",
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    htmlB64,
+    "",
+    `--${boundary}--`,
+    "",
   ].join("\r\n");
 }
 
@@ -855,10 +990,15 @@ export async function sendPacketEmail(opts: {
   to: string;
   subject: string;
   bodyText: string;
-  /** 7-day signed download URL for the packet. Inserted into the email body. */
+  /** 7-day signed download URL for the packet. Rendered as a hyperlink in the
+   *  HTML body and inlined as a plain-text fallback. */
   packetUrl: string;
   /** Optional friendly filename hint shown in the body. */
   attachmentFilename?: string;
+  /** Anchor text for the download hyperlink in the HTML part. Defaults to
+   *  "Download Packet". Phase 3.6.13: callers pass a per-packet-kind label
+   *  (e.g. "Download Final Review packet") so the link reads natural. */
+  downloadLinkLabel?: string;
 }): Promise<boolean> {
   if (!opts.to) {
     console.warn("[packetRender] sendPacketEmail: no recipient, skipping");
@@ -866,12 +1006,13 @@ export async function sendPacketEmail(opts: {
   }
   try {
     const token = await getGmailAccessToken();
-    const fullBody = `${opts.bodyText}\n\nDownload: ${opts.packetUrl}\n\nThis link expires in 7 days. Save the PDF locally for long-term reference.`;
     const mime = buildLinkMime({
       to: opts.to,
       from: "Mirror NYC <jobs@mirrornyc.com>",
       subject: opts.subject,
-      bodyText: fullBody,
+      bodyText: opts.bodyText,
+      downloadUrl: opts.packetUrl,
+      downloadLinkLabel: opts.downloadLinkLabel ?? "Download Packet",
     });
     const raw = base64Url(bytesToBase64(new TextEncoder().encode(mime)));
     const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
