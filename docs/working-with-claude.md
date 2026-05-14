@@ -194,6 +194,7 @@ Currently shipped:
 - **`add-migration`**. Migration file naming, types regen, schema.md update, re-eval flag.
 - **`ship-phase`**. The squash-merge dance (pre-merge checklist + squash + post-merge backfill).
 - **`new-hq-surface`**. Phase-5 specific. Pattern for a new page that has no existing template.
+- **`triage-observations`**. Turns the `code-observations.md` log into a summary, a prioritized fix plan with recommended phase/order, and a ready-to-paste Code prompt. Does not implement fixes.
 
 ### Custom slash commands in `.claude/commands/`
 
@@ -201,6 +202,7 @@ Currently shipped:
 - **`/diagnose`**. Cron + edge fn health + migrations drift check.
 - **`/spec <surface>`**. Boot the design-spec-builder subagent. Save output to `OUTPUTS/phase-X-Y-<surface>-spec.md`.
 - **`/sync-prompts`**. Verify `src/lib/talent-scout/defaultEvalPrompt.ts` matches `supabase/functions/_shared/prompts.ts` DEFAULT_EVAL_PROMPT byte-for-byte.
+- **`/triage-observations`**. Run the `triage-observations` skill against `code-observations.md`: summary, prioritized fix plan, ready-to-paste Code prompt.
 
 ### Subdirectory CLAUDE.md files
 
