@@ -2,8 +2,8 @@
 
 Living-state doc. Update on every meaningful merge to `main`.
 
-**Last updated:** 2026-05-13
-**Latest commit on `main`:** `7cd27ed` ([skip netlify] TS Final Review packet: email template + layout fixes + email-as-cover-letter fallback). Cherry-picked from origin/main onto vs-port-fresh during the 2026-05-13 cutover, then `vs-port-fresh:main --force-with-lease` fired the Netlify deploy. Prior to cutover, main carried the failed-attempt Phase 4 stack (Scout Dashboard through Deck Prep + URL-quality hot patches); that 42-commit set was intentionally dropped on cutover.
+**Last updated:** 2026-05-14
+**Latest commit on `main`:** `49978f4` ([skip netlify] Doc audit sweep (2026-05-13)). Post-Phase-4-cutover documentation pass: roadmap reframed, schema/operations/design-system stale claims corrected, em dashes swept repo-wide, visual-audit/ reorganized into docs/historical/, NEXT_STEPS.md deleted, Two-session discipline + Code observations workflow restored. Followed by an administrative CHECKPOINT.md backfill commit. After the 2026-05-13 cutover, main also took two doc-only commits (`6b9ad84` post-cutover doc sweep, `0503e6b` Mirror M logo + notification hyperlink) that this CHECKPOINT had not yet recorded.
 **Active feature branch:** none. `vs-port-fresh` is fully merged into main as of cutover and no longer needs separate tracking. Future Phase 5 work spawns its own branches.
 **Current phase:** **Phase 4 (Venue Scout port) shipped to production 2026-05-13.** Cutover complete. Main contains the full 1:1 port from `mirror-nyc-venue-scout-pro` (Phase 4.1-port through 4.10.6-port) plus the two parallel TS commits that landed on main during the port window (`6775429` Generate Packet button restore + `7cd27ed` packet email template + layout fixes + email-as-cover-letter fallback). The 4a8a5c6 TS-wizard Stepper-migration commit was excluded from the cutover (it depended on a `ui/Stepper.tsx` file introduced by the failed Phase 4.3.1 commit that we dropped); the TS wizard keeps its local `talent-scout/Stepper.tsx`. Next: **Phase 5 (HQ Core)**.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). Auto-deploys on push to main.
@@ -47,12 +47,14 @@ Living-state doc. Update on every meaningful merge to `main`.
 ## Recent commits (main)
 
 ```
+49978f4  [skip netlify] Doc audit sweep (2026-05-13)
+0503e6b  [skip netlify] Restore real Mirror M logo (SVG paths) + pull notification HTML hyperlink
+6b9ad84  [skip netlify] Post-cutover doc sweep: VS port live in production
 7cd27ed  [skip netlify] TS Final Review packet: email template + layout fixes + email-as-cover-letter fallback (cherry-picked from origin/main during 2026-05-13 cutover)
 fdcd15c  TS Final Review: re-enable Generate Packet button (cherry-picked from origin/main during 2026-05-13 cutover; orig 6775429)
-32a5d8e  [skip netlify] Backfill 1287478 + a31a73a squash hashes into CHECKPOINT.md + CLAUDE.md + full docs sweep (vs-port-fresh tip at cutover)
-a31a73a  [skip netlify] Phase 4.10.6-port: URL acquisition fallbacks + deck flow polish
-1287478  [skip netlify] Phase 4.10.5-port: AI surface stabilization
 ```
+
+(A `[skip netlify]` CHECKPOINT.md backfill commit lands on top of `49978f4`; it is the administrative tail of this sweep, not listed here. The next CHECKPOINT update will surface it.)
 
 The 2026-05-13 cutover replaced the failed-attempt Phase 4 stack on main with the full vs-port-fresh history (Phase 4.1-port through 4.10.6-port). 42 commits on main with no patch-equivalent on vs-port-fresh were intentionally dropped. See `docs/decisions.md` and `docs/venue-scout-port-plan.md` § "Done when" for the cutover trail.
 
