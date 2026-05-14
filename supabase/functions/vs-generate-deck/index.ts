@@ -252,6 +252,13 @@ Deno.serve(async (req) => {
   // from DeckPrep is the recovery path. Logs the underlying update error
   // if the write itself fails; the page would otherwise spin forever
   // because neither success nor failure state lands.
+  //
+  // Post-4.10.4 hot patch round 9: guard against overwriting a prior
+  // success. .eq("current_step", "deck_prep") makes this update a CAS
+  // that no-ops if another invocation has already advanced the scout to
+  // 'completed' (success path flips current_step to 'completed' before
+  // appending to generated_decks). Same guard pattern applied to
+  // vs-research-venues + vs-compile-summaries writeFailure.
   async function failWithCode(code: ErrCode, message: string): Promise<void> {
     console.error(`[vs-generate-deck] scout=${scout_id} ${code}: ${message}`);
     const { error: updErr } = await sb
@@ -261,7 +268,8 @@ Deno.serve(async (req) => {
         pipeline_error: `${code}: ${message}`,
         last_touched_at: new Date().toISOString(),
       })
-      .eq("id", scout_id);
+      .eq("id", scout_id)
+      .eq("current_step", "deck_prep");
     if (updErr) {
       console.error(
         `[vs-generate-deck] scout=${scout_id} failWithCode update FAILED: ${updErr.message}`,

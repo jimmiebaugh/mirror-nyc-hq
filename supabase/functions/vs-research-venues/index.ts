@@ -21,14 +21,21 @@
 // self-invoke, no internal-secret path. The handshake returns before the
 // AI work starts so the browser doesn't wait on a 90-second request.
 //
-// Model: claude-sonnet-4-6 (callClaude wrapper default). Testing 4-6 on
-// the port-side function; the existing pin in memory note
-// project_sourcing_model_pin is for the failed-attempt vs-start-sourcing
-// function and does NOT carry over. Diagnostic log captures
-// usage.input_tokens, usage.output_tokens, and server_tool_use count so
-// the May 11 collapse signature (out<200 AND server_tool_uses=0) is
-// visible. Pivot procedure on collapse: add `model: "claude-sonnet-4-5"`
-// to the callClaude call below.
+// Model: claude-sonnet-4-6 + web_search_20260209 (post-4.10.4 hot patch).
+// The 4.10.3 spec pivoted to claude-sonnet-4-5 + web_search_20250305 on
+// the assumption that 4-6 collapsed (out=2610, server_tool_uses=0), but
+// the diagnostic log lines hardcoded `model=claude-sonnet-4-6` so the
+// pivot was logging-invisible -- we never actually verified 4-6 was the
+// failure source. Post-4.10.4 smoke (2026-05-13 evening) on 4-5 surfaced
+// server_tool_uses=0 on ALL 9 Claude calls (7 per-row Phase A + 2 batch
+// Phase B). Anthropic docs explicitly support Sonnet 4.6 / 4.7 / Opus
+// 4.6+ / Mythos with the newer web_search_20260209 (dynamic filtering);
+// Sonnet 4.5 is not on that list. Combined with web_search enabled in
+// the org Console, the 4-6 + 20260209 combo should restore live URL
+// fetch. Diagnostic log captures usage.input_tokens, usage.output_tokens,
+// and server_tool_use count so any future collapse is visible. Pivot
+// procedure on collapse: try `model: "claude-opus-4-7"` first (same new
+// web_search version supports it), then escalate.
 //
 // VS Pro source: supabase/functions/research-venues/index.ts (~145 lines).
 //
@@ -44,7 +51,7 @@ import {
   type SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callClaude, type ClaudeTool } from "../_shared/anthropic.ts";
-import { canonicalizeType } from "../_shared/venueTypes.ts";
+import { canonicalizeType, stripPlaceholders } from "../_shared/venueTypes.ts";
 import {
   validateWebsiteUrl,
   validateWebsiteUrls,
@@ -107,14 +114,27 @@ async function enrichSheetVenue(
       "venue_scout",
       [{ role: "user", content: userMsg }],
       {
-        model: "claude-sonnet-4-5",
-        max_tokens: 6000,
+        // Post-4.10.4 hot patch (2026-05-13 evening): pivoted from
+        // claude-sonnet-4-5 + web_search_20250305 to claude-sonnet-4-6 +
+        // web_search_20260209 (the official Sonnet 4.6 / Opus 4.6+ pair).
+        //
+        // Round 12 hot patch: pivoted web_search_20260209 -> 20250305.
+        // The newer 20260209 tool with dynamic filtering runs a
+        // code_execution sandbox per use, and Anthropic bills cumulative
+        // context on every multi-turn round (each search adds ~7-8k
+        // tokens to the next turn's input). Round 11's brief_data trim
+        // helped (215k -> 80k) but the bulk is still web_search results.
+        // The simpler 20250305 tool (no dynamic filtering, no
+        // code_execution sandbox) has lighter per-use overhead. Docs
+        // confirm 20250305 remains GA and works with Sonnet 4.6.
+        model: "claude-sonnet-4-6",
+        max_tokens: 4000,
         system: FILL_SYSTEM,
         tools: [
           FILL_TOOL,
           { type: "web_search_20250305", name: "web_search", max_uses: 2 },
         ],
-        tool_choice: { type: "tool", name: "fill_venue" },
+        tool_choice: { type: "auto" },
         fn_name: "vs-research-venues:fill",
       },
     );
@@ -174,17 +194,29 @@ async function enrichSheetVenue(
       ? row.key_features
       : [];
     if (existingFeatures.length === 0 && Array.isArray(f.key_features)) {
-      patch.key_features = f.key_features;
+      // Round 7 hot patch: strip placeholder tokens ('<UNKNOWN>', 'TBD',
+      // 'N/A', etc.) Claude falls back to when uncertain. If the
+      // resulting array is empty, skip the write so the row keeps its
+      // null / empty state instead of getting a junk-filled column.
+      const cleaned = stripPlaceholders(f.key_features);
+      if (cleaned.length > 0) patch.key_features = cleaned;
     }
 
     // Recs / cons / rank always written -- sheet rows never have them at
     // parse time. Tool schema requires both arrays + ranking_score so
     // they're always present on a successful tool_use block.
+    //
+    // Round 7 hot patch: same placeholder strip as key_features. Schema
+    // minItems pushes Claude to fill these even when uncertain, and the
+    // fallback is sometimes a placeholder array; this filter ensures the
+    // producer sees actual research, not Claude's "I don't know" tokens.
     if (Array.isArray(f.recommendations)) {
-      patch.recommendations = f.recommendations;
+      const cleaned = stripPlaceholders(f.recommendations);
+      if (cleaned.length > 0) patch.recommendations = cleaned;
     }
     if (Array.isArray(f.considerations)) {
-      patch.considerations = f.considerations;
+      const cleaned = stripPlaceholders(f.considerations);
+      if (cleaned.length > 0) patch.considerations = cleaned;
     }
     if (typeof f.ranking_score === "number") {
       patch.rank = Math.round(f.ranking_score);
@@ -279,12 +311,24 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Skip-the-kickoff window. If a previous invocation kicked off less than
 // this many ms ago and is still mid-flight, the new invocation no-ops to
 // prevent double-charging on a page hard-refresh.
-const IN_FLIGHT_GRACE_MS = 90_000;
+// Round 6 hot patch (Pro plan upgrade): bumped back up after round 5's
+// defensive shrink. Project is now on Supabase Pro (400s wall clock),
+// so app-level timeouts can run to 360s with a 40s buffer for the
+// writeFailure UPDATE to land before the platform kill. IN_FLIGHT_GRACE_MS
+// matches so the re-invoke idempotency window covers the upper bound of
+// in-progress work.
+//
+// Sizing rationale: Phase B with tool_choice: auto + web_search max_uses=6
+// can spend 3-5s per search call + significant model thinking on the
+// batch submit_research schema. Thorough sourcing runs land around
+// 90-180s; 360s gives substantial headroom for cold-sourcing cases that
+// need many follow-up searches.
+const IN_FLIGHT_GRACE_MS = 360_000;
 
-// Hard ceiling on Claude work. Anthropic typically returns in 60-90s; if
-// the call hangs past this, the function writes status='failed' so the
-// page surfaces an error instead of spinning forever.
-const WORK_TIMEOUT_MS = 120_000;
+// Hard app-level ceiling on Claude work, sized to fire ~40s before the
+// Supabase Pro 400s platform wall clock so writeFailure lands cleanly
+// before the platform pulls the function.
+const WORK_TIMEOUT_MS = 360_000;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -354,7 +398,12 @@ const TOOL: ClaudeTool = {
             },
             size_sq_ft: { type: "number" },
             capacity: { type: "number" },
-            key_features: { type: "array", items: { type: "string" } },
+            key_features: {
+              type: "array",
+              description:
+                "3-6 short, concrete physical or experiential features pulled from web_search results. Examples: 'High vaulted ceilings, ~18 ft', 'Wraparound storefront windows on two streets', 'Adjacent fenced courtyard, ~1,200 sq ft', 'Industrial finish, exposed brick, polished concrete floor'. CRITICAL: do NOT use placeholder tokens like '<UNKNOWN>', 'TBD', 'N/A', 'None', 'TODO' -- placeholder strings will be stripped and the field treated as missing. web_search the venue first to find real features.",
+              items: { type: "string", maxLength: 120 },
+            },
             derived_attrs: {
               type: "object",
               description: "Map column id -> 'yes'|'maybe'|'no'",
@@ -363,7 +412,7 @@ const TOOL: ClaudeTool = {
             recommendations: {
               type: "array",
               description:
-                "2-4 short venue-specific observations the producer can use to pitch this venue against the brief. Each is a concrete, targeted, single-clause statement (10-15 words). Focus on activation potential, brand-fit, physical features, neighborhood context.",
+                "2-4 short venue-specific observations the producer can use to pitch this venue against the brief. Each is a concrete, targeted, single-clause statement (10-15 words). Focus on activation potential, brand-fit, physical features, neighborhood context. CRITICAL: do NOT use placeholder tokens like '<UNKNOWN>', 'TBD', 'N/A', 'None', 'Not Available', 'TODO' -- placeholder strings will be stripped and the field treated as missing. web_search the venue first to find real observations.",
               items: {
                 type: "string",
                 description:
@@ -376,7 +425,7 @@ const TOOL: ClaudeTool = {
             considerations: {
               type: "array",
               description:
-                "2-4 short limitations, gaps, or logistics flags the producer should weigh against the brief. Each is a concrete, targeted, single-clause statement (10-15 words). Focus on permits, capacity, distance, brand fit gaps, parking, programming constraints.",
+                "2-4 short limitations, gaps, or logistics flags the producer should weigh against the brief. Each is a concrete, targeted, single-clause statement (10-15 words). Focus on permits, capacity, distance, brand fit gaps, parking, programming constraints. CRITICAL: do NOT use placeholder tokens like '<UNKNOWN>', 'TBD', 'N/A', 'None', 'Not Available', 'TODO' -- placeholder strings will be stripped and the field treated as missing. web_search the venue first to find real constraints.",
               items: {
                 type: "string",
                 description:
@@ -419,14 +468,29 @@ async function writeFailure(
   message: string,
 ): Promise<void> {
   console.error(`[vs-research-venues] scout=${scout_id} failure: ${message}`);
-  await sb
+  // Post-4.10.4 hot patch round 9: guard against overwriting a prior
+  // success. Smoke 2026-05-13 surfaced a case where two parallel
+  // invocations both ran Phase A + B; the first succeeded
+  // (current_step='sourcing_report'), the second failed (pause_turn),
+  // and the second's writeFailure overwrote the first's success state.
+  // Now we only write failure if the scout is still 'researching' --
+  // i.e., no prior invocation has already advanced it past this step.
+  // The .eq("current_step", "researching") filter makes the UPDATE a
+  // CAS that no-ops if another invocation already won.
+  const { error } = await sb
     .from("vs_scouts")
     .update({
       status: "failed",
       pipeline_error: message,
       last_touched_at: new Date().toISOString(),
     })
-    .eq("id", scout_id);
+    .eq("id", scout_id)
+    .eq("current_step", "researching");
+  if (error) {
+    console.error(
+      `[vs-research-venues] scout=${scout_id} writeFailure update error: ${error.message}`,
+    );
+  }
 }
 
 Deno.serve(async (req) => {
@@ -518,6 +582,19 @@ Deno.serve(async (req) => {
   // User message -- lifted from VS Pro with `project.` -> `scout.` field
   // reads. Fallback strings normalized to "(not set)" (VS Pro used en
   // dashes which violate the voice rule).
+  //
+  // Post-4.10.4 hot patch round 11: replaced the full `Brief data:
+  // ${JSON.stringify(scout.brief_data)}` dump with selective field
+  // extraction (expected_guest_count + brief_data.notes). The dump was
+  // including internal state flags (research_started_at /
+  // compile_started_at / deck_generation_started_at /
+  // uploaded_files file-metadata) that are pure noise to Claude and
+  // inflated the input token count for every Phase B call. Trimmed
+  // version focuses Claude on the search-relevant subset.
+  const phaseBBriefData =
+    (scout.brief_data ?? {}) as Record<string, unknown>;
+  const phaseBExpectedGuests = phaseBBriefData.expected_guest_count;
+  const phaseBNotes = phaseBBriefData.notes;
   const userMsg =
     `PROJECT BRIEF
 Client: ${scout.client_name ?? "(not set)"}
@@ -525,8 +602,18 @@ Event: ${scout.event_name ?? "(not set)"}
 City: ${scout.city ?? "(not set)"}
 Live dates: ${scout.live_dates ?? "(not set)"}
 Budget: ${scout.budget ?? "(not set)"}
+Expected guests: ${
+      typeof phaseBExpectedGuests === "number" ||
+      typeof phaseBExpectedGuests === "string"
+        ? String(phaseBExpectedGuests)
+        : "(not set)"
+    }
 Overview: ${scout.event_overview ?? "(not set)"}
-Brief data: ${JSON.stringify(scout.brief_data ?? {})}
+Additional brief notes: ${
+      typeof phaseBNotes === "string" && phaseBNotes.trim().length > 0
+        ? phaseBNotes.trim()
+        : "(none)"
+    }
 
 EXISTING VENUES (do not duplicate):
 ${(existing ?? [])
@@ -577,20 +664,44 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
         "venue_scout",
         [{ role: "user", content: userMsg }],
         {
-          // Phase 4.10.3-port: pivoted to claude-sonnet-4-5 per the
-          // pre-authorized procedure documented above. 4-6 was emitting
-          // out=2610 with server_tool_uses=0 (no web_search) on smoke
-          // 2026-05-13 -- venues filled from training knowledge with no
-          // URLs. 4-5 is the validated baseline for forced custom-tool
-          // alongside server-side web_search.
-          model: "claude-sonnet-4-5",
-          max_tokens: 8000,
+          // Post-4.10.4 hot patch round 1 (2026-05-13 evening): pivoted
+          // model + web_search version from claude-sonnet-4-5 +
+          // web_search_20250305 to claude-sonnet-4-6 + web_search_20260209.
+          // Smoke surfaced 3/7 Phase A per-row calls now invoke web_search
+          // (vs 0/7 before), confirming the pivot is the right direction.
+          // BUT this same batch call still returned server_tool_uses=0
+          // with out=2297, producing 4 generic "vacant retail" venues with
+          // null URLs and 1 known-brand venue (Palihouse) with a training-
+          // knowledge URL. Same structural collapse Phase A's per-row
+          // restructure was supposed to cure: forced `tool_choice` on a
+          // complex batch schema + server-side web_search = model emits
+          // the tool from training knowledge without searching.
+          //
+          // Round 2 hot patch: drop forced tool_choice -> auto. SYSTEM
+          // still says "You return ONLY a tool call to submit_research"
+          // (strong directive). Auto-mode lets Claude use web_search
+          // freely first, then emit the tool when it has actual results.
+          // If Claude occasionally emits plain text instead of the tool,
+          // the existing `no structured output` failure path kicks in and
+          // the Researching page routes to ErrorState; producer retries.
+          // Memory rule check: feedback_tool_choice_collapse is about not
+          // editing SYSTEM, not about tool_choice. The collapse pattern
+          // itself motivates dropping the forced choice.
+          // Round 12 hot patch: pivoted web_search_20260209 -> 20250305
+          // (same rationale as Phase A: dynamic filtering's
+          // code_execution sandbox adds heavy per-turn context that
+          // bills cumulatively across multi-turn rounds; the simpler
+          // 20250305 tool is lighter-weight). Combined with round 10's
+          // max_tokens 5000 + max_uses 4 + MAX_PAUSE_CONTINUATIONS=1,
+          // Phase B should now fit comfortably within 360s.
+          model: "claude-sonnet-4-6",
+          max_tokens: 5000,
           system: SYSTEM,
           tools: [
             TOOL,
-            { type: "web_search_20250305", name: "web_search", max_uses: 6 },
+            { type: "web_search_20250305", name: "web_search", max_uses: 4 },
           ],
-          tool_choice: { type: "tool", name: "submit_research" },
+          tool_choice: { type: "auto" },
           fn_name: "vs-research-venues",
         },
       );
@@ -676,17 +787,18 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
             size_sq_ft:
               typeof v.size_sq_ft === "number" ? v.size_sq_ft : null,
             capacity: typeof v.capacity === "number" ? v.capacity : null,
-            key_features: Array.isArray(v.key_features) ? v.key_features : [],
+            // Round 7 hot patch: strip placeholder tokens ('<UNKNOWN>',
+            // 'TBD', 'N/A', etc.) before they land in the DB. Phase B's
+            // submit_research schema has the same minItems constraints as
+            // Phase A's fill_venue, and Claude exhibits the same
+            // "fill with placeholder when uncertain" fallback under both.
+            key_features: stripPlaceholders(v.key_features),
             derived_attrs:
               typeof v.derived_attrs === "object" && v.derived_attrs !== null
                 ? v.derived_attrs
                 : {},
-            recommendations: Array.isArray(v.recommendations)
-              ? v.recommendations
-              : [],
-            considerations: Array.isArray(v.considerations)
-              ? v.considerations
-              : [],
+            recommendations: stripPlaceholders(v.recommendations),
+            considerations: stripPlaceholders(v.considerations),
             // vs_candidate_venues.rank is INTEGER; Math.round defensively
             // in case Claude returns a float (the schema declares
             // `ranking_score: number` which allows floats). Postgres would

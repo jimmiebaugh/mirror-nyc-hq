@@ -118,3 +118,65 @@ export function sanitizeWebsiteUrl(raw: unknown): string | null {
 
   return url.toString();
 }
+
+// Post-4.10.4 hot patch round 7: placeholder-string sanitizer.
+//
+// Symptom: with key_features added to FILL_TOOL.required + minItems on
+// recommendations / considerations / key_features, Claude was filling
+// schema-required arrays with placeholder tokens like '<UNKNOWN>',
+// 'TBD', 'N/A' when it didn't have real data. The schema constraint
+// removed the "return empty array" escape hatch but Claude found a new
+// one: emit literal "I don't know" sentinels to satisfy the structure.
+//
+// This filter strips those out at the patch boundary. The schema
+// descriptions also now explicitly forbid placeholders (the primary
+// lever per feedback_tool_choice_collapse memory rule), and this
+// post-emission cleanup is the safety net.
+//
+// Pattern: any string whose case-folded + punctuation-stripped form
+// matches a known "I don't know" sentinel is dropped. Length cap of 32
+// chars keeps real short observations like "Adjacent municipal lot"
+// from being accidentally flagged.
+const PLACEHOLDER_TOKENS = new Set([
+  "unknown",
+  "tbd",
+  "tba",
+  "na",
+  "none",
+  "null",
+  "notavailable",
+  "notprovided",
+  "notspecified",
+  "notapplicable",
+  "notset",
+  "notfound",
+  "noinformation",
+  "nodata",
+  "noinfo",
+  "pending",
+  "placeholder",
+  "todo",
+  "fixme",
+]);
+
+export function isPlaceholderString(raw: unknown): boolean {
+  if (typeof raw !== "string") return false;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return true;
+  if (trimmed.length > 32) return false;
+  // Strip angle brackets, square brackets, parentheses, dashes,
+  // periods, slashes, and whitespace. What remains is the bare token
+  // we compare against PLACEHOLDER_TOKENS.
+  const stripped = trimmed
+    .toLowerCase()
+    .replace(/[<>[\](){}\s\-./_]/g, "");
+  return PLACEHOLDER_TOKENS.has(stripped);
+}
+
+export function stripPlaceholders(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    .filter((s) => !isPlaceholderString(s))
+    .map((s) => s.trim());
+}

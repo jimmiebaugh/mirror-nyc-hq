@@ -157,7 +157,7 @@ export default function Researching() {
       <h1 className="h-page text-center">Researching Venues</h1>
       <p className="text-sm text-muted-foreground text-center mt-4 max-w-md">
         Researching venue candidates, comparing against the brief, and
-        preparing the matrix. This typically takes 30 to 60 seconds.
+        preparing the matrix. This could take up to 4 minutes.
       </p>
       {/* Progress bar (track uses bg-input per design-system § 12 rule 1). */}
       <div className="w-full max-w-md mt-8 h-1 bg-input rounded-full overflow-hidden">
