@@ -76,6 +76,15 @@ verify_jwt = true
 # matches the vs-parse-* sibling pattern; the explicit entry is for
 # clarity since EdgeRuntime.waitUntil might look like a self-invoke
 # candidate at a glance.
+#
+# Platform wall-clock note: Supabase platform wall clock is plan-level
+# (150s Free, 400s Pro) and NOT settable via config.toml. As of
+# 2026-05-13 evening the project is on Pro plan (400s). App-level
+# WORK_TIMEOUT_MS in index.ts is sized at 360s -- 40s under the platform
+# cap so writeFailure fires before any platform kill. If the project
+# ever falls back to Free, bump WORK_TIMEOUT_MS down to ~130s and Phase
+# B web_search max_uses down to 3 (the round-5 sizing) to fit under
+# the 150s Free cap.
 [functions.vs-research-venues]
 verify_jwt = true
 

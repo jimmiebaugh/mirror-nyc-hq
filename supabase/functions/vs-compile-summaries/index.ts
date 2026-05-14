@@ -50,7 +50,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callClaude, type ClaudeTool } from "../_shared/anthropic.ts";
-import { canonicalizeType } from "../_shared/venueTypes.ts";
+import { canonicalizeType, stripPlaceholders } from "../_shared/venueTypes.ts";
 import { validateWebsiteUrl } from "../_shared/urlValidation.ts";
 import {
   buildFillUserMsg,
@@ -135,20 +135,32 @@ const OVERVIEW_SYSTEM =
 // Two-row failure write helper. Used by the outer catastrophic catch.
 // Per-venue Claude errors are logged + skipped (matches VS Pro tolerance);
 // only framework-level errors (DB, timeout) flip status='failed'.
+//
+// Post-4.10.4 hot patch round 9: guard against overwriting a prior
+// success. .eq("current_step", "compiling") makes the UPDATE a CAS
+// that no-ops if another invocation has already advanced the scout
+// past 'compiling' (e.g., succeeded to 'deck_prep'). Same pattern
+// applied to vs-research-venues.writeFailure.
 async function writeFailure(
   sb: ReturnType<typeof createClient>,
   scout_id: string,
   message: string,
 ): Promise<void> {
   console.error(`[vs-compile-summaries] scout=${scout_id} failure: ${message}`);
-  await sb
+  const { error } = await sb
     .from("vs_scouts")
     .update({
       status: "failed",
       pipeline_error: message,
       last_touched_at: new Date().toISOString(),
     })
-    .eq("id", scout_id);
+    .eq("id", scout_id)
+    .eq("current_step", "compiling");
+  if (error) {
+    console.error(
+      `[vs-compile-summaries] scout=${scout_id} writeFailure update error: ${error.message}`,
+    );
+  }
 }
 
 Deno.serve(async (req) => {
@@ -247,14 +259,33 @@ Deno.serve(async (req) => {
   // extraction); fallback strings stay aligned with this block to keep
   // both passes seeing the same brief shape. Fallback strings normalized
   // to "(not set)" (VS Pro used em dashes which violate the voice rule).
+  //
+  // Post-4.10.4 hot patch round 11: trimmed Brief block. Replaced the
+  // full `Brief: ${JSON.stringify(scout.brief_data)}` dump with selective
+  // field extraction so the per-venue prompt isn't inflated with internal
+  // state flags (research_started_at / compile_started_at /
+  // deck_generation_started_at / uploaded_files). Matches the trim
+  // applied to vs-research-venues Phase B + venueFill.buildFillUserMsg.
+  const briefDataObj = (scout.brief_data ?? {}) as Record<string, unknown>;
+  const briefDataGuests = briefDataObj.expected_guest_count;
+  const briefDataNotes = briefDataObj.notes;
   const briefBlock =
     `Client: ${scout.client_name ?? "(not set)"}
 Event: ${scout.event_name ?? "(not set)"}
 City: ${scout.city ?? "(not set)"}
 Live dates: ${scout.live_dates ?? "(not set)"}
 Budget: ${scout.budget ?? "(not set)"}
+Expected guests: ${
+      typeof briefDataGuests === "number" || typeof briefDataGuests === "string"
+        ? String(briefDataGuests)
+        : "(not set)"
+    }
 Overview: ${scout.event_overview ?? "(not set)"}
-Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
+Additional brief notes: ${
+      typeof briefDataNotes === "string" && briefDataNotes.trim().length > 0
+        ? briefDataNotes.trim()
+        : "(none)"
+    }`;
 
   // Background work. Returns nothing; writes success / failure straight
   // to vs_scouts so the Compiling page picks them up via Realtime.
@@ -342,23 +373,27 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
               "venue_scout",
               [{ role: "user", content: fillUserMsg }],
               {
-                // Phase 4.10.3-port: pivoted to claude-sonnet-4-5 (per
-                // smoke test 2026-05-13; same collapse signature as
-                // vs-parse-sheet:fill). Bumped 2000 -> 6000 for
-                // web_search content room.
-                model: "claude-sonnet-4-5",
-                max_tokens: 6000,
+                // Post-4.10.4 hot patch (2026-05-13 evening): pivoted from
+                // claude-sonnet-4-5 + web_search_20250305 to
+                // claude-sonnet-4-6 + web_search_20260209. Mirror the same
+                // pivot applied to vs-research-venues Phase A + B after
+                // smoke logs showed server_tool_uses=0 across all 4-5 +
+                // 20250305 calls. Anthropic docs list Sonnet 4.6 / 4.7 /
+                // Opus 4.6+ / Mythos as the supported model set for the
+                // newer web_search_20260209; Sonnet 4.5 isn't on that
+                // list. Max tokens stays at 6000 for web_search content
+                // headroom.
+                model: "claude-sonnet-4-6",
+                max_tokens: 4000,
                 system: FILL_SYSTEM,
-                // Phase 4.10.3-port: add web_search so backfill of sheet
-                // + manual rows can fill website_url from real search
-                // results. Parity with vs-parse-sheet enrichOne and
-                // vs-research-venues. max_uses=2 keeps per-row latency
-                // bounded; backfill set is typically small.
+                // Round 12 hot patch: mirror vs-research-venues Phase A
+                // pivot from web_search_20260209 -> 20250305. Lighter
+                // per-turn context, no code_execution sandbox.
                 tools: [
                   FILL_TOOL,
                   { type: "web_search_20250305", name: "web_search", max_uses: 2 },
                 ],
-                tool_choice: { type: "tool", name: "fill_venue" },
+                tool_choice: { type: "auto" },
                 fn_name: "vs-compile-summaries:fill",
               },
             );
@@ -414,7 +449,13 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
                   existingFeatures.length === 0 &&
                   Array.isArray(f.key_features)
                 ) {
-                  patch.key_features = f.key_features;
+                  // Round 7 hot patch: strip placeholder tokens
+                  // ('<UNKNOWN>', 'TBD', 'N/A') Claude falls back to
+                  // under schema pressure. If the cleaned array is
+                  // empty, skip the write so the row keeps its null
+                  // state rather than getting a junk-filled column.
+                  const cleaned = stripPlaceholders(f.key_features);
+                  if (cleaned.length > 0) patch.key_features = cleaned;
                 }
 
                 const existingDerived = (v.derived_attrs ?? {}) as Record<
@@ -430,14 +471,16 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
                 }
 
                 if (recsArr.length === 0 && Array.isArray(f.recommendations)) {
-                  patch.recommendations = f.recommendations;
+                  const cleaned = stripPlaceholders(f.recommendations);
+                  if (cleaned.length > 0) patch.recommendations = cleaned;
                 }
 
                 const consArr = Array.isArray(v.considerations)
                   ? v.considerations
                   : [];
                 if (consArr.length === 0 && Array.isArray(f.considerations)) {
-                  patch.considerations = f.considerations;
+                  const cleaned = stripPlaceholders(f.considerations);
+                  if (cleaned.length > 0) patch.considerations = cleaned;
                 }
 
                 if (v.rank == null && typeof f.ranking_score === "number") {
