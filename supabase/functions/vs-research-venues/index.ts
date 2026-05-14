@@ -748,7 +748,20 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
           // max_tokens 5000 + max_uses 4 + MAX_PAUSE_CONTINUATIONS=1,
           // Phase B should now fit comfortably within 360s.
           model: "claude-sonnet-4-6",
-          max_tokens: 5000,
+          // No-sheet flow truncation fix (2026-05-14): the research-only
+          // path requests targetNet=10 venues (vs 4-7 when a sheet is
+          // uploaded, where existing rows absorb most of the 10-15 target).
+          // A submit_research payload for 10 fully-populated venues -- each
+          // with key_features + recommendations + considerations arrays --
+          // plus the interleaved web_search rounds overflowed the 5000
+          // ceiling. The tool_use truncated mid-emission: derived_columns
+          // landed (first in schema property order) but venues was cut
+          // off, surfacing downstream as "tool input missing venues
+          // array". 12000 fits the full 10-venue payload + searches +
+          // reasoning in a single round with headroom; the model only
+          // bills tokens it actually emits, so this costs nothing on the
+          // smaller sheet-flow payloads.
+          max_tokens: 12000,
           system: SYSTEM,
           tools: [
             TOOL,
@@ -779,7 +792,8 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
         `[vs-research-venues] scout=${scout_id} model=claude-sonnet-4-6 ` +
           `in=${result.usage?.input_tokens ?? "?"} ` +
           `out=${result.usage?.output_tokens ?? "?"} ` +
-          `server_tool_uses=${serverToolUses}`,
+          `server_tool_uses=${serverToolUses} ` +
+          `stop_reason=${result.stop_reason ?? "?"}`,
       );
 
       const toolUse = (result.content ?? []).find(
@@ -801,7 +815,14 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
       };
 
       if (!Array.isArray(venues)) {
-        await writeFailure(sb, scout_id, "tool input missing venues array");
+        // stop_reason + out token count make a truncated tool_use
+        // immediately diagnosable: stop_reason=max_tokens here means the
+        // payload outgrew max_tokens and venues got cut off mid-emission.
+        await writeFailure(
+          sb,
+          scout_id,
+          `tool input missing venues array (stop_reason=${result.stop_reason ?? "?"}, out=${result.usage?.output_tokens ?? "?"})`,
+        );
         return;
       }
 

@@ -49,6 +49,7 @@ Only things actually encountered during a task. Do not go hunting:
 
 | # | Date | File | Hash | V | R | Severity | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2026-05-14 | `supabase/functions/vs-research-venues/index.ts:601-621` | `49e03e6` | ☑ | ☐ | [med] | Duplicate-invocation race confirmed live (scout 25b5c921, 4 boots / 2 parallel callClaude runs same scout id); the in_flight check reads `brief_data.research_started_at` then writes it non-atomically, so concurrent invocations both pass before either records the kickoff. Downstream CAS guards mask the DB-write conflict but double-spend tokens. Carry-forward from 2026-05-13 cutover; proper fix is a Postgres advisory lock or a kickoff CAS on `research_started_at`. |
 
 ## Database
 
