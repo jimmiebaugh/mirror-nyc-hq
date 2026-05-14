@@ -23,6 +23,25 @@ export const FILL_TOOL: ClaudeTool = {
   input_schema: {
     type: "object",
     properties: {
+      // Post-4.10.4 hot patch round 15: added address + neighborhood
+      // so Claude can fill them when the producer left them null on
+      // the sheet row. Common case: producer enters just the venue
+      // name (which is itself an address-style string like "238 N Canon
+      // Drive"), and we want web_search to resolve the full canonical
+      // address (city, state, zip) from the brief's city context.
+      // Patch guards (vs-research-venues + vs-compile-summaries) only
+      // write these when the existing row value is null/empty so the
+      // producer's pre-filled values stay authoritative.
+      address: {
+        type: "string",
+        description:
+          "Full street address (number, street, city, state, ZIP if known). Only fill when the producer left address blank. If the venue NAME is itself an address-style string (e.g. '238 N Canon Drive'), web_search using that string + the brief's city to resolve the full canonical address. Examples: '238 N Canon Dr, Beverly Hills, CA 90210', '8500 Melrose Ave, West Hollywood, CA 90069'.",
+      },
+      neighborhood: {
+        type: "string",
+        description:
+          "Specific neighborhood / district / submarket. Only fill when the producer left neighborhood blank. Examples: 'West Hollywood', 'Arts District', 'SoHo', 'Chelsea', 'Williamsburg'. Should be more specific than the city itself.",
+      },
       venue_type: {
         type: "string",
         description:

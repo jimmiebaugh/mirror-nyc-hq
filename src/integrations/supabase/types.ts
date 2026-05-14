@@ -1304,6 +1304,10 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_producer_or_admin: { Args: never; Returns: boolean }
+      reset_scout_for_deck_regenerate: {
+        Args: { target_scout_id: string }
+        Returns: undefined
+      }
       start_over_scout: { Args: { target_scout_id: string }; Returns: Json }
     }
     Enums: {

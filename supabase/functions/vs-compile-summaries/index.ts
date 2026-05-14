@@ -49,8 +49,16 @@
 //     posture where sanitizer catches what schema-prompting could not.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callClaude, type ClaudeTool } from "../_shared/anthropic.ts";
-import { canonicalizeType, stripPlaceholders } from "../_shared/venueTypes.ts";
+import {
+  callClaude,
+  extractWebSearchResults,
+  type ClaudeTool,
+} from "../_shared/anthropic.ts";
+import {
+  canonicalizeType,
+  findBestSearchResultUrl,
+  stripPlaceholders,
+} from "../_shared/venueTypes.ts";
 import { validateWebsiteUrl } from "../_shared/urlValidation.ts";
 import {
   buildFillUserMsg,
@@ -415,6 +423,26 @@ Additional brief notes: ${
               if (tu && typeof tu.input === "object" && tu.input !== null) {
                 const f = tu.input as Record<string, unknown>;
 
+                // Round 15 hot patch: address + neighborhood are now in
+                // FILL_TOOL. Mirror Phase A's patch guard -- only fill
+                // when the existing row value is null/empty so producer
+                // values stay authoritative.
+                if (
+                  (!v.address || v.address.trim().length === 0) &&
+                  typeof f.address === "string" &&
+                  f.address.trim().length > 0
+                ) {
+                  patch.address = f.address.trim();
+                }
+
+                if (
+                  (!v.neighborhood || v.neighborhood.trim().length === 0) &&
+                  typeof f.neighborhood === "string" &&
+                  f.neighborhood.trim().length > 0
+                ) {
+                  patch.neighborhood = f.neighborhood.trim();
+                }
+
                 // venue_type: canonicalizeType per slash/comma-separated
                 // token. Only set if the venue doesn't already have a
                 // type.
@@ -431,7 +459,30 @@ Additional brief notes: ${
                   // pattern as vs-parse-sheet's enrichOne; Pass 1 runs CHUNK_SIZE
                   // rows in parallel so per-chunk latency stays bounded.
                   const cleaned = await validateWebsiteUrl(f.website_url);
-                  if (cleaned) patch.website_url = cleaned;
+                  if (cleaned) {
+                    patch.website_url = cleaned;
+                  } else {
+                    // Round 13 hot patch: fallback. Mirror Phase A in
+                    // vs-research-venues -- pull a URL out of the
+                    // web_search results blocks if Claude's tool output
+                    // didn't include a usable one.
+                    const searchResults = extractWebSearchResults(
+                      fillResult.content ?? [],
+                    );
+                    const fallbackUrl = findBestSearchResultUrl(
+                      v.name,
+                      searchResults,
+                    );
+                    if (fallbackUrl) {
+                      const validated = await validateWebsiteUrl(fallbackUrl);
+                      if (validated) {
+                        patch.website_url = validated;
+                        console.log(
+                          `[vs-compile-summaries] scout=${scout_id} venue=${v.id} website_url fallback from search results: ${validated}`,
+                        );
+                      }
+                    }
+                  }
                 }
 
                 if (v.size_sq_ft == null && typeof f.size_sq_ft === "number") {

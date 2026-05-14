@@ -392,3 +392,126 @@ export async function callClaude(
     raw: finalData,
   };
 }
+
+/**
+ * Web search result extracted from a Claude response. Each entry is one
+ * page surfaced by the web_search server tool. The url + title come
+ * directly from the search engine; encrypted_content is what Anthropic
+ * needs for citation continuity in multi-turn conversations.
+ *
+ * Per the Anthropic web_search docs, each `web_search_tool_result`
+ * content block has a nested `content` array of `web_search_result`
+ * objects with this shape.
+ */
+export type WebSearchResult = {
+  url: string;
+  title: string;
+};
+
+/**
+ * Walk a Claude response's content blocks and pull every web_search_result
+ * surfaced by the model. Returns them in order of appearance (which
+ * roughly corresponds to relevance per query). Used by venue-research
+ * callers as a fallback when Claude's tool output left website_url null
+ * but search results clearly contained valid URLs.
+ *
+ * Post-4.10.4 hot patch round 13: introduced after smoke 2026-05-13
+ * showed Phase B research consistently leaving website_url null even
+ * for known-branded venues, because FILL_SYSTEM tells Claude not to
+ * use listing-database URLs and Claude was being conservative. The
+ * URLs ARE in the search results blocks; we just weren't reading them.
+ */
+export function extractWebSearchResults(
+  content: ClaudeResponseBlock[],
+): WebSearchResult[] {
+  const out: WebSearchResult[] = [];
+  for (const block of content) {
+    if (block?.type !== "web_search_tool_result") continue;
+    const inner = (block as { content?: unknown }).content;
+    if (!Array.isArray(inner)) continue;
+    for (const r of inner) {
+      if (
+        r &&
+        typeof r === "object" &&
+        (r as { type?: string }).type === "web_search_result" &&
+        typeof (r as { url?: unknown }).url === "string"
+      ) {
+        const u = (r as { url: string }).url;
+        const t = typeof (r as { title?: unknown }).title === "string"
+          ? ((r as { title: string }).title)
+          : "";
+        out.push({ url: u, title: t });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Targeted per-venue web-search for the venue's own dedicated website.
+ *
+ * Post-4.10.4 hot patch round 14: round-13's findBestSearchResultUrl
+ * fallback used the BROAD search results from Phase B's batch
+ * submit_research call and matched titles to venue names. The matching
+ * was too loose -- titles often described nearby venues or generic
+ * commercial-real-estate listings, so the URLs landed wrong. This
+ * helper instead runs a NEW, focused Claude call: web_search with a
+ * tight "find the official site for {name} at {address}" prompt.
+ *
+ * Used as Phase B's URL fallback after the initial validateWebsiteUrls
+ * pass returns null.
+ *
+ * Returns the first non-listing-database URL the model surfaces (via
+ * sanitizeWebsiteUrl), or null. Caller should HEAD-validate the result
+ * before persisting.
+ *
+ * Cost: one Claude call per venue, ~10-15s typical. Run in parallel
+ * across all null-URL venues; aggregate latency stays bounded.
+ */
+export async function findVenueWebsite(
+  app: AppKey,
+  args: { name: string; address: string | null; city: string | null },
+  options: { fn_name?: string } = {},
+): Promise<string | null> {
+  const addr = args.address?.trim();
+  const city = args.city?.trim();
+  const where = [addr, city].filter(Boolean).join(", ") || "(unknown location)";
+  const prompt =
+    `Find the official, dedicated website URL for this venue:\n\n` +
+    `Name: ${args.name}\n` +
+    `Location: ${where}\n\n` +
+    `Use web_search. Return ONLY the venue's own dedicated website URL (or a deep-link listing URL like peerspace.com/spaces/<id>, thestorefront.com/listing/<slug>, loopnet.com/Listing/<full-id> if the venue has no dedicated site). Do NOT return search-result pages, directory homepages, or guesses. If you cannot find a confident match, respond with the literal text "NONE".\n\n` +
+    `Respond with the bare URL on a single line, with no commentary.`;
+  const result = await callClaude(
+    app,
+    [{ role: "user", content: prompt }],
+    {
+      max_tokens: 500,
+      tools: [
+        { type: "web_search_20250305", name: "web_search", max_uses: 2 },
+      ],
+      tool_choice: { type: "auto" },
+      fn_name: options.fn_name ?? "findVenueWebsite",
+    },
+  );
+  if (!result.ok) return null;
+  // Pull the first http(s) URL out of any text block.
+  const urlRe = /https?:\/\/[^\s<>"]+/i;
+  for (const b of result.content ?? []) {
+    if (b?.type === "text" && typeof b.text === "string") {
+      const m = b.text.match(urlRe);
+      if (m) {
+        // Strip trailing sentence-end punctuation Claude sometimes
+        // appends. Excludes ')' because listing URLs (Peerspace,
+        // LoopNet, TheVendry, etc.) occasionally have parens in the
+        // path (e.g. .../listing/foo(bar)). Stripping ')' truncated
+        // those.
+        return m[0].replace(/[.,;:!?]+$/, "");
+      }
+    }
+  }
+  // Fallback: pull first URL from the search results themselves.
+  const searchResults = extractWebSearchResults(result.content ?? []);
+  if (searchResults.length > 0) return searchResults[0].url;
+  return null;
+}
