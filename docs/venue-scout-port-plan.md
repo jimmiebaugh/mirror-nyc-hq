@@ -402,6 +402,18 @@ The 10 sub-phases above land on `vs-port-fresh`. Then:
 - Drop the abandoned `vs_briefs`, `vs_sourcing_rounds`, `vs_pitch_decks` tables in production if they were left in place per the Code-recommended Option A (one cleanup migration on the new main).
 - Update `docs/roadmap.md`, `CHECKPOINT.md`, `docs/decisions.md` to reflect the port-completed state. The roadmap's failed Phase 4 entries become "Abandoned, replaced by Phase 4-port."
 
+### Cutover complete: 2026-05-13
+
+Main was hard-reset to `vs-port-fresh` HEAD via `git push origin vs-port-fresh:main --force-with-lease`. Sequence executed:
+1. Cherry-picked `6775429` (TS Final Review re-enable Generate Packet) and `f24d3f5` (TS Final Review packet email template + layout fixes + email-as-cover-letter fallback) from origin/main onto vs-port-fresh; both diffstats verified byte-equal to source via `git show --stat`.
+2. Considered `4a8a5c6` (TS wizard migrates to canonical Stepper) for cherry-pick but dropped it: it imports from `src/components/ui/Stepper.tsx`, a file introduced by the failed Phase 4.3.1 squash (`564ff9e`) that the cutover discards. Carrying the file standalone was the alternative; chose the cleaner zero-contamination path. The TS wizard pages keep their import of the local `talent-scout/Stepper.tsx`.
+3. `npx tsc --noEmit` and `npm run build` both clean.
+4. Verified `git log --cherry-pick --left-only --no-merges main...vs-port-fresh` listed only the 42 commits we intended to drop (failed Phase 4 squashes 4.1 through 4.6 + URL-quality hot patches + their backfills + 4a8a5c6 + Phase 4.3.1 follow-ups + assorted doc-only commits). Cherry-picked `6775429` and `f24d3f5` were correctly excluded as patch-equivalent.
+5. Push fired Netlify deploy on `hq.mirrornyc.com`. Production VS went live as the build completed.
+6. Post-cutover cleanup: `vs-start-sourcing` orphan edge function deleted via `supabase functions delete`. The 4.1-port migration's DROP TABLE statements for `vs_briefs` / `vs_sourcing_rounds` / `vs_pitch_decks` were already applied (migration `20260512200000` is on the production ledger), so no additional DB cleanup migration was needed.
+
+Main HEAD after cutover: `7cd27ed`. Final post-cutover doc sweep landed in a follow-on `[skip netlify]` commit.
+
 ---
 
 ## Voice + style for the port
