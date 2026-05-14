@@ -1,4 +1,4 @@
-// vs-parse-sheet (Phase 4.4-port rebuild)
+// vs-parse-sheet (Phase 4.4-port rebuild + Phase 4.10.3-port restructure)
 //
 // Port of VS Pro `parse-sheet`. Lifts the XLSX parsing + pick() fuzzy header
 // matcher verbatim. Swaps bucket name (sourcing-sheets -> sourcing_sheets),
@@ -6,11 +6,28 @@
 // vs_candidate_venues), payload field rename (project_id -> scout_id), and
 // adds vs-parse-brief-style storage_path validation.
 //
+// Phase 4.10.1-port added an AI enrichment pass after insert. Phase 4.10.3-port
+// REMOVES that enrichment pass and consolidates all AI venue work into
+// vs-research-venues (Phase A: per-row enrichment of source='sheet' rows;
+// Phase B: existing sourcing of new venues). Justification (decisions.md):
+// forced tool_choice + server-side web_search produced empty fill_venue tool
+// calls on every row (out=113-139 tokens) at smoke 2026-05-13; consolidating
+// into vs-research-venues removes one Claude surface, lets the sheet upload
+// be instant, and centralizes web_search + validation in a single function.
+//
+// Phase 4.10.3-port also adds two parser improvements that stay here even
+// after the AI move: (1) website_url + capacity get picked from the sheet
+// (VS Pro dropped them, forcing the AI to re-find what the producer had
+// already entered); (2) keyword lists expanded for natural producer header
+// variants.
+//
 // Replaces the failed-attempt vs-parse-sheet in the deployed-function slot.
 // Same name, different behavior + shape; no separate cutover deletion needed.
 //
-// Signature:
-//   POST { scout_id, storage_path } -> { count } | { error }
+// Signature (Phase 4.10.3-port shape):
+//   POST { scout_id, storage_path }
+//     -> { count }
+//     -> { error }
 //
 // Flow:
 //   1. Validate scout_id UUID; storage_path prefixed with `${scout_id}/`,
@@ -20,20 +37,21 @@
 //      routes to empty-sheet error when count=0).
 //   4. XLSX / CSV -> XLSX.read + first-sheet sheet_to_json.
 //   5. Map rows to vs_candidate_venues records via pick() fuzzy match.
+//      website_url runs through sanitizeWebsiteUrl (catches search pages +
+//      listing-DB bare homepages). capacity + size both digits-only parse.
 //   6. Filter to non-empty `name`.
 //   7. INSERT rows with source: "sheet" + scout_id.
 //   8. UPDATE vs_scouts.sheet_storage_path = storage_path.
-//   9. Return { count }.
+//   9. Return { count }. AI enrichment is now vs-research-venues' job.
 //
-// Auth: verify_jwt = true (default; explicit config.toml entry per the
-// vs-parse-brief convention). No callClaude; no AI. No EdgeRuntime.waitUntil.
+// Auth: verify_jwt = true. Synchronous handshake; no waitUntil. The function
+// returns in well under a second now that AI work is gone.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import { sanitizeWebsiteUrl } from "../_shared/venueTypes.ts";
 
-// User-invoked synchronous only; no internal-secret path. Don't advertise
-// `x-internal-secret` to the browser preflight (caught by code-reviewer
-// during 4.4-port; same cleanup applied to vs-parse-brief in this commit).
+// User-invoked synchronous only; no internal-secret path.
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -137,21 +155,84 @@ Deno.serve(async (req) => {
 
     const venues = rows
       .map((r) => ({
+        // Phase 4.10.3-port: keyword lists expanded for natural producer
+        // header variants. pick() is fuzzy includes() so any substring
+        // match in any header lands. Collision note: keep "Venue Name"
+        // left of "Venue Type" in the sheet -- pick(name) iterates row
+        // keys in column order and "Venue Type" also matches "venue".
         name: pick(r, ["name", "venue"]),
-        neighborhood: pick(r, ["neighborhood", "area", "district"]),
+        neighborhood: pick(r, [
+          "neighborhood",
+          "area",
+          "district",
+          "hood",
+          "borough",
+        ]),
         address: pick(r, ["address", "location"]),
         // VS Pro `type` -> HQ `venue_type` (port plan-locked rename;
         // `type` reads as a Postgres / TS reserved word and was renamed at
         // 4.1-port migration time).
-        venue_type: pick(r, ["type", "category"]),
+        venue_type: pick(r, ["type", "category", "kind"]),
+        // Phase 4.10.3-port: extract producer-entered URL + capacity from
+        // sheet columns. VS Pro's parse-sheet dropped both fields; the
+        // enrichment pass was then forced to web_search for URLs Claude
+        // could have inherited from the producer's input. sanitizeWebsiteUrl
+        // (not validateWebsiteUrl) at parse time -- producer-typed URLs
+        // are trusted input; no HEAD check for hundreds of rows. The
+        // enrichOne pass in vs-research-venues uses validateWebsiteUrl
+        // only for AI-emitted URLs.
+        website_url: (() => {
+          const v = pick(r, [
+            "website",
+            "url",
+            "site",
+            "link",
+            "web",
+            "homepage",
+          ]);
+          return v ? sanitizeWebsiteUrl(v) : null;
+        })(),
+        capacity: (() => {
+          const v = pick(r, [
+            "capacity",
+            "occupancy",
+            "max guests",
+            "max",
+            "guests",
+            "people",
+            "pax",
+            "headcount",
+            "attendance",
+            "seats",
+            "seating",
+          ]);
+          if (!v) return null;
+          const n = parseInt(v.replace(/[^\d]/g, ""), 10);
+          return Number.isFinite(n) ? n : null;
+        })(),
         size_sq_ft: (() => {
-          const v = pick(r, ["sq ft", "sqft", "size"]);
+          const v = pick(r, [
+            "sq ft",
+            "sqft",
+            "size",
+            "square footage",
+            "footage",
+            "feet",
+          ]);
           if (!v) return null;
           const n = parseInt(v.replace(/[^\d]/g, ""), 10);
           return Number.isFinite(n) ? n : null;
         })(),
         key_features: (() => {
-          const v = pick(r, ["features", "feature", "notes"]);
+          const v = pick(r, [
+            "features",
+            "feature",
+            "notes",
+            "amenities",
+            "highlights",
+            "description",
+            "details",
+          ]);
           return v
             ? v.split(/[,;|\n]/).map((s) => s.trim()).filter(Boolean)
             : [];
@@ -166,9 +247,12 @@ Deno.serve(async (req) => {
     // VS Pro `venues` -> HQ `vs_candidate_venues`. VS Pro `project_id` ->
     // HQ `scout_id`. source = "sheet" so the producer's later edits in
     // Sourcing Report / Shortlist can distinguish parsed-sheet rows from
-    // AI-researched rows.
+    // AI-researched rows. vs-research-venues' Phase A picks these rows up
+    // and enriches them via callClaude(fill_venue + web_search).
     const inserts = venues.map((v) => ({ ...v, scout_id, source: "sheet" }));
-    const { error: insErr } = await sb.from("vs_candidate_venues").insert(inserts);
+    const { error: insErr } = await sb
+      .from("vs_candidate_venues")
+      .insert(inserts);
     if (insErr) {
       return jsonResponse({ error: `Insert failed: ${insErr.message}` }, 500);
     }
@@ -181,18 +265,20 @@ Deno.serve(async (req) => {
       .eq("id", scout_id);
     if (updErr) {
       // Insert succeeded; sheet_storage_path update is a soft secondary.
-      // Log but don't fail the whole call -- the producer sees the parsed
-      // count and can move forward.
       console.warn(
         `[vs-parse-sheet] sheet_storage_path update failed for scout ${scout_id}: ${updErr.message}`,
       );
     }
 
+    console.log(
+      `[vs-parse-sheet] scout=${scout_id} parsed=${venues.length} (AI enrichment deferred to vs-research-venues)`,
+    );
+
     return jsonResponse({ count: venues.length });
   } catch (e) {
     console.error("[vs-parse-sheet] unexpected:", e);
     return jsonResponse(
-      { error: e instanceof Error ? e.message : "parse failed" },
+      { error: e instanceof Error ? e.message : "unknown" },
       500,
     );
   }

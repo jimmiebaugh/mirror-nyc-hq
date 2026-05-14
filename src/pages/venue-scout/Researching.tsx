@@ -21,7 +21,7 @@
 // FinalReviewLoading.tsx (Phase 3.5). The Realtime subscription is the
 // channel through which the page learns about completion or failure.
 // vs-research-venues writes vs_scouts.current_step='sourcing_report' on
-// success or status='failed'+research_error on failure; this page reacts
+// success or status='failed'+pipeline_error on failure; this page reacts
 // to either.
 
 import { useEffect, useState } from "react";
@@ -40,7 +40,7 @@ type ScoutRow = {
   id: string;
   current_step: string | null;
   status: string | null;
-  research_error: string | null;
+  pipeline_error: string | null;
 };
 
 export default function Researching() {
@@ -65,7 +65,7 @@ export default function Researching() {
     const fetchScout = async () => {
       const { data } = await supabase
         .from("vs_scouts")
-        .select("id, current_step, status, research_error")
+        .select("id, current_step, status, pipeline_error")
         .eq("id", scoutId)
         .maybeSingle();
       if (!cancelled && data) setScout(data as unknown as ScoutRow);
@@ -140,7 +140,7 @@ export default function Researching() {
       );
       return () => clearTimeout(t);
     }
-    if (scout.status === "failed" && scout.research_error) {
+    if (scout.status === "failed" && scout.pipeline_error) {
       navigate(
         `/venue-scout/scouts/${scoutId}/sourcing/error/research-timeout`,
       );
@@ -157,7 +157,7 @@ export default function Researching() {
       <h1 className="h-page text-center">Researching Venues</h1>
       <p className="text-sm text-muted-foreground text-center mt-4 max-w-md">
         Researching venue candidates, comparing against the brief, and
-        preparing the matrix. This typically takes 30 to 60 seconds.
+        preparing the matrix. This could take up to 4 minutes.
       </p>
       {/* Progress bar (track uses bg-input per design-system § 12 rule 1). */}
       <div className="w-full max-w-md mt-8 h-1 bg-input rounded-full overflow-hidden">

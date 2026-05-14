@@ -23,11 +23,11 @@
 //     about completion via Realtime, not the response.
 //   - Server-side idempotency on vs-generate-deck means dev-mode double-mount
 //     and refresh-mid-flight are both safe (no double Slides API calls).
-//   - Failure path: vs-generate-deck writes status='failed' + research_error
+//   - Failure path: vs-generate-deck writes status='failed' + pipeline_error
 //     formatted as `<CODE>: <message>`. Page parses the code with a regex,
 //     falls back to UNKNOWN, and navigates to /deck/error/<code>.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -35,7 +35,7 @@ type ScoutRow = {
   id: string;
   current_step: string | null;
   status: string | null;
-  research_error: string | null;
+  pipeline_error: string | null;
   generated_decks: unknown;
 };
 
@@ -51,6 +51,17 @@ export default function Generating() {
   const { id: scoutId } = useParams();
   const navigate = useNavigate();
   const [scout, setScout] = useState<ScoutRow | null>(null);
+  // Guard against Realtime firing the success effect twice in quick
+  // succession (Realtime + polling fallback can both deliver the same
+  // UPDATE) and trying to window.open / navigate twice. Set once, then
+  // the second invocation no-ops.
+  const handledTerminalRef = useRef(false);
+  // Snapshot the prior deck count on first scout state. The success
+  // effect only fires when the count INCREASES past this baseline --
+  // otherwise a regenerate where DeckPrep didn't fully reset the scout
+  // state would race and re-open the prior deck. DeckPrep's reset
+  // (round 18) should make this redundant; this is belt-and-suspenders.
+  const initialDeckCountRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!scoutId) return;
@@ -61,7 +72,7 @@ export default function Generating() {
     const fetchScout = async () => {
       const { data } = await supabase
         .from("vs_scouts")
-        .select("id, current_step, status, research_error, generated_decks")
+        .select("id, current_step, status, pipeline_error, generated_decks")
         .eq("id", scoutId)
         .maybeSingle();
       if (!cancelled && data) setScout(data as unknown as ScoutRow);
@@ -87,7 +98,7 @@ export default function Generating() {
 
     // 2. Optimistic clear of any prior failure state BEFORE the initial
     //    fetch lands. Without this, a Generate-after-failure flow lets
-    //    the page read stale `status='failed' + research_error='...'`
+    //    the page read stale `status='failed' + pipeline_error='...'`
     //    from a prior run and the nav effect immediately routes back to
     //    /deck/error/<code> before the new run even starts. The edge
     //    function also clears these at kickoff (idempotent double-write
@@ -95,7 +106,7 @@ export default function Generating() {
     void (async () => {
       await supabase
         .from("vs_scouts")
-        .update({ status: "in_progress", research_error: null })
+        .update({ status: "in_progress", pipeline_error: null })
         .eq("id", scoutId);
 
       // 3. Initial fetch (now reads the cleared state).
@@ -128,24 +139,64 @@ export default function Generating() {
   // Navigation effect: react to scout state changes from Realtime / poll.
   useEffect(() => {
     if (!scout || !scoutId) return;
+    if (handledTerminalRef.current) return;
+
+    // Snapshot the prior deck count on the first scout state we see.
+    // Used by the success branch below to detect a fresh deck (count
+    // strictly greater than the baseline) vs a stale one (count
+    // unchanged from baseline).
+    if (initialDeckCountRef.current === null) {
+      const initialDecks = Array.isArray(scout.generated_decks)
+        ? scout.generated_decks
+        : [];
+      initialDeckCountRef.current = initialDecks.length;
+    }
 
     // Success: vs-generate-deck appended to generated_decks AND flipped
-    // current_step to 'completed'. Navigate to brief landing (the
-    // completed-scout home; matches VS Pro Generating's /projects/:id/brief
-    // target). `replace: true` keeps /generating out of history so
-    // browser-back from /brief doesn't re-mount this page.
-    const decks = Array.isArray(scout.generated_decks) ? scout.generated_decks : [];
-    if (decks.length > 0 && scout.current_step === "completed") {
-      navigate(`/venue-scout/scouts/${scoutId}/brief`, { replace: true });
+    // current_step to 'completed'.
+    //
+    // Post-4.10.4 hot patch round 16: changed the post-success flow.
+    // Instead of navigating to /brief (the completed-scout home), we
+    // now (1) open the freshly-generated deck's edit_url in a new tab
+    // so the producer can review it immediately, and (2) navigate back
+    // to /deck/prep so they're returned to the deck-prep matrix
+    // (regenerate, re-order, edit photos all in one place). `replace:
+    // true` keeps /generating out of history so browser-back from
+    // /deck/prep doesn't re-mount this page.
+    //
+    // Popup-blocker note: window.open after a Realtime event has no
+    // immediate user gesture, so some browsers may block the new tab.
+    // The deck URL is also visible on /brief (and surfaced via Scout
+    // Settings) for manual retrieval if the popup is blocked. We use
+    // `noopener,noreferrer` so the opened tab can't navigate this
+    // window via window.opener.
+    const decks = Array.isArray(scout.generated_decks)
+      ? scout.generated_decks
+      : [];
+    const baseline = initialDeckCountRef.current ?? 0;
+    if (
+      decks.length > baseline &&
+      scout.current_step === "completed"
+    ) {
+      handledTerminalRef.current = true;
+      const latest = decks[decks.length - 1];
+      if (latest && typeof latest === "object") {
+        const editUrl = (latest as { edit_url?: unknown }).edit_url;
+        if (typeof editUrl === "string" && editUrl.length > 0) {
+          window.open(editUrl, "_blank", "noopener,noreferrer");
+        }
+      }
+      navigate(`/venue-scout/scouts/${scoutId}/deck/prep`, { replace: true });
       return;
     }
 
-    // Failure: vs-generate-deck writes status='failed' + research_error
+    // Failure: vs-generate-deck writes status='failed' + pipeline_error
     // formatted as `<CODE>: <message>`. Parse the code, fall back to
     // UNKNOWN, route to the per-key error stub. `replace: true` same
     // reasoning as the success path.
-    if (scout.status === "failed" && scout.research_error) {
-      const code = parseErrorCode(scout.research_error);
+    if (scout.status === "failed" && scout.pipeline_error) {
+      handledTerminalRef.current = true;
+      const code = parseErrorCode(scout.pipeline_error);
       navigate(`/venue-scout/scouts/${scoutId}/deck/error/${code}`, {
         replace: true,
       });
@@ -158,9 +209,9 @@ export default function Generating() {
       <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin mb-8" />
       <h1 className="h-page">Generating Venue Deck</h1>
       <p className="text-sm text-muted-foreground mt-3 max-w-xl">
-        Copying the Mirror template into your Drive folder, populating slides
-        with project + venue data, and inserting your photos. This typically
-        takes 1 to 2 minutes.
+        Copying the deck template into the Drive output folder, populating
+        slides with project + venue data, and inserting your photos. This
+        typically takes 2-5 minutes.
       </p>
     </div>
   );

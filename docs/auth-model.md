@@ -10,8 +10,8 @@ Identity, permission roles, RLS, storage buckets, the Google service account, an
 
 ## Permission roles (3 tiers, stacked)
 
-- `member`: full read/write on HQ tables. No Venue Scout, no Talent Scout, no global settings. Default for new signups.
-- `producer`: everything member can do, plus full read/write on Venue Scout.
+- `member`: full read/write on HQ tables. Can use Venue Scout end-to-end (per port plan § 8.6, collaborative agency-wide workflow; storage policies relaxed in Phase 4.10.3-port). No Talent Scout. No global settings. Default for new signups.
+- `producer`: everything member can do, plus elevated permissions reserved for future controls (no producer-only Venue Scout gating currently; tier kept for forward compatibility).
 - `admin`: everything producer can do, plus Talent Scout, user role management, global settings.
 
 A user can be assigned to projects (as account manager or designer) regardless of their permission role — assignment ≠ permission tier.
@@ -43,9 +43,9 @@ Admin checks are done via a SECURITY DEFINER function that reads `permission_rol
 
 - `candidate_attachments`: admin only (Talent Scout)
 - `packets`: admin only (Talent Scout — round + final-review packet PDFs, Phase 3.6)
-- `briefs`, `sourcing_sheets`: producer or admin (Venue Scout)
+- `briefs`, `sourcing_sheets`: any auth user (Venue Scout; relaxed from producer-or-admin in Phase 4.10.3-port to match the open-authenticated vs_* table RLS).
 - `venue_photos`: any auth read; producer or admin write (HQ Core master `venues` table photos)
-- `vs_venue_photos`: producer or admin (Venue Scout deck photos, private; signed URLs at render time, 1-hour TTL). Distinct from the public `venue_photos` bucket; the two coexist because Venue Scout decks need private upload/render while HQ Core's master-venues bucket stays public for downstream usage. Created in Phase 4.7.1-port.
+- `vs_venue_photos`: any auth user (Venue Scout deck photos, private; signed URLs at render time, 1-hour TTL). Distinct from the public `venue_photos` bucket; the two coexist because Venue Scout decks need private upload/render while HQ Core's master-venues bucket stays public for downstream usage. Created in Phase 4.7.1-port; producer-or-admin gate relaxed to authenticated in Phase 4.10.3-port.
 - `profile_avatars`: any auth read; user writes only to their own folder (`{user_id}/...` path prefix)
 
 All buckets are private. URLs go through `supabase.storage.createSignedUrl` with short TTLs (typical: 60 minutes for inline rendering, 1 hour for download links).

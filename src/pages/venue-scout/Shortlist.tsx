@@ -5,26 +5,25 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { NotesModal } from "@/components/venue-scout/NotesModal";
-import { PhotoUploadModal } from "@/components/venue-scout/PhotoUploadModal";
 import {
   Th,
   Td,
   HdrStack,
   VStack,
-  Pill,
   Bullets,
-  RankDisplay,
   NotesCellButton,
   parseTypes,
-  TYPE_STYLES,
-  TYPE_FALLBACK_STYLE,
-  EditableVenueName,
-  WebsiteArrow,
+  EditableField,
+  EditableTextarea,
+  VenueIdentityStack,
+  TypeTogglePopover,
 } from "@/components/venue-scout/matrix/primitives";
+import type { CanonicalType } from "@/components/venue-scout/matrix/primitives";
 import {
   ScoutSettingsLink,
   ScoutStepThroughNav,
 } from "@/components/venue-scout/ScoutChrome";
+import { SOURCE_PRIORITY } from "@/lib/venue-scout/format";
 
 // Lifted from VS Pro (src/pages/sourcing/Shortlist.tsx) per port plan § 9 +
 // Phase 4.6-port spec. Same column-rename / route-prefix / table-rename
@@ -57,7 +56,12 @@ type Venue = {
   notes: string | null;
 };
 
-const TOTAL_COLS = 9;
+// Phase 4.10.2-port: 9 -> 8 columns after dropping the Alignment | Rank
+// column.
+// Phase 4.10.4-port: 8 -> 7 columns after dropping the Upload Photos column.
+// Photos still live on Review.tsx; the upload affordance is gone from
+// Shortlist per producer-flow simplification (Jimmie lock 2026-05-13).
+const TOTAL_COLS = 7;
 
 export default function Shortlist() {
   const { id: scoutId } = useParams<{ id: string }>();
@@ -72,9 +76,13 @@ export default function Shortlist() {
   >(null);
 
   const [notesOpen, setNotesOpen] = useState(false);
-  const [photosOpen, setPhotosOpen] = useState(false);
   const [activeVenue, setActiveVenue] = useState<Venue | null>(null);
-  const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
+  // Phase 4.10.2-port: id of the most recently inserted manual row. Passed
+  // through to <VenueIdentityStack autoFocusName> so the new contenteditable
+  // span receives focus on mount. Replaces the previous setTimeout +
+  // querySelector("input[data-manual-name=...]") path, which only worked when
+  // manual rows rendered as <input> elements.
+  const [lastManualId, setLastManualId] = useState<string | null>(null);
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {},
@@ -113,22 +121,6 @@ export default function Shortlist() {
     );
     setVenues(visible);
 
-    // 4.7.1-port: real photo counts (4.6-port stub returned 0 always).
-    if (visible.length) {
-      const ids = visible.map((v) => v.id);
-      const { data: ph } = await supabase
-        .from("vs_venue_photos")
-        .select("candidate_venue_id")
-        .in("candidate_venue_id", ids);
-      const counts: Record<string, number> = {};
-      (ph ?? []).forEach((p) => {
-        counts[p.candidate_venue_id] = (counts[p.candidate_venue_id] ?? 0) + 1;
-      });
-      setPhotoCounts(counts);
-    } else {
-      setPhotoCounts({});
-    }
-
     setLoading(false);
   }, [scoutId]);
 
@@ -144,13 +136,41 @@ export default function Shortlist() {
     };
   }, []);
 
+  // Phase 4.10.2-port: one-shot reset of lastManualId after the new
+  // manual row's <EditableField> has had its mount-effect fire. Without
+  // this, if the manual row's tr ever remounts later (e.g. an edge case
+  // where the sort step swaps the manual row's tree position and React
+  // tears it down), autoFocusName would still be true at remount-time
+  // and steal focus from whichever cell the producer is currently
+  // editing. Clearing on requestAnimationFrame gives the contenteditable
+  // its initial focus, then takes the signal back down before any
+  // subsequent reconciliation can fire it a second time.
+  useEffect(() => {
+    if (lastManualId == null) return;
+    const handle = window.requestAnimationFrame(() =>
+      setLastManualId(null),
+    );
+    return () => window.cancelAnimationFrame(handle);
+  }, [lastManualId]);
+
+  // Phase 4.10.3-port: 3-tier source priority sort (manual -> sheet ->
+  // research). Mirrors SourcingReport. SOURCE_PRIORITY lives in
+  // src/lib/venue-scout/format.ts.
+  //
+  // Phase 4.10.4-port: secondary tiebreaker flipped from `rank desc` to
+  // alphabetical-by-name (case-insensitive + numeric collation). Rank column
+  // still lives in the DB; display is hidden only.
   const sorted = useMemo(() => {
     const arr = [...venues];
-    arr.sort((a, b) => (b.rank ?? -1) - (a.rank ?? -1));
-    arr.sort(
-      (a, b) =>
-        Number(a.source === "manual") - Number(b.source === "manual"),
-    );
+    arr.sort((a, b) => {
+      const aPri = SOURCE_PRIORITY[a.source ?? "research"] ?? 99;
+      const bPri = SOURCE_PRIORITY[b.source ?? "research"] ?? 99;
+      if (aPri !== bPri) return aPri - bPri;
+      return (a.name ?? "").localeCompare(b.name ?? "", undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
+    });
     return arr;
   }, [venues]);
 
@@ -202,7 +222,16 @@ export default function Shortlist() {
         .from("vs_candidate_venues")
         .update(normalized)
         .eq("id", id);
-      if (error) toast.error(error.message);
+      if (error) {
+        // Phase 4.10.2-port: align Shortlist with SourcingReport + DeckPrep --
+        // on save failure, reload from DB so the optimistic update gets
+        // rolled back. Previously 4.6-port only toasted (acceptable when
+        // the only editable fields were on manual rows the producer just
+        // typed); 4.10.2 extends editing to every research / sheet row, so
+        // a silent stale-state on the matrix would be worse.
+        toast.error(error.message);
+        load();
+      }
     }, 600);
   }
 
@@ -222,24 +251,18 @@ export default function Shortlist() {
       toast.error(error.message);
       return;
     }
-    setVenues((prev) => [...prev, (data as unknown) as Venue]);
-    setTimeout(() => {
-      const el = document.querySelector<HTMLInputElement>(
-        `input[data-manual-name="${(data as { id: string }).id}"]`,
-      );
-      el?.focus();
-    }, 50);
+    const inserted = (data as unknown) as Venue;
+    setVenues((prev) => [...prev, inserted]);
+    // Phase 4.10.2-port: signal <VenueIdentityStack autoFocusName> for this
+    // new row. The contenteditable name span focuses on its mount-effect
+    // (no setTimeout / querySelector needed; the previous DOM-query path
+    // only worked when manual rows rendered as <input> elements).
+    setLastManualId(inserted.id);
   }
 
   function openNotes(v: Venue) {
     setActiveVenue(v);
     setNotesOpen(true);
-  }
-
-  function openPhotos(v: Venue) {
-    if (!v.pitched) return;
-    setActiveVenue(v);
-    setPhotosOpen(true);
   }
 
   async function onContinue() {
@@ -274,9 +297,8 @@ export default function Shortlist() {
             </div>
             <h1 className="h-page">Venue Shortlist</h1>
             <p className="text-sm text-muted-foreground max-w-3xl">
-              Mark the venues you want to pitch. Add notes per venue, upload
-              deck photos for the pitched ones, and pull in any manual
-              additions before continuing.
+              Mark the venues you want to pitch. Add notes per venue and pull
+              in any manual additions before continuing.
             </p>
           </div>
           <div className="flex items-end gap-4">
@@ -293,18 +315,37 @@ export default function Shortlist() {
       </header>
       {scoutId && <ScoutStepThroughNav scoutId={scoutId} scout={scoutMeta} />}
 
+      {/*
+        Phase 4.10.2-port matrix overhaul:
+          - 9 -> 8 columns (Alignment | Rank dropped; Rank moved into col2
+            via <VenueIdentityStack>).
+          - Col2 widened 200 -> 230 to absorb rank bar + source pill.
+          - Manual vs research vs sheet row branching collapsed: ALL rows
+            use <VenueIdentityStack> in col2, <EditableField variant="neigh">
+            in col3 top, and <EditableTextarea> for Features in col4. Type
+            pills stay static (AI-derived; producer-edit is a 4.10.3 polish
+            item). Recommendations + Considerations stay <Bullets> for all
+            rows (AI-only; intentional affordance asymmetry vs Features).
+          - The hardcoded "Manual" pill is gone; <SourcePill> inside
+            <VenueIdentityStack> renders Uploaded / Sourced / Manual.
+          - Total matrix width 1740 -> 1580.
+          - `columns` (derived alignment columns) stays read off vs_scouts
+            (no longer rendered; kept for parity with SourcingReport).
+
+        Phase 4.10.4-port: 8 -> 7 columns. Upload Photos column dropped;
+        photo upload now lives only on Review.tsx (4.7.1-port surface).
+        Total matrix width 1580 -> 1450.
+      */}
       <div className="bg-surface-alt rounded-md overflow-hidden border border-border">
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full min-w-[1740px] border-collapse text-[12.5px]">
+          <table className="w-full min-w-[1450px] border-collapse text-[12.5px]">
             <colgroup>
               <col style={{ width: 60 }} />
-              <col style={{ width: 200 }} />
+              <col style={{ width: 230 }} />
               <col style={{ width: 160 }} />
               <col style={{ width: 220 }} />
-              <col style={{ width: 220 }} />
               <col style={{ width: 250 }} />
               <col style={{ width: 250 }} />
-              <col style={{ width: 130 }} />
               <col style={{ width: 230 }} />
             </colgroup>
             <thead className="sticky top-0 z-20">
@@ -313,10 +354,8 @@ export default function Shortlist() {
                 <Th sticky="col2"><HdrStack a="Venue" b="Address" /></Th>
                 <Th><HdrStack a="Neighborhood" b="Type" /></Th>
                 <Th>Features</Th>
-                <Th><HdrStack a="Alignment" b="Rank" /></Th>
                 <Th>Recommendations</Th>
                 <Th>Considerations</Th>
-                <Th>Upload<br />Photos</Th>
                 <Th>Notes /<br />Feedback</Th>
               </tr>
             </thead>
@@ -341,14 +380,8 @@ export default function Shortlist() {
                 </tr>
               ) : (
                 sorted.map((v) => {
-                  const isManual = v.source === "manual";
                   const types = parseTypes(v.venue_type);
-                  const addrParts = (v.address ?? "")
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean);
                   const note = v.notes ?? undefined;
-                  const phCount = photoCounts[v.id] ?? 0;
                   return (
                     <tr
                       key={v.id}
@@ -366,185 +399,68 @@ export default function Shortlist() {
                         />
                       </Td>
                       <Td noPadX noPadY sticky="col2">
-                        {isManual ? (
-                          <div className="h-full flex flex-col justify-center px-3 py-3 gap-1.5">
-                            <input
-                              data-manual-name={v.id}
-                              defaultValue={v.name}
-                              placeholder="Venue name"
-                              onChange={(e) =>
-                                debounceSave(v.id, { name: e.target.value })
-                              }
-                              className="ghost-input w-full font-bold text-[16px]"
-                            />
-                            <input
-                              defaultValue={v.address ?? ""}
-                              placeholder="Address"
-                              onChange={(e) =>
-                                debounceSave(v.id, { address: e.target.value })
-                              }
-                              className="ghost-input w-full text-[12px] text-muted-foreground"
-                            />
-                            <span className="manual-tag">Manual</span>
-                          </div>
-                        ) : (
-                          <VStack
-                            top={
-                              <EditableVenueName
-                                id={v.id}
-                                name={v.name}
-                                onChange={(n) =>
-                                  debounceSave(v.id, { name: n })
-                                }
-                              />
-                            }
-                            bot={
-                              <div className="flex flex-col items-center gap-[2px] text-muted-foreground">
-                                {addrParts.length ? (
-                                  addrParts.map((p, i) => (
-                                    <div key={i}>{p}</div>
-                                  ))
-                                ) : (
-                                  <div>-</div>
-                                )}
-                                {v.website_url ? (
-                                  <div className="pt-[10px]">
-                                    <WebsiteArrow url={v.website_url} />
-                                  </div>
-                                ) : null}
-                              </div>
-                            }
-                          />
-                        )}
-                      </Td>
-                      <Td noPadX noPadY>
-                        {isManual ? (
-                          <div className="h-full flex flex-col justify-center px-3 py-3 gap-2">
-                            <input
-                              defaultValue={v.neighborhood ?? ""}
-                              placeholder="Neighborhood"
-                              onChange={(e) =>
-                                debounceSave(v.id, {
-                                  neighborhood: e.target.value,
-                                })
-                              }
-                              className="ghost-input w-full text-[12.5px]"
-                            />
-                            <input
-                              defaultValue={v.venue_type ?? ""}
-                              placeholder="Type"
-                              onChange={(e) =>
-                                debounceSave(v.id, {
-                                  venue_type: e.target.value,
-                                })
-                              }
-                              className="ghost-input w-full text-[12px] text-muted-foreground"
-                            />
-                          </div>
-                        ) : (
-                          <VStack
-                            top={
-                              <div className="text-foreground">
-                                {v.neighborhood ?? "-"}
-                              </div>
-                            }
-                            bot={
-                              <div className="flex flex-col items-center gap-[7px]">
-                                {types.length ? (
-                                  types.map((t, i) => (
-                                    <Pill
-                                      key={i}
-                                      className={
-                                        TYPE_STYLES[t] ?? TYPE_FALLBACK_STYLE
-                                      }
-                                    >
-                                      {t}
-                                    </Pill>
-                                  ))
-                                ) : (
-                                  <span className="text-muted-foreground">
-                                    -
-                                  </span>
-                                )}
-                              </div>
-                            }
-                          />
-                        )}
-                      </Td>
-                      <Td vCenter>
-                        {isManual ? (
-                          <input
-                            defaultValue={(v.key_features ?? []).join(", ")}
-                            placeholder="Key features"
-                            onChange={(e) =>
-                              debounceSave(v.id, {
-                                key_features: e.target.value,
-                              })
-                            }
-                            className="ghost-input w-full text-[12.5px]"
-                          />
-                        ) : (
-                          <Bullets items={v.key_features ?? []} />
-                        )}
-                      </Td>
-                      <Td noPadX noPadY>
-                        {isManual ? (
-                          <div className="h-full flex items-center justify-center text-muted-foreground">
-                            -
-                          </div>
-                        ) : (
-                          <VStack
-                            dividerPad={10}
-                            top={
-                              <div className="flex flex-wrap gap-[5px] items-center justify-center">
-                                {columns.map((c) => {
-                                  const val = v.derived_attrs?.[c.id];
-                                  if (val === "yes")
-                                    return (
-                                      <Pill
-                                        key={c.id}
-                                        className="bg-green-400/15 text-green-400 border-green-400/35"
-                                      >
-                                        {c.label}
-                                      </Pill>
-                                    );
-                                  if (val === "maybe")
-                                    return (
-                                      <Pill
-                                        key={c.id}
-                                        className="bg-amber-400/15 text-amber-400 border-amber-400/35"
-                                      >
-                                        {c.label}
-                                      </Pill>
-                                    );
-                                  return null;
-                                })}
-                              </div>
-                            }
-                            bot={<RankDisplay score={v.rank} />}
-                          />
-                        )}
-                      </Td>
-                      <Td vCenter>
-                        {isManual ? (
-                          <span className="text-muted-foreground">-</span>
-                        ) : (
-                          <Bullets items={v.recommendations ?? []} />
-                        )}
-                      </Td>
-                      <Td vCenter>
-                        {isManual ? (
-                          <span className="text-muted-foreground">-</span>
-                        ) : (
-                          <Bullets items={v.considerations ?? []} />
-                        )}
-                      </Td>
-                      <Td vCenter className="text-center">
-                        <UploadPhotosButton
-                          pitched={v.pitched}
-                          count={phCount}
-                          onClick={() => openPhotos(v)}
+                        <VenueIdentityStack
+                          venueId={v.id}
+                          name={v.name}
+                          onNameChange={(n) =>
+                            debounceSave(v.id, { name: n })
+                          }
+                          address={v.address ?? ""}
+                          onAddressChange={(a) =>
+                            debounceSave(v.id, {
+                              address: a.trim() || null,
+                            })
+                          }
+                          website={v.website_url}
+                          source={v.source}
+                          autoFocusName={v.id === lastManualId}
                         />
+                      </Td>
+                      <Td noPadX noPadY>
+                        <VStack
+                          dividerPad={18}
+                          top={
+                            <EditableField
+                              id={`${v.id}-neigh`}
+                              value={v.neighborhood ?? ""}
+                              onChange={(n) =>
+                                debounceSave(v.id, {
+                                  neighborhood: n.trim() || null,
+                                })
+                              }
+                              variant="neighborhood"
+                              placeholder="(no neighborhood)"
+                            />
+                          }
+                          bot={
+                            <TypeTogglePopover
+                              currentTypes={types}
+                              onChange={(next: CanonicalType[]) =>
+                                debounceSave(v.id, {
+                                  venue_type:
+                                    next.length > 0 ? next.join(" / ") : null,
+                                })
+                              }
+                            />
+                          }
+                        />
+                      </Td>
+                      <Td vCenter>
+                        <EditableTextarea
+                          id={`${v.id}-features`}
+                          value={(v.key_features ?? []).join(", ")}
+                          onChange={(raw) =>
+                            debounceSave(v.id, { key_features: raw })
+                          }
+                          placeholder="(no features)"
+                          rows={6}
+                        />
+                      </Td>
+                      <Td vCenter>
+                        <Bullets items={v.recommendations ?? []} />
+                      </Td>
+                      <Td vCenter>
+                        <Bullets items={v.considerations ?? []} />
                       </Td>
                       <Td vCenter className="text-center">
                         <NotesCellButton
@@ -610,69 +526,6 @@ export default function Shortlist() {
           }
         }}
       />
-
-      <PhotoUploadModal
-        open={photosOpen}
-        onOpenChange={setPhotosOpen}
-        scoutId={scoutId ?? ""}
-        venueId={activeVenue?.id ?? null}
-        venueName={activeVenue?.name ?? ""}
-        onSaved={(c) => {
-          if (activeVenue) {
-            setPhotoCounts((prev) => ({ ...prev, [activeVenue.id]: c }));
-          }
-        }}
-      />
     </div>
-  );
-}
-
-function UploadPhotosButton({
-  pitched,
-  count,
-  onClick,
-}: {
-  pitched: boolean;
-  count: number;
-  onClick: () => void;
-}) {
-  if (!pitched) {
-    return (
-      <button
-        title="Mark for Pitch to enable photo upload"
-        disabled
-        className="w-full px-2 py-2 text-[10px] font-bold uppercase tracking-[0.12em] rounded bg-input text-muted-foreground cursor-not-allowed border border-border"
-      >
-        - Locked
-      </button>
-    );
-  }
-  if (count >= 4) {
-    return (
-      <button
-        onClick={onClick}
-        className="w-full px-2 py-2 rounded bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/40 hover:bg-[#22c55e]/25 transition-colors"
-      >
-        <span className="block text-[10px] font-bold uppercase tracking-[0.12em] leading-tight">
-          ✓ Complete
-        </span>
-        <span className="block text-[10px] opacity-80 leading-tight mt-0.5">
-          (4 / 4)
-        </span>
-      </button>
-    );
-  }
-  return (
-    <button
-      onClick={onClick}
-      className="w-full px-2 py-2 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-    >
-      <span className="block text-[10px] font-bold uppercase tracking-[0.12em] leading-tight">
-        + Upload
-      </span>
-      <span className="block text-[10px] opacity-90 leading-tight mt-0.5">
-        ({count} / 4)
-      </span>
-    </button>
   );
 }

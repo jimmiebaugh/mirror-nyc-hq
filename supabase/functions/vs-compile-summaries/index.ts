@@ -1,12 +1,13 @@
-// vs-compile-summaries (Phase 4.7.2-port)
+// vs-compile-summaries (Phase 4.7.2-port + Phase 4.10.1-port refactor)
 //
 // Two-pass AI compile for the pitched-venue set. Lifted from VS Pro
 // `compile-summaries` with these locked deltas per port plan § 6:
 //   1. Both Anthropic calls go through callClaude('venue_scout', ...) for
 //      spend tracking + per-app key + cache discounts. No raw fetch.
 //   2. Sanitization on Pass 1 output: venue_type tokens through
-//      canonicalizeType, website_url through sanitizeWebsiteUrl,
-//      ranking_score -> rank Math.round for INTEGER column.
+//      canonicalizeType, website_url through validateWebsiteUrl (4.10.3-port
+//      HEAD-validation wrapper around sanitizeWebsiteUrl), ranking_score ->
+//      rank Math.round for INTEGER column.
 //   3. EdgeRuntime.waitUntil divorces request lifetime from work lifetime
 //      (port plan § 8.3). The function returns 200 immediately; the AI
 //      work + per-venue UPDATEs + final UPDATE run in the background. The
@@ -15,6 +16,16 @@
 //   4. Payload simplified from VS Pro's { project_id, venue_ids } to
 //      { scout_id }; function queries pitched venues itself. Notes flow
 //      collapsed: producer notes come back inline from vs_candidate_venues.
+//
+// Phase 4.10.1-port refactor:
+//   - FILL_TOOL + FILL_SYSTEM + buildFillUserMsg moved to
+//     _shared/venueFill.ts so vs-parse-sheet (4.10.1) reuses the same
+//     prompt + schema. Single source of truth. OVERVIEW_TOOL +
+//     OVERVIEW_SYSTEM stay local; only compile-summaries uses them.
+//   - Pass 1 needsFill condition extended to fire for source='sheet'
+//     rows that are missing derived_attrs. vs-parse-sheet enrichment
+//     never fills derived_attrs (vs_scouts.derived_columns doesn't
+//     exist at parse time); this catch-all backfills them at compile.
 //
 // Auth posture: verify_jwt = true. User-invoked synchronous handshake; no
 // self-invoke. The handshake returns before the AI work starts so the
@@ -38,12 +49,23 @@
 //     posture where sanitizer catches what schema-prompting could not.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { callClaude, type ClaudeTool } from "../_shared/anthropic.ts";
 import {
-  CANONICAL_TYPES,
+  callClaude,
+  extractWebSearchResults,
+  type ClaudeTool,
+} from "../_shared/anthropic.ts";
+import {
   canonicalizeType,
-  sanitizeWebsiteUrl,
+  findBestSearchResultUrl,
+  stripPlaceholders,
 } from "../_shared/venueTypes.ts";
+import { validateWebsiteUrl } from "../_shared/urlValidation.ts";
+import {
+  buildFillUserMsg,
+  FILL_SYSTEM,
+  FILL_TOOL,
+  type ScoutBrief,
+} from "../_shared/venueFill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,85 +93,82 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-// FILL_TOOL -- lifted from VS Pro with one rename: `type` -> `venue_type`
-// to match the HQ column rename. Sanitization downstream maps tool input
-// `venue_type` to the `vs_candidate_venues.venue_type` column. No minItems
-// changes per the tool_choice_collapse memory rule.
-const FILL_TOOL: ClaudeTool = {
-  name: "fill_venue",
-  description:
-    "Fill in missing venue research fields. Honor any pre-set fields the producer entered.",
-  input_schema: {
-    type: "object",
-    properties: {
-      venue_type: {
-        type: "string",
-        description: `Slash-separated values from canonical list: ${CANONICAL_TYPES.join(", ")}`,
-      },
-      website_url: { type: "string" },
-      size_sq_ft: { type: "number" },
-      capacity: { type: "number" },
-      key_features: { type: "array", items: { type: "string" } },
-      derived_attrs: {
-        type: "object",
-        additionalProperties: { type: "string" },
-      },
-      recommendations: {
-        type: "array",
-        items: { type: "string" },
-        minItems: 2,
-        maxItems: 4,
-      },
-      considerations: {
-        type: "array",
-        items: { type: "string" },
-        minItems: 2,
-        maxItems: 4,
-      },
-      ranking_score: { type: "number" },
-    },
-    required: ["recommendations", "considerations", "ranking_score"],
-  },
-};
+// FILL_TOOL + FILL_SYSTEM + buildFillUserMsg now live in _shared/venueFill.ts
+// (Phase 4.10.1-port). vs-parse-sheet and this function both import them so
+// the Pass 1 prompt + schema never drift.
 
+// Phase 4.10.4-port: OVERVIEW_TOOL tuned to produce shorter, better-targeted
+// overviews. Per feedback_tool_choice_collapse memory rule, the levers are
+// the tool description + the venue_overview property description + maxLength.
+// OVERVIEW_SYSTEM stays untouched.
+//
+// Targets:
+//   - 3-4 sentences, ~80 words (down from 5-8 sentences, ~150 words).
+//   - Surface standout physical / experiential features + immediate
+//     neighborhood character + at most one critical consideration.
+//   - Don't itemize every amenity; don't pad with marketing fluff.
+//
+// `maxLength: 600` is a soft signal -- Claude generally honors but does not
+// strictly truncate. ~120 words is ~600-700 characters depending on prose;
+// the cap aligns with the ~45-50% length reduction target.
+//
+// Diagnostic: if smoke output is still too long, tighten maxLength to 500
+// or 450 first. If output is still un-targeted, add more concrete examples
+// to the property description. Do NOT edit OVERVIEW_SYSTEM.
 const OVERVIEW_TOOL: ClaudeTool = {
   name: "write_overview",
   description:
-    "Write a single-paragraph (5-8 sentences) producer-tone venue overview tied to the brief.",
+    "Write a single-paragraph venue overview (3-4 sentences, ~80 words) tied to the brief. Focus on standout physical / experiential features, the immediate neighborhood character around the venue, and only the MOST critical considerations. Skip the nitty-gritty.",
   input_schema: {
     type: "object",
-    properties: { venue_overview: { type: "string" } },
+    properties: {
+      venue_overview: {
+        type: "string",
+        description:
+          "A single producer-tone paragraph of 3-4 sentences (~80 words, max ~120). Structure: (1) one-sentence identity + standout physical or experiential feature; (2) what the space offers programmatically (zones, sightlines, infrastructure, outdoor connections, flexibility); (3) one sentence on the surrounding neighborhood and the cultural / commercial context; (4) optionally, one sentence on what it's best suited for OR one critical consideration. Examples of standout features worth surfacing: 'Extremely large, contiguous floors with high ceilings'; 'Strong ability to separate zones and mitigate sound bleed'; 'Industrial aesthetic with a clean, modernized interior'; 'Robust infrastructure for load-in, power, and large-scale production'; 'Rising cultural hub already hosting CFDA / NYFW shifts'; 'Proximity to Meatpacking, Chelsea galleries, High Line'; 'Brooklyn industrial aesthetic'; 'Multiple outdoor areas (courtyard + intimate garden)'; 'Casual, communal layout supports networking and social engagement'; 'Branding opportunities, prime advertising frontage'; 'High ceilings and multiple entrances; rigging points and truss'; 'Mezzanine great for another programming area'. Examples of well-calibrated overviews: 'The Sunset is a storefront for lease that is situated on the Sunset Strip in the heart of West Hollywood. This prime retail space is within walking distance of everything and has unparalleled access to premier destinations.' / 'Chelsea Industrial is a large, industrial-style event space in West Chelsea known for hosting high-production corporate events, brand activations, and conferences. The venue features a wide-open floor plan with high ceilings, offering a flexible canvas for custom builds and large-scale programming. Its industrial aesthetic and neutral interior lend themselves well to contemporary, tech-forward events, while the surrounding neighborhood provides easy access to transportation, hotels, and production resources.' / 'Platform is a vibrant, design-forward cultural destination. Developed on a repurposed industrial site, the 50,000 sq ft campus blends boutique retail, elevated restaurants and creative community experiences. Situated in Culver City, it sits in the heart of LA art galleries, studios and tech offices.' Do NOT itemize every amenity, do NOT pad with marketing fluff, do NOT exceed ~120 words.",
+        maxLength: 600,
+      },
+    },
     required: ["venue_overview"],
   },
 };
 
-// FILL_SYSTEM and OVERVIEW_SYSTEM lifted verbatim from VS Pro. Do NOT
-// edit either per feedback_tool_choice_collapse memory rule. Output
-// quality levers live on schema descriptions and post-emission
-// sanitization.
-const FILL_SYSTEM =
-  `You are a venue researcher for Mirror NYC. Fill in missing structured fields for a single venue. Type must use ONLY values from this canonical list: ${CANONICAL_TYPES.join(", ")}. Multiple types separated by " / " allowed. Prefer Retail for ground-floor commercial / storefront / vacancy spaces. Never set website_url to a listing-database URL (thestorefront.com, peerspace.com, propertyshark.com, loopnet.com, crexi.com).`;
-
+// OVERVIEW_SYSTEM lifted verbatim from VS Pro. Do NOT edit per
+// feedback_tool_choice_collapse memory rule. Output quality levers live
+// on schema descriptions and post-emission sanitization (compile-only;
+// FILL_SYSTEM is in _shared/venueFill.ts under the same rule).
 const OVERVIEW_SYSTEM =
   `You are a producer at Mirror NYC writing venue summaries for a pitch deck. Tone: declarative, third-person, specific to the brief. 5-8 sentences. Mention how the venue serves the specific event (foot traffic, back-of-house, capacity, neighborhood fit). No marketing fluff. Forbidden words: "perfect", "ideal", "premier", "elevated experience", "world-class", "stunning", "amazing".`;
 
 // Two-row failure write helper. Used by the outer catastrophic catch.
 // Per-venue Claude errors are logged + skipped (matches VS Pro tolerance);
 // only framework-level errors (DB, timeout) flip status='failed'.
+//
+// Post-4.10.4 hot patch round 9: guard against overwriting a prior
+// success. .eq("current_step", "compiling") makes the UPDATE a CAS
+// that no-ops if another invocation has already advanced the scout
+// past 'compiling' (e.g., succeeded to 'deck_prep'). Same pattern
+// applied to vs-research-venues.writeFailure.
 async function writeFailure(
   sb: ReturnType<typeof createClient>,
   scout_id: string,
   message: string,
 ): Promise<void> {
   console.error(`[vs-compile-summaries] scout=${scout_id} failure: ${message}`);
-  await sb
+  const { error } = await sb
     .from("vs_scouts")
     .update({
       status: "failed",
-      research_error: message,
+      pipeline_error: message,
       last_touched_at: new Date().toISOString(),
     })
-    .eq("id", scout_id);
+    .eq("id", scout_id)
+    .eq("current_step", "compiling");
+  if (error) {
+    console.error(
+      `[vs-compile-summaries] scout=${scout_id} writeFailure update error: ${error.message}`,
+    );
+  }
 }
 
 Deno.serve(async (req) => {
@@ -221,7 +240,7 @@ Deno.serve(async (req) => {
         ...briefData,
         compile_started_at: new Date().toISOString(),
       },
-      research_error: null,
+      pipeline_error: null,
     })
     .eq("id", scout_id);
 
@@ -243,17 +262,38 @@ Deno.serve(async (req) => {
 
   const venues = venuesData ?? [];
 
-  // Brief block reused across every Pass 1 and Pass 2 user message.
-  // Fallback strings normalized to "(not set)" (VS Pro used em dashes
-  // which violate the voice rule).
+  // Brief block for Pass 2 overview user messages. Pass 1's brief block is
+  // built inside _shared/venueFill.ts buildFillUserMsg (Phase 4.10.1-port
+  // extraction); fallback strings stay aligned with this block to keep
+  // both passes seeing the same brief shape. Fallback strings normalized
+  // to "(not set)" (VS Pro used em dashes which violate the voice rule).
+  //
+  // Post-4.10.4 hot patch round 11: trimmed Brief block. Replaced the
+  // full `Brief: ${JSON.stringify(scout.brief_data)}` dump with selective
+  // field extraction so the per-venue prompt isn't inflated with internal
+  // state flags (research_started_at / compile_started_at /
+  // deck_generation_started_at / uploaded_files). Matches the trim
+  // applied to vs-research-venues Phase B + venueFill.buildFillUserMsg.
+  const briefDataObj = (scout.brief_data ?? {}) as Record<string, unknown>;
+  const briefDataGuests = briefDataObj.expected_guest_count;
+  const briefDataNotes = briefDataObj.notes;
   const briefBlock =
     `Client: ${scout.client_name ?? "(not set)"}
 Event: ${scout.event_name ?? "(not set)"}
 City: ${scout.city ?? "(not set)"}
 Live dates: ${scout.live_dates ?? "(not set)"}
 Budget: ${scout.budget ?? "(not set)"}
+Expected guests: ${
+      typeof briefDataGuests === "number" || typeof briefDataGuests === "string"
+        ? String(briefDataGuests)
+        : "(not set)"
+    }
 Overview: ${scout.event_overview ?? "(not set)"}
-Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
+Additional brief notes: ${
+      typeof briefDataNotes === "string" && briefDataNotes.trim().length > 0
+        ? briefDataNotes.trim()
+        : "(none)"
+    }`;
 
   // Background work. Returns nothing; writes success / failure straight
   // to vs_scouts so the Compiling page picks them up via Realtime.
@@ -284,7 +324,7 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
           .update({
             current_step: "deck_prep",
             status: "in_progress",
-            research_error: null,
+            pipeline_error: null,
             last_touched_at: new Date().toISOString(),
           })
           .eq("id", scout_id);
@@ -297,40 +337,71 @@ Brief: ${JSON.stringify(scout.brief_data ?? {})}`;
       for (const v of venues) {
         const patch: Record<string, unknown> = {};
 
-        // Pass 1: fill missing structured fields. Only fires for manual
-        // venues that lack recommendations or ranking_score (VS Pro
-        // tolerance: research-sourced venues already have all fields).
+        // Pass 1: fill missing structured fields.
+        //
+        // Original (4.7.2-port): only manual venues missing recs or rank
+        // (research-sourced venues already have all fields from
+        // vs-research-venues).
+        //
+        // Extended (4.10.1-port): also fire for sheet-source venues
+        // missing derived_attrs. vs-parse-sheet's enrichment never fills
+        // derived_attrs because vs_scouts.derived_columns doesn't exist
+        // at parse time. Pass 1's per-field guards prevent overwriting
+        // the already-enriched recs / rank / type / etc.; only the
+        // derived_attrs slot lands in the typical sheet-row case. Also
+        // catches sheet rows whose parse-time enrichment failed
+        // mid-flight (recs empty or rank null) as a fallback recovery.
         const recsArr = Array.isArray(v.recommendations)
           ? v.recommendations
           : [];
+        const derivedAttrsEmpty =
+          !v.derived_attrs ||
+          Object.keys(v.derived_attrs as Record<string, unknown>).length === 0;
         const needsFill =
-          v.source === "manual" && (recsArr.length === 0 || v.rank == null);
+          (v.source === "manual" || v.source === "sheet") &&
+          (recsArr.length === 0 || v.rank == null || derivedAttrsEmpty);
         if (needsFill) {
-          const fillUserMsg =
-            `BRIEF
-${briefBlock}
-
-VENUE (producer-entered, do not overwrite filled fields):
-Name: ${v.name}
-Address: ${v.address ?? "?"}
-Neighborhood: ${v.neighborhood ?? "?"}
-Type (if set): ${v.venue_type ?? "(missing, set from canonical list)"}
-Producer notes: ${v.notes ?? "(none)"}
-
-Fill in missing structured fields. Type must use canonical list values only.`;
+          // Pass 1 user message comes from the shared builder so
+          // vs-parse-sheet's enrichment and this backfill stay in lock
+          // step. Producer notes go through too (manual rows collect
+          // them; sheet rows pre-pitch typically don't have notes yet).
+          const fillUserMsg = buildFillUserMsg(scout as ScoutBrief, {
+            name: v.name,
+            address: v.address,
+            neighborhood: v.neighborhood,
+            venue_type: v.venue_type,
+            // Phase 4.10.3-port: forward producer-set URL so backfill
+            // research uses it as primary source.
+            website_url: v.website_url,
+            notes: v.notes,
+          });
 
           try {
             const fillResult = await callClaude(
               "venue_scout",
               [{ role: "user", content: fillUserMsg }],
               {
-                // Testing claude-sonnet-4-6 (wrapper default). If the
-                // diagnostic log shows out<200 on Pass 1, pivot to 4-5
-                // by adding `model: "claude-sonnet-4-5"` here.
-                max_tokens: 2000,
+                // Post-4.10.4 hot patch (2026-05-13 evening): pivoted from
+                // claude-sonnet-4-5 + web_search_20250305 to
+                // claude-sonnet-4-6 + web_search_20260209. Mirror the same
+                // pivot applied to vs-research-venues Phase A + B after
+                // smoke logs showed server_tool_uses=0 across all 4-5 +
+                // 20250305 calls. Anthropic docs list Sonnet 4.6 / 4.7 /
+                // Opus 4.6+ / Mythos as the supported model set for the
+                // newer web_search_20260209; Sonnet 4.5 isn't on that
+                // list. Max tokens stays at 6000 for web_search content
+                // headroom.
+                model: "claude-sonnet-4-6",
+                max_tokens: 4000,
                 system: FILL_SYSTEM,
-                tools: [FILL_TOOL],
-                tool_choice: { type: "tool", name: "fill_venue" },
+                // Round 12 hot patch: mirror vs-research-venues Phase A
+                // pivot from web_search_20260209 -> 20250305. Lighter
+                // per-turn context, no code_execution sandbox.
+                tools: [
+                  FILL_TOOL,
+                  { type: "web_search_20250305", name: "web_search", max_uses: 2 },
+                ],
+                tool_choice: { type: "auto" },
                 fn_name: "vs-compile-summaries:fill",
               },
             );
@@ -352,6 +423,26 @@ Fill in missing structured fields. Type must use canonical list values only.`;
               if (tu && typeof tu.input === "object" && tu.input !== null) {
                 const f = tu.input as Record<string, unknown>;
 
+                // Round 15 hot patch: address + neighborhood are now in
+                // FILL_TOOL. Mirror Phase A's patch guard -- only fill
+                // when the existing row value is null/empty so producer
+                // values stay authoritative.
+                if (
+                  (!v.address || v.address.trim().length === 0) &&
+                  typeof f.address === "string" &&
+                  f.address.trim().length > 0
+                ) {
+                  patch.address = f.address.trim();
+                }
+
+                if (
+                  (!v.neighborhood || v.neighborhood.trim().length === 0) &&
+                  typeof f.neighborhood === "string" &&
+                  f.neighborhood.trim().length > 0
+                ) {
+                  patch.neighborhood = f.neighborhood.trim();
+                }
+
                 // venue_type: canonicalizeType per slash/comma-separated
                 // token. Only set if the venue doesn't already have a
                 // type.
@@ -364,8 +455,34 @@ Fill in missing structured fields. Type must use canonical list values only.`;
                 }
 
                 if (!v.website_url) {
-                  const cleaned = sanitizeWebsiteUrl(f.website_url);
-                  if (cleaned) patch.website_url = cleaned;
+                  // Phase 4.10.3-port: HEAD-validated. Same per-row sequential
+                  // pattern as vs-parse-sheet's enrichOne; Pass 1 runs CHUNK_SIZE
+                  // rows in parallel so per-chunk latency stays bounded.
+                  const cleaned = await validateWebsiteUrl(f.website_url);
+                  if (cleaned) {
+                    patch.website_url = cleaned;
+                  } else {
+                    // Round 13 hot patch: fallback. Mirror Phase A in
+                    // vs-research-venues -- pull a URL out of the
+                    // web_search results blocks if Claude's tool output
+                    // didn't include a usable one.
+                    const searchResults = extractWebSearchResults(
+                      fillResult.content ?? [],
+                    );
+                    const fallbackUrl = findBestSearchResultUrl(
+                      v.name,
+                      searchResults,
+                    );
+                    if (fallbackUrl) {
+                      const validated = await validateWebsiteUrl(fallbackUrl);
+                      if (validated) {
+                        patch.website_url = validated;
+                        console.log(
+                          `[vs-compile-summaries] scout=${scout_id} venue=${v.id} website_url fallback from search results: ${validated}`,
+                        );
+                      }
+                    }
+                  }
                 }
 
                 if (v.size_sq_ft == null && typeof f.size_sq_ft === "number") {
@@ -383,7 +500,13 @@ Fill in missing structured fields. Type must use canonical list values only.`;
                   existingFeatures.length === 0 &&
                   Array.isArray(f.key_features)
                 ) {
-                  patch.key_features = f.key_features;
+                  // Round 7 hot patch: strip placeholder tokens
+                  // ('<UNKNOWN>', 'TBD', 'N/A') Claude falls back to
+                  // under schema pressure. If the cleaned array is
+                  // empty, skip the write so the row keeps its null
+                  // state rather than getting a junk-filled column.
+                  const cleaned = stripPlaceholders(f.key_features);
+                  if (cleaned.length > 0) patch.key_features = cleaned;
                 }
 
                 const existingDerived = (v.derived_attrs ?? {}) as Record<
@@ -399,14 +522,16 @@ Fill in missing structured fields. Type must use canonical list values only.`;
                 }
 
                 if (recsArr.length === 0 && Array.isArray(f.recommendations)) {
-                  patch.recommendations = f.recommendations;
+                  const cleaned = stripPlaceholders(f.recommendations);
+                  if (cleaned.length > 0) patch.recommendations = cleaned;
                 }
 
                 const consArr = Array.isArray(v.considerations)
                   ? v.considerations
                   : [];
                 if (consArr.length === 0 && Array.isArray(f.considerations)) {
-                  patch.considerations = f.considerations;
+                  const cleaned = stripPlaceholders(f.considerations);
+                  if (cleaned.length > 0) patch.considerations = cleaned;
                 }
 
                 if (v.rank == null && typeof f.ranking_score === "number") {
@@ -521,7 +646,7 @@ Write the venue_overview paragraph.`;
         .update({
           current_step: "deck_prep",
           status: "in_progress",
-          research_error: null,
+          pipeline_error: null,
           last_touched_at: new Date().toISOString(),
         })
         .eq("id", scout_id);

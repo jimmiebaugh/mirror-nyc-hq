@@ -24,7 +24,7 @@
 //      slow; typical runs are 1-2 minutes per VS Pro description; 60-second
 //      buffer.
 //   7. Error signaling: VS Pro returns { error, code } synchronously. Port
-//      writes status='failed' + research_error=`${CODE}: ${message}`. The
+//      writes status='failed' + pipeline_error=`${CODE}: ${message}`. The
 //      Generating page parses the code and routes to /deck/error/<code>.
 //      current_step stays 'deck_prep' so Resume / Re-generate from
 //      DeckPrep is the recovery path (same pattern as 4.7.2 leaving at
@@ -73,6 +73,13 @@ const IN_FLIGHT_GRACE_MS = 90_000;
 // (template copy + per-venue duplicates + per-venue token replacements +
 // per-venue image replacements + slide deletes + reads). Cap at 3 minutes.
 const WORK_TIMEOUT_MS = 180_000;
+
+// Mirror's deck template has 6 front-matter slides (cover, project info
+// across slides 2-3, event overview, section title, venue map with
+// venue-name legend at slide 6). All per-venue detail + floor-plan
+// duplicates land starting at this index. Mirrors the constant of the
+// same name on the frontend DeckPrep page.
+const FRONT_MATTER_SLIDES = 6;
 
 // Service-account scopes. No impersonation; the service account owns the
 // Drive + Slides calls directly.
@@ -246,22 +253,30 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // failWithCode: write status='failed' + research_error=`${code}: ${message}`.
+  // failWithCode: write status='failed' + pipeline_error=`${code}: ${message}`.
   // The Generating page parses the code with a regex and routes to
   // /deck/error/<code>. current_step stays 'deck_prep' so Re-generate
   // from DeckPrep is the recovery path. Logs the underlying update error
   // if the write itself fails; the page would otherwise spin forever
   // because neither success nor failure state lands.
+  //
+  // Post-4.10.4 hot patch round 9: guard against overwriting a prior
+  // success. .eq("current_step", "deck_prep") makes this update a CAS
+  // that no-ops if another invocation has already advanced the scout to
+  // 'completed' (success path flips current_step to 'completed' before
+  // appending to generated_decks). Same guard pattern applied to
+  // vs-research-venues + vs-compile-summaries writeFailure.
   async function failWithCode(code: ErrCode, message: string): Promise<void> {
     console.error(`[vs-generate-deck] scout=${scout_id} ${code}: ${message}`);
     const { error: updErr } = await sb
       .from("vs_scouts")
       .update({
         status: "failed",
-        research_error: `${code}: ${message}`,
+        pipeline_error: `${code}: ${message}`,
         last_touched_at: new Date().toISOString(),
       })
-      .eq("id", scout_id);
+      .eq("id", scout_id)
+      .eq("current_step", "deck_prep");
     if (updErr) {
       console.error(
         `[vs-generate-deck] scout=${scout_id} failWithCode update FAILED: ${updErr.message}`,
@@ -317,7 +332,7 @@ Deno.serve(async (req) => {
         ...briefData,
         deck_generation_started_at: new Date().toISOString(),
       },
-      research_error: null,
+      pipeline_error: null,
     })
     .eq("id", scout_id);
 
@@ -468,24 +483,43 @@ Deno.serve(async (req) => {
         // are duplicated once per venue and the originals deleted at the end.
         // 4.8.3-port shifted every index by one after first real producer
         // test revealed the VS Pro lift assumed 5 front-matter slides.
+        const slide2Id = slides[1]?.objectId;
         const legendSlideId = slides[5]?.objectId;
         const templateSlide7 = slides[6]?.objectId;
         const templateSlide8 = slides[7]?.objectId;
-        if (!legendSlideId || !templateSlide7 || !templateSlide8) {
-          throw new Error("Template missing slide 6, 7, or 8");
+        if (!slide2Id || !legendSlideId || !templateSlide7 || !templateSlide8) {
+          throw new Error("Template missing slide 2, 6, 7, or 8");
         }
 
         // Slide 2 + 3 + 4 global text replacements (across the front matter).
         const guestCount =
           (scout.brief_data as Record<string, unknown> | null)
             ?.expected_guest_count ?? "TBD";
+        const clientName = (scout.client_name as string) ?? "";
+        const eventName = (scout.event_name as string) ?? "";
+        const liveDate = fmtDate(scout.live_dates as string);
+        const cityName = (scout.city as string) ?? "";
         // deno-lint-ignore no-explicit-any
         const globalReqs: any[] = [
-          repText("{{client_name}}", (scout.client_name as string) ?? ""),
-          repText("{{event_name}}", (scout.event_name as string) ?? ""),
-          repText("{{event_live_date}}", fmtDate(scout.live_dates as string)),
+          // Post-4.10.4 hot patch round 17: slide 2 ALL-CAPS pass MUST
+          // run before the case-preserving global replaces below. The
+          // Slides API processes requests within a batchUpdate in
+          // order, so once these scoped replaces fire on slide 2 the
+          // tokens are gone there and the subsequent global replaces
+          // touch only the OTHER slides (which keep original casing).
+          repText("{{client_name}}", clientName.toUpperCase(), [slide2Id]),
+          repText("{{event_name}}", eventName.toUpperCase(), [slide2Id]),
+          repText("{{event_live_date}}", liveDate.toUpperCase(), [slide2Id]),
+          repText("{{event_location}}", cityName.toUpperCase(), [slide2Id]),
+          // Case-preserving global replacements (cover all other slides
+          // where these tokens appear -- title, project info pages,
+          // etc.). On slide 2 the tokens are already gone after the
+          // ALL-CAPS pass above, so these are no-ops there.
+          repText("{{client_name}}", clientName),
+          repText("{{event_name}}", eventName),
+          repText("{{event_live_date}}", liveDate),
           repText("{{guest_count}}", String(guestCount)),
-          repText("{{event_location}}", (scout.city as string) ?? ""),
+          repText("{{event_location}}", cityName),
           repText(
             "{{event_overview}}",
             (scout.event_overview as string) ?? "",
@@ -686,17 +720,68 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Delete the original template slides 7 + 8 (the per-venue
-        // detail + floor-plan source slides). The duplicates created above
-        // are what populate the deck output.
-        await batchUpdate(
-          deckId,
-          [
-            { deleteObject: { objectId: templateSlide7 } },
-            { deleteObject: { objectId: templateSlide8 } },
-          ],
-          token,
-        );
+        // Post-4.10.4 hot patch round 19: reorder duplicates + delete
+        // originals in a single batchUpdate.
+        //
+        // duplicateObject inserts the duplicate IMMEDIATELY AFTER its
+        // source. Duplicating slide 7 N times pushes each new duplicate
+        // BETWEEN the source and the prior duplicate, landing them in
+        // REVERSE order. Original slides 7 and 8 are duplicated
+        // independently, so the post-duplicate state is:
+        //   [front0..5, ts7, dup7_N-1..dup7_0, ts8, dup8_N-1..dup8_0]
+        // After deleting templates ts7 + ts8 (still in this batch):
+        //   [front0..5, dup7_N-1..dup7_0, dup8_N-1..dup8_0]
+        // Producer needs interleaved-forward:
+        //   [front0..5, dup7_0, dup8_0, dup7_1, dup8_1, ..., dup7_N-1, dup8_N-1]
+        //
+        // Round-17 attempted this with ONE updateSlidesPosition listing
+        // every duplicate in the desired order. The Slides API rejected
+        // that with INVALID_ARGUMENT: "The slides should be in
+        // presentation order, with no duplicates." The slideObjectIds
+        // list MUST match current presentation order; you can't use
+        // updateSlidesPosition to reorder, only to relocate a contiguous
+        // already-ordered block.
+        //
+        // Round-19 fix: emit ONE updateSlidesPosition per slide. A
+        // single-slide list is trivially in order, satisfying the
+        // constraint. Per-slide insertionIndex is interpreted in the
+        // post-removal state (per API docs), so for slide K-th in the
+        // desired final order, insertionIndex = FRONT_MATTER_SLIDES + K
+        // works regardless of where the slide currently sits. Slides
+        // API processes the requests in order within the batchUpdate
+        // so each subsequent move sees the layout from the previous
+        // move's result.
+        //
+        // Order matters: delete ts7 + ts8 FIRST, then the per-slide
+        // moves operate on the cleaner post-delete state. The dup IDs
+        // are stable across the template deletes (they're independent
+        // slides, not children of the templates).
+        // deno-lint-ignore no-explicit-any
+        const finalizeReqs: any[] = [];
+        finalizeReqs.push({ deleteObject: { objectId: templateSlide7 } });
+        finalizeReqs.push({ deleteObject: { objectId: templateSlide8 } });
+        if (venues.length > 0) {
+          let targetIdx = FRONT_MATTER_SLIDES;
+          for (let i = 0; i < venues.length; i++) {
+            // Venue (i+1) detail slide -> position targetIdx.
+            finalizeReqs.push({
+              updateSlidesPosition: {
+                slideObjectIds: [slide7Ids[i]],
+                insertionIndex: targetIdx,
+              },
+            });
+            targetIdx += 1;
+            // Venue (i+1) floor plan slide -> position targetIdx.
+            finalizeReqs.push({
+              updateSlidesPosition: {
+                slideObjectIds: [slide8Ids[i]],
+                insertionIndex: targetIdx,
+              },
+            });
+            targetIdx += 1;
+          }
+        }
+        await batchUpdate(deckId, finalizeReqs, token);
 
         // Final slide count.
         // deno-lint-ignore no-explicit-any
@@ -731,16 +816,26 @@ Deno.serve(async (req) => {
           ? (fresh!.generated_decks as unknown[])
           : existing;
 
-        const { error: scoutUpdErr } = await sb
+        // Phase 4.10.6-port: CAS guard on the success path mirrors the
+        // failWithCode CAS guard (round 9). Two parallel invocations
+        // that both succeed would otherwise both append to
+        // generated_decks here, with a TOCTOU window between the
+        // freshExisting re-read and the UPDATE. The
+        // .eq("current_step", "deck_prep") filter makes the success
+        // UPDATE a CAS that no-ops when another invocation has already
+        // advanced current_step to 'completed' -- only the first-to-
+        // complete wins the append.
+        const { error: scoutUpdErr, count: scoutUpdCount } = await sb
           .from("vs_scouts")
           .update({
             generated_decks: [...freshExisting, meta],
             current_step: "completed",
             status: "complete",
-            research_error: null,
+            pipeline_error: null,
             last_touched_at: new Date().toISOString(),
-          })
-          .eq("id", scout_id);
+          }, { count: "exact" })
+          .eq("id", scout_id)
+          .eq("current_step", "deck_prep");
 
         if (scoutUpdErr) {
           // Final write failed AFTER the deck landed in Drive. Surface as
@@ -748,6 +843,15 @@ Deno.serve(async (req) => {
           // deck is orphaned but doesn't block the workflow).
           throw new Error(
             `Final scout update failed: ${scoutUpdErr.message}`,
+          );
+        }
+        if (scoutUpdCount === 0) {
+          // CAS lost: another invocation completed first. The in-Drive
+          // deck is orphaned; the producer-facing state reflects the
+          // other invocation's deck. Log but don't fail (not a real
+          // error from the producer's POV; they get a working deck).
+          console.warn(
+            `[vs-generate-deck] scout=${scout_id} success CAS lost; another invocation already completed. deck_id=${deckId} orphaned.`,
           );
         }
 

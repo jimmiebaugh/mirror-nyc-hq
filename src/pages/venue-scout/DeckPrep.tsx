@@ -25,13 +25,19 @@ import {
 import {
   SortableContext,
   arrayMove,
+  rectSortingStrategy,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { PhotoUploadModal } from "@/components/venue-scout/PhotoUploadModal";
+import {
+  EditableField,
+  EditableTextarea,
+} from "@/components/venue-scout/matrix/primitives";
 import {
   ScoutSettingsLink,
   ScoutStepThroughNav,
@@ -46,6 +52,18 @@ type Venue = {
   capacity: number | null;
   website_url: string | null;
   venue_overview: string | null;
+};
+// Phase 4.10.2-port: shared patch shape for the inline-edit save on this
+// page. Kept at module scope (rather than inside the component) so DeckRow
+// can reference it via the `onSave` prop type without re-declaring.
+type FieldPatch = {
+  name?: string;
+  address?: string | null;
+  neighborhood?: string | null;
+  size_sq_ft?: number | null;
+  capacity?: number | null;
+  website_url?: string | null;
+  venue_overview?: string | null;
 };
 type Photo = { candidate_venue_id: string; slot: number; storage_path: string };
 
@@ -78,6 +96,13 @@ export default function DeckPrep() {
     { venueId: string; venueName: string } | null
   >(null);
   const orderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Phase 4.10.2-port: per-venue 600ms debounce for inline edits on the
+  // venue summary cell (name / address / neighborhood / size / cap /
+  // website) + the venue_overview cell. Same shape as Shortlist + the
+  // new SourcingReport debounceSave.
+  const fieldTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -175,8 +200,42 @@ export default function DeckPrep() {
   useEffect(() => {
     return () => {
       if (orderTimer.current) clearTimeout(orderTimer.current);
+      // Phase 4.10.2-port: drop any pending inline-edit timers on unmount
+      // (producer navigates away before the 600ms debounce fires). Mirrors
+      // SourcingReport + Shortlist cleanup behavior.
+      Object.values(fieldTimers.current).forEach((t) => clearTimeout(t));
     };
   }, []);
+
+  // Phase 4.10.2-port: inline-edit save for the DeckPrep venue summary +
+  // overview cells. Optimistic state update, then 600ms debounced UPDATE.
+  // Patch fields are coerced (numbers, null-on-empty) at the call site so
+  // the in-memory Venue keeps its typed shape. `website_url` validation
+  // deferred to 4.10.3-port (URL hot patch).
+  function debounceSave(id: string, patch: FieldPatch) {
+    setVenues((prev) =>
+      prev.map((v) => (v.id === id ? ({ ...v, ...patch } as Venue) : v)),
+    );
+    clearTimeout(fieldTimers.current[id]);
+    fieldTimers.current[id] = setTimeout(async () => {
+      const { error } = await supabase
+        .from("vs_candidate_venues")
+        .update(patch)
+        .eq("id", id);
+      if (error) {
+        toast.error(error.message);
+        load();
+      }
+    }, 600);
+  }
+  // Helper: parse a raw string ("25,000 sq ft" / "1500") into an int or
+  // null. Strips non-digit characters so producers can type with units.
+  function parseIntOrNull(raw: string): number | null {
+    const cleaned = raw.replace(/[^\d]/g, "");
+    if (!cleaned) return null;
+    const n = parseInt(cleaned, 10);
+    return Number.isFinite(n) ? n : null;
+  }
 
   function persistOrder(next: Venue[]) {
     if (!scoutId) return;
@@ -299,13 +358,37 @@ export default function DeckPrep() {
       clearTimeout(orderTimer.current);
       orderTimer.current = null;
     }
-    // Persist any pending order, then mark each venue's include_in_deck flag
-    // to match the current UI selection so vs-generate-deck only generates
-    // what the producer expects.
+
+    // Phase 4.10.6-port: reset scout state for a clean regenerate.
+    //
+    // When the scout has already been through a successful generate
+    // cycle, current_step='completed' and brief_data.deck_generation_started_at
+    // holds the prior kickoff timestamp. Both gate vs-generate-deck from
+    // running again:
+    //   - if (scout.current_step !== "deck_prep") return skipped
+    //   - if (deck_generation_started_at < grace window) return in_flight
+    // Without a reset here, clicking Generate again silently no-ops and
+    // Generating.tsx sees the unchanged success state, treating the
+    // prior deck as a fresh result.
+    //
+    // Uses the reset_scout_for_deck_regenerate RPC (migration
+    // 20260514100000) so the brief_data jsonb minus is atomic in a
+    // single SQL statement -- no TOCTOU window between a read and a
+    // write. The RPC sets current_step='deck_prep', strips
+    // deck_generation_started_at via jsonb `-` operator, and resets
+    // status + pipeline_error. deck_order is persisted in a separate
+    // UPDATE since it isn't part of the reset semantics.
+    await supabase.rpc("reset_scout_for_deck_regenerate", {
+      target_scout_id: scoutId,
+    });
     await supabase
       .from("vs_scouts")
       .update({ deck_order: venues.map((v) => v.id) })
       .eq("id", scoutId);
+
+    // Mark each venue's include_in_deck flag to match the current UI
+    // selection so vs-generate-deck only generates what the producer
+    // expects.
     await Promise.all(
       venues.map((v) =>
         supabase
@@ -365,6 +448,25 @@ export default function DeckPrep() {
         </span>
       </div>
 
+      {/* Phase 4.10.4-port: notes consolidated above the table in a single
+          bulleted card. Copy preserved verbatim from the 4.8.1-port
+          asterisk-list block that used to live below the table. Card uses
+          bg-input + white (foreground) text + coral bullet markers per
+          Jimmie's lock 2026-05-13. */}
+      <div className="mb-4 rounded-md border border-border bg-input px-4 py-3">
+        <ul className="text-sm text-foreground space-y-1 list-disc list-inside marker:text-primary">
+          <li>Drag rows to reorder · top = Venue 01</li>
+          <li>
+            Drag photos within a row to swap slot positions (TL · TR · BL · BR)
+          </li>
+          <li>
+            Cover, project info, event overview, section title, venue map
+            slides auto-generate from brief
+          </li>
+          <li>One detail + one floor plan slide per venue</li>
+        </ul>
+      </div>
+
       <div className="bg-surface-alt rounded-md border border-border overflow-hidden">
         <div className="grid grid-cols-[40px_90px_70px_minmax(220px,1fr)_minmax(280px,360px)_minmax(280px,2fr)] gap-0 border-b border-border bg-input text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
           <div className="px-3 py-3 text-center">≡</div>
@@ -408,6 +510,8 @@ export default function DeckPrep() {
                   onOpenPhotos={() =>
                     setPhotoModal({ venueId: v.id, venueName: v.name })
                   }
+                  onSave={(patch) => debounceSave(v.id, patch)}
+                  parseIntOrNull={parseIntOrNull}
                 />
               ))}
             </SortableContext>
@@ -415,33 +519,41 @@ export default function DeckPrep() {
         )}
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.12em]">
-        <span className="px-3 py-1.5 rounded bg-input border border-border text-amber-400">
-          ✱ Drag rows to reorder · top = Venue 01
-        </span>
-        <span className="px-3 py-1.5 rounded bg-input border border-border text-amber-400">
-          ✱ Drag photos within a row to swap slot positions (TL · TR · BL · BR)
-        </span>
-        <span className="px-3 py-1.5 rounded bg-input border border-border text-amber-400">
-          ✱ Cover, project info, event overview, section title, venue map slides
-          auto-generate from brief
-        </span>
-        <span className="px-3 py-1.5 rounded bg-input border border-border text-amber-400">
-          ✱ One detail + one floor plan slide per venue
-        </span>
-      </div>
+      {/* Phase 4.10.4-port: the below-table ✱ asterisk-note block has moved
+          above the table (see the card just above the matrix). The notes are
+          identical to the prior copy; consolidated into a single bulleted
+          card per Jimmie's lock 2026-05-13 so the producer sees them first
+          rather than below the matrix scroll. */}
 
+      {/* Phase 4.10.4-port: bottom-nav rework.
+          - "X slides will be generated" dropped (the table header already
+            shows total slide count).
+          - "X Venues" bumped to text-xl semibold to match the count emphasis
+            on the rest of the page.
+          - Bulleted list of each included venue name underneath the count,
+            in the same pitched / order sequence the deck will use. Internal
+            scroll (max-h-40) caps the floating-nav footprint when a scout
+            pitches many venues; the producer can scroll within the nav
+            without the whole bar growing. */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <Link to={reviewPath} className="crumb">
             ← Back
           </Link>
-          <div className="text-xs text-muted-foreground">
-            <strong className="text-foreground">{includedVenues.length}</strong>{" "}
-            venues
-            <span className="mx-2">·</span>
-            <strong className="text-foreground">{totalSlides} slides</strong>{" "}
-            will be generated
+          <div className="flex flex-col gap-1 max-w-md">
+            <p className="text-xl font-semibold text-foreground">
+              {includedVenues.length}{" "}
+              {includedVenues.length === 1 ? "Venue" : "Venues"}
+            </p>
+            {includedVenues.length > 0 ? (
+              <ul className="text-sm text-muted-foreground space-y-0.5 list-disc list-inside marker:text-primary max-h-40 overflow-y-auto">
+                {includedVenues.map((v) => (
+                  <li key={v.id} className="leading-snug">
+                    {v.name || "(untitled)"}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
           <Button
             onClick={generate}
@@ -479,6 +591,8 @@ function DeckRow({
   photoUrls,
   onSwapPhotos,
   onOpenPhotos,
+  onSave,
+  parseIntOrNull,
 }: {
   venue: Venue;
   orderNum: number;
@@ -488,6 +602,10 @@ function DeckRow({
   photoUrls: Record<number, string>;
   onSwapPhotos: (fromSlot: number, toSlot: number) => void;
   onOpenPhotos: () => void;
+  // Phase 4.10.2-port: debounced inline-edit callback. Already partial-applied
+  // with this row's venue id; DeckRow just builds the patch.
+  onSave: (patch: FieldPatch) => void;
+  parseIntOrNull: (raw: string) => number | null;
 }) {
   const sortable = useSortable({ id: venue.id });
   const style = {
@@ -495,15 +613,18 @@ function DeckRow({
     transition: sortable.transition,
     opacity: sortable.isDragging ? 0.5 : 1,
   };
-  const meta = [
-    venue.neighborhood,
-    venue.size_sq_ft != null
-      ? `${venue.size_sq_ft.toLocaleString()} sq ft`
-      : null,
-    venue.capacity != null ? `~${venue.capacity} cap` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const sizeDisplay =
+    venue.size_sq_ft != null ? `${venue.size_sq_ft.toLocaleString()} sq ft` : "";
+  const capacityDisplay = venue.capacity != null ? `${venue.capacity}` : "";
+  // Phase 4.10.4-port: when all three meta fields (neighborhood / size /
+  // capacity) are null/empty, skip the stack entirely so the cell doesn't
+  // render an empty flex container that still occupies the parent's gap.
+  // Producer would normally fill these on Review before reaching DeckPrep;
+  // showing a "(no details)" placeholder would be misleading.
+  const hasAnyMeta =
+    (venue.neighborhood ?? "").trim().length > 0 ||
+    sizeDisplay.length > 0 ||
+    capacityDisplay.length > 0;
 
   return (
     <div
@@ -541,24 +662,109 @@ function DeckRow({
           className="h-[18px] w-[18px] accent-primary cursor-pointer"
         />
       </div>
-      <div className="px-3 py-5">
+      {/*
+        Phase 4.10.2-port: editable venue summary stack. Before: static name +
+        meta line. After: editable name, NEW editable address row, editable
+        neighborhood + size + capacity inline (size + cap parse to int with
+        unit suffix tolerated), editable website_url (external-link icon
+        kept). All saves go through onSave -> debounceSave (600ms).
+      */}
+      <div className="px-3 py-5 space-y-1.5">
+        <EditableField
+          id={`${venue.id}-name-deck`}
+          value={venue.name}
+          onChange={(n) => onSave({ name: n })}
+          variant="name"
+          placeholder="(untitled)"
+        />
+        <EditableField
+          id={`${venue.id}-addr-deck`}
+          value={venue.address ?? ""}
+          onChange={(a) => onSave({ address: a.trim() || null })}
+          variant="address"
+          placeholder="(no address)"
+        />
+        {/* Phase 4.10.4-port: neighborhood / size / capacity stacked
+            vertically. Each row gets its own line with a "Field:" label so
+            the producer can scan the cell without parsing inline separators.
+            Skip a row entirely when the underlying value is null/empty
+            (don't render an empty "Neighborhood:" line). The fields remain
+            inline-editable; the visual change is layout-only.
+
+            When all three fields are empty, skip the stack container too so
+            the cell doesn't render a zero-height flex element that still
+            consumes the parent's gap-y. */}
+        {hasAnyMeta ? (
+          <div className="flex flex-col gap-y-0.5 text-[11.5px] text-muted-foreground">
+            {(venue.neighborhood ?? "").trim().length > 0 ? (
+              <div className="flex items-baseline gap-x-1">
+                <span aria-hidden className="text-muted-foreground/70">
+                  Neighborhood:
+                </span>
+                <EditableField
+                  id={`${venue.id}-neigh-deck`}
+                  value={venue.neighborhood ?? ""}
+                  onChange={(n) =>
+                    onSave({ neighborhood: n.trim() || null })
+                  }
+                  variant="neighborhood"
+                  placeholder="(neighborhood)"
+                />
+              </div>
+            ) : null}
+            {sizeDisplay.length > 0 ? (
+              <div className="flex items-baseline gap-x-1">
+                <span aria-hidden className="text-muted-foreground/70">
+                  Size:
+                </span>
+                <EditableField
+                  id={`${venue.id}-size-deck`}
+                  value={sizeDisplay}
+                  onChange={(raw) =>
+                    onSave({ size_sq_ft: parseIntOrNull(raw) })
+                  }
+                  variant="neighborhood"
+                  placeholder="(sq ft)"
+                />
+              </div>
+            ) : null}
+            {capacityDisplay.length > 0 ? (
+              <div className="flex items-baseline gap-x-1">
+                <span aria-hidden className="text-muted-foreground/70">
+                  Capacity:
+                </span>
+                <EditableField
+                  id={`${venue.id}-cap-deck`}
+                  value={capacityDisplay}
+                  onChange={(raw) =>
+                    onSave({ capacity: parseIntOrNull(raw) })
+                  }
+                  variant="neighborhood"
+                  placeholder="(cap)"
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex items-center gap-1.5">
-          <span className="font-bold text-[15px]">
-            {venue.name || "(untitled)"}
-          </span>
-          {venue.website_url && (
+          <EditableField
+            id={`${venue.id}-url-deck`}
+            value={venue.website_url ?? ""}
+            onChange={(u) => onSave({ website_url: u.trim() || null })}
+            variant="address"
+            placeholder="(no website)"
+          />
+          {venue.website_url ? (
             <a
               href={venue.website_url}
               target="_blank"
               rel="noreferrer"
               className="text-muted-foreground hover:text-primary"
+              title="Open website"
             >
               <ExternalLink className="h-3 w-3" />
             </a>
-          )}
-        </div>
-        <div className="text-[11.5px] text-muted-foreground mt-1.5 leading-snug">
-          {meta || "-"}
+          ) : null}
         </div>
       </div>
       <div className="px-3 py-5">
@@ -570,14 +776,20 @@ function DeckRow({
           onOpen={onOpenPhotos}
         />
       </div>
-      <div className="px-3 py-5 text-[12.5px] leading-relaxed text-foreground/90">
-        {venue.venue_overview ? (
-          venue.venue_overview
-        ) : (
-          <span className="text-muted-foreground italic">
-            Summary will appear after compile.
-          </span>
-        )}
+      {/*
+        Phase 4.10.2-port: editable overview via <EditableTextarea>. Replaces
+        the read-only render of venue_overview. The textarea is uncontrolled
+        (defaultValue keyed on venue.id) so optimistic state updates from
+        debounceSave don't fight the producer's caret.
+      */}
+      <div className="px-3 py-5">
+        <EditableTextarea
+          id={`${venue.id}-overview-deck`}
+          value={venue.venue_overview ?? ""}
+          onChange={(t) => onSave({ venue_overview: t })}
+          placeholder="Summary will appear after compile."
+          rows={6}
+        />
       </div>
     </div>
   );
@@ -613,13 +825,21 @@ function PhotoSlotRow({
 
   const slotIds = [1, 2, 3, 4].map((n) => `${venueId}-slot-${n}`);
 
+  // Post-4.10.4 hot patch round 17: switched strategy from
+  // verticalListSortingStrategy to rectSortingStrategy. The slots are
+  // laid out in a `grid grid-cols-4` (horizontal row, or 2x2 grid on
+  // narrow widths), not a vertical list. verticalListSortingStrategy
+  // computes the shift animation for vertical-only motion, so dragging
+  // a photo sideways gave no visual feedback and the drop hit zones
+  // felt broken. rectSortingStrategy handles arbitrary grid arrangements
+  // and animates neighbors in whichever direction the drag is heading.
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragEnd={onDragEnd}
     >
-      <SortableContext items={slotIds} strategy={verticalListSortingStrategy}>
+      <SortableContext items={slotIds} strategy={rectSortingStrategy}>
         <div className="grid grid-cols-4 gap-2">
           {[1, 2, 3, 4].map((slotNum) => {
             const photo = photos.find((p) => p.slot === slotNum);

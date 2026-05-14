@@ -1170,8 +1170,8 @@ export type Database = {
           last_touched_at: string
           live_dates: string | null
           name: string
+          pipeline_error: string | null
           project_id: string | null
-          research_error: string | null
           sheet_storage_path: string | null
           status: string
           updated_at: string
@@ -1195,8 +1195,8 @@ export type Database = {
           last_touched_at?: string
           live_dates?: string | null
           name: string
+          pipeline_error?: string | null
           project_id?: string | null
-          research_error?: string | null
           sheet_storage_path?: string | null
           status?: string
           updated_at?: string
@@ -1220,8 +1220,8 @@ export type Database = {
           last_touched_at?: string
           live_dates?: string | null
           name?: string
+          pipeline_error?: string | null
           project_id?: string | null
-          research_error?: string | null
           sheet_storage_path?: string | null
           status?: string
           updated_at?: string
@@ -1304,6 +1304,10 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_producer_or_admin: { Args: never; Returns: boolean }
+      reset_scout_for_deck_regenerate: {
+        Args: { target_scout_id: string }
+        Returns: undefined
+      }
       start_over_scout: { Args: { target_scout_id: string }; Returns: Json }
     }
     Enums: {

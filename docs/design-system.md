@@ -125,7 +125,7 @@ function Field({ label, required, children }: {
 }) {
   return (
     <div className="space-y-2">
-      <Label className="text-[12px] font-mono font-bold uppercase tracking-wider text-foreground">
+      <Label className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
         {label}
         {required && <span className="ml-1 text-primary">*</span>}
       </Label>

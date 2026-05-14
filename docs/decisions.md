@@ -2,6 +2,312 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.10.6-port (URL acquisition fallbacks + deck flow polish)
+
+### URL extraction fallback layered onto Claude's tool output
+
+Producer-visible problem: every Phase B-sourced venue was landing in `vs_candidate_venues` with `website_url=NULL`, even for well-known venues whose URLs were clearly in Claude's `web_search_tool_result` blocks. Root cause: `FILL_SYSTEM` / research SYSTEM instructs Claude not to use listing-database URLs as the website_url output field, so Claude was conservatively returning null on the tool call even when usable URLs were visible in the search results.
+
+Two-stage fix, both as post-emission layers (per `feedback_tool_choice_collapse` memory rule — schema descriptions + post-emission sanitization are the levers, not SYSTEM):
+
+1. **`extractWebSearchResults(content)` in `_shared/anthropic.ts`** walks the response content blocks and pulls every `{ url, title }` from `web_search_tool_result` blocks.
+
+2. **`findVenueWebsite(app, { name, address, city })` in `_shared/anthropic.ts`** runs a fresh, focused Claude call per venue with `web_search` + a tight "find the official website URL for {name} at {address}" prompt. Returns the first non-listing-database URL via `sanitizeWebsiteUrl` validation. Used as Phase B's URL fallback after the initial `validateWebsiteUrls` returns null.
+
+Phase A (per-row enrichSheetVenue) and `vs-compile-summaries` Pass 1 use the cheaper `findBestSearchResultUrl(venueName, results)` heuristic that scores results by token overlap with the venue name; these calls are already venue-scoped per-row so the broad-match risk is lower. Phase B uses the more expensive targeted approach because its batch `submit_research` returns a single mixed pool of search results.
+
+### Schema tightening on `submit_research.name`
+
+Producers were seeing venue names polluted with descriptive suffixes ("Vacant Ground-Floor Retail - 10250 Santa Monica Blvd", "Platform - West Hollywood Flagship Storefront"). Tightened the `name` field description to explicitly forbid descriptive suffixes with concrete BAD examples, telling Claude to use the venue's brand / property name and fall back to address-only for unbranded vacancies. Those descriptive bits belong in `venue_type` / `key_features`.
+
+### `address` + `neighborhood` added to `FILL_TOOL`
+
+Phase A wasn't filling addresses for sheet rows where the producer left address blank — because `FILL_TOOL` didn't have an `address` field at all (only `venue_type`, `website_url`, `size_sq_ft`, `capacity`, `key_features`, etc.). Common case: producer enters an address-style venue name like "238 N Canon Drive" and leaves the address column blank. Added `address` + `neighborhood` to FILL_TOOL with descriptions that explicitly call out the address-as-name case + the brief's city as context. Patch guards in Phase A + Pass 1 only fill when the existing row value is null/empty so producer-entered values remain authoritative.
+
+### Post-deck-generation flow: open in new tab, return to Deck Prep
+
+Previously: success on Generating navigated to /brief (the completed-scout landing). Changed to: open the just-generated deck's `edit_url` in a new tab via `window.open(..., "_blank", "noopener,noreferrer")`, then navigate back to /deck/prep. Producer can immediately review the deck in Drive AND has the Deck Prep matrix in front of them to regenerate / tweak. `handledTerminalRef` guards against duplicate Realtime / polling deliveries. `initialDeckCountRef` snapshot prevents a regenerate from re-opening the prior deck when the deck count is unchanged.
+
+### Regenerate-from-Deck-Prep fix: atomic state reset via RPC
+
+Previously clicking Generate Deck on a scout with `current_step='completed'` silently no-opped vs-generate-deck's idempotency guard and Generating.tsx then reopened the prior deck. Frontend reset was a read-then-write on `brief_data` which has a TOCTOU race. Replaced with new `reset_scout_for_deck_regenerate(target_scout_id)` Postgres RPC (migration `20260514100000`) that does `brief_data - 'deck_generation_started_at'` atomically in a single SQL statement, alongside `current_step='deck_prep'` + clear failure state. SECURITY INVOKER; GRANT EXECUTE TO authenticated.
+
+### `updateSlidesPosition` per-slide moves for venue slide ordering
+
+Slides API rejected a single `updateSlidesPosition` request with all duplicates listed in desired-final order: "The slides should be in presentation order, with no duplicates." The parameter requires `slideObjectIds` to match current presentation order — it relocates a contiguous already-ordered block, it doesn't reorder. Fixed by emitting one `updateSlidesPosition` per slide (a single-element list is trivially in order). `insertionIndex = FRONT_MATTER_SLIDES + K` for each slide's target final position. Slides API processes batchUpdate requests sequentially, so cumulative result = canonical interleaved-forward layout `[V1_detail, V1_fp, V2_detail, V2_fp, ...]`.
+
+### Slide 2 ALL CAPS via scoped pre-pass
+
+`{{client_name}}`, `{{event_name}}`, `{{event_live_date}}`, `{{event_location}}` need to appear UPPERCASE on slide 2 specifically (producer's deck-design preference) but keep original casing on other front-matter slides. Did this by inserting scoped `replaceAllText` requests with `pageObjectIds: [slide2Id]` at the head of `globalReqs`, with uppercased values. They run BEFORE the case-preserving global pass; once slide 2's tokens are replaced, the global pass can't find them there anymore but still touches the other slides.
+
+### Photo dnd: `rectSortingStrategy` (was `verticalListSortingStrategy`)
+
+Photos render in a `grid grid-cols-4` layout, not a vertical list. The vertical-only sort strategy was suppressing neighbor animations on horizontal drags, making the interaction feel broken even though the underlying `swapPhotoSlots` persistence was working. `rectSortingStrategy` handles arbitrary grid arrangements.
+
+### "Contact the team" button removed from deck error states
+
+The four deck-side error configs (`TEMPLATE_COPY_FAILED`, `SLIDES_API_FAILED`, `NO_VENUES_INCLUDED`, `UNKNOWN`) rendered a "Contact the team" ghost button that routed back to `/deck/prep` — same destination as the primary "← Back to Deck Prep" button. Misleading affordance; the label promised a contact path that didn't exist. `Cfg.secondaryLabel` + `secondaryHref` are now optional; help-text bullets mentioning team contact remain as informational guidance.
+
+### vs-generate-deck success path CAS guard
+
+Mirror of the `writeFailure` CAS pattern from 4.10.5-port. Two parallel invocations that both succeed would otherwise both append to `generated_decks` with a TOCTOU window on the `freshExisting` re-read. The success UPDATE now uses `.eq("current_step", "deck_prep")` so only the first-to-complete wins the append. CAS-loss path logs warn + leaves the orphaned in-Drive deck behind (not fatal; producer sees a working deck either way).
+
+### Carry-forward debt: duplicate-invocation race in vs-research-venues
+
+Smoke testing revealed that vs-research-venues can be invoked twice in quick succession (likely React 18 strict-mode dev double-mount or Realtime hiccup) and both invocations execute Phase A + Phase B independently. The 4.10.5-port `writeFailure` CAS guards mask the symptom (failure-overwrites-success) and 4.10.6-port's success CAS on vs-generate-deck masks success-overwrites-success — but both invocations still burn Claude credits. Proper fix is a Postgres advisory lock or a kickoff CAS on `brief_data.research_started_at`. Deferred to cutover follow-up.
+
+### Carry-forward debt: pause_turn continuation cap is conservative
+
+`MAX_PAUSE_CONTINUATIONS = 1` in `callClaude` keeps long-running calls bounded but means some legitimate multi-turn workloads will fail with "no structured output" if they need more than one continuation. If we see this in prod logs, the next move is to raise the cap to 2-3 with a per-call wall-clock budget rather than a continuation-count cap.
+
+## Phase 4.10.5-port (AI surface stabilization)
+
+### Model + web_search pivot: `claude-sonnet-4-6` + `web_search_20250305`
+
+Smoke testing 2026-05-13 surfaced `server_tool_uses=0` across every Phase A enrichment + Phase B sourcing call on the prior `claude-sonnet-4-5 + web_search_20250305` combo. Anthropic docs confirm the newer `web_search_20260209` tool (with dynamic filtering) lists Claude Sonnet 4.6, Opus 4.6+, and Mythos as supported models — 4.5 isn't on the list. Combined with web_search being enabled at the org level (Anthropic Console), pivoting to **4.6 restored web_search invocation**.
+
+Settled on the OLDER `web_search_20250305` tool version with the NEW model (4.6) after smoke showed the newer `20260209` dynamic-filter tool was billing 80k+ tokens per Phase A call (each web_search invocation runs a code_execution sandbox internally and bills cumulative context across multi-turn rounds). The simpler 20250305 tool with 4.6 invokes web_search reliably AND keeps per-turn token bloat bounded.
+
+### `pause_turn` continuation in `callClaude`
+
+Anthropic's server-tool loop (web_search, web_fetch, code_execution) can return `stop_reason=pause_turn` when a long-running turn hits an internal pause point. The caller is expected to send another request with the prior assistant content appended as a message; Claude continues the turn. Without this, callers that emit a custom tool after multi-step web_search research saw "no structured output" failures because the tool_use block hadn't emitted yet.
+
+`_shared/anthropic.ts callClaude` now wraps a continuation loop. On `stop_reason="pause_turn"`, the wrapper appends the assistant's content blocks as the next message and re-calls. Accumulates content + usage across cycles. Capped at `MAX_PAUSE_CONTINUATIONS = 1` to keep total latency bounded under the app-level WORK_TIMEOUT_MS.
+
+### `writeFailure` CAS guards prevent failure-overwrites-success
+
+Smoke testing surfaced a race: two parallel invocations of vs-research-venues (e.g., from React 18 strict-mode dev double-mount) both run Phase A + Phase B; first succeeds (writes `current_step='sourcing_report'`), second hits a different code path and fails (was writing `status='failed' + pipeline_error=...`, overwriting the first's success state).
+
+All three AI edge functions now CAS via `.eq("current_step", <expected_pre_success_step>)` on the failure UPDATE:
+- `vs-research-venues.writeFailure`: `.eq("current_step", "researching")`
+- `vs-compile-summaries.writeFailure`: `.eq("current_step", "compiling")`
+- `vs-generate-deck.failWithCode`: `.eq("current_step", "deck_prep")`
+
+Failure no-ops when another invocation has already advanced past the pre-success step.
+
+### Timeout sizing for Supabase Pro plan
+
+Supabase Edge Function wall clock is plan-level (150s Free, 400s Pro) and is NOT settable via `config.toml`. After the project upgraded to Pro, settled on:
+
+- `WORK_TIMEOUT_MS = 360_000` (40s buffer under Pro's 400s cap so `writeFailure` UPDATE lands before any platform kill)
+- `IN_FLIGHT_GRACE_MS = 360_000` (matched so re-invoke idempotency window covers the upper bound of in-progress work)
+- Phase B `web_search max_uses = 4`
+- Phase A + Pass 1 `web_search max_uses = 2`
+- `MAX_PAUSE_CONTINUATIONS = 1`
+
+`supabase/config.toml` documents the plan-level setting + the Free-plan fallback sizing recipe.
+
+### Trim `brief_data` JSON dump from Claude user messages
+
+`Brief: ${JSON.stringify(scout.brief_data ?? {})}` was dumping the entire `brief_data` JSONB into every Claude call, including internal state flags (`research_started_at`, `compile_started_at`, `deck_generation_started_at`, `uploaded_files`). Pure noise to the model and inflated input token count.
+
+Replaced with selective field extraction in three call sites (`buildFillUserMsg`, vs-research-venues Phase B, vs-compile-summaries briefBlock): `expected_guest_count` + `brief_data.notes` as named fields, rest of brief_data dropped. ~30-70% input token reduction per call.
+
+### Placeholder string sanitizer
+
+After tightening FILL_TOOL schema to make `key_features` + `recommendations` + `considerations` required with minItems, Claude started filling arrays with literal `<UNKNOWN>` / `TBD` / `N/A` / `None` / `TODO` placeholder tokens when it didn't have real data — satisfying the schema structurally while signaling "I don't know."
+
+Two-layer fix:
+1. **Schema-description layer** (primary, per `feedback_tool_choice_collapse` rule): tool descriptions + per-field descriptions + user-message trailer all explicitly forbid placeholder tokens with a list of common offenders.
+2. **Post-emission sanitizer** (defense): new `isPlaceholderString` + `stripPlaceholders` in `_shared/venueTypes.ts`. Pattern: strip whitespace + punctuation, lowercase, compare against a set of placeholder tokens (unknown, tbd, na, none, null, notavailable, notprovided, todo, pending, etc.). 32-char length cap so real short observations don't accidentally match. Wired into Phase A patch builder, Phase B venue sanitize, and vs-compile-summaries Pass 1 patch builder.
+
+If the cleaned array is empty post-strip, skip the write so the row keeps its null state rather than getting a junk-filled column.
+
+### Drop forced `tool_choice` on Phase A
+
+Smoke testing showed Phase A `fill_venue` calls collapsing to out=94-115 minimal payloads under the schema description hardening + forced `tool_choice: { type: "tool", name: "fill_venue" }`. Same pattern Phase B saw (4.10.3 retrospective). Mirror Phase B's fix: changed Phase A's `tool_choice` to `{ type: "auto" }`. `FILL_SYSTEM` still says "fill structured fields" (strong directive); auto mode lets Claude use web_search freely before committing to the tool with real findings.
+
+## Phase 4.10.4-port (pre-cutover smoke polish)
+
+### Rank hidden in UI; column stays in DB
+
+Smoke walk 2026-05-13 surfaced rank as visual noise (producer doesn't trust the 0-100 number day-to-day; the source pill + sort tier already conveys the relevant grouping). Decision: hide rank from the matrix render but keep the DB column + the tool emission paths (FILL_TOOL, SUBMIT_RESEARCH) + the patch-write paths (vs-compile-summaries, vs-research-venues, vs-parse-sheet). Reversible by adding the prop back to `VenueIdentityStack` and dropping `<RankDisplay />` back into the stack. Locked 2026-05-13.
+
+### Secondary sort flipped to alphabetical-by-name
+
+With rank no longer the visible signal, the rank-desc tiebreaker after `SOURCE_PRIORITY` tier had no anchor to the producer's mental model. Flipped to `name.localeCompare` with `sensitivity: "base"` (case-insensitive) + `numeric: true` (so "Studio 10" sorts after "Studio 2", not before). Within-tier ordering is now stable and producer-readable.
+
+### Photo upload column removed from Shortlist; photos live on Review only
+
+Producer-flow simplification: photos are a deck-prep concern, not a shortlist concern. The Shortlist column added affordance noise + made the matrix wider (1740 -> 1580 in 4.10.2 -> 1450 in 4.10.4). Drop the column, drop the modal, drop the photoCounts state. Review.tsx keeps the full photo grid + PhotoUploadModal per 4.7.1-port. VS Pro divergence: VS Pro kept both surfaces; HQ collapses to one.
+
+### Notes/Feedback editor added to Review Selects
+
+VS Pro never surfaced `vs_candidate_venues.notes` for producer edit (notes always landed via the SourcingReport / Shortlist NotesModal). Phase 4.10.4 adds a per-row textarea on Review bound to the same column via debounceSave. Already factored into the venue_overview prompt as `Producer notes: ${v.notes ?? "(none)"}` on vs-compile-summaries:452 (so the producer's last-minute context shapes Pass 2 output without ever landing on the deck itself). Coral descriptor + a title-descriptor sentence make the contract explicit ("not displayed on the deck but is considered in generating the Overview paragraph").
+
+### Confirm + Compile flush widened to include `notes`
+
+`confirmCompile` already flushes pending debounce timers before navigating to /compiling. The flush payload's column list now includes `notes` so a producer who types into the textarea, hits Confirm immediately, and races the 600ms debounce doesn't lose the edit (the optimistic state already updated, but the DB UPDATE hadn't fired yet). Matches the pattern for the other inline-edit fields on Review.
+
+### Venue Overview prompt tuned via schema descriptions; OVERVIEW_SYSTEM untouched
+
+Per memory rule `feedback_tool_choice_collapse`, system prompts on the venue-scout AI surfaces stay frozen. Tuning levers are (1) `OVERVIEW_TOOL.description`, (2) `OVERVIEW_TOOL.input_schema.properties.venue_overview.description`, (3) `maxLength`. Phase 4.10.4 swaps the description from "5-8 sentences" to "3-4 sentences, ~80 words" and embeds positive examples from Jimmie's reference set (standout-features snippets + three full overview paragraphs). `maxLength: 600` is a soft signal but Claude generally honors it. If smoke output stays too long, the next lever is dropping maxLength to 500/450 OR adding more concrete examples — NOT editing the system prompt.
+
+### Compiling + Generating loading copy refined
+
+Compiling: "~ 60 seconds" replaces "30 to 60 seconds" (real-world variance from smoke testing closes around the 60s mark; the producer reads the lower end as a commitment, not an estimate). Generating: "2-5 minutes" replaces "1 to 2 minutes" (Google Slides API + photo-insert latency runs longer than the VS Pro source's optimistic estimate). Both updates also resolve copy ambiguities surfaced during smoke.
+
+### Deck Prep bottom nav: venue-name list replaces slide count
+
+The "X slides will be generated" string was redundant with the in-page slide tally above the matrix. Replaced with a bulleted list of each INCLUDED venue's name (in pitched/order sequence) underneath a bumped "X Venues" count. The list scrolls internally (max-h-40 + overflow-y-auto) when long, so the floating-nav footprint stays predictable. Producer can now confirm at-a-glance which venues are going into the deck without scrolling the matrix.
+
+### Deck Prep notes consolidated above the table
+
+The four asterisk-prefixed amber pills below the table required scrolling past the matrix to read. Consolidated into a single bulleted card above the table (white text on bg-input, coral bullet markers). Copy preserved verbatim; the visual restructure is the only change. Below-table block deleted.
+
+### Deck Prep cell line-breaks for neighborhood / size / capacity
+
+VS Pro rendered these three meta fields inline with `·` separators in the venue summary cell. Producer feedback during smoke: hard to scan, harder to edit because the contenteditable spans bleed into each other on narrow widths. Switched to flex-col with explicit `Field:` labels. Null fields skip their row entirely (no orphan "Neighborhood:" line); when all three are null, the stack container itself doesn't render. VS Pro divergence. Editing surfaces stay (Review owns the canonical input path; DeckPrep allows on-the-fly tweaks).
+
+## Phase 4.10.3-port (URL validation + Recs/Considerations tuning + 3-tier sort + venue_type popover + pipeline_error rename + storage reconciliation + AI surface consolidation)
+
+### AI surface consolidation: sheet enrichment moves into vs-research-venues
+
+Smoke testing 2026-05-13 surfaced a structural collapse pattern: forced `tool_choice: {type: "tool", name: "fill_venue"}` combined with server-side `web_search_20250305` caused Claude (both 4-6 and the 4-5 pivot) to emit empty tool calls (out=113-139 tokens, server_tool_uses=0) on every per-row sheet enrichment. Same shape collapse on vs-research-venues' submit_research call: out=2304-2610 but server_tool_uses=0, returning venues with null URLs from training knowledge.
+
+Locked option (2026-05-13, Path B): consolidate all AI venue work into `vs-research-venues`. New shape:
+
+- **vs-parse-sheet** becomes parse-only. Strips the per-row Claude fill pass. Returns `{ count }`. Sub-second response. Producer sees Sheet Upload -> Done immediately.
+- **vs-research-venues** runs two phases inside the existing `EdgeRuntime.waitUntil`:
+  - **Phase A (parallel):** SELECT `vs_candidate_venues WHERE scout_id=? AND source='sheet'`. For each row, `callClaude(fill_venue + web_search, model=claude-sonnet-4-5)`. Per-row patch guards prevent overwriting producer values. Per-row failures tolerated.
+  - **Phase B (parallel):** Existing sourcing pattern -- `callClaude(submit_research + web_search)` for net-new venues.
+  - Both kick off inside `work()`; Phase A awaits its loop, Phase B awaits its Claude call + INSERT, then the function awaits Phase A before the final scout state flip.
+- **vs-compile-summaries Pass 1** unchanged. Stays as the backstop for any rows that miss Phase A (compile is always a second AI surface that produces overviews).
+
+Why this fixes the collapse: per-row enrichment is no longer a synchronous parse-blocker. The sheet upload returns instantly. The "Researching" page handles both new-venue sourcing AND existing-row enrichment under a single producer wait state. Phase A's per-row calls are still subject to the same forced-tool + web_search collapse risk, but they at least live in `EdgeRuntime.waitUntil` (not blocking the user-visible upload) and the failures fall through to vs-compile-summaries Pass 1 backfill. The architectural win is one Claude surface for AI venue work, one web_search budget posture, one validation layer. SheetUpload's "Enriching N/M" UI was dropped (no Claude work happening at upload time now).
+
+Cost / latency tradeoffs: Sheet upload is now sub-second (was 30-90s for 5-15 rows). Researching is longer (was ~60-90s for sourcing alone; now ~60-120s for parallel sourcing + sheet enrich at N/5 chunks). Net producer wall-time unchanged or slightly faster (sheet wait moved to research wait).
+
+### Sheet parser fills website_url + capacity (was dropping both)
+
+Pre-4.10.3 the VS Pro `parse-sheet` pick chain extracted name + neighborhood + address + venue_type + size_sq_ft + key_features. `website_url` and `capacity` columns were dropped at parse time even when the producer entered them, then re-derived by the AI enrichment pass. Fix: add both to the pick chain. URL passes through `sanitizeWebsiteUrl` (catches search pages + listing-DB bare homepages) but no HEAD check at parse time (producer input is trusted; HEAD-checking hundreds of rows would slow parse to a crawl). Keyword lists also expanded for natural producer header variants -- `borough`, `hood`, `web`, `homepage`, `pax`, `headcount`, `seats`, `square footage`, `feet`, `amenities`, `highlights`, `description`, etc.
+
+
+
+### Final pre-cutover polish phase
+
+11 items bundled because every one is small (under 50 lines) and they all share validation surface (smoke testing 2026-05-13 + carry-forward debt from 4.5 / 4.7.2 / 4.10.2). Shipping as one squash keeps the rename pass (`research_error` -> `pipeline_error`, 7 file edits) atomic so no commit in the history compiles with a half-renamed column.
+
+### `research_error` -> `pipeline_error` column rename
+
+The column was added at 4.5-port for `vs-research-venues` failures. 4.7.2-port (`vs-compile-summaries`) and 4.8.2-port (`vs-generate-deck`) reused the same column for compile + deck errors without renaming. Name has been misleading since 4.7.2; this rename brings it in line with actual usage as the single AI-pipeline error channel. Plain `ALTER ... RENAME COLUMN` preserves all existing values. Two migrations: (1) the column rename; (2) `CREATE OR REPLACE FUNCTION start_over_scout` to clear `pipeline_error` instead of `research_error`. Cross-cutting rename touches 3 edge functions + 4 page files; all done in the same squash so the build stays green.
+
+### URL HEAD validation (post-emission gate against AI fabrication)
+
+Smoke testing 2026-05-13 surfaced URL fabrication: Claude returns LoopNet / Crexi listing URLs with invented path segments that 4xx or soft-404 to a homepage. The existing `sanitizeWebsiteUrl` catches search pages + listing-DB bare-homepage URLs but not fabricated URLs that match the syntax pattern. Locked option: new `_shared/urlValidation.ts` wraps `sanitizeWebsiteUrl` with a HEAD-request check + redirect-host + redirect-path comparison. 4xx -> reject. 5xx + network errors -> keep (transient; producer can edit). Host mismatch -> reject (soft 404). Final path significantly shorter than request path -> reject (listing-gone redirect to root). 5s timeout per URL. Parallel via `Promise.all` inside vs-research-venues (~2-3s additional latency for 15-20 URLs); per-row sequential inside vs-parse-sheet enrichOne + vs-compile-summaries Pass 1 (already chunked-parallel at the venue level, so per-chunk latency stays bounded). Memory rule `feedback_tool_choice_collapse`: AI output quality lives on schema descriptions + post-emission validation. This is the post-emission layer.
+
+### Recommendations + Considerations schema tuning (length cap + positive examples)
+
+Carry-forward from continued smoke testing: bullets too long. Tuning lives on schema descriptions in both `FILL_TOOL` (`_shared/venueFill.ts`) and `SUBMIT_RESEARCH` (`vs-research-venues/index.ts`). Added: per-array description ("2-4 short venue-specific observations ... 10-15 words"), per-item description with concrete examples lifted from Jimmie's reference set, `maxLength: 150` on recommendations / `maxLength: 200` on considerations. `maxLength` is a soft signal in JSON Schema; Claude generally honors but doesn't strictly enforce, so set generously. Memory rule `feedback_tool_choice_collapse` reaffirmed: no system-prompt edits. The two tool definitions stay independent (vs-research-venues has unique fields like `derived_columns`); inline duplication is fine over a full extraction at this stage.
+
+### Website_url schema description tuning (lifted from URL-quality hot patch lesson)
+
+Companion to HEAD validation. Updated `website_url` description in both `FILL_TOOL` and `SUBMIT_RESEARCH` to "Must be a verbatim URL from a web search result. Examples: ... Do NOT fabricate URLs or guess listing IDs." The "Do NOT fabricate" phrasing is a positive-only redirect framed against the verbatim-from-search-results positive lever (no forbidden-URL list; same posture as the URL-quality hot patch).
+
+### 3-tier source priority sort (manual -> sheet -> research)
+
+Carry-forward extension of the 4.10.2-port 2-tier (manual top / rest mixed) sort. Smoke testing surfaced that the producer wanted uploaded sheet rows visually separated from AI-research rows. New `SOURCE_PRIORITY` constant in `src/lib/venue-scout/format.ts` (single source of truth shared by SourcingReport + Shortlist). Within each tier, rank desc with nulls last. Unknown / null source falls back to lowest priority (sorts to the bottom). DeckPrep stays on producer-controlled dnd-kit order (4.6-port lock; producer-controlled order is the entire point of the DeckPrep surface).
+
+### Per-venue enrichment progress (static post-completion count)
+
+Locked option (b): SheetUpload reads `enriched_count` + `count` from the `vs-parse-sheet` response and renders "N / M enriched" when N < M. When all rows enriched (N === M), no ratio shown (redundant). Zero migration cost; ~10 line frontend addition. Realtime sub-progress option (publication add for `vs_candidate_venues` + Realtime subscription) deferred -- not worth the schema bloat for an enrichment pass that typically completes in 30-60s. If sheet sizes routinely run 60s+ in real use, revisit in a future polish phase.
+
+### venue_type inline editing UX (popover with checkboxes)
+
+4.10.2-port collapsed the manual-row `<input>` for type into the shared `<VenueIdentityStack>` and the producer's path to set `venue_type` disappeared on manual rows. Per port-plan locked "all rows editable except recs/considerations": type editing should be available on all rows (manual + sheet + research). UX: click the type-pills cell -> popover with 8 canonical types as toggleable checkboxes; toggle returns a new `CanonicalType[]`; the caller serializes to `${types.join(" / ")}` or null and persists via debounceSave. New `TypeTogglePopover` primitive in `matrix/primitives.tsx` (shadcn `Popover` was already in the repo). Replaces static type-pills in col3 on SourcingReport + Shortlist. DeckPrep doesn't render type pills today; no change.
+
+### VS storage policy reconciliation (open-authenticated, match table RLS)
+
+Pre-4.10.3 state: `briefs` + `sourcing_sheets` + `vs_venue_photos` buckets all gated `is_producer_or_admin()` while the vs_* table RLS is open-authenticated per port plan § 8.6. Member-tier users could read/write vs_* tables but couldn't upload files, breaking the "collaborative agency-wide workflow" the port plan locks. Locked option: relax storage policies to authenticated; matches table RLS posture. `docs/auth-model.md` updated in the same squash so the role-tier definitions reflect "members can use Venue Scout end-to-end." `vs_venue_photos` collapsed from 4 split policies to a single `FOR ALL` policy. `IF EXISTS` on the DROPs handles any Studio-side rename drift.
+
+### design-system § 3 Field label color (text-foreground -> text-primary)
+
+Doc-implementation drift. Doc said `text-foreground`; every implementation (TS NewRoleDetails + RoleSettings + 4.3-port Brief + 4.9-port ScoutSettings) used `text-primary` (coral). Single-line doc fix to match the actual canonical implementation.
+
+### Cutover plan update (cherry-pick before hard reset)
+
+Per port plan § "Done when" rewrite: cherry-pick the must-carry set from main onto `vs-port-fresh` before the hard-reset. Known must-carry: `f24d3f5` (2026-05-13 TS Final Review packet template + layout fixes + email-as-cover-letter fallback). Everything else on main since `dd38577` is the archived failed-Phase-4 stack + URL-quality hot patches, which we DISCARD on cutover. No conflicts expected for must-carry items since TS files are disjoint from VS port files. Verification check is `git show --stat <new-sha>` vs `git show --stat <source-sha>`, not the naive `git log main --not vs-port-fresh --oneline` empty check (which is impossible by design since vs-port-fresh branched from `dd38577`, has archived commits on main below it, and cherry-picks produce new SHAs). Dry-run 2026-05-13 confirmed `git cherry-pick f24d3f5` applies cleanly (2 files, 184+/17-, no conflicts).
+
+### Side-by-side reconciliation pass (small fixes inline, larger items deferred to 4.10.4)
+
+Final pre-cutover walk of VS Pro vs HQ surface-by-surface. Locked option: fold small fixes (5 line change or less) inline as part of 4.10.3 squash; defer larger items to 4.10.4 with logged rationale. Expected intentional divergences (page wrapper widths, Alignment column gone, Source pills present, inline editing extensions, Settings page, ErrorState debug detail) stay as-is per port-plan locks; not regressed. Walk surfaced no unknown divergences that block cutover.
+
+## Phase 4.10.2-port (matrix UX overhaul: inline editing + Source pill + Alignment column removal + manual-at-top sort)
+
+### Three matrix changes bundled
+
+Inline-editing extension + Source pill + column rearrange all edit the same four files (SourcingReport, Shortlist, DeckPrep, matrix/primitives.tsx). Shipping them as one squash keeps the diff coherent and lets the new `<VenueIdentityStack>` primitive land alongside the column-rearrange that needs it. Splitting would require either a placeholder Alignment column on the first ship or staging the primitive twice; both are worse.
+
+### Alignment column removed from UI; `derived_attrs` jsonb stays in DB
+
+Deliberate divergence from VS Pro per Jimmie's 2026-05-12 producer-smoke call. The Alignment column took up ~200px of horizontal real estate for a signal producers don't act on day-to-day; rank already tells them the same thing in less space. `vs_candidate_venues.derived_attrs` jsonb persists in the schema (deck generation may consume it; cleanup deferred to cutover). Both SourcingReport + Shortlist still `select(derived_attrs)` and hold the `columns` state from `vs_scouts.derived_columns`; the data is just no longer rendered. `feedback_port_fidelity` exception applies (port-plan-locked frontend change per § 9 4.10.2 entry, expanded 2026-05-13).
+
+### `EditableVenueName` generalized to `EditableField` with variants
+
+The 4.6-port contenteditable was name-only. 4.10.2 needs the same shape for address + neighborhood across all matrix rows + DeckPrep's full venue summary. Generalized into `EditableField` with `name | address | neighborhood` style variants. `EditableVenueName` kept as a thin backward-compat wrapper so any future import outside the matrix continues to work. `EditableTextarea` added for DeckPrep's `venue_overview` (contenteditable handles single-line poorly for long text; `<textarea>` is right).
+
+### `VenueIdentityStack` (new primitive) replaces the col2 VStack
+
+Four-element vertical stack: name -> divider -> address (+ optional website link) -> divider -> rank -> source pill. Replaces the two-element `VStack` for the Venue|Address cell on SourcingReport + Shortlist. `VStack` stays untouched for the Neighborhood|Type column (still two-element). `RankDisplay` reused as-is inside the new stack (no sizing tweaks; the rank-bar at 50% width of the cell reads cleanly inside the narrower col2 widths 220 / 230).
+
+### `SourcePill` three-label palette with subtle color hints
+
+Three values map to three labels: `sheet -> "Uploaded"` (amber `bg-amber-400/10 text-amber-400`), `research -> "Sourced"` (muted `bg-input text-muted-foreground`), `manual -> "Manual"` (electric blue `bg-blue-400/10 text-blue-300`). Locked option (b) over a single-neutral palette: amber pulls producer attention to sheet rows that may have producer-entered values worth verifying, manual blue matches the ReferralPill convention from Talent Scout (design-system § 12 brand rule 8). Defensive fallback: any non-canonical / null source reads as "Manual". `SourcePill` is NOT rendered on DeckPrep -- producer is past sourcing-origin distinction by then.
+
+### Manual venues pin to the TOP of SourcingReport + Shortlist
+
+VS Pro's 4.6-port lift sorted manual venues to the BOTTOM. Producer's 2026-05-13 call: manual rows are the ones the producer added by hand and most wants to verify / fix; pinning them to the top mirrors the producer's attention order. Within each group (manual / non-manual), rank desc with nulls last. SourcingReport gains a new `useMemo` sort step (was SQL-`.order("rank")`-only); Shortlist's existing client-side sort inverts the manual-vs-rest comparator. Sheet vs research within the non-manual group stay mixed and sorted by rank only; producer disambiguates by Source pill color.
+
+### Features column is editable on ALL rows; Recs + Considerations stay AI-only
+
+Locked: drop `<Bullets>` for the Features column entirely. Use `<EditableTextarea>` with comma / semicolon / pipe / newline split-and-trim across both pages. Manual rows on Shortlist no longer have a special `ghost-input` branch -- one path, all rows. Recommendations + Considerations stay `<Bullets>` everywhere; per Jimmie's 2026-05-13 call: "recommendations and considerations should always be generated by AI." The visual asymmetry IS the affordance signal: Features looks like an input (textarea) so producer knows it's editable; Recs/Considerations look like bullets so producer knows they're AI-generated read-only.
+
+### Type pills stay static (canonical-type editing deferred to 4.10.3)
+
+Manual rows on Shortlist previously had a `<input>` for `venue_type` (free-text). 4.10.2 drops that input -- type column reads as static canonical-type pills for ALL rows, including manual. Manual rows with empty type now read as "-". Producer-edit of canonical types is a 4.10.3 polish item if at all (parseTypes-style multi-select would be the obvious shape, but the matrix's narrow Type subcell isn't a great surface for it).
+
+### DeckPrep gains a `debounceSave` helper + a new editable address field
+
+DeckPrep previously had only the row-order debounce (`orderTimer`); no per-field debounce. Added the same shape as Shortlist's existing `debounceSave` (600ms, optimistic, error -> toast + reload). Address surfaced as a new editable field in the venue summary stack (was hidden previously; producer only saw name + neighborhood + size + cap + website). Size + capacity inputs accept raw strings with unit suffixes ("25,000 sq ft" / "~500 cap") and coerce to int via `parseIntOrNull` at the save boundary so the in-memory Venue keeps its number shape.
+
+### Manual-row autofocus: signal-driven, not query-driven
+
+Shortlist's `addManualRow` previously focused the new row via `setTimeout(50ms) + document.querySelector('input[data-manual-name=...]')`. That only worked when manual rows rendered as `<input>` elements. 4.10.2 collapses manual rows into the same `<VenueIdentityStack>` everyone else uses; the focus path becomes a `lastManualId` state + `autoFocusName` prop -> EditableField's mount-effect calls `ref.current.focus()` once. Same producer outcome, no DOM-queries, no timer.
+
+## Phase 4.10.1-port (sheet upload AI enrichment)
+
+### Sheet upload enrichment is synchronous, not waitUntil
+
+vs-parse-sheet now does parse + insert + AI enrichment in a single call. SheetUpload awaits the full response before navigating. Locked over `EdgeRuntime.waitUntil` because the producer's mental model is "drop sheet -> wait -> ready." Backgrounding the enrichment would let the producer click Continue mid-enrichment and land on SourcingReport with half-enriched rows next to fully-enriched ones. One coherent waiting state on SheetUpload is cleaner than two-stage navigation with a Realtime subscription.
+
+### Parallel-chunked Claude calls, CHUNK_SIZE = 5
+
+15 venues sequentially at ~5s/call would be ~75s. All-parallel risks Anthropic rate-limit and concurrent-connection issues. Chunks of 5 with `Promise.all` inside, sequential across chunks, lands at ~15-20s for a 15-venue sheet and scales linearly to ~50-65s for 50 venues -- well under the Supabase Edge Function ~150s soft cap. Tuning lever in `supabase/functions/vs-parse-sheet/index.ts`: drop to 3 if rate-limit errors show up in logs.
+
+### Per-row Claude failures tolerated; never fail the whole call
+
+Each enrichOne() returns `{ enriched: boolean }`; failures are logged + counted but the loop continues. SourcingReport renders sheet-only data for failed rows next to fully-enriched siblings; no crashes. compile-summaries Pass 1 (extended condition below) catches the orphans at pitch time. Response includes `enriched_count` + `failed_count` for future telemetry / debug UI without grep'ing logs.
+
+### `derived_attrs` filled later, not at parse-sheet time
+
+`vs_scouts.derived_columns` doesn't exist until `vs-research-venues` runs (the next step in the producer flow). vs-parse-sheet has no way to know which derived-attr keys to fill, so the FILL_TOOL output's `derived_attrs` is dropped at parse time. vs-compile-summaries Pass 1 condition extended to fire for `source='sheet' AND derived_attrs IS EMPTY` so the backfill happens at compile time after the producer pitches.
+
+### `FILL_TOOL` + `FILL_SYSTEM` + `buildFillUserMsg` extracted to `_shared/venueFill.ts`
+
+Both vs-parse-sheet (4.10.1) and vs-compile-summaries Pass 1 (4.7.2 + 4.10.1) use the same Pass-1 prompt + schema. Pulling them into a shared module is single-source-of-truth: a future schema-description tweak (the `feedback_tool_choice_collapse` lever) lands once, applies everywhere. `OVERVIEW_TOOL` + `OVERVIEW_SYSTEM` stay local to vs-compile-summaries because only compile uses them.
+
+### Inline `canonicalizeMulti` in vs-parse-sheet (not lifted to venueTypes.ts)
+
+`_shared/venueTypes.ts` already exports a `canonicalizeMultiType` helper, but it returns the trimmed input on no-match (so the frontend matrix can render an unknown-type fallback pill). Server-side enrichment wants null-on-no-match so the patch-guard skips the venue_type write rather than persisting non-canonical strings. Different semantics; kept inline in vs-parse-sheet matching the existing inline copies in vs-compile-summaries and vs-research-venues. Consolidating these three inline copies into a strict `canonicalizeMultiTypeStrict` shared helper is queued for a future cleanup; out of scope for 4.10.1.
+
+### HQ port-side improvement over VS Pro
+
+VS Pro's `parse-sheet` does not enrich. Sheet rows land with sheet-only data and the matrix renders them next to fully-populated research rows. The producer's 2026-05-12 first-run test surfaced the gap; port plan § 9 locked enrichment as part of 4.10.1. Per `feedback_port_fidelity`, this is a port-plan-locked backend improvement, not a fidelity regression -- the exception the memory rule explicitly carves out.
+
+### Frontend `enriching` state is optimistic, not signal-driven
+
+SheetUpload toggles its visible status from "parsing" to "enriching" via a 3-second timer (`PARSING_TO_ENRICHING_MS`), not a Realtime signal from vs-parse-sheet. The function is usually past parse + insert by that point and into the Claude phase, so the producer sees a smooth Parsing -> Enriching -> Done sequence. A real progress channel (per-venue "enriched N/M") would need `vs_candidate_venues` added to `supabase_realtime` publication + a frontend subscription; deferred to 4.10.3 polish if producers ask for it.
+
 ## Phase 4.9-port (Scout Settings + full ErrorState + per-scout chrome)
 
 ### Settings page is HQ-from-scratch
@@ -20,9 +326,9 @@ History is preserved across resets. If a producer Starts Over after generating a
 
 Photos in `vs_venue_photos` bucket and sheets in `sourcing_sheets` bucket orphan after the table DELETEs run. Future cron sweep handles cleanup. Same precedent as 4.7.1-port photo storage and TS `candidate_attachments`. Trade-off: simpler RPC + faster Start Over vs slightly delayed reclaim of bucket bytes.
 
-### ErrorState surfaces `research_error` in a `<details>` section
+### ErrorState surfaces `research_error` in a `<details>` section (renamed to `pipeline_error` in Phase 4.10.3-port)
 
-Producer can expand the collapsed-by-default summary to see the raw `<CODE>: <message>` from `vs_scouts.research_error`. Copy + forward to team for triage. Not auto-expanded; subtle. Replaces the stub's "static message" with the actual error text. Same `research_error` column carries research / compile / deck errors today (rename deferred to 4.10.3 per the prior decision).
+Producer can expand the collapsed-by-default summary to see the raw `<CODE>: <message>` from `vs_scouts.pipeline_error` (column renamed from `research_error` in Phase 4.10.3-port). Copy + forward to team for triage. Not auto-expanded; subtle. Replaces the stub's "static message" with the actual error text. Single column carries research / compile / deck errors as of 4.7.2-port.
 
 ### Per-scout chrome (gear + step-through nav) on every action page, NOT on loading screens
 
@@ -104,7 +410,7 @@ VS Pro's DeckPrep has a stub `current_step='deck_generated'` write inside an unr
 
 ## Phase 4.7.2-port (Compiling + vs-compile-summaries)
 
-### Reuse `vs_scouts.research_error` column for compile errors
+### Reuse `vs_scouts.research_error` column for compile errors (renamed to `pipeline_error` in Phase 4.10.3-port)
 
 Adding a `compile_error` column would split the AI-pipeline failure channel into two physically-separate state machines for what is conceptually a single producer-facing concern ("something in the AI pipeline went wrong"). Keeping one channel means both Researching and Compiling pages subscribe to the same Realtime payload shape, ErrorStateStub keys (`research-timeout`, `compile-failed`) co-locate, and Scout Index can render a single "had a problem" indicator without joining two columns. The column rename to `pipeline_error` (more accurately describing the dual usage) is deferred to cutover doc sweep or 4.9-port polish; renaming is cheap, splitting later is not.
 

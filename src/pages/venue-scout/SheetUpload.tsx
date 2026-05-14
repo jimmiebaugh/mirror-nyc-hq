@@ -34,7 +34,16 @@ import {
   ScoutStepThroughNav,
 } from "@/components/venue-scout/ScoutChrome";
 
-type Status = "idle" | "uploading" | "parsing" | "done" | "error";
+// Phase 4.10.3-port: AI enrichment moved out of vs-parse-sheet and into
+// vs-research-venues (Phase A). The "enriching" state + 3-second timer
+// that toggled the UI from Parsing -> Enriching mid-call is gone; parse
+// is now a sub-second operation. Producer sees Parsing -> Done.
+type Status =
+  | "idle"
+  | "uploading"
+  | "parsing"
+  | "done"
+  | "error";
 
 const MAX_SHEET_SIZE_MB = 25;
 const ALLOWED_EXTS = new Set(["pdf", "xlsx", "csv"]);
@@ -106,9 +115,14 @@ export default function SheetUpload() {
       }
 
       setStatus("parsing");
-      const { data, error } = await supabase.functions.invoke("vs-parse-sheet", {
-        body: { scout_id: scoutId, storage_path: path },
-      });
+      // Phase 4.10.3-port: vs-parse-sheet is now parse-only (AI enrichment
+      // moved to vs-research-venues Phase A). The call typically returns
+      // in under a second; no need for the 4.10.1 "Parsing -> Enriching"
+      // toggle.
+      const { data, error } = await supabase.functions.invoke(
+        "vs-parse-sheet",
+        { body: { scout_id: scoutId, storage_path: path } },
+      );
       if (myGen !== parseGenRef.current) return;
 
       if (error) {

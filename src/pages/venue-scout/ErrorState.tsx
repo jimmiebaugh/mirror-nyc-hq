@@ -9,7 +9,7 @@
 //     UNKNOWN).
 //
 // HQ additions:
-//   - vs_scouts.research_error surfaced in a <details> "Debug detail"
+//   - vs_scouts.pipeline_error surfaced in a <details> "Debug detail"
 //     section below the help card when set. Producer can copy the
 //     <CODE>: <message> for triage. Collapsed by default per spec § 14.
 //   - Per-page chrome: <ScoutSettingsLink /> (right slot) and
@@ -50,8 +50,13 @@ type Cfg = {
   help: React.ReactNode;
   primaryLabel?: string;
   primaryAction: PrimaryAction;
-  secondaryLabel: string;
-  secondaryHref: (scoutId: string) => string;
+  // Secondary action is optional. Round-20: dropped on the four deck
+  // error configs where it had been wired to a misleading "Contact
+  // the team" button that just routed back to /deck/prep (no actual
+  // contact path). Help-text bullets keep the informational guidance
+  // about contacting the team where relevant.
+  secondaryLabel?: string;
+  secondaryHref?: (scoutId: string) => string;
 };
 
 const CONFIGS: Record<string, Cfg> = {
@@ -172,8 +177,6 @@ const CONFIGS: Record<string, Cfg> = {
     ),
     primaryLabel: "← Back to Deck Prep",
     primaryAction: "back-to-deck-prep",
-    secondaryLabel: "Contact the team",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/deck/prep`,
   },
   SLIDES_API_FAILED: {
     icon: "x",
@@ -189,8 +192,6 @@ const CONFIGS: Record<string, Cfg> = {
     ),
     primaryLabel: "← Back to Deck Prep",
     primaryAction: "back-to-deck-prep",
-    secondaryLabel: "Contact the team",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/deck/prep`,
   },
   NO_VENUES_INCLUDED: {
     icon: "warn",
@@ -206,8 +207,6 @@ const CONFIGS: Record<string, Cfg> = {
     ),
     primaryLabel: "← Back to Deck Prep",
     primaryAction: "back-to-deck-prep",
-    secondaryLabel: "Contact the team",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/deck/prep`,
   },
   UNKNOWN: {
     icon: "block",
@@ -223,8 +222,6 @@ const CONFIGS: Record<string, Cfg> = {
     ),
     primaryLabel: "← Back to Deck Prep",
     primaryAction: "back-to-deck-prep",
-    secondaryLabel: "Contact the team",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/deck/prep`,
   },
 };
 
@@ -235,7 +232,7 @@ const ALIASES: Record<string, string> = {
 
 type VsScoutMeta = {
   current_step: string | null;
-  research_error: string | null;
+  pipeline_error: string | null;
   generated_decks: unknown;
 };
 
@@ -260,12 +257,12 @@ export default function ErrorState() {
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    // Parallel: fetch the scout (for research_error + step-through meta)
+    // Parallel: fetch the scout (for pipeline_error + step-through meta)
     // and, for sheet-side keys only, the most recent uploaded filename.
     const tasks: Promise<unknown>[] = [
       supabase
         .from("vs_scouts")
-        .select("current_step, research_error, generated_decks")
+        .select("current_step, pipeline_error, generated_decks")
         .eq("id", id)
         .maybeSingle()
         .then(({ data }) => {
@@ -378,23 +375,25 @@ export default function ErrorState() {
           </CardContent>
         </Card>
 
-        {/* ---- research_error debug detail (collapsed by default) ---- */}
-        {scout?.research_error && (
+        {/* ---- pipeline_error debug detail (collapsed by default) ---- */}
+        {scout?.pipeline_error && (
           <details className="mt-4 w-full max-w-xl">
             <summary className="cursor-pointer text-[11px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground">
               Debug detail
             </summary>
             <pre className="mt-2 whitespace-pre-wrap break-words rounded bg-input p-3 text-[11px] font-mono text-muted-foreground">
-              {scout.research_error}
+              {scout.pipeline_error}
             </pre>
           </details>
         )}
 
         {/* ---- Action buttons ---- */}
         <div className="mt-8 flex items-center gap-3">
-          <Link to={cfg.secondaryHref(id)}>
-            <Button variant="ghost">{cfg.secondaryLabel}</Button>
-          </Link>
+          {cfg.secondaryHref && cfg.secondaryLabel && (
+            <Link to={cfg.secondaryHref(id)}>
+              <Button variant="ghost">{cfg.secondaryLabel}</Button>
+            </Link>
+          )}
           {cfg.primaryAction !== "none" && cfg.primaryLabel && (
             <Button
               onClick={() => void onPrimary()}

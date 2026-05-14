@@ -118,3 +118,123 @@ export function sanitizeWebsiteUrl(raw: unknown): string | null {
 
   return url.toString();
 }
+
+// Post-4.10.4 hot patch round 7: placeholder-string sanitizer.
+//
+// Symptom: with key_features added to FILL_TOOL.required + minItems on
+// recommendations / considerations / key_features, Claude was filling
+// schema-required arrays with placeholder tokens like '<UNKNOWN>',
+// 'TBD', 'N/A' when it didn't have real data. The schema constraint
+// removed the "return empty array" escape hatch but Claude found a new
+// one: emit literal "I don't know" sentinels to satisfy the structure.
+//
+// This filter strips those out at the patch boundary. The schema
+// descriptions also now explicitly forbid placeholders (the primary
+// lever per feedback_tool_choice_collapse memory rule), and this
+// post-emission cleanup is the safety net.
+//
+// Pattern: any string whose case-folded + punctuation-stripped form
+// matches a known "I don't know" sentinel is dropped. Length cap of 32
+// chars keeps real short observations like "Adjacent municipal lot"
+// from being accidentally flagged.
+const PLACEHOLDER_TOKENS = new Set([
+  "unknown",
+  "tbd",
+  "tba",
+  "na",
+  "none",
+  "null",
+  "notavailable",
+  "notprovided",
+  "notspecified",
+  "notapplicable",
+  "notset",
+  "notfound",
+  "noinformation",
+  "nodata",
+  "noinfo",
+  "pending",
+  "placeholder",
+  "todo",
+  "fixme",
+]);
+
+export function isPlaceholderString(raw: unknown): boolean {
+  if (typeof raw !== "string") return false;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return true;
+  if (trimmed.length > 32) return false;
+  // Strip angle brackets, square brackets, parentheses, dashes,
+  // periods, slashes, and whitespace. What remains is the bare token
+  // we compare against PLACEHOLDER_TOKENS.
+  const stripped = trimmed
+    .toLowerCase()
+    .replace(/[<>[\](){}\s\-./_]/g, "");
+  return PLACEHOLDER_TOKENS.has(stripped);
+}
+
+export function stripPlaceholders(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    .filter((s) => !isPlaceholderString(s))
+    .map((s) => s.trim());
+}
+
+// Post-4.10.4 hot patch round 13: pick a URL from web_search results
+// that best matches a given venue. Used as a fallback when Claude's
+// tool output left website_url null but the search results clearly
+// contained valid URLs for the venue.
+//
+// Algorithm: tokenize the venue name into meaningful words (drop common
+// suffixes like "venue", "space", "studio", "the"). For each search
+// result, score by how many venue tokens appear in the result's title
+// (case-insensitive). Pick the highest-scoring result whose URL passes
+// sanitizeWebsiteUrl. Ties broken by earliest position in the results
+// list (search-engine-relevance order).
+//
+// Returns null when no result has at least one matching token, or all
+// matching results have URLs that the sanitizer rejects.
+const NAME_NOISE_WORDS = new Set([
+  "the", "a", "an", "and", "of", "at", "in", "on", "for", "with",
+  "venue", "space", "spaces", "studio", "studios", "loft", "lofts",
+  "gallery", "galleries", "warehouse", "warehouses", "building",
+  "center", "centre", "place", "house", "hall", "room", "rooms",
+  "events", "event", "rental", "rentals", "vacancy", "storefront",
+  "retail", "ground", "floor", "lower", "upper", "main",
+]);
+
+function tokenizeVenueName(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !NAME_NOISE_WORDS.has(t));
+}
+
+export function findBestSearchResultUrl(
+  venueName: string,
+  results: ReadonlyArray<{ url: string; title: string }>,
+): string | null {
+  const venueTokens = tokenizeVenueName(venueName);
+  if (venueTokens.length === 0) return null;
+  let best: { url: string; score: number; index: number } | null = null;
+  for (let i = 0; i < results.length; i += 1) {
+    const r = results[i];
+    const titleLower = r.title.toLowerCase();
+    const score = venueTokens.reduce(
+      (acc, t) => acc + (titleLower.includes(t) ? 1 : 0),
+      0,
+    );
+    if (score === 0) continue;
+    const cleaned = sanitizeWebsiteUrl(r.url);
+    if (!cleaned) continue;
+    if (
+      best === null ||
+      score > best.score ||
+      (score === best.score && i < best.index)
+    ) {
+      best = { url: cleaned, score, index: i };
+    }
+  }
+  return best?.url ?? null;
+}
