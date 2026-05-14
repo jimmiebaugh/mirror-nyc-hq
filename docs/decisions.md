@@ -2,6 +2,121 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 4.10.6-port (URL acquisition fallbacks + deck flow polish)
+
+### URL extraction fallback layered onto Claude's tool output
+
+Producer-visible problem: every Phase B-sourced venue was landing in `vs_candidate_venues` with `website_url=NULL`, even for well-known venues whose URLs were clearly in Claude's `web_search_tool_result` blocks. Root cause: `FILL_SYSTEM` / research SYSTEM instructs Claude not to use listing-database URLs as the website_url output field, so Claude was conservatively returning null on the tool call even when usable URLs were visible in the search results.
+
+Two-stage fix, both as post-emission layers (per `feedback_tool_choice_collapse` memory rule — schema descriptions + post-emission sanitization are the levers, not SYSTEM):
+
+1. **`extractWebSearchResults(content)` in `_shared/anthropic.ts`** walks the response content blocks and pulls every `{ url, title }` from `web_search_tool_result` blocks.
+
+2. **`findVenueWebsite(app, { name, address, city })` in `_shared/anthropic.ts`** runs a fresh, focused Claude call per venue with `web_search` + a tight "find the official website URL for {name} at {address}" prompt. Returns the first non-listing-database URL via `sanitizeWebsiteUrl` validation. Used as Phase B's URL fallback after the initial `validateWebsiteUrls` returns null.
+
+Phase A (per-row enrichSheetVenue) and `vs-compile-summaries` Pass 1 use the cheaper `findBestSearchResultUrl(venueName, results)` heuristic that scores results by token overlap with the venue name; these calls are already venue-scoped per-row so the broad-match risk is lower. Phase B uses the more expensive targeted approach because its batch `submit_research` returns a single mixed pool of search results.
+
+### Schema tightening on `submit_research.name`
+
+Producers were seeing venue names polluted with descriptive suffixes ("Vacant Ground-Floor Retail - 10250 Santa Monica Blvd", "Platform - West Hollywood Flagship Storefront"). Tightened the `name` field description to explicitly forbid descriptive suffixes with concrete BAD examples, telling Claude to use the venue's brand / property name and fall back to address-only for unbranded vacancies. Those descriptive bits belong in `venue_type` / `key_features`.
+
+### `address` + `neighborhood` added to `FILL_TOOL`
+
+Phase A wasn't filling addresses for sheet rows where the producer left address blank — because `FILL_TOOL` didn't have an `address` field at all (only `venue_type`, `website_url`, `size_sq_ft`, `capacity`, `key_features`, etc.). Common case: producer enters an address-style venue name like "238 N Canon Drive" and leaves the address column blank. Added `address` + `neighborhood` to FILL_TOOL with descriptions that explicitly call out the address-as-name case + the brief's city as context. Patch guards in Phase A + Pass 1 only fill when the existing row value is null/empty so producer-entered values remain authoritative.
+
+### Post-deck-generation flow: open in new tab, return to Deck Prep
+
+Previously: success on Generating navigated to /brief (the completed-scout landing). Changed to: open the just-generated deck's `edit_url` in a new tab via `window.open(..., "_blank", "noopener,noreferrer")`, then navigate back to /deck/prep. Producer can immediately review the deck in Drive AND has the Deck Prep matrix in front of them to regenerate / tweak. `handledTerminalRef` guards against duplicate Realtime / polling deliveries. `initialDeckCountRef` snapshot prevents a regenerate from re-opening the prior deck when the deck count is unchanged.
+
+### Regenerate-from-Deck-Prep fix: atomic state reset via RPC
+
+Previously clicking Generate Deck on a scout with `current_step='completed'` silently no-opped vs-generate-deck's idempotency guard and Generating.tsx then reopened the prior deck. Frontend reset was a read-then-write on `brief_data` which has a TOCTOU race. Replaced with new `reset_scout_for_deck_regenerate(target_scout_id)` Postgres RPC (migration `20260514100000`) that does `brief_data - 'deck_generation_started_at'` atomically in a single SQL statement, alongside `current_step='deck_prep'` + clear failure state. SECURITY INVOKER; GRANT EXECUTE TO authenticated.
+
+### `updateSlidesPosition` per-slide moves for venue slide ordering
+
+Slides API rejected a single `updateSlidesPosition` request with all duplicates listed in desired-final order: "The slides should be in presentation order, with no duplicates." The parameter requires `slideObjectIds` to match current presentation order — it relocates a contiguous already-ordered block, it doesn't reorder. Fixed by emitting one `updateSlidesPosition` per slide (a single-element list is trivially in order). `insertionIndex = FRONT_MATTER_SLIDES + K` for each slide's target final position. Slides API processes batchUpdate requests sequentially, so cumulative result = canonical interleaved-forward layout `[V1_detail, V1_fp, V2_detail, V2_fp, ...]`.
+
+### Slide 2 ALL CAPS via scoped pre-pass
+
+`{{client_name}}`, `{{event_name}}`, `{{event_live_date}}`, `{{event_location}}` need to appear UPPERCASE on slide 2 specifically (producer's deck-design preference) but keep original casing on other front-matter slides. Did this by inserting scoped `replaceAllText` requests with `pageObjectIds: [slide2Id]` at the head of `globalReqs`, with uppercased values. They run BEFORE the case-preserving global pass; once slide 2's tokens are replaced, the global pass can't find them there anymore but still touches the other slides.
+
+### Photo dnd: `rectSortingStrategy` (was `verticalListSortingStrategy`)
+
+Photos render in a `grid grid-cols-4` layout, not a vertical list. The vertical-only sort strategy was suppressing neighbor animations on horizontal drags, making the interaction feel broken even though the underlying `swapPhotoSlots` persistence was working. `rectSortingStrategy` handles arbitrary grid arrangements.
+
+### "Contact the team" button removed from deck error states
+
+The four deck-side error configs (`TEMPLATE_COPY_FAILED`, `SLIDES_API_FAILED`, `NO_VENUES_INCLUDED`, `UNKNOWN`) rendered a "Contact the team" ghost button that routed back to `/deck/prep` — same destination as the primary "← Back to Deck Prep" button. Misleading affordance; the label promised a contact path that didn't exist. `Cfg.secondaryLabel` + `secondaryHref` are now optional; help-text bullets mentioning team contact remain as informational guidance.
+
+### vs-generate-deck success path CAS guard
+
+Mirror of the `writeFailure` CAS pattern from 4.10.5-port. Two parallel invocations that both succeed would otherwise both append to `generated_decks` with a TOCTOU window on the `freshExisting` re-read. The success UPDATE now uses `.eq("current_step", "deck_prep")` so only the first-to-complete wins the append. CAS-loss path logs warn + leaves the orphaned in-Drive deck behind (not fatal; producer sees a working deck either way).
+
+### Carry-forward debt: duplicate-invocation race in vs-research-venues
+
+Smoke testing revealed that vs-research-venues can be invoked twice in quick succession (likely React 18 strict-mode dev double-mount or Realtime hiccup) and both invocations execute Phase A + Phase B independently. The 4.10.5-port `writeFailure` CAS guards mask the symptom (failure-overwrites-success) and 4.10.6-port's success CAS on vs-generate-deck masks success-overwrites-success — but both invocations still burn Claude credits. Proper fix is a Postgres advisory lock or a kickoff CAS on `brief_data.research_started_at`. Deferred to cutover follow-up.
+
+### Carry-forward debt: pause_turn continuation cap is conservative
+
+`MAX_PAUSE_CONTINUATIONS = 1` in `callClaude` keeps long-running calls bounded but means some legitimate multi-turn workloads will fail with "no structured output" if they need more than one continuation. If we see this in prod logs, the next move is to raise the cap to 2-3 with a per-call wall-clock budget rather than a continuation-count cap.
+
+## Phase 4.10.5-port (AI surface stabilization)
+
+### Model + web_search pivot: `claude-sonnet-4-6` + `web_search_20250305`
+
+Smoke testing 2026-05-13 surfaced `server_tool_uses=0` across every Phase A enrichment + Phase B sourcing call on the prior `claude-sonnet-4-5 + web_search_20250305` combo. Anthropic docs confirm the newer `web_search_20260209` tool (with dynamic filtering) lists Claude Sonnet 4.6, Opus 4.6+, and Mythos as supported models — 4.5 isn't on the list. Combined with web_search being enabled at the org level (Anthropic Console), pivoting to **4.6 restored web_search invocation**.
+
+Settled on the OLDER `web_search_20250305` tool version with the NEW model (4.6) after smoke showed the newer `20260209` dynamic-filter tool was billing 80k+ tokens per Phase A call (each web_search invocation runs a code_execution sandbox internally and bills cumulative context across multi-turn rounds). The simpler 20250305 tool with 4.6 invokes web_search reliably AND keeps per-turn token bloat bounded.
+
+### `pause_turn` continuation in `callClaude`
+
+Anthropic's server-tool loop (web_search, web_fetch, code_execution) can return `stop_reason=pause_turn` when a long-running turn hits an internal pause point. The caller is expected to send another request with the prior assistant content appended as a message; Claude continues the turn. Without this, callers that emit a custom tool after multi-step web_search research saw "no structured output" failures because the tool_use block hadn't emitted yet.
+
+`_shared/anthropic.ts callClaude` now wraps a continuation loop. On `stop_reason="pause_turn"`, the wrapper appends the assistant's content blocks as the next message and re-calls. Accumulates content + usage across cycles. Capped at `MAX_PAUSE_CONTINUATIONS = 1` to keep total latency bounded under the app-level WORK_TIMEOUT_MS.
+
+### `writeFailure` CAS guards prevent failure-overwrites-success
+
+Smoke testing surfaced a race: two parallel invocations of vs-research-venues (e.g., from React 18 strict-mode dev double-mount) both run Phase A + Phase B; first succeeds (writes `current_step='sourcing_report'`), second hits a different code path and fails (was writing `status='failed' + pipeline_error=...`, overwriting the first's success state).
+
+All three AI edge functions now CAS via `.eq("current_step", <expected_pre_success_step>)` on the failure UPDATE:
+- `vs-research-venues.writeFailure`: `.eq("current_step", "researching")`
+- `vs-compile-summaries.writeFailure`: `.eq("current_step", "compiling")`
+- `vs-generate-deck.failWithCode`: `.eq("current_step", "deck_prep")`
+
+Failure no-ops when another invocation has already advanced past the pre-success step.
+
+### Timeout sizing for Supabase Pro plan
+
+Supabase Edge Function wall clock is plan-level (150s Free, 400s Pro) and is NOT settable via `config.toml`. After the project upgraded to Pro, settled on:
+
+- `WORK_TIMEOUT_MS = 360_000` (40s buffer under Pro's 400s cap so `writeFailure` UPDATE lands before any platform kill)
+- `IN_FLIGHT_GRACE_MS = 360_000` (matched so re-invoke idempotency window covers the upper bound of in-progress work)
+- Phase B `web_search max_uses = 4`
+- Phase A + Pass 1 `web_search max_uses = 2`
+- `MAX_PAUSE_CONTINUATIONS = 1`
+
+`supabase/config.toml` documents the plan-level setting + the Free-plan fallback sizing recipe.
+
+### Trim `brief_data` JSON dump from Claude user messages
+
+`Brief: ${JSON.stringify(scout.brief_data ?? {})}` was dumping the entire `brief_data` JSONB into every Claude call, including internal state flags (`research_started_at`, `compile_started_at`, `deck_generation_started_at`, `uploaded_files`). Pure noise to the model and inflated input token count.
+
+Replaced with selective field extraction in three call sites (`buildFillUserMsg`, vs-research-venues Phase B, vs-compile-summaries briefBlock): `expected_guest_count` + `brief_data.notes` as named fields, rest of brief_data dropped. ~30-70% input token reduction per call.
+
+### Placeholder string sanitizer
+
+After tightening FILL_TOOL schema to make `key_features` + `recommendations` + `considerations` required with minItems, Claude started filling arrays with literal `<UNKNOWN>` / `TBD` / `N/A` / `None` / `TODO` placeholder tokens when it didn't have real data — satisfying the schema structurally while signaling "I don't know."
+
+Two-layer fix:
+1. **Schema-description layer** (primary, per `feedback_tool_choice_collapse` rule): tool descriptions + per-field descriptions + user-message trailer all explicitly forbid placeholder tokens with a list of common offenders.
+2. **Post-emission sanitizer** (defense): new `isPlaceholderString` + `stripPlaceholders` in `_shared/venueTypes.ts`. Pattern: strip whitespace + punctuation, lowercase, compare against a set of placeholder tokens (unknown, tbd, na, none, null, notavailable, notprovided, todo, pending, etc.). 32-char length cap so real short observations don't accidentally match. Wired into Phase A patch builder, Phase B venue sanitize, and vs-compile-summaries Pass 1 patch builder.
+
+If the cleaned array is empty post-strip, skip the write so the row keeps its null state rather than getting a junk-filled column.
+
+### Drop forced `tool_choice` on Phase A
+
+Smoke testing showed Phase A `fill_venue` calls collapsing to out=94-115 minimal payloads under the schema description hardening + forced `tool_choice: { type: "tool", name: "fill_venue" }`. Same pattern Phase B saw (4.10.3 retrospective). Mirror Phase B's fix: changed Phase A's `tool_choice` to `{ type: "auto" }`. `FILL_SYSTEM` still says "fill structured fields" (strong directive); auto mode lets Claude use web_search freely before committing to the tool with real findings.
+
 ## Phase 4.10.4-port (pre-cutover smoke polish)
 
 ### Rank hidden in UI; column stays in DB
