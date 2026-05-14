@@ -17,7 +17,7 @@ HQ was running an emerald-green primary on a blue-tinted dark background. Source
 | `--primary-hover` | (missing) | `0 86% 71%` (`#f47373`) | New token. |
 | `--secondary` | `222 20% 14%` | `0 0% 11%` | |
 | `--muted` | `222 20% 14%` | `0 0% 11%` | |
-| `--muted-foreground` | `220 10% 60%` | `0 0% 78%` (`#c8c8c8`) | Source mutes are lighter — closer to off-white. |
+| `--muted-foreground` | `220 10% 60%` | `0 0% 78%` (`#c8c8c8`) | Source mutes are lighter: closer to off-white. |
 | `--subtle-foreground` | (missing) | `0 0% 54%` (`#8a8a8a`) | New token for tertiary text. |
 | `--accent` | `158 64% 52%` (same as primary) | `0 0% 14%` (`#242424`) | Source `accent` is a surface color, NOT primary. Big semantic shift. |
 | `--accent-foreground` | `222 47% 8%` | `0 0% 100%` | |
@@ -33,7 +33,7 @@ HQ was running an emerald-green primary on a blue-tinted dark background. Source
 | `--surface-alt` | (missing) | `0 0% 11%` | New token (raised panel). |
 | `--surface-raised` | (missing) | `0 0% 14%` | New token (highest elevation). |
 
-HQ also has `--sidebar-*` tokens for the shadcn `sidebar` component, but `AppShell` doesn't render that component — they're inert. Leaving them in place to avoid breaking the unused `components/ui/sidebar.tsx`.
+HQ also has `--sidebar-*` tokens for the shadcn `sidebar` component, but `AppShell` doesn't render that component: they're inert. Leaving them in place to avoid breaking the unused `components/ui/sidebar.tsx`.
 
 ## Radius
 
@@ -52,21 +52,21 @@ HQ also has `--sidebar-*` tokens for the shadcn `sidebar` component, but `AppShe
 | `font-feature-settings` | `"ss01", "cv11"` | none |
 | Tailwind `fontFamily.sans` | unset (defaults to system) | `["Inter", "ui-sans-serif", "system-ui"]` |
 
-Source loads Inter weights 400–900 to support the brand's heavy uppercase headings (e.g. `.h-page` is `font-black uppercase` 43px).
+Source loads Inter weights 400-900 to support the brand's heavy uppercase headings (e.g. `.h-page` is `font-black uppercase` 43px).
 
 ## Component-layer utility classes
 
 Source defines these in its `@layer components`. HQ defines none of them. Bringing them all over so they're available for any current/future component that wants them. None are used in HQ today, so adding them is purely additive.
 
-- `.h-page` — page heading, 43px, `font-black uppercase`, tight letter-spacing.
-- `.label-section`, `.label-form` — 11px bold uppercase section/form labels.
-- `.crumb` — 12px medium uppercase breadcrumb.
-- `.btn-base`, `.btn-primary`, `.btn-ghost`, `.btn-light` — branded button variants (42px tall, 4px radius, 13px bold uppercase).
-- `.input-base`, `.input-filled`, `.textarea-base` — 44px inputs with `surface-alt` background and primary focus ring.
-- `.tier-badge`, `.tier-badge--1/2/3/bonus` — scorecard tier pills (T1 red, T2 amber, T3 green, bonus coral).
-- `.manual-tag` — coral micro-tag for "Manual" overrides.
-- `.surface`, `.surface-alt` — panel containers.
-- `.status-pill`, `.status-pill--active/complete/new` — running/complete pill variants.
+- `.h-page`: page heading, 43px, `font-black uppercase`, tight letter-spacing.
+- `.label-section`, `.label-form`: 11px bold uppercase section/form labels.
+- `.crumb`: 12px medium uppercase breadcrumb.
+- `.btn-base`, `.btn-primary`, `.btn-ghost`, `.btn-light`: branded button variants (42px tall, 4px radius, 13px bold uppercase).
+- `.input-base`, `.input-filled`, `.textarea-base`: 44px inputs with `surface-alt` background and primary focus ring.
+- `.tier-badge`, `.tier-badge--1/2/3/bonus`: scorecard tier pills (T1 red, T2 amber, T3 green, bonus coral).
+- `.manual-tag`: coral micro-tag for "Manual" overrides.
+- `.surface`, `.surface-alt`: panel containers.
+- `.status-pill`, `.status-pill--active/complete/new`: running/complete pill variants.
 
 ## Tailwind config additions
 

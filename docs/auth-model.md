@@ -14,7 +14,7 @@ Identity, permission roles, RLS, storage buckets, the Google service account, an
 - `producer`: everything member can do, plus elevated permissions reserved for future controls (no producer-only Venue Scout gating currently; tier kept for forward compatibility).
 - `admin`: everything producer can do, plus Talent Scout, user role management, global settings.
 
-A user can be assigned to projects (as account manager or designer) regardless of their permission role — assignment ≠ permission tier.
+A user can be assigned to projects (as account manager or designer) regardless of their permission role; assignment ≠ permission tier.
 
 ## Per-project assignments (separate from permission role)
 
@@ -42,7 +42,7 @@ Admin checks are done via a SECURITY DEFINER function that reads `permission_rol
 ## Storage buckets
 
 - `candidate_attachments`: admin only (Talent Scout)
-- `packets`: admin only (Talent Scout — round + final-review packet PDFs, Phase 3.6)
+- `packets`: admin only (Talent Scout; round + final-review packet PDFs, Phase 3.6)
 - `briefs`, `sourcing_sheets`: any auth user (Venue Scout; relaxed from producer-or-admin in Phase 4.10.3-port to match the open-authenticated vs_* table RLS).
 - `venue_photos`: any auth read; producer or admin write (HQ Core master `venues` table photos)
 - `vs_venue_photos`: any auth user (Venue Scout deck photos, private; signed URLs at render time, 1-hour TTL). Distinct from the public `venue_photos` bucket; the two coexist because Venue Scout decks need private upload/render while HQ Core's master-venues bucket stays public for downstream usage. Created in Phase 4.7.1-port; producer-or-admin gate relaxed to authenticated in Phase 4.10.3-port.
@@ -58,7 +58,7 @@ Single Google service account `mirror-ny-hq-backend@mirror-nyc-hq.iam.gserviceac
 - `presentations` (Slides deck generation)
 - `drive` (Drive saves and template reads)
 
-JSON key stored as a Supabase secret (`GOOGLE_SERVICE_ACCOUNT_KEY`; read by `_shared/googleServiceAccount.ts`). Used by edge functions only — never reaches the browser.
+JSON key stored as a Supabase secret (`GOOGLE_SERVICE_ACCOUNT_KEY`; read by `_shared/googleServiceAccount.ts`). Used by edge functions only; never reaches the browser.
 
 `scripts/verify-service-account.ts` runs a per-scope JWT bearer flow and smoke-tests `messages.list` and `files.list` to verify delegation; re-run any time scopes are changed in the Workspace Admin Console.
 
@@ -74,7 +74,7 @@ Missing or misconfigured: `vs-generate-deck` fails fast with `TEMPLATE_COPY_FAIL
 
 ## Edge Function self-invocation auth
 
-Some Edge Functions (`ts-pull-candidates`, `ts-bulk-reevaluate`; the packet-generate function in 3.6 will join) self-invoke for chunked processing. The Supabase gateway on this project rejects the service-role bearer token at its `verify_jwt` layer (likely a new-format-key vs legacy-JWT mismatch — applies to whatever key Supabase ships in `SUPABASE_SERVICE_ROLE_KEY` for newer projects). To unblock self-invocation:
+Some Edge Functions (`ts-pull-candidates`, `ts-bulk-reevaluate`; the packet-generate function in 3.6 will join) self-invoke for chunked processing. The Supabase gateway on this project rejects the service-role bearer token at its `verify_jwt` layer (likely a new-format-key vs legacy-JWT mismatch; applies to whatever key Supabase ships in `SUPABASE_SERVICE_ROLE_KEY` for newer projects). To unblock self-invocation:
 
 1. **Per-function `verify_jwt = false`** in `supabase/config.toml`:
    ```toml
@@ -92,4 +92,4 @@ Some Edge Functions (`ts-pull-candidates`, `ts-bulk-reevaluate`; the packet-gene
 
    Anything else → 401. Anon callers that slip past the disabled gateway are rejected here.
 
-**When to use this pattern:** any Edge Function that POSTs back to itself (chunked pipelines, batch processing). Use the default `verify_jwt = true` for one-shot user-invoked functions like `ts-generate-scorecard` — they don't need the override.
+**When to use this pattern:** any Edge Function that POSTs back to itself (chunked pipelines, batch processing). Use the default `verify_jwt = true` for one-shot user-invoked functions like `ts-generate-scorecard`; they don't need the override.

@@ -57,7 +57,27 @@ See `CHECKPOINT.md` for live state. As of this writing: **Phase 4 (Venue Scout p
 5. **After merging to main**, update `CHECKPOINT.md` (latest commit, recent commits, known drift).
 6. **Phase boundaries** → summarize the finished phase to one line in `docs/roadmap.md`, expand the next phase with full detail.
 7. **Decisions worth preserving** → add to `docs/decisions.md` with rationale, don't bury in commit messages.
-8. **Deploy policy (Phase 3.X — active).** Netlify charges credits per deploy. All Phase 3.X feature work lives on a feature branch (e.g. `phase-3-7-candidates-ux`). Commits stay local; the only Netlify-deploy event per phase is the eventual squash-merge to `main`, and Jimmie has to explicitly approve that. Do NOT push to `main` or to any remote feature branch (origin pushes can fire deploy previews) until Jimmie says go. Edge function deploys (`supabase functions deploy`) and DB migrations (`supabase db push --linked`) are out-of-band and fine to apply during feature work — they don't burn Netlify credits.
+8. **Deploy policy.** Netlify charges credits per deploy. Feature work lives on a feature branch (e.g. `phase-5-1-notifications`). Commits stay local; the only Netlify-deploy event per phase is the eventual squash-merge to `main`, and Jimmie has to explicitly approve that. Do NOT push to `main` or to any remote feature branch (origin pushes can fire deploy previews) until Jimmie says go. Edge function deploys (`supabase functions deploy`) and DB migrations (`supabase db push --linked`) are out-of-band and fine to apply during feature work; they don't burn Netlify credits.
+9. **Two-session discipline.** Cowork (spec drafting) and Code (implementation) both edit files. To avoid clobbering, Cowork is read-only on the repo while any `claude/*` feature branch is active; doc-update intent queues in `OUTPUTS/REPO_DOC_UPDATES.md` for Code to apply. Pre-flight check + full rule in `docs/working-with-claude.md` § Two-session discipline. Read at the start of every session.
+
+## Code observations
+
+After completing each task, log noteworthy findings you encountered while reading or working with the codebase into [code-observations.md](code-observations.md). The file persists across sessions so the team can triage during dedicated cleanup passes. See the file's header for entry format, severity tags, and the verify or resolve lifecycle.
+
+**What to look for** (only things you actually encountered; do not go hunting):
+
+- **Unfinished implementations**: TODOs, stubs, placeholder logic, partially implemented features.
+- **Dead code**: unused functions, unreachable branches, commented-out blocks.
+- **Possible bugs**: unchecked errors, race conditions, off-by-ones, logic errors.
+- **Unusual patterns**: inconsistent conventions, surprising workarounds, anti-patterns.
+
+**How to log:**
+
+1. Append a row to the matching section's table in `code-observations.md` (Frontend / Edge Functions / Database / Build & Tooling / Docs / Other). The header at the top of that file documents the exact column format, severity tags, and the `☐` / `☑` status glyphs.
+2. Get the introducing commit's short hash via `git blame -L <line>,<line> <file>` and put it in the Hash column (backtick-wrapped). For non-code observations write `n/a`.
+3. Append-only. Never reorder or delete rows. Use the V / R status columns and strikethrough rules defined in the file for state changes.
+
+**In your end-of-turn response**, mention findings only if directly relevant to the current task. Otherwise say "N new observations logged" so the user knows the log moved without re-listing everything. If there is nothing to log this turn, skip the section entirely.
 
 ## Notes
 

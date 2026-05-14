@@ -2,7 +2,7 @@
 
 The applied patterns Talent Scout established that every new HQ surface (Phase 4 Venue Scout, Phase 5 Cross-cutting, anything beyond) builds on. **This is the canonical reference for new surface design.**
 
-For history of how we got here, see `docs/visual-audit/`. For the brand authority itself, see `docs/visual-audit/mirror-style-guide.md`. This doc is forward-looking: "I'm building a new HQ page; what's the pattern?"
+For history of how we got here, see `docs/historical/visual-audit-phase-3-5b/`. For the brand authority itself, see `docs/mirror-style-guide.md`. This doc is forward-looking: "I'm building a new HQ page; what's the pattern?"
 
 ---
 
@@ -21,7 +21,7 @@ Every new surface uses these. Don't introduce new ones unless approved.
 | `--input` | `0 0% 16%` | `#2A2A2A` | Input borders AND track backgrounds (slider, score bar) |
 | `--border` | `0 0% 16%` | `#2A2A2A` | Hairline dividers |
 | `--border-strong` | `0 0% 23%` | `#3A3A3A` | Input outlines, stronger dividers |
-| `--primary` | `4 47% 51%` | `#BE4E44` | Mirror coral — eyebrows, primary CTAs, R-pill, focus rings |
+| `--primary` | `4 47% 51%` | `#BE4E44` | Mirror coral: eyebrows, primary CTAs, R-pill, focus rings |
 | `--primary-hover` | `4 53% 56%` | `#CC5C52` | Coral hover state |
 | `--muted-foreground` | `0 0% 78%` | `#C8C8C8` | Secondary text |
 | `--subtle-foreground` | `0 0% 54%` | `#8A8A8A` | Tertiary text, captions |
@@ -34,23 +34,23 @@ Every new surface uses these. Don't introduce new ones unless approved.
 ### Type
 
 Three families:
-- **Montserrat ExtraBold** (`var(--font-display)`) — page titles, eyebrows, brand wordmark, criterion names
-- **Roboto Mono** (`var(--font-mono)`) — labels, captions, status pills, breadcrumb, "TIER 1 — MUST-HAVES"
-- **Roboto** (`var(--font-body)`) — body text, form inputs, narrative content
+- **Montserrat ExtraBold** (`var(--font-display)`): page titles, eyebrows, brand wordmark, criterion names
+- **Roboto Mono** (`var(--font-mono)`): labels, captions, status pills, breadcrumb, "TIER 1: MUST-HAVES"
+- **Roboto** (`var(--font-body)`): body text, form inputs, narrative content
 
 Sizes (utility classes in `src/index.css`):
-- `.h-page` — page title (`text-[34px] font-display font-extrabold uppercase`)
-- `.h-section` — section header inside a card (`text-[20px] font-display`)
-- `.label-section` — section eyebrow (`text-[12px] font-mono uppercase tracking-wider`)
-- `.label-form` — form-field label (`text-[12px] font-mono font-bold uppercase tracking-wider`)
-- `.eyebrow` — coral eyebrow above a title (`text-[14px] font-mono uppercase tracking-widest text-primary`)
-- `.crumb` — back-link breadcrumb (`text-[14px] font-mono uppercase tracking-widest text-primary hover:underline`)
+- `.h-page`: page title (`text-[34px] font-display font-extrabold uppercase`)
+- `.h-section`: section header inside a card (`text-[20px] font-display`)
+- `.label-section`: section eyebrow (`text-[12px] font-mono uppercase tracking-wider`)
+- `.label-form`: form-field label (`text-[12px] font-mono font-bold uppercase tracking-wider`)
+- `.eyebrow`: coral eyebrow above a title (`text-[14px] font-mono uppercase tracking-widest text-primary`)
+- `.crumb`: back-link breadcrumb (`text-[14px] font-mono uppercase tracking-widest text-primary hover:underline`)
 
 **Page titles are ALL CAPS** (deck-canonical). Button labels stay sentence/title case (uppercase reads too presentational).
 
 ### Spacing + radius
 
-- `--radius: 0.25rem` (4px) — every rounded element
+- `--radius: 0.25rem` (4px): every rounded element
 - Card content padding: `p-6` (24px) standard, `p-8` for forms
 - Card → card gap: `space-y-6` (24px)
 - Form-field stack: `space-y-2` per Field, `space-y-4` per group, `space-y-6` between sections
@@ -115,7 +115,7 @@ Reference: `src/pages/talent-scout/RoleSettings.tsx` (Scorecard card), `src/comp
 
 ### Field component (worth extracting)
 
-Currently duplicated in `NewRoleDetails.tsx` and `RoleSettings.tsx`. Phase 4 should extract to `src/components/ui/Field.tsx`.
+Extracted to `src/components/ui/Field.tsx` in Phase 4 (port). Use the shared component for any new form.
 
 ```jsx
 function Field({ label, required, children }: {
@@ -151,7 +151,7 @@ Keyword/tag input is custom: `src/components/talent-scout/TagInput.tsx`. Reuse f
 - Each step = its own page route (`/new/details`, `/new/search`, `/new/scorecard`)
 - Final "lock + create" step writes the record to DB and navigates to the detail page
 
-Worth replicating for Venue Scout's brief → research → deck wizard in Phase 4.
+Replicated in Venue Scout's brief, research, and deck flow (Phase 4 port; see `docs/venue-scout-port-plan.md`).
 
 ### Sticky bottom action bar
 
@@ -290,7 +290,7 @@ toast({ title: "Save failed", description: err.message,       // failure
         variant: "destructive" });
 ```
 
-Title is short (≤ 4 words). Description carries detail. Don't put error stacks in the toast — `console.error` those, surface a clean message.
+Title is short (≤ 4 words). Description carries detail. Don't put error stacks in the toast: `console.error` those, surface a clean message.
 
 ---
 
@@ -341,16 +341,16 @@ Default to server-confirmed: disable button → await response → update state 
 Worth knowing what's already built before reaching for shadcn/ui:
 
 **Reusable across HQ:**
-- `src/components/ui/*` — shadcn/ui primitives (Button, Card, Input, Select, Checkbox, RadioGroup, Slider, Textarea, Label, AlertDialog, sonner, toast, etc.)
-- `src/components/AppShell.tsx` — top nav + main content wrapper for authenticated pages
-- `src/components/ProtectedRoute.tsx` / `AdminRoute.tsx` — route gates
+- `src/components/ui/*`: shadcn/ui primitives (Button, Card, Input, Select, Checkbox, RadioGroup, Slider, Textarea, Label, AlertDialog, sonner, toast, etc.)
+- `src/components/AppShell.tsx`: top nav + main content wrapper for authenticated pages
+- `src/components/ProtectedRoute.tsx` / `AdminRoute.tsx`: route gates
 
 **Talent-Scout-specific (some worth lifting to shared if Phase 4 / 5 want them):**
-- `src/components/talent-scout/Stepper.tsx` — wizard stepper. Genericize for VS wizards.
-- `src/components/talent-scout/TagInput.tsx` — tag/keyword input with case-insensitive dedup. Already used in Settings + RoleSettings + NewRoleSearch. **Already generic; no rename needed.**
-- `src/components/talent-scout/CandidateTable.tsx` — the two-tier table pattern. Don't lift; copy + adapt for Venues / Projects since columns differ.
-- `src/components/talent-scout/CriterionCard.tsx` — auto-grow textarea pattern. Useful reference for any inline-editable list-row.
-- `src/pages/talent-scout/RoleSettings.tsx` — the canonical 2-column form page. **Read this first** when building Edit-Project, Edit-Venue, Edit-Client pages.
+- `src/components/talent-scout/Stepper.tsx`: wizard stepper. Genericize for VS wizards.
+- `src/components/talent-scout/TagInput.tsx`: tag/keyword input with case-insensitive dedup. Already used in Settings + RoleSettings + NewRoleSearch. **Already generic; no rename needed.**
+- `src/components/talent-scout/CandidateTable.tsx`: the two-tier table pattern. Don't lift; copy + adapt for Venues / Projects since columns differ.
+- `src/components/talent-scout/CriterionCard.tsx`: auto-grow textarea pattern. Useful reference for any inline-editable list-row.
+- `src/pages/talent-scout/RoleSettings.tsx`: the canonical 2-column form page. **Read this first** when building Edit-Project, Edit-Venue, Edit-Client pages.
 
 **To extract in Phase 4:** the `Field` helper component currently duplicated in `NewRoleDetails.tsx` and `RoleSettings.tsx`. Move to `src/components/ui/Field.tsx`.
 
@@ -382,7 +382,7 @@ Compiled from the visual audit + Phase 3.7 / 3.10 sessions. Keep these top-of-mi
 4. **mailto:** use `inline-block max-w-full truncate align-bottom`, not `block truncate` (which makes the entire column clickable).
 5. **Em dashes don't render in Gmail subject lines.** Phase 3.11.1's pull-completion email subject came back garbled. Use `|` for separators in any email subject. Match Jimmie's "no em dashes anywhere" rule everywhere.
 6. **Local dev runs at `http://127.0.0.1:8080/`**, not `localhost:8080`. Vite binds IPv6.
-7. **`mirrornyc.com` is in `BLOCKED_PORTFOLIO_DOMAINS`** in `_shared/unwrapUrl.ts`. Don't remove it — manager email signatures embed the URL.
+7. **`mirrornyc.com` is in `BLOCKED_PORTFOLIO_DOMAINS`** in `_shared/unwrapUrl.ts`. Don't remove it: manager email signatures embed the URL.
 8. **ReferralPill stays electric blue.** Coral was tried (3.7.8.8) and reverted (3.7.8.13) because too many coral surfaces blurred the signal.
 
 ---
@@ -392,6 +392,6 @@ Compiled from the visual audit + Phase 3.7 / 3.10 sessions. Keep these top-of-mi
 - New token introduced (rare, should require justification)
 - New page-level pattern emerges that's reused twice (extract here)
 - A brand rule we hit twice gets a section here so we stop hitting it
-- Any deviation from the patterns above on a new surface — document it in `docs/decisions.md` AND add the new pattern here
+- Any deviation from the patterns above on a new surface: document it in `docs/decisions.md` AND add the new pattern here
 
 This doc is the source of truth for "how an HQ surface looks and behaves." Code drift from this doc is a bug to file, not a precedent to follow.
