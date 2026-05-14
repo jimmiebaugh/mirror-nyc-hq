@@ -12,9 +12,13 @@
 //     venue_types, sq_ft_min, sq_ft_max, sq_ft_minimum, ideal_features,
 //     priority_location, priority_cost.
 //   - Non-form keys ride along untouched in the brief_data passthrough:
-//     uploaded_files (string[]), the *_started_at idempotency flags, and the
-//     retired `notes` key (kept for backward compat -- existing scouts that
-//     have notes keep them; new scouts never write the key).
+//     uploaded_files (string[]), the *_started_at idempotency flags,
+//     overview_source_hash (Phase 4 Revision pass 3: written by
+//     vs-generate-brief-overview, read by Submit Brief to decide whether the
+//     persisted overview is stale -- machine metadata, no form field, same
+//     shape as the *_started_at flags), and the retired `notes` key (kept for
+//     backward compat -- existing scouts that have notes keep them; new scouts
+//     never write the key).
 //
 // fromScout strips the 16 form-backed keys out of the brief_data passthrough
 // (they live in their own form fields); toUpdate rebuilds them from the form
@@ -420,4 +424,67 @@ export function appendUploadedFile(
       uploaded_files: [...existing, storagePath],
     },
   };
+}
+
+/**
+ * Deterministic client-side fallback for the Event Overview. Mirrors the edge
+ * function's own stub (vs-generate-brief-overview `buildStub`) for the case
+ * where the invoke fails before the function can run. Used by Submit Brief
+ * (BriefVenue) and the report's regenerate path (BriefReport).
+ */
+export function buildOverviewStub(state: BriefFormState): string {
+  const where = state.city.trim() ? ` in ${state.city.trim()}` : "";
+  const live = state.live_dates.trim()
+    ? ` Live ${state.live_dates.trim()}.`
+    : "";
+  return `${state.event_name.trim() || "Event"} for ${
+    state.client_name.trim() || "the client"
+  }${where}.${live}`;
+}
+
+/**
+ * Stable hash of the brief fields that drive the Event Overview prompt.
+ * Used by Submit Brief (client) and vs-generate-brief-overview (server)
+ * to decide whether the overview is stale.
+ *
+ * Arrays are sorted before serialization so reordering tags does not
+ * count as a change. Strings are trimmed. Numbers are passed through.
+ * null and "" both serialize to JSON null so an empty field reads as
+ * "no value" regardless of typing.
+ *
+ * The 15 inputs are the same fields vs-generate-brief-overview feeds into the
+ * overview prompt. The server recomputes this hash from the persisted scout
+ * row, so the field set, the canonical form of each field, AND the object key
+ * order must stay in lockstep with the server implementation.
+ *
+ * Returns a 16-character hex prefix of the SHA-256 digest.
+ */
+export async function computeOverviewSourceHash(
+  state: BriefFormState,
+): Promise<string> {
+  const normalize = (v: string) => v.trim() || null;
+  const source = {
+    client_name: normalize(state.client_name),
+    event_name: normalize(state.event_name),
+    live_dates: normalize(state.live_dates),
+    install_dates: normalize(state.install_dates),
+    strike_dates: normalize(state.strike_dates),
+    city: normalize(state.city),
+    budget_text: normalize(state.budget_text),
+    expected_guest_count: normalize(state.expected_guest_count),
+    activations_count: state.activations_count,
+    objectives: [...state.objectives].sort(),
+    target_audience: normalize(state.target_audience),
+    vibe_aesthetic: normalize(state.vibe_aesthetic),
+    target_neighborhoods: [...state.target_neighborhoods].sort(),
+    venue_types: [...state.venue_types].sort(),
+    ideal_features: [...state.ideal_features].sort(),
+  };
+  const json = JSON.stringify(source);
+  const buf = new TextEncoder().encode(json);
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 16);
 }
