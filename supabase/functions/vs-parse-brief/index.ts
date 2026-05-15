@@ -1,4 +1,4 @@
-// vs-parse-brief (Phase 4.3-port rebuild; Phase 4 Revision field widen)
+// vs-parse-brief (Phase 4.3-port rebuild; Phase 4 Revision field widen; Phase 5.1 v17 comma-split objective sanitizer)
 //
 // Replaces the failed-attempt vs-parse-brief in the deployed-function slot.
 // Different signature, different shape, different storage target -- but
@@ -253,15 +253,17 @@ function sanitizeStringArray(raw: unknown): string[] | undefined {
 // objectives needs extra defense beyond the generic string-array sanitizer:
 // the UI's TagInput expects short tag-style phrases, but the model sometimes
 // leaks a narrative paragraph as one item or a joined string. Split joined
-// items on "; " / " and ", drop paragraph-length items (>60 chars), then
-// trim / dedupe / drop empties. No hard count cap -- the producer prunes via
-// the TagInput.
+// items on "; " / ", " / " and ", drop paragraph-length items (>60 chars),
+// then trim / dedupe / drop empties. No hard count cap -- the producer
+// prunes via the TagInput. (Phase 5.1 NIT pickup: added ", " split so a
+// comma-joined item like "Brand awareness, Press moment, Premium positioning"
+// breaks into three array items.)
 function sanitizeObjectives(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out: string[] = [];
   for (const v of raw) {
     if (typeof v !== "string") continue;
-    for (const piece of v.split(/; | and /)) {
+    for (const piece of v.split(/; |, | and /)) {
       const t = piece.trim();
       if (!t || t.length > 60) continue;
       if (!out.includes(t)) out.push(t);

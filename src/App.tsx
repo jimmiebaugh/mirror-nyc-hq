@@ -1,13 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
+import { StandardOrAdminRoute } from "@/components/StandardOrAdminRoute";
 import AppShell from "@/components/AppShell";
-import Dashboard from "./pages/Dashboard";
+import Home from "./pages/Home";
+import PendingState from "./pages/PendingState";
 import Projects from "./pages/Projects";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound.tsx";
@@ -50,6 +52,18 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
+            {/* Pending state: ProtectedRoute with the pending-redirect bypassed
+                so the page renders rather than looping. No shell. */}
+            <Route
+              path="/pending"
+              element={
+                <ProtectedRoute bypassPending>
+                  <PendingState />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Authed routes inside the new left-rail shell. */}
             <Route
               element={
                 <ProtectedRoute>
@@ -57,11 +71,153 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/venues" element={<ComingSoon title="Venues" />} />
-              <Route path="/clients" element={<ComingSoon title="Clients" />} />
-              <Route path="/tasks" element={<ComingSoon title="Tasks" />} />
+              {/* Authed `/` redirects to /home; unauthed `/` is intercepted
+                  by ProtectedRoute and renders the stealth Landing. */}
+              <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route
+                path="/home"
+                element={
+                  <StandardOrAdminRoute>
+                    <Home />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects"
+                element={
+                  <StandardOrAdminRoute>
+                    <Projects />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Project detail" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/tasks"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Tasks" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/tasks/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Task detail" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Deliverables" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/calendar"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Calendar" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/venues"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Venues" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/venues/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Venue detail" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/clients"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Clients" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/organizations"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Organizations" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/people"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="People" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/activity"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Activity Feed" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/search"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Search" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/wiki"
+                element={
+                  <StandardOrAdminRoute>
+                    <ComingSoon title="Wiki" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/team"
+                element={
+                  <AdminRoute>
+                    <ComingSoon title="Team" />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/outlook"
+                element={
+                  <AdminRoute>
+                    <ComingSoon title="Outlook" />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <AdminRoute>
+                    <ComingSoon title="Settings" />
+                  </AdminRoute>
+                }
+              />
               <Route
                 path="/talent-scout"
                 element={

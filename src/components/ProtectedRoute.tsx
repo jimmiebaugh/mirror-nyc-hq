@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 import Landing from "@/pages/Landing";
 
 /**
@@ -9,13 +10,22 @@ import Landing from "@/pages/Landing";
  *     redirectTo can land the user back on it after sign-in) and redirect
  *     to / which renders Landing with the hidden sign-in trigger.
  *
- * The hidden sign-in trigger lives on Landing, so there's no /login route to
- * leak. Authenticated users get the AppShell + nested Outlet as normal.
+ * Phase 5.1: when the signed-in user's permission_role is `pending`, redirect
+ * to /pending so admins assign a tier before any shell route renders. The
+ * /pending route itself wraps in ProtectedRoute but skips the pending redirect
+ * via the `bypassPending` flag below.
  */
 const POST_SIGNIN_REDIRECT_KEY = "post_signin_redirect";
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+export function ProtectedRoute({
+  children,
+  bypassPending = false,
+}: {
+  children: React.ReactNode;
+  bypassPending?: boolean;
+}) {
   const { user, loading } = useAuth();
+  const { isPending, loading: roleLoading } = useUserRole();
   const location = useLocation();
 
   if (loading) {
@@ -36,10 +46,22 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       try {
         sessionStorage.setItem(POST_SIGNIN_REDIRECT_KEY, intended);
       } catch {
-        /* private mode / quota exceeded — fall through */
+        /* private mode / quota exceeded; fall through */
       }
     }
     return <Navigate to="/" replace state={{ from: location }} />;
+  }
+
+  if (roleLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black">
+        <div className="text-muted-foreground text-sm">Loading…</div>
+      </div>
+    );
+  }
+
+  if (isPending && !bypassPending) {
+    return <Navigate to="/pending" replace state={{ from: location }} />;
   }
 
   return <>{children}</>;

@@ -1,4 +1,4 @@
-// vs-generate-brief-overview (Phase 4 Revision - Intake; v2 = pass 3)
+// vs-generate-brief-overview (Phase 4 Revision - Intake; v3 = Phase 5.1 NIT pickup, canonical-value hash)
 //
 // Generates the Event Overview paragraph for a Venue Scout brief.
 //
@@ -103,33 +103,28 @@ function buildStub(scout: {
   return `${event} for ${client}${where}.${when}`;
 }
 
-// --- overview_source_hash (pass 3) -------------------------------------------
+// --- overview_source_hash (pass 3, v3) ---------------------------------------
 // Reproduce src/lib/venue-scout/briefForm.ts computeOverviewSourceHash exactly.
 // The client builds its input from a BriefFormState; the server builds the
 // same canonical object from the persisted scout row (which is exactly what
-// toUpdate(form) wrote, so the array/scalar values match byte-for-byte). The
-// budget_text + expected_guest_count helpers below mirror briefForm.ts's
-// formatBudget + asString so the named-column budget and the numeric
-// brief_data.expected_guest_count canonicalize to the same display strings the
-// client hashed. Arrays are coerced to string[] but NOT trimmed/de-emptied:
-// the client helper hashes form arrays as-is, so the server must too. If the
-// overview prompt's input set changes, update both sides in lockstep.
-function hashFormatBudget(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "";
-  if (!Number.isFinite(value)) return "";
-  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
-}
-function hashAsString(v: unknown): string {
-  if (typeof v === "string") return v;
-  if (typeof v === "number" && Number.isFinite(v)) return String(v);
-  return "";
-}
+// toUpdate(form) wrote, so the array/scalar values match byte-for-byte).
+// Phase 5.1 NIT pickup: budget + expected_guest_count are hashed in their
+// canonical numeric form (matching toUpdate output) so a producer typing
+// `750000` (no `$`/commas) hashes the same as a producer typing `$750,000`.
+// Arrays are coerced to string[] but NOT trimmed/de-emptied: the client
+// helper hashes form arrays as-is, so the server must too. If the overview
+// prompt's input set changes, update both sides in lockstep.
 function hashAsStringArray(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v.filter((x): x is string => typeof x === "string");
 }
 function hashAsNumberOrNull(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+function hashAsString(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return "";
 }
 
 async function computeOverviewSourceHash(
@@ -151,10 +146,8 @@ async function computeOverviewSourceHash(
     install_dates: normalize(hashAsString(briefData.install_dates)),
     strike_dates: normalize(hashAsString(briefData.strike_dates)),
     city: normalize(scout.city ?? ""),
-    budget_text: normalize(hashFormatBudget(scout.budget)),
-    expected_guest_count: normalize(
-      hashAsString(briefData.expected_guest_count),
-    ),
+    budget: hashAsNumberOrNull(scout.budget),
+    expected_guest_count: hashAsNumberOrNull(briefData.expected_guest_count),
     activations_count: hashAsNumberOrNull(briefData.activations_count),
     objectives: hashAsStringArray(briefData.objectives).sort(),
     target_audience: normalize(hashAsString(briefData.target_audience)),
