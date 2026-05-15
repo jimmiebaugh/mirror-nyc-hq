@@ -23,14 +23,15 @@
 -- this migration is safe to apply before the edge function is deployed.
 --
 -- `is_producer_or_admin()` previously read `permission_role IN ('producer',
--- 'admin')`; the 'producer' literal would error against the new enum. The
--- function is renamed semantically to "standard or admin" via body rewrite
--- (`permission_role IN ('admin', 'standard')`). Net effect: storage policies
--- that previously gated producer-or-admin (the master `venue_photos` bucket
--- write/update/delete) now gate Standard or Admin, which preserves intent
--- (block Freelance + Pending from master-venue photo writes). The function
--- NAME stays for compatibility with the VS storage policies that haven't
--- been rewritten yet; the body change is documented inline.
+-- 'admin')`; the 'producer' literal would error against the new enum AND
+-- the function cannot be dropped because three master-venue-photos storage
+-- policies depend on it. We CREATE OR REPLACE with a `::text` comparison
+-- BEFORE the type swap so the body is enum-agnostic (works against both
+-- the old and new enum) and no DROP/CASCADE is needed. The function's
+-- semantic meaning shifts from "producer or admin" to "standard or admin";
+-- net effect on the storage policies that gate on it: Freelance and Pending
+-- users can no longer write to the master `venue_photos` bucket, which is
+-- the intent.
 --
 -- `is_admin()` body is unchanged. It references only the literal 'admin'
 -- which is valid in both the old and new enum, so it keeps working through
@@ -39,6 +40,29 @@
 -- `current_user_role()` returns `public.permission_role`. Because the type's
 -- column reference is gone after the swap but the function's return-type
 -- reference remains, we drop and recreate the function around the type swap.
+-- Nothing depends on it (it's a frontend type-inference helper only).
+
+-- ============================================================================
+-- 0. Rewrite is_producer_or_admin FIRST so the body is enum-agnostic before
+--    the type swap. Using `permission_role::text IN ('admin', 'standard')`
+--    avoids any enum-cast of the literals, which means the body works for
+--    both the old enum (where 'standard' is not a value) and the new enum.
+--    CREATE OR REPLACE preserves the function OID so the three storage
+--    policies that depend on it continue to resolve without re-creating.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.is_producer_or_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(
+    (SELECT permission_role::text IN ('admin', 'standard') FROM public.users WHERE id = auth.uid()),
+    false
+  );
+$$;
 
 -- ============================================================================
 -- 1. New enum + column-type swap (preserves data via the USING backfill).
@@ -70,28 +94,16 @@ ALTER TABLE public.users
   ALTER COLUMN permission_role SET DEFAULT 'pending'::public.permission_role_new;
 
 -- ============================================================================
--- 2. Drop functions that still reference the OLD permission_role type, then
---    drop the old type, then rename the new type to claim the canonical name.
+-- 2. Drop current_user_role (return-type dependency on the old enum), drop
+--    the orphaned old type, rename the new type to claim the canonical name.
 -- ============================================================================
 
--- `current_user_role()` returns the old type; cannot drop the type until
--- the function is gone. Recreated below.
 DROP FUNCTION IF EXISTS public.current_user_role();
-
--- `is_producer_or_admin()` body has a literal 'producer' that would fail
--- against the new enum the next time it runs. Drop and recreate with new
--- semantics (Standard or Admin) so the master-venue-photos storage policies
--- keep working without a wide-RLS rewrite in this sub-phase.
-DROP FUNCTION IF EXISTS public.is_producer_or_admin();
-
--- Now drop the orphaned old type.
 DROP TYPE public.permission_role;
-
--- Rename the new type to claim the canonical name.
 ALTER TYPE public.permission_role_new RENAME TO permission_role;
 
 -- ============================================================================
--- 3. Recreate the dropped helpers with the (now renamed) type.
+-- 3. Recreate current_user_role with the (now renamed) type.
 -- ============================================================================
 
 CREATE FUNCTION public.current_user_role()
@@ -104,24 +116,7 @@ AS $$
   SELECT permission_role FROM public.users WHERE id = auth.uid();
 $$;
 
--- New semantics: Standard or Admin. Phase 5 tier model has no `producer`;
--- the function name stays for backward compatibility with shipped storage
--- policies that still reference it (master `venue_photos` bucket).
-CREATE FUNCTION public.is_producer_or_admin()
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT COALESCE(
-    (SELECT permission_role IN ('admin', 'standard') FROM public.users WHERE id = auth.uid()),
-    false
-  );
-$$;
-
-GRANT EXECUTE ON FUNCTION public.current_user_role()      TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.is_producer_or_admin()   TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.current_user_role() TO authenticated, service_role;
 
 -- ============================================================================
 -- 4. Rewrite handle_new_user: insert as `pending`, write notifications rows
