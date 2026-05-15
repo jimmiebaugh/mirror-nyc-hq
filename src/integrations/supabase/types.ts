@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -117,6 +118,66 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deliverables: {
+        Row: {
+          assigned_user_ids: string[]
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          due_date: string | null
+          id: string
+          notes: string | null
+          project_id: string
+          status: Database["public"]["Enums"]["deliverable_status"]
+          title: string
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_user_ids?: string[]
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          project_id: string
+          status?: Database["public"]["Enums"]["deliverable_status"]
+          title: string
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_user_ids?: string[]
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          project_id?: string
+          status?: Database["public"]["Enums"]["deliverable_status"]
+          title?: string
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deliverables_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliverables_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -410,15 +471,61 @@ export type Database = {
           },
         ]
       }
+      saved_views: {
+        Row: {
+          created_at: string
+          entity_type: string
+          filter_state: Json
+          id: string
+          is_default: boolean
+          name: string
+          updated_at: string
+          user_id: string
+          view_kind: string
+        }
+        Insert: {
+          created_at?: string
+          entity_type: string
+          filter_state?: Json
+          id?: string
+          is_default?: boolean
+          name: string
+          updated_at?: string
+          user_id: string
+          view_kind: string
+        }
+        Update: {
+          created_at?: string
+          entity_type?: string
+          filter_state?: Json
+          id?: string
+          is_default?: boolean
+          name?: string
+          updated_at?: string
+          user_id?: string
+          view_kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           assignee_id: string | null
+          blocked_by: string[]
           completed_at: string | null
           created_at: string
           created_by: string
           description: string | null
           due_date: string | null
           id: string
+          priority: string
           project_id: string | null
           status: Database["public"]["Enums"]["task_status"]
           title: string
@@ -426,12 +533,14 @@ export type Database = {
         }
         Insert: {
           assignee_id?: string | null
+          blocked_by?: string[]
           completed_at?: string | null
           created_at?: string
           created_by: string
           description?: string | null
           due_date?: string | null
           id?: string
+          priority?: string
           project_id?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title: string
@@ -439,12 +548,14 @@ export type Database = {
         }
         Update: {
           assignee_id?: string | null
+          blocked_by?: string[]
           completed_at?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
           due_date?: string | null
           id?: string
+          priority?: string
           project_id?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title?: string
@@ -1345,23 +1456,24 @@ export type Database = {
       start_over_scout: { Args: { target_scout_id: string }; Returns: Json }
     }
     Enums: {
+      deliverable_status: "Upcoming" | "In Progress" | "Complete" | "Skipped"
       permission_role: "admin" | "standard" | "freelance" | "pending"
       project_status:
+        | "Approved"
+        | "In Production"
+        | "In Progress"
+        | "Location Scouting"
+        | "Install"
+        | "Removal"
+        | "Billing"
+        | "Queued"
         | "Quoting"
         | "Quote Sent"
+        | "Awaiting Feedback"
         | "On Hold"
-        | "Awaiting FB"
-        | "Awaiting Files"
-        | "Awaiting Approval"
-        | "In Progress"
         | "Complete"
-        | "In Production"
-        | "Event Live"
-        | "Billing"
-        | "Proof Out"
-        | "Location Scouting"
-        | "In Review"
-      task_status: "todo" | "in_progress" | "blocked" | "done"
+        | "Cancelled"
+      task_status: "To Do" | "Doing" | "Blocked" | "Done"
       ts_candidate_attachment_type:
         | "resume"
         | "cover_letter"
@@ -1511,24 +1623,25 @@ export const Constants = {
   },
   public: {
     Enums: {
+      deliverable_status: ["Upcoming", "In Progress", "Complete", "Skipped"],
       permission_role: ["admin", "standard", "freelance", "pending"],
       project_status: [
+        "Approved",
+        "In Production",
+        "In Progress",
+        "Location Scouting",
+        "Install",
+        "Removal",
+        "Billing",
+        "Queued",
         "Quoting",
         "Quote Sent",
+        "Awaiting Feedback",
         "On Hold",
-        "Awaiting FB",
-        "Awaiting Files",
-        "Awaiting Approval",
-        "In Progress",
         "Complete",
-        "In Production",
-        "Event Live",
-        "Billing",
-        "Proof Out",
-        "Location Scouting",
-        "In Review",
+        "Cancelled",
       ],
-      task_status: ["todo", "in_progress", "blocked", "done"],
+      task_status: ["To Do", "Doing", "Blocked", "Done"],
       ts_candidate_attachment_type: [
         "resume",
         "cover_letter",
@@ -1553,3 +1666,6 @@ export const Constants = {
     },
   },
 } as const
+<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
+A new version of Supabase CLI is available: v2.98.2 (currently installed v2.98.1)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

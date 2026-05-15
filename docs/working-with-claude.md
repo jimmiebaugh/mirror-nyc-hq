@@ -48,8 +48,21 @@ cd /Users/jimmie/Code/mirror-nyc-hq && \
   echo "=== branch ===" && git branch --show-current && \
   echo "=== status ===" && git status --short && \
   echo "=== worktrees ===" && git worktree list && \
-  echo "=== unmerged claude branches ===" && (git branch | grep '^  claude/' || echo "(none)")
+  echo "=== unmerged claude branches ===" && (git branch | grep '^  claude/' || echo "(none)") && \
+  echo "=== sync-doc drift check ===" && \
+  ACTUAL=$(git log -1 origin/main --format=%H) && \
+  CLAIMED=$(grep -oP 'SHIPPED at[ \x60]+\K[a-f0-9]{7,40}' /Users/jimmie/Claude/Mirror\ NYC\ HQ/OUTPUTS/COWORK_SYNC.md 2>/dev/null || echo "(no SHIPPED hash)") && \
+  echo "  origin/main: $ACTUAL" && \
+  echo "  sync doc:    $CLAIMED" && \
+  ( [ "${ACTUAL:0:7}" = "${CLAIMED:0:7}" ] || echo "  >>> DRIFT: sync doc and origin/main disagree" )
 ```
+
+Decision tree on the drift line:
+
+- **No drift (hashes match):** sync doc is fresh. Trust it.
+- **Sync doc says SHIPPED but hash mismatches origin/main:** sync wasn't refreshed after a subsequent commit landed. Re-read git log to find the actual latest state before any further work.
+- **Sync doc says AWAITING SQUASH APPROVAL:** the previous phase stopped at the approval gate. Cowork should NOT start new work; surface to Jimmie what's pending and offer to advance.
+- **No SHIPPED hash anywhere in the sync doc:** sync doc may be stale or the phase isn't complete. Investigate.
 
 Decision tree on the output:
 
@@ -74,6 +87,41 @@ git branch -D claude/<name>
 ```
 
 Stale worktrees make `git status` and `git branch -a` noisy. Clean up before declaring the sub-phase done.
+
+### COWORK_SYNC.md write convention (two-write per phase)
+
+`OUTPUTS/COWORK_SYNC.md` is the Code to Cowork status channel. To avoid stale-sync confusion, Code writes the doc twice per phase with an explicit status marker.
+
+**Write 1: at the squash-approval gate.** When Code has implemented + reviewed + committed locally and is stopping for Jimmie's squash decision, it writes a short sync block:
+
+```markdown
+**Status:** AWAITING SQUASH APPROVAL
+**Feature branch:** claude/<name>
+**Feature commit:** <hash>
+**Migration applied:** yes/no
+**Edge function deployed:** yes/no
+**Build:** tsc + vite clean
+```
+
+Plus a "What landed" summary and the squash + push instructions Jimmie will run.
+
+**Write 2: after squash + push + backfill + cleanup.** Code OVERWRITES the doc once the full flow completes:
+
+```markdown
+**Status:** SHIPPED at <main-hash>
+**Squashed at:** <squash-hash>
+**Backfilled at:** <backfill-hash>
+**Pushed to origin:** yes
+**Netlify deploy:** triggered (or skipped if [skip netlify])
+**Worktree:** cleaned up
+**Feature branch:** deleted
+```
+
+Plus the full "What landed" summary, code-reviewer recap, decisions confirmed, and carried-forward items. This is the version Cowork syncs from.
+
+**Why two writes:** if Jimmie session-outs before approving, Cowork next session reads the AWAITING block and knows the actual state without grepping git logs. If Jimmie approves and the full flow completes, Cowork reads SHIPPED and trusts the doc fully.
+
+**Don't conflate writes.** The AWAITING block is short and explicitly preliminary. The SHIPPED block is comprehensive and the source of truth. Don't try to make the AWAITING block do double duty.
 
 ---
 
@@ -294,7 +342,7 @@ Phase 4 shipped as a 1:1 port from `mirror-nyc-venue-scout-pro`. Reference: `doc
 
 **8. CHECKPOINT.md staleness.** The doc that's supposed to be the living state drifted from reality when post-squash backfill commits got delayed. Bit Cowork at 4.3.2 and 4.3.3 wrap-ups.
 
-*Fix:* the COWORK_SYNC two-write convention (pending in `OUTPUTS/REPO_DOC_UPDATES.md`). Until that lands, CHECKPOINT.md gets updated in the same commit as any sub-phase completion. Don't defer.
+*Fix:* the COWORK_SYNC two-write convention codified in § 2 above (AWAITING SQUASH APPROVAL stub at the gate, SHIPPED block after squash + push + cleanup). CHECKPOINT.md gets updated in the same commit as any sub-phase completion. Don't defer.
 
 ---
 

@@ -10,7 +10,15 @@ import { StandardOrAdminRoute } from "@/components/StandardOrAdminRoute";
 import AppShell from "@/components/AppShell";
 import Home from "./pages/Home";
 import PendingState from "./pages/PendingState";
-import Projects from "./pages/Projects";
+import ProjectsList from "./pages/projects/ProjectsList";
+import ProjectDetail from "./pages/projects/ProjectDetail";
+import ProjectEdit from "./pages/projects/ProjectEdit";
+import TasksList from "./pages/tasks/TasksList";
+import TaskDetail from "./pages/tasks/TaskDetail";
+import TaskEdit from "./pages/tasks/TaskEdit";
+import DeliverablesList from "./pages/deliverables/DeliverablesList";
+import DeliverableDetail from "./pages/deliverables/DeliverableDetail";
+import DeliverableEdit from "./pages/deliverables/DeliverableEdit";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound.tsx";
 import TalentScoutIndex from "./pages/talent-scout/Index";
@@ -86,7 +94,31 @@ const App = () => (
                 path="/projects"
                 element={
                   <StandardOrAdminRoute>
-                    <Projects />
+                    <ProjectsList view="list" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects/board"
+                element={
+                  <StandardOrAdminRoute>
+                    <ProjectsList view="board" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects/timeline"
+                element={
+                  <StandardOrAdminRoute>
+                    <ProjectsList view="timeline" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <ProjectEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -94,7 +126,15 @@ const App = () => (
                 path="/projects/:id"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Project detail" />
+                    <ProjectDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <ProjectEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -102,7 +142,23 @@ const App = () => (
                 path="/tasks"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Tasks" />
+                    <TasksList view="list" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/tasks/board"
+                element={
+                  <StandardOrAdminRoute>
+                    <TasksList view="board" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/tasks/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <TaskEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -110,7 +166,15 @@ const App = () => (
                 path="/tasks/:id"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Task detail" />
+                    <TaskDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/tasks/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <TaskEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -118,7 +182,47 @@ const App = () => (
                 path="/deliverables"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Deliverables" />
+                    <DeliverablesList view="calendar" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/list"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverablesList view="list" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/board"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverablesList view="board" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverableEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverableDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverableEdit />
                   </StandardOrAdminRoute>
                 }
               />

@@ -2,6 +2,42 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.2.1 (HQ Core databases: Projects + Tasks + Deliverables + cross-cutting components + rail amendment)
+
+Spec: `OUTPUTS/phase-5-2-spec.md` §§ 0-5.B + 5.C + 7 + 11 + 12 (5.2.1 row) + 13 (Q1-Q4 LOCKED, Q5-Q10 RECOMMENDED) + 14. Rail amendment: `OUTPUTS/phase-5-2-rail-amendment.md`. Locked Phase 5 decisions: `OUTPUTS/phase-5-locked-decisions-2026-05-15.md`.
+
+### Project + Task status enum reshape (locked Q2)
+
+Both Postgres enums were rebuilt to match the locked-decisions canonical labels rather than label-mapping in the UI. `project_status` went from 14 legacy values to 14 locked values with six dropped (`Awaiting FB`, `Awaiting Files`, `Awaiting Approval`, `Event Live`, `Proof Out`, `In Review`) and six added (`Approved`, `Install`, `Removal`, `Queued`, `Awaiting Feedback`, `Cancelled`); the rename `Awaiting FB -> Awaiting Feedback` is the obvious one. Catch-all backfills: `Awaiting Files -> In Progress`, `Proof Out -> In Production`, `In Review -> In Progress`; spot-check rows that came from those legacy values if the catch-all is wrong for a specific project. `task_status` went from lowercase `(todo, in_progress, blocked, done)` to mixed case `(To Do, Doing, Blocked, Done)`; the `tasks_completed_at_set` trigger function was `CREATE OR REPLACE`'d in the same migration so its literal `'done'` comparison flipped to `'Done'`. Index dependents (`idx_projects_status`, `idx_tasks_status`) auto-rebuild during `ALTER COLUMN TYPE ... USING (...)`. `taskStatusLabel()` is gone.
+
+### Deliverables table (locked Q1)
+
+New 4-value `deliverable_status` enum (`Upcoming`, `In Progress`, `Complete`, `Skipped`) per locked-decisions § 4. Skipped renders strikethrough + opacity-60. Multi-assignee via `assigned_user_ids uuid[]` rather than a join table (matches the wireframe Surface 14 first-name stack on board cards). `completed_at` set by a parallel trigger to `tasks_completed_at_set`. RLS open-authenticated to match HQ Core posture. Added to `supabase_realtime` for Board drag-drop.
+
+### activity_log_writer extended to handle DELETE
+
+Pre-Phase 5.2.1 the function initialized `action_val` + `payload_val` inside the INSERT / UPDATE branches only; a DELETE invocation would have left both NULL and violated `activity_log.action NOT NULL`. The existing projects / venues / tasks triggers fired only on INSERT OR UPDATE so the gap was invisible. The 5.2.1 `deliverables` trigger fires on INSERT OR UPDATE OR DELETE per spec § 4b, so the function was `CREATE OR REPLACE`'d (same OID, existing triggers keep resolving unchanged) with a DELETE branch: `action_val := 'deleted'`, `payload_val := jsonb_build_object('old', to_jsonb(OLD))`. The DELETE branch logs `actor_id = auth.uid()` which is NULL in a server-context / cascade-delete write. This is correct: `activity_log.actor_id` is nullable (FK with ON DELETE SET NULL), and a server-initiated delete is the right thing to attribute to a null actor.
+
+### saved_views per-user table (recommended Q5 -> built)
+
+Persisted per-user filter / sort / view-kind snapshots for every HQ Core database list page. Per-user RLS scoped to `user_id = auth.uid()` (the only HQ Core table that doesn't follow the shared open-authenticated posture; saved views are personal preferences, not team state). `is_default` per `(user_id, entity_type)` is enforced in app via a transactional "clear then set" upsert (`createSavedView` in `src/lib/hq/savedViews.ts`); the DB carries no unique partial index for it because a single multi-row write would have to dodge a constraint mid-flight.
+
+### tasks priority + blocked_by (recommended Q7 -> built)
+
+`tasks.priority text NOT NULL DEFAULT 'Normal' CHECK IN ('Urgent', 'High', 'Normal', 'Low')` and `tasks.blocked_by uuid[] NOT NULL DEFAULT '{}'` with a GIN index. uuid[] beats a join table for simplicity; downside is Postgres can't FK-enforce array elements, so the app validates that entries reference valid task ids before write. The Surface 13 "Notes / Blocks" cell renders `description` + `blocked_by` together; the migration kept them as distinct columns so future surfaces can split them.
+
+### tasks_completed_at_set rewrite
+
+`CREATE OR REPLACE` rather than `DROP FUNCTION` + recreate. Same lesson as the Phase 5.1 `is_producer_or_admin` rewrite (memory `feedback_enum_storage_policy_dep.md`): plpgsql function bodies defer name resolution to first execution, so the safest swap is to keep the OID, rewrite the body, and let next-execution pick up the new literal `'Done'`. No CASCADE drops; no trigger re-attaches.
+
+### Rail amendment: single Tools group + tool-app variant
+
+`OUTPUTS/phase-5-2-rail-amendment.md`. The shipped split between Tools (Standard + Admin) and admin-only items collapsed into a single ordered list with per-item `adminOnly?: boolean`. Locked ordering: Wiki, Talent Scout, Venue Scout, Team, Outlook, Settings. Tool-app variant detected via `pathname.startsWith('/talent-scout') || pathname.startsWith('/venue-scout')` swaps the Primary group for `[HQ Home, Activity Feed]`. Route-based, not state-based: clicking a non-tool-app rail item flips the route and the rail returns to default on next render. `/pending` still renders no rail.
+
+### Out of scope for 5.2.1 (lands 5.2.2 or later)
+
+Organizations / People / Venues surfaces (5.2.2). `<InternalNotesEditor />` (5.2.2, since it's the Org / Person / Venue Internal Notes pattern). `<StarRating />` (5.2.2). Quick-add cluster on `/home` flipping placeholders to real "+ New Project / Task / Deliverable" routes (deferred until 5.2.2 lands the People route). Project Detail attachments (storage; future sub-phase). Status Notes uses existing `projects.notes`; Client Notes is rendered as a "lands in 5.2.2" empty-state placeholder. The `notes_log` Realtime publication stays deferred until simultaneous-author UX surfaces. Per-surface Calendar tabs (Projects / Tasks) route to the unified `/calendar?source=...` stub; the unified Calendar surface lands in 5.3.
+
 ## Phase 4 Revision - Intake (3-step brief stepper)
 
 Follow-on revision correcting the Phase 4.3-port + 4.9-port surfaces. Phase 4 stays DONE; this rebuilt the single-page Brief into a 3-step stepper (Event -> Venue -> Review) and gathered the venue-side fields the AI sourcing prompt needs. Spec: `OUTPUTS/phase-4-revision-intake-spec.md`. The five decision points below were resolved by Jimmie on 2026-05-14 and are binding.
