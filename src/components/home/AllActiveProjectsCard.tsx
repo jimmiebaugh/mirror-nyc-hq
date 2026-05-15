@@ -51,12 +51,7 @@ async function loadActive(): Promise<Row[]> {
        designers:project_designers(user:users(full_name, email))`,
     )
     .is("archived_at", null)
-    // Spec § 7a step 4: status NOT IN ('Complete', 'Cancelled'). The shipped
-    // project_status enum has 'Complete' but no 'Cancelled' (the canonical
-    // label lands when 5.2 reshapes the enum); filtering for 'Cancelled'
-    // here would error from PostgREST's enum cast. Filter on Complete only
-    // for 5.1, and revisit when 5.2 adds Cancelled.
-    .not("status", "in", '("Complete")');
+    .not("status", "in", '("Complete","Cancelled")');
   const rows: Row[] = ((data ?? []) as unknown as DbProjectRow[]).map((p) => {
     const am = (p.account_managers ?? []).map((j) => j.user).filter(Boolean);
     const ds = (p.designers ?? []).map((j) => j.user).filter(Boolean);

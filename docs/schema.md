@@ -28,13 +28,14 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `id` (uuid, PK)
 - `name` (text, not null)
 - `client_id` (uuid, FK to clients, nullable)
-- `status` (enum: Quoting, Quote Sent, On Hold, Awaiting FB, Awaiting Files, Awaiting Approval, In Progress, Complete, In Production, Event Live, Billing, Proof Out, Location Scouting, In Review). May be refined later.
+- `status` (enum `project_status`, 14 values, default `Queued`): `Approved`, `In Production`, `In Progress`, `Location Scouting`, `Install`, `Removal`, `Billing`, `Queued`, `Quoting`, `Quote Sent`, `Awaiting Feedback`, `On Hold`, `Complete`, `Cancelled`. Reshaped in Phase 5.2.1 (`20260515130000_phase_5_2_1_project_task_enum_reshape.sql`) from the 14-value shipped enum to the locked 14-value list per `OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 4. Backfill mapping: `Awaiting FB` -> `Awaiting Feedback`, `Awaiting Files` -> `In Progress` (catch-all), `Awaiting Approval` -> `Awaiting Feedback`, `Event Live` -> `In Production`, `Proof Out` -> `In Production` (catch-all), `In Review` -> `In Progress` (catch-all); other 8 values map to themselves.
 - `live_dates_start`, `live_dates_end` (date, nullable)
 - `production_folder_url`, `design_decks_folder_url`, `budget_sheet_url`, `latest_creative_deck_url`, `slack_channel_url` (text, all nullable)
 - `notes` (text)
 - `archived_at` (timestamptz, nullable; null = active, non-null = archived; default queries filter `archived_at IS NULL`)
 - `created_by` (uuid, FK to users)
 - `created_at`, `updated_at`
+- Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` (Phase 5.2.1) so the Projects Board view subscribes to status changes via `postgres_changes`.
 
 ### project_account_managers (join, every project must have at least one row)
 - `project_id`, `user_id` (PK composite)
@@ -68,9 +69,12 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `project_id` (uuid, FK, nullable for personal tasks)
 - `assignee_id` (uuid, FK to users, nullable)
 - `created_by` (uuid, FK to users, not null)
-- `status` (enum: `todo`, `in_progress`, `blocked`, `done`)
+- `status` (enum `task_status`, 4 values, default `To Do`): `To Do`, `Doing`, `Blocked`, `Done`. Reshaped in Phase 5.2.1 from the lowercase shipped enum (`todo` / `in_progress` / `blocked` / `done`) per `OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 4. `tasks_completed_at_set` trigger function was `CREATE OR REPLACE`'d in the same migration to compare against the new `Done` literal.
+- `priority` (text, default `Normal`, CHECK in `Urgent` / `High` / `Normal` / `Low`). Added in Phase 5.2.1 (`20260515130003_phase_5_2_1_tasks_priority_blocks.sql`) to back the Surface 13 Priority pill.
+- `blocked_by` (uuid[] of task ids, default `{}`, GIN-indexed). Added in Phase 5.2.1; surfaces the Surface 13 "Notes / Blocks" cell. Postgres can't FK-enforce array elements; the app validates that entries reference valid task ids before write.
 - `due_date` (date, nullable)
 - `created_at`, `updated_at`, `completed_at`
+- Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` (Phase 5.2.1) so the Tasks Board view subscribes to status changes via `postgres_changes`.
 
 ## Talent Scout (siloed from HQ)
 
@@ -251,6 +255,37 @@ Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSi
 - `payload` (jsonb)
 - `created_at`
 
+### deliverables (Phase 5.2.1)
+Per-project workflow checkpoints surfaced on Surface 14 (Calendar default view) and on the Project detail (Surface 07).
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `project_id` (uuid, NOT NULL, FK to `projects.id` ON DELETE CASCADE)
+- `title` (text, NOT NULL)
+- `type` (text): free-text Kickoff / Venue Recon / Design Round / Client Approval / Install / Removal etc. Future sub-phase may promote to a lookup.
+- `status` (enum `deliverable_status`, 4 values, default `Upcoming`): `Upcoming`, `In Progress`, `Complete`, `Skipped`. Skipped renders with strikethrough + opacity-60 per locked-decisions § 4.
+- `due_date` (date, nullable). Calendar view filters out NULL due dates.
+- `notes` (text, nullable)
+- `assigned_user_ids` (uuid[], NOT NULL, default `{}`, GIN-indexed). Multi-assignee per build notes Surface 14 board card "first-name" stack.
+- `created_by` (uuid, NOT NULL, FK to `users.id` default ON DELETE RESTRICT)
+- `created_at`, `updated_at`, `completed_at` (timestamptz). `completed_at` is set by the `deliverables_completed_at_set` trigger when status flips to `Complete`; cleared on flip away.
+- Triggers: `trg_deliverables_updated_at` (updated_at_auto), `trg_deliverables_completed_at` (completed_at on Complete), `trg_activity_log_deliverables` (INSERT OR UPDATE OR DELETE -> activity_log via the extended `activity_log_writer`; Phase 5.2.1 added the DELETE branch).
+- RLS: SELECT/INSERT/UPDATE/DELETE open to authenticated.
+- Realtime: published via `supabase_realtime` with `REPLICA IDENTITY FULL` so the Board drag-drop status changes reach peers via `postgres_changes`.
+
+### saved_views (Phase 5.2.1)
+Per-user named filter / sort / view-kind snapshots for the HQ Core database list pages.
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `user_id` (uuid, NOT NULL, FK to `users.id` ON DELETE CASCADE)
+- `entity_type` (text, NOT NULL, CHECK in `project / task / deliverable / organization / person / venue`)
+- `name` (text, NOT NULL)
+- `view_kind` (text, NOT NULL, CHECK in `list / board / timeline / calendar`)
+- `filter_state` (jsonb, NOT NULL, default `'{}'::jsonb`). Shape: `{ connector: 'AND'|'OR', chips: [{field, op, value}], sort?: {field, dir}, columns?: [string] }`.
+- `is_default` (bool, NOT NULL, default false). One per `(user_id, entity_type)` enforced in app via a transactional "clear then set" upsert; the DB does not carry a unique partial index for it.
+- `created_at`, `updated_at` (timestamptz)
+- RLS: per-user (`USING user_id = auth.uid()`) on SELECT/INSERT/UPDATE/DELETE. Unlike every other HQ Core table this is personal preference data; no cross-user reads.
+- Index: `(user_id, entity_type)` btree.
+
 ### notes_log (Phase 5.1)
 Polymorphic Internal Notes log shared by Organizations and People. Both surfaces land in Phase 5.2; this table is forward-compatible across both today.
 
@@ -267,8 +302,9 @@ Polymorphic Internal Notes log shared by Organizations and People. Both surfaces
 ## Postgres triggers
 
 - `vs_candidate_venues_shortlist_sync`: re-introduced in Phase 4.6-port (migration `20260512230000_phase_4_6_port_shortlist_sync_trigger.sql`) at a simplified shape after being dropped in Phase 4.1-port. BEFORE UPDATE on `vs_candidate_venues`, fires only when `shortlisted` flips false to true. Matches HQ `venues` by `website_url` first, then by case-insensitive `name + neighborhood`; sets `linked_venue_id` on match. If no match, INSERTs a new HQ `venues` row (carrying `name`, `address`, `neighborhood`, `website_url`, `features` from `key_features`, and `created_by` pulled from the parent `vs_scouts` row) and sets `linked_venue_id`. SECURITY DEFINER so the INSERT bypasses RLS on `venues`. Never updates an existing HQ venue row; the master `venues` table is treated as append-only by this trigger.
-- `tasks_completed_at_set`: when `tasks.status` flips to `done`, set `completed_at = now()`.
-- `activity_log_writer`: on insert/update/status-change to projects, venues, tasks, write an activity_log row.
+- `tasks_completed_at_set`: when `tasks.status` flips to `Done`, set `completed_at = now()`. Body `CREATE OR REPLACE`'d in Phase 5.2.1 to compare against the mixed-case enum label after the task_status reshape.
+- `deliverables_completed_at_set` (Phase 5.2.1): mirror of `tasks_completed_at_set` for the `deliverables` table; flips `completed_at` on `status -> 'Complete'`.
+- `activity_log_writer`: on insert / update / delete / status-change to projects, venues, tasks, deliverables, write an `activity_log` row. Extended in Phase 5.2.1 with a `TG_OP = 'DELETE'` branch (`action = 'deleted'`, payload `{ old: to_jsonb(OLD) }`) so the new `trg_activity_log_deliverables` trigger can fire on AFTER DELETE; existing projects / venues / tasks triggers remain on AFTER INSERT OR UPDATE only.
 - `updated_at_auto`: standard updated_at trigger on every table with the column.
 - `handle_new_user`: on `auth.users` INSERT, mirror to `public.users` with `permission_role = 'pending'` (Phase 5.1; was `'member'` pre-rewrite). Also inserts one `notifications` row per active admin (`type='user_pending'`) and fires the `notify-admin-of-pending-user` edge function via `public.invoke_edge_function`. Runs as service role.
 

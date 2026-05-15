@@ -17,7 +17,7 @@ import { currentWeekWindow } from "@/lib/home/week";
 type Row = {
   id: string;
   title: string;
-  priority: "Urgent" | "High" | "Normal" | "Low" | null;
+  priority: "Urgent" | "High" | "Normal" | "Low";
   dueDateIso: string | null;
   projectName: string | null;
   clientName: string | null;
@@ -28,6 +28,7 @@ type DbTaskRow = {
   title: string;
   due_date: string | null;
   status: string;
+  priority: "Urgent" | "High" | "Normal" | "Low";
   // The Supabase generated relationship type returns the join shape inline;
   // the project nested object is the small subset we need on the dashboard.
   project: {
@@ -42,6 +43,7 @@ function priorityBadgeClass(p: Row["priority"]): string {
     case "Urgent": return "hq-pill hq-pill--destructive";
     case "High": return "hq-pill hq-pill--warn";
     case "Low": return "hq-pill hq-pill--muted";
+    case "Normal":
     default: return "hq-pill hq-pill--muted";
   }
 }
@@ -75,18 +77,18 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
       const { data } = await supabase
         .from("tasks")
         .select(
-          "id, title, due_date, status, project:projects(id, name, client:clients(name))",
+          "id, title, due_date, status, priority, project:projects(id, name, client:clients(name))",
         )
         .eq("assignee_id", userId)
         .gte("due_date", mondayIso)
         .lte("due_date", sundayIso)
-        .in("status", ["todo", "in_progress", "blocked"])
+        .in("status", ["To Do", "Doing", "Blocked"])
         .order("due_date", { ascending: true });
       if (!active) return;
       const next: Row[] = ((data ?? []) as unknown as DbTaskRow[]).map((t) => ({
         id: t.id,
         title: t.title,
-        priority: null, // Phase 5.2 adds a `priority` column to tasks; rendered as Normal until then.
+        priority: t.priority,
         dueDateIso: t.due_date,
         projectName: t.project?.name ?? null,
         clientName: t.project?.client?.name ?? null,
@@ -102,7 +104,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
     setCompleting((m) => ({ ...m, [taskId]: true }));
     const { error } = await supabase
       .from("tasks")
-      .update({ status: "done" })
+      .update({ status: "Done" })
       .eq("id", taskId);
     if (!error) {
       // Optimistic remove + server-confirmed reload per docs/conventions.md.
@@ -167,7 +169,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
                   </td>
                   <td>
                     <span className={priorityBadgeClass(r.priority)}>
-                      {r.priority ?? "Normal"}
+                      {r.priority}
                     </span>
                   </td>
                   <td className={`r ${due.className}`}>{due.label}</td>

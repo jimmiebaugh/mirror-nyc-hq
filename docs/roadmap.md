@@ -55,8 +55,14 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   Dashboard and Surface 03 Admin Dashboard.
 - **5.2 Projects + Tasks + Deliverables + Organizations + People + Venues
   databases.** The canonical database-list pattern (list, board, timeline,
-  calendar views) plus detail + edit, applied across all six surfaces. They
-  share the same shell so they parallelize once 5.1 lands.
+  calendar views) plus detail + edit, applied across all six surfaces. Split
+  into two commits per the Phase 5.2 spec:
+  - **5.2.1** Project workflow trio (Projects + Tasks + Deliverables) +
+    cross-cutting components (`<DataTable />`, `<ViewSwitch />`, `<FilterBar />`,
+    `<SavedViewsDropdown />`, `<BoardView />`, `<TimelineView />`) + the rail
+    amendment from `OUTPUTS/phase-5-2-rail-amendment.md`.
+  - **5.2.2** Entity trio (Organizations + People + Venues) using the cross-
+    cutting components landed in 5.2.1.
 - **5.3 Calendar + Outlook.** Unified Calendar with two-row event banners,
   per-project visibility toggles, and Outlook 12-month grid + entry edit
   form with the Promote-to-Project affordance.

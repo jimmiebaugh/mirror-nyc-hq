@@ -30,7 +30,7 @@ export default function AppShell() {
       .from("tasks")
       .select("id", { count: "exact", head: true })
       .eq("assignee_id", user.id)
-      .in("status", ["todo", "in_progress"])
+      .in("status", ["To Do", "Doing"])
       .then(({ count }) => {
         if (!active) return;
         setTasksOpenCount(count ?? 0);
@@ -52,7 +52,7 @@ export default function AppShell() {
       : "Standard"; // Default catches Standard plus any role-unresolved race (pending users are gated upstream)
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <LeftRail
         isAdmin={isAdmin}
         tasksOpenCount={tasksOpenCount}
