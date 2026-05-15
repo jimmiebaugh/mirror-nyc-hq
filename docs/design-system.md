@@ -52,9 +52,15 @@ Sizes (utility classes in `src/index.css`):
 
 - `--radius: 0.25rem` (4px): every rounded element
 - Card content padding: `p-6` (24px) standard, `p-8` for forms
-- Card → card gap: `space-y-6` (24px)
+- Card to card gap: `space-y-6` (24px)
 - Form-field stack: `space-y-2` per Field, `space-y-4` per group, `space-y-6` between sections
 - Sticky bottom action bar: `py-4 px-6` with `border-t-2 border-primary/40`
+
+**Component sizing** (canonical; promoted from `mirror-style-guide.md` during the Phase 5 reconciliation):
+
+- **Button height:** 40px for primary and secondary, 36px for tertiary.
+- **Input height:** 44px.
+- **Card title (h3) size:** 18px Montserrat ExtraBold. Distinct from `.h-section` (22px shipped); use `.h-card` for in-card titles on dashboards and table headbars. `.h-card` is defined in `src/index.css` under the Phase 5.1 HQ Core block.
 
 ---
 
@@ -210,6 +216,78 @@ References: `RoundStatusPill.tsx`, `RoleStatusPill.tsx`, `ReferralPill.tsx`, `Re
 - Latest / Most-recent indicator → green (success token)
 - Reject / DQ → destructive red
 - Referral pill → electric blue (NOT coral). Coral was tried in 3.7.8.8, reverted in 3.7.8.13 because too many other coral surfaces blurred the signal.
+
+---
+
+## 5b. Status color mapping (canonical)
+
+Every status pill, table row left-border, board column dot, and timeline bar in HQ Core resolves to one of these tokens. Mapped per enum.
+
+**Tokens:**
+
+| Token | Hex | Use |
+| --- | --- | --- |
+| `--success` | `#4ADE80` | green |
+| `--info` | `#06B6D4` | cyan |
+| `--warn` | `#F59E0B` | amber |
+| `--destructive` | `#EF4444` | red |
+| `--border-strong` | `#3A3A3A` | neutral / dormant gray |
+
+Coral (`--primary`) is reserved as an accent (primary CTAs, eyebrows, focus rings, primary record links). It is NEVER a status color.
+
+### Project status (14 values)
+
+| Status | Token |
+| --- | --- |
+| Approved | `--success` |
+| In Production | `--info` |
+| In Progress | `--info` |
+| Location Scouting | `--info` |
+| Install | `--info` |
+| Removal | `--warn` |
+| Billing | `--warn` |
+| Queued | `--border-strong` |
+| Quoting | `--warn` |
+| Quote Sent | `--warn` |
+| Awaiting Feedback | `--warn` |
+| On Hold | `--border-strong` |
+| Complete | `--border-strong` |
+| Cancelled | `--destructive` |
+
+**Billing is amber, not green.** The locked wireframe Surface 04 renders Billing rows green; that is a wireframe-side inconsistency carrying into the spec. Build enforces amber.
+
+### Task status (4 values)
+
+| Status | Token |
+| --- | --- |
+| To Do | `--border-strong` |
+| Doing | `--info` |
+| Blocked | `--destructive` |
+| Done | `--success` |
+
+### Deliverable status (4 values)
+
+| Status | Token |
+| --- | --- |
+| Upcoming | `--border-strong` |
+| In Progress | `--warn` |
+| Complete | `--success` |
+| Skipped | `--border-strong` (with strikethrough text and reduced opacity) |
+
+Upcoming and Skipped share the gray token. Skipped differentiates with `text-decoration: line-through` and `opacity-60` on the title text, matching the Done task render in the wireframe.
+
+### Outlook Confidence (4 values)
+
+| Status | Token |
+| --- | --- |
+| On Radar | `--warn` |
+| Likely | `--info` |
+| Confirmed | `--success` |
+| Complete | `--border-strong` |
+
+Reads as a step-up ladder: speculative (amber), looking good (cyan), locked (green), done (gray). This flips the wireframe's drawn mapping for Outlook Confidence; build enforces this version.
+
+Implementation pointer: `src/lib/home/projectStatusToken.ts` is the canonical mapper for the Project + Task enums; `.hq-pill--<token>` classes in `src/index.css` render the resolved color.
 
 ---
 

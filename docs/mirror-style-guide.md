@@ -72,9 +72,7 @@ The deck uses 36pt for hero titles and 16pt for accent captions on a presentatio
 
 | Use | Family / weight | Size | Tracking | Casing |
 | --- | --- | --- | --- | --- |
-| Page title (h1) | Montserrat ExtraBold (800) | 32px | -0.01em | UPPERCASE |
 | Page subtitle | Roboto Mono 400 | 13px | 0.06em | UPPERCASE |
-| Section title (h2) | Montserrat ExtraBold (800) | 22px | -0.005em | UPPERCASE |
 | Card title (h3) | Montserrat ExtraBold (800) | 18px | normal | Title Case OK |
 | Eyebrow caption (e.g. "TALENT SCOUT", "PULL ROUND") | Roboto Mono 400 | 11px | 0.08em | UPPERCASE |
 | Section label (e.g. "RECRUITER OVERVIEW", "FILES & MATERIALS") | Roboto Mono 700 | 11px | 0.06em | UPPERCASE |
@@ -176,13 +174,10 @@ className="w-full h-11 px-3 rounded-sm bg-surface-alt border border-border-stron
 
 ### Cards / panels
 
-```tsx
-className="rounded-sm bg-surface border border-border p-5"
-```
-
 - 4px radius. Pure flat: no shadow.
 - Background `--surface` (`#0A0A0A`: barely lifted off black) so cards are visible against `#000` page.
-- 20px padding internal (`p-5`). Tighter than source, matching HQ's compactness.
+
+For padding + sizing canon, see `docs/design-system.md` § 1 Spacing + radius + Component sizing.
 
 ### Header / nav
 

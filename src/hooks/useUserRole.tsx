@@ -8,22 +8,30 @@ type PermissionRole = Database["public"]["Enums"]["permission_role"];
 type State = {
   role: PermissionRole | null;
   loading: boolean;
-  isMember: boolean;
-  isProducer: boolean;
   isAdmin: boolean;
+  isStandard: boolean;
+  isFreelance: boolean;
+  isPending: boolean;
+  isStandardOrAdmin: boolean;
 };
 
 const initial: State = {
   role: null,
   loading: true,
-  isMember: false,
-  isProducer: false,
   isAdmin: false,
+  isStandard: false,
+  isFreelance: false,
+  isPending: false,
+  isStandardOrAdmin: false,
 };
 
 /**
  * Reads the current authed user's permission_role from public.users.
  * Refetches when the user changes (sign-in / sign-out).
+ *
+ * Phase 5.1 tier model: admin / standard / freelance / pending. The
+ * `isStandardOrAdmin` flag drives `<StandardOrAdminRoute>` access; pending
+ * users are redirected to /pending upstream by `<ProtectedRoute>`.
  */
 export function useUserRole(): State {
   const { user } = useAuth();
@@ -47,9 +55,11 @@ export function useUserRole(): State {
         setState({
           role,
           loading: false,
-          isMember: role === "member" || role === "producer" || role === "admin",
-          isProducer: role === "producer" || role === "admin",
           isAdmin: role === "admin",
+          isStandard: role === "standard",
+          isFreelance: role === "freelance",
+          isPending: role === "pending",
+          isStandardOrAdmin: role === "admin" || role === "standard",
         });
       });
     return () => {

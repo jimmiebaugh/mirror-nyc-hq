@@ -40,20 +40,48 @@ Shipped to production 2026-05-13 (main at `7cd27ed`). Full 1:1 port from `mirror
 
 ### Phase 5: HQ Core (cross-cutting). ACTIVE.
 
-Six surfaces that connect Talent Scout, Venue Scout, and HQ-level concerns. No source repo to port from; each surface gets a Cowork-drafted spec before any code.
+The cross-cutting HQ Core layer that ties Talent Scout and Venue Scout into a
+single relational backbone for the agency. No source repo to port from; each
+sub-phase ships from a Cowork-drafted spec built off the locked Phase 5
+wireframe (`OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html`) + the locked
+decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
 
-**Sub-phase candidates** (ordering subject to Phase 5.1 scoping):
+**Sub-phases:**
 
-- **5.1 Notifications dispatch.** The foundation. Folds in `ts-send-pull-notification` and the future bell. Provides the event pipeline before Dashboard tiles or in-app bell can wire to it.
-- **5.2 Dashboard tile grid.** Main landing for authenticated users. Each tile links to a destination (Projects, Venues, Clients, Tasks, Talent Scout, Venue Scout). Needs Projects to exist before it lands.
-- **5.3 Real /projects page.** Highest-traffic HQ Core surface. Replaces the current stub. Active scouts, active roles, recent activity, project meta.
-- **5.4 /venues, /clients, /tasks pages.** Parallelizable once Projects pattern is set. Each follows the same list-then-detail structure.
-- **5.5 Activity log feed.** Cross-cutting. Hooks into project, venue, role, scout, and task triggers. Surfaces in Dashboard plus a dedicated feed page.
-- **5.6 Admin pages.** User role management. Global settings UI for fields currently SQL-only (the existing TS Settings and VS Settings pages cover their respective scopes; admin pages cover the rest).
+- **5.1 Schema + auth foundations + left rail shell + Home.** Tier model
+  rewrite (Admin / Standard / Freelance / Pending), notes_log table for
+  Internal Notes parity on Organizations + People, pending-state flow, new
+  left rail AppShell replacing the shipped top-nav, Surface 02 Standard
+  Dashboard and Surface 03 Admin Dashboard.
+- **5.2 Projects + Tasks + Deliverables + Organizations + People + Venues
+  databases.** The canonical database-list pattern (list, board, timeline,
+  calendar views) plus detail + edit, applied across all six surfaces. They
+  share the same shell so they parallelize once 5.1 lands.
+- **5.3 Calendar + Outlook.** Unified Calendar with two-row event banners,
+  per-project visibility toggles, and Outlook 12-month grid + entry edit
+  form with the Promote-to-Project affordance.
+- **5.4 Wiki + Account Logins + Settings + Team.** Wiki pages with admin-
+  gated Edit, Account Logins page with reveal-and-copy credential field
+  and silent 30-second idle re-redact, global Settings page, Team page
+  (admin-only, user-management directory; ties to Settings for the
+  user-management read path).
+- **5.5 Notifications + Activity Feed + states polish.** `notifications-
+  dispatch` edge function absorbing `ts-send-pull-notification` and any
+  Phase 5.1 placeholder admin-notification function, the bell panel with
+  unread state, dedicated Activity Feed page, and the state-gallery polish
+  pass across empty / loading / error / permission-denied + toasts +
+  dialogs.
 
-**Order matters:** Dashboard depends on Projects. Notifications can ship in parallel with Dashboard since it is edge-function-plus-table groundwork. Bell UI wires after Dashboard. Activity log lands after enough event triggers exist to populate it.
+**Order matters:** 5.1 is the foundation; every later sub-phase depends on
+the shell, the tier model, and the notes_log table. After 5.1, 5.2 and 5.3
+parallelize cleanly. 5.4 depends on the user-management work in 5.1 for the
+Team page; Wiki, Account Logins, and Settings are otherwise independent. 5.5
+absorbs whatever notification scaffolding 5.1 stubbed and ships the polish.
 
-Per-sub-phase pattern follows `docs/working-with-claude.md` § standard new-surface workflow.
+Per-sub-phase pattern follows `docs/working-with-claude.md` § standard
+new-surface workflow: Cowork drafts the spec from the locked wireframe + the
+relevant docs, Code implements off the spec, code-reviewer subagent on the
+diff before merge.
 
 ### Phase 6: Cutover. DONE.
 

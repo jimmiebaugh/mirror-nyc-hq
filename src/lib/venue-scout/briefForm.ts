@@ -172,6 +172,18 @@ function parseBudget(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Parse a producer-typed guest count back to an integer. Same canonical form
+ * as `toUpdate` uses for the brief_data.expected_guest_count number.
+ * Returns null when empty or unparseable.
+ */
+function parseGuestCount(text: string): number | null {
+  const trimmed = (text ?? "").trim();
+  if (!trimmed) return null;
+  const n = parseInt(trimmed.replace(/[,\s]/g, ""), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
 function asString(v: unknown): string {
   if (typeof v === "string") return v;
   if (typeof v === "number" && Number.isFinite(v)) return String(v);
@@ -463,6 +475,10 @@ export async function computeOverviewSourceHash(
   state: BriefFormState,
 ): Promise<string> {
   const normalize = (v: string) => v.trim() || null;
+  // Phase 5.1 NIT pickup: budget + expected_guest_count are hashed in their
+  // canonical numeric form so a producer who types a non-canonical input
+  // (no `$`, no commas) doesn't trigger a wasted regen on re-submit. The
+  // server-side hash in vs-generate-brief-overview applies the same shape.
   const source = {
     client_name: normalize(state.client_name),
     event_name: normalize(state.event_name),
@@ -470,8 +486,8 @@ export async function computeOverviewSourceHash(
     install_dates: normalize(state.install_dates),
     strike_dates: normalize(state.strike_dates),
     city: normalize(state.city),
-    budget_text: normalize(state.budget_text),
-    expected_guest_count: normalize(state.expected_guest_count),
+    budget: parseBudget(state.budget_text),
+    expected_guest_count: parseGuestCount(state.expected_guest_count),
     activations_count: state.activations_count,
     objectives: [...state.objectives].sort(),
     target_audience: normalize(state.target_audience),

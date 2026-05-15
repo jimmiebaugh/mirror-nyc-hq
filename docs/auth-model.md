@@ -6,15 +6,18 @@ Identity, permission roles, RLS, storage buckets, the Google service account, an
 
 - Google OAuth via Supabase Auth, restricted to `@mirrornyc.com`.
 - Three reinforcing layers: `hd=mirrornyc.com` OAuth parameter, Supabase allowed domains, app-level email check.
-- New signups land in `auth.users` first; the `handle_new_user` trigger mirrors them into `public.users` with `permission_role = 'member'`.
+- New signups land in `auth.users` first; the `handle_new_user` trigger mirrors them into `public.users` with `permission_role = 'pending'` (Phase 5.1). The trigger also writes one `notifications` row per active admin and fires the `notify-admin-of-pending-user` edge function so admins know to assign a tier from the Team page (lands 5.4).
 
-## Permission roles (3 tiers, stacked)
+## Permission roles (Phase 5.1 four-tier model)
 
-- `member`: full read/write on HQ tables. Can use Venue Scout end-to-end (per port plan § 8.6, collaborative agency-wide workflow; storage policies relaxed in Phase 4.10.3-port). No Talent Scout. No global settings. Default for new signups.
-- `producer`: everything member can do, plus elevated permissions reserved for future controls (no producer-only Venue Scout gating currently; tier kept for forward compatibility).
-- `admin`: everything producer can do, plus Talent Scout, user role management, global settings.
+Reshaped in Phase 5.1 from the original 3-tier model (`member`/`producer`/`admin`) per the locked Phase 5 decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 2). Backfill: admin -> admin, producer -> admin, member -> standard.
 
-A user can be assigned to projects (as account manager or designer) regardless of their permission role; assignment ≠ permission tier.
+- `pending`: default for new signups. Cannot access any HQ surface beyond `/pending`. `<ProtectedRoute>` redirects to `/pending` for any authed route. An admin assigns one of the other three tiers from the Team page (Phase 5.4).
+- `standard`: full read/write on HQ Core tables (Projects, Tasks, Deliverables, Venues, Organizations, People, etc. as they land in 5.2). Full Venue Scout access (port plan § 8.6 collaborative agency-wide workflow; storage policies relaxed in Phase 4.10.3-port). No Talent Scout. No global settings. No Team / Outlook / Settings rail entries.
+- `freelance`: read-only HQ access tier. Phase 5.1 renders the Standard rail variant minus Account Logins (Account Logins lands 5.4 with the tier-specific gate). Spec § 6c: 5.1 ships Freelance with the Standard rail until the dedicated gates land.
+- `admin`: everything Standard can do, plus Talent Scout, Team / Outlook / Settings rail entries, user role management, global settings.
+
+A user can be assigned to projects (as account manager or designer) regardless of their permission role; assignment != permission tier.
 
 ## Per-project assignments (separate from permission role)
 
@@ -35,8 +38,9 @@ Admin checks are done via a SECURITY DEFINER function that reads `permission_rol
 
 ## Frontend route gates
 
-- `<ProtectedRoute>`: any signed-in `@mirrornyc.com` user.
-- `<AdminRoute>`: wraps `ProtectedRoute`, additionally requires `permission_role = 'admin'`. Used on every `/talent-scout/*` route.
+- `<ProtectedRoute>`: any signed-in `@mirrornyc.com` user. **Phase 5.1 behavior change:** when `permission_role = 'pending'`, redirects to `/pending`. The `/pending` route itself wraps in `<ProtectedRoute bypassPending>` so the pending screen renders rather than looping.
+- `<StandardOrAdminRoute>` (Phase 5.1): wraps `ProtectedRoute`, additionally requires `permission_role IN ('admin', 'standard')`. Used on `/home` and every HQ Core surface beyond `/pending`. Freelance users see a friendly "access restricted" empty state with a Sign Out button.
+- `<AdminRoute>`: wraps `ProtectedRoute`, additionally requires `permission_role = 'admin'`. Used on every `/talent-scout/*` route plus `/team`, `/outlook`, `/settings`.
 - All `/venue-scout/*` routes wrap in `<ProtectedRoute>` only (port plan § 8.6 RLS open-authenticated; Phase 4.2-port landed Scout Index + New Scout with this posture).
 
 ## Storage buckets

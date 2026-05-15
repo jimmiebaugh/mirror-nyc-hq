@@ -122,11 +122,7 @@ function resolveActiveChip(pathname: string, scoutId: string): string | null {
     { label: "Brief", prefix: `${root}/brief` },
   ];
   for (const m of matches) {
-    if (
-      pathname === m.prefix ||
-      pathname.startsWith(`${m.prefix}/`) ||
-      pathname.startsWith(`${m.prefix}?`)
-    ) {
+    if (pathname === m.prefix || pathname.startsWith(`${m.prefix}/`)) {
       return m.label;
     }
   }

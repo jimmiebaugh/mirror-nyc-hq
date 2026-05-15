@@ -81,7 +81,10 @@ Resets `global_settings.anthropic_spend_current_month_usd=0` and `cap_alert_sent
 ## Cross-cutting
 
 ### `notifications-dispatch(event_type, entity_id, recipient_user_ids)`: Phase 5
-Insert `notifications` rows + send email via Gmail API service account (`jobs@mirrornyc.com`). Phase 3.8's `ts-send-pull-notification` folds into this here.
+Insert `notifications` rows + send email via Gmail API service account (`jobs@mirrornyc.com`). Phase 3.8's `ts-send-pull-notification` and Phase 5.1's `notify-admin-of-pending-user` both fold into this here.
+
+### `notify-admin-of-pending-user(user_id, email)`: Phase 5.1
+Sends a one-time email to every active admin when a new user signs in for the first time. Called from the `handle_new_user` trigger via `public.invoke_edge_function` (server-to-server with `x-internal-secret`). Composes a plain-text + HTML body via `_shared/sendEmail.ts` and sends via the service account's `gmail.send` scope from `jobs@mirrornyc.com`. Failures are logged, not thrown: the pending user is already in `public.users` and the durable `notifications` rows are written by the trigger before the function fires. Standalone in 5.1; folds into `notifications-dispatch` in 5.5. `verify_jwt = false`.
 
 ### `auth-on-signup` (deprecated: use `handle_new_user` trigger)
 The original spec mentioned an `auth-on-signup` Edge Function. Phase 2 implemented this as a Postgres trigger on `auth.users` instead (`handle_new_user`), running with service-role privileges. No Edge Function needed.
