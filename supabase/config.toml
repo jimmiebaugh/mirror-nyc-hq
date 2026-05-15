@@ -107,3 +107,10 @@ verify_jwt = true
 # vs-* sibling pattern.
 [functions.vs-generate-deck]
 verify_jwt = true
+
+# Phase 5.1: admin notification for new pending users. Called by the
+# handle_new_user trigger via public.invoke_edge_function (server-to-server
+# with x-internal-secret). requireInternalOrUserAuth handles auth in-fn.
+# Phase 5.5's notifications-dispatch will absorb this.
+[functions.notify-admin-of-pending-user]
+verify_jwt = false

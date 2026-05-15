@@ -11,7 +11,7 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `email` (text, unique, not null)
 - `full_name` (text)
 - `avatar_url` (text)
-- `permission_role` (enum: `member`, `producer`, `admin`; default `member`)
+- `permission_role` (enum: `admin`, `standard`, `freelance`, `pending`; default `pending`). Reshaped in Phase 5.1 from the 3-tier model (`member`/`producer`/`admin`) per the locked Phase 5 decisions memo. Backfill: admin -> admin, producer -> admin, member -> standard. New signups land in `pending` until an admin assigns a tier from the Team page (lands 5.4).
 - `department_tags` (text[]; allowed values: 'Account Manager', 'Production', 'Design', 'Creative'; users self-tag)
 - `active` (bool, default true; soft-delete column)
 - `created_at`, `updated_at`
@@ -251,13 +251,26 @@ Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSi
 - `payload` (jsonb)
 - `created_at`
 
+### notes_log (Phase 5.1)
+Polymorphic Internal Notes log shared by Organizations and People. Both surfaces land in Phase 5.2; this table is forward-compatible across both today.
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `parent_type` (text, NOT NULL, CHECK `IN ('organization', 'person')`)
+- `parent_id` (uuid, NOT NULL): logical FK to the parent record. Not a real FK because the parent table varies. Tightening to per-type split tables can land later if it ever matters.
+- `body` (text, NOT NULL)
+- `author_id` (uuid, NOT NULL, FK to `users.id`)
+- `created_at` (timestamptz, NOT NULL, default `now()`)
+- Index: `(parent_type, parent_id, created_at DESC)` for the newest-first per-parent timeline.
+- **No `updated_at`. Notes are immutable except for deletion** per locked-decisions § 3.
+- RLS: SELECT-all-authenticated, INSERT-self-author, DELETE-author-or-admin. **No UPDATE policy.**
+
 ## Postgres triggers
 
 - `vs_candidate_venues_shortlist_sync`: re-introduced in Phase 4.6-port (migration `20260512230000_phase_4_6_port_shortlist_sync_trigger.sql`) at a simplified shape after being dropped in Phase 4.1-port. BEFORE UPDATE on `vs_candidate_venues`, fires only when `shortlisted` flips false to true. Matches HQ `venues` by `website_url` first, then by case-insensitive `name + neighborhood`; sets `linked_venue_id` on match. If no match, INSERTs a new HQ `venues` row (carrying `name`, `address`, `neighborhood`, `website_url`, `features` from `key_features`, and `created_by` pulled from the parent `vs_scouts` row) and sets `linked_venue_id`. SECURITY DEFINER so the INSERT bypasses RLS on `venues`. Never updates an existing HQ venue row; the master `venues` table is treated as append-only by this trigger.
 - `tasks_completed_at_set`: when `tasks.status` flips to `done`, set `completed_at = now()`.
 - `activity_log_writer`: on insert/update/status-change to projects, venues, tasks, write an activity_log row.
 - `updated_at_auto`: standard updated_at trigger on every table with the column.
-- `handle_new_user`: on `auth.users` INSERT, mirror to `public.users` with `permission_role = 'member'`. Runs as service role.
+- `handle_new_user`: on `auth.users` INSERT, mirror to `public.users` with `permission_role = 'pending'` (Phase 5.1; was `'member'` pre-rewrite). Also inserts one `notifications` row per active admin (`type='user_pending'`) and fires the `notify-admin-of-pending-user` edge function via `public.invoke_edge_function`. Runs as service role.
 
 ## Postgres functions (RPCs)
 

@@ -2,10 +2,10 @@
 
 Living-state doc. Update on every meaningful merge to `main`.
 
-**Last updated:** 2026-05-14
-**Latest commit on `main`:** `bb58053` (Phase 4 Revision pass 3: Event Overview generation moves to Submit Brief, hash-gated). The Event Overview generation trigger moved from a `BriefReport.tsx` first-arrival `useEffect` to the Submit Brief click in `BriefVenue.tsx`, gated by `brief_data.overview_source_hash` (a 16-char SHA-256 over the 15 overview-driving brief fields, computed identically client + server) so the overview only regenerates when those fields actually changed since the last generation. `vs-generate-brief-overview` deployed v2 to `amipjjmphblfxpghjnel` out-of-band (atomic single-UPDATE write of `event_overview` + `brief_data.overview_source_hash`, returns both). `BriefReport.tsx` lost the auto-fire `useEffect`; its empty-state Generate button + the Regenerate link are the manual re-invokes. Squash-merge of `claude/phase-4-revision-3` (1 feature commit). Fires the Netlify deploy. Followed by an administrative CHECKPOINT.md backfill commit (`[skip netlify]`).
-**Active feature branch:** none. `claude/phase-4-revision-3` was squash-merged + its worktree removed. Future work spawns its own branches.
-**Current phase:** **Phase 4 (Venue Scout port) shipped to production 2026-05-13.** Cutover complete. Main contains the full 1:1 port from `mirror-nyc-venue-scout-pro` (Phase 4.1-port through 4.10.6-port) plus the two parallel TS commits that landed on main during the port window (`6775429` Generate Packet button restore + `7cd27ed` packet email template + layout fixes + email-as-cover-letter fallback). The 4a8a5c6 TS-wizard Stepper-migration commit was excluded from the cutover (it depended on a `ui/Stepper.tsx` file introduced by the failed Phase 4.3.1 commit that we dropped); the TS wizard keeps its local `talent-scout/Stepper.tsx`. Next: **Phase 5 (HQ Core)**.
+**Last updated:** 2026-05-15
+**Latest commit on `main`:** `4ec9828` (CHECKPOINT.md backfill of bb58053 Phase 4 Revision pass 3). Phase 5.1 (HQ Core foundations) is the active feature branch staged in this worktree; the squash-merge has NOT landed on main yet.
+**Active feature branch:** `claude/phase-5-1-foundations` (worktree `laughing-mcnulty-459376`). Awaiting Jimmie's squash-approval gate.
+**Current phase:** **Phase 5 (HQ Core) kickoff: 5.1 foundations.** Phase 4 (Venue Scout port) shipped to production 2026-05-13 (main at `7cd27ed`); the cutover stack is settled and main HEAD has only moved through administrative backfill commits since. Next: squash-merge of `claude/phase-5-1-foundations` lands the locked-decisions 4-tier model (admin / standard / freelance / pending), the `notes_log` table forward-compatible across Organizations + People, the left-rail `AppShell` replacing the shipped top-nav, the Standard + Admin Home variants (Surface 02 + 03 from the locked wireframe), and the `notify-admin-of-pending-user` edge function. After 5.1 lands, **Phase 5.2** (Projects + Tasks + Deliverables + Organizations + People + Venues databases) follows.
 **Deployed at:** `https://hq.mirrornyc.com` (also `https://mirrornyc-hq.netlify.app`). Auto-deploys on push to main.
 
 ## What's live in production
@@ -41,7 +41,8 @@ Living-state doc. Update on every meaningful merge to `main`.
 - All Phase 3.8 edge functions need to be deployed via `supabase functions deploy <name>` (cron functions + `ts-send-pull-notification` + re-deploys for `ts-pull-candidates` and any function that imports `_shared/anthropic.ts`).
 - Phase 3.8 migrations need to be pushed: `supabase db push --linked`.
 - HQ Core pages beyond `/projects` are stubs (Phase 5).
-- In-app notifications bell (Phase 5). Pull-completion email is live; bell + per-user prefs come later.
+- In-app notifications bell (Phase 5.5). Pull-completion email is live; bell + per-user prefs come later.
+- **Phase 5.1 foundations queued on `claude/phase-5-1-foundations`:** tier model rewrite migration, `notes_log` migration, left-rail shell, Home (Standard + Admin), `notify-admin-of-pending-user` edge function. Migrations need `supabase db push --linked`; the edge function needs `supabase functions deploy notify-admin-of-pending-user`. Both are out-of-band; the squash-merge fires the Netlify deploy for the frontend.
 
 ## Known issues / drift
 
@@ -52,20 +53,22 @@ Living-state doc. Update on every meaningful merge to `main`.
 ## Recent commits (main)
 
 ```
+4ec9828  [skip netlify] Backfill bb58053 Phase 4 Revision pass 3 into CHECKPOINT.md
 bb58053  Phase 4 Revision pass 3: Event Overview generation moves to Submit Brief, hash-gated
 e95eb6f  [skip netlify] Backfill 970c881 Phase 4 Revision pass 2 into CHECKPOINT.md
 970c881  Phase 4 Revision pass 2: chip restructure, objectives tagging, Stepper hide
 8b78e64  [skip netlify] Backfill 20e17ec Phase 4 Revision into CHECKPOINT.md
-20e17ec  Phase 4 Revision: 3-step brief intake stepper
 ```
 
-(A `[skip netlify]` CHECKPOINT.md backfill commit lands on top of `bb58053`; it is the administrative tail of this merge, not listed here. The next CHECKPOINT update will surface it.)
+(Phase 5.1 feature work staged on `claude/phase-5-1-foundations`; squash-merge to main pending Jimmie's approval. The next CHECKPOINT update reflects the squash hash + backfill hash.)
 
 The 2026-05-13 cutover replaced the failed-attempt Phase 4 stack on main with the full vs-port-fresh history (Phase 4.1-port through 4.10.6-port). 42 commits on main with no patch-equivalent on vs-port-fresh were intentionally dropped. See `docs/decisions.md` and `docs/venue-scout-port-plan.md` § "Done when" for the cutover trail.
 
 ## Recent migrations
 
 ```
+20260515120001_phase_5_1_notes_log.sql                            Phase 5.1: notes_log table polymorphic across organization + person. RLS: SELECT-all-auth, INSERT-self-author, DELETE-author-or-admin, NO UPDATE policy (notes are immutable except for deletion per locked-decisions § 3). Index on (parent_type, parent_id, created_at DESC). Forward-compatible with the Organizations + People tables that ship in 5.2. (STAGED on claude/phase-5-1-foundations; awaiting squash + supabase db push --linked)
+20260515120000_phase_5_1_tier_model_rewrite.sql                   Phase 5.1: ALTER TYPE swap for public.permission_role from member/producer/admin to admin/standard/freelance/pending. Backfill via ALTER COLUMN TYPE USING (CASE): admin -> admin, producer -> admin, member -> standard. New default 'pending'. handle_new_user trigger rewritten to insert 'pending', write notifications rows per active admin, and invoke notify-admin-of-pending-user via public.invoke_edge_function. is_producer_or_admin() body updated to permission_role IN ('admin', 'standard') (new semantics) so the venue_photos storage policy keeps working. current_user_role() recreated around the type swap. (STAGED on claude/phase-5-1-foundations; awaiting squash + supabase db push --linked)
 20260514110000_phase_4_revision_intake_current_step.sql              Phase 4 Revision - Intake: DROP + re-ADD vs_scouts_current_step_check with a 10th value `brief` prepended; ALTER COLUMN current_step SET DEFAULT 'brief'. Additive -- existing rows untouched. `brief` is the in-flight 3-step intake step; Step 3 Confirm flips it to `sheet_prompt`. (APPLIED)
 20260514100000_phase_4_10_6_port_reset_scout_for_deck_regenerate.sql  Phase 4.10.6-port: reset_scout_for_deck_regenerate(target_scout_id uuid) RPC for the Deck Prep regenerate flow. Atomic single-statement UPDATE that sets current_step='deck_prep', strips deck_generation_started_at from brief_data via the jsonb `-` operator, clears status + pipeline_error, bumps last_touched_at. Replaces a frontend read-then-write that had a TOCTOU race window. SECURITY INVOKER; GRANT EXECUTE TO authenticated. (APPLIED)
 20260514000002_phase_4_10_3_port_vs_storage_policies.sql        Phase 4.10.3-port: relax storage policies for briefs / sourcing_sheets / vs_venue_photos buckets from is_producer_or_admin() to authenticated. Matches vs_* table RLS posture per port plan § 8.6 (collaborative agency-wide workflow). vs_venue_photos collapsed from 4 split policies to a single FOR ALL policy. IF EXISTS on DROPs handles Studio-side rename drift. (APPLIED)
@@ -88,7 +91,10 @@ The nine `phase_4_*` migrations that landed on `main` between Phase 4.1 (Scout D
 
 ## Next up
 
-**Phase 5 (HQ Core).** Venue Scout port shipped to production 2026-05-13. With both Talent Scout (Phase 3) and Venue Scout (Phase 4) live, the next focus is the cross-cutting HQ Core pages (Projects, Venues, Clients, Tasks beyond the current stubs) plus the in-app notifications bell.
+**Phase 5.1 (HQ Core foundations).** Staged on `claude/phase-5-1-foundations` (this worktree). Awaiting Jimmie's squash-approval gate. After 5.1 lands:
+- Push migrations (`supabase db push --linked`).
+- Deploy edge function (`supabase functions deploy notify-admin-of-pending-user`).
+- Then **Phase 5.2** (Projects + Tasks + Deliverables + Organizations + People + Venues databases) per the locked decisions memo.
 
 **Production wiring for Phase 3.8** still pending (GUCs, db push, 12 edge function deploys). Can happen in parallel since it's all out-of-band (no Netlify). Steps: set `app.supabase_url` and `app.internal_api_secret` GUCs in the Supabase SQL editor, then `supabase db push --linked` for the cron migrations, then `supabase functions deploy <name>` for each of the six cron functions, `ts-send-pull-notification`, plus re-deploys for `ts-pull-candidates` and any function importing `_shared/anthropic.ts`.
 

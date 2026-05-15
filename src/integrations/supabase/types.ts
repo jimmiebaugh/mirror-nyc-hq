@@ -163,6 +163,41 @@ export type Database = {
         }
         Relationships: []
       }
+      notes_log: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          id: string
+          parent_id: string
+          parent_type: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          id?: string
+          parent_id: string
+          parent_type: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          parent_id?: string
+          parent_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notes_log_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
@@ -1310,7 +1345,7 @@ export type Database = {
       start_over_scout: { Args: { target_scout_id: string }; Returns: Json }
     }
     Enums: {
-      permission_role: "member" | "producer" | "admin"
+      permission_role: "admin" | "standard" | "freelance" | "pending"
       project_status:
         | "Quoting"
         | "Quote Sent"
@@ -1476,7 +1511,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      permission_role: ["member", "producer", "admin"],
+      permission_role: ["admin", "standard", "freelance", "pending"],
       project_status: [
         "Quoting",
         "Quote Sent",
