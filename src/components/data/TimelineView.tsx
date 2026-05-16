@@ -1,16 +1,17 @@
+import type { ReactNode } from "react";
+
 /**
- * 8-month gantt view for the Projects Timeline surface.
+ * 8-month gantt view for Projects Timeline (Surface 06). Wireframe-fidelity
+ * rebuild (Phase 5.2.1 Revision); renders the `.tl > .tl-head + .tl-row >
+ * .tl-name + .tl-track > .tl-bar` structure from
+ * OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 1264-1311.
  *
- * Spec: § 5.A.3. Rows are projects; bars are Install / Live / Removal,
- * drawn proportionally across an 8-month axis (current month + 7 forward).
- * Bars click into the project detail. Per build notes Surface 06, projects
- * with NO dated milestones are hidden from this view (filtered upstream).
- *
- * The component is generic enough to be reused for Venues if a similar
- * gantt lands later; for now Projects is the only consumer.
+ * Row left border colored by status token (`rb-<token>` -> inline
+ * border-left-color since the wireframe uses an inline style). Bar colors:
+ * Install = info cyan, Live = primary coral, Removal = warn amber.
  */
 
-import type { ReactNode } from "react";
+import type { StatusToken } from "@/lib/home/projectStatusToken";
 
 export type TimelineBar = {
   kind: "install" | "live" | "removal";
@@ -21,26 +22,45 @@ export type TimelineBar = {
 
 export type TimelineRow = {
   id: string;
-  label: ReactNode;
+  /** Title cell content (project name + sub line). */
+  name: ReactNode;
+  subText?: string;
   bars: TimelineBar[];
-  /** Optional left-border token to surface row status colour. */
-  token?: "info" | "success" | "warn" | "destructive" | "muted";
+  token?: StatusToken;
 };
 
-const LABEL_COL_PX = 220;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const BAR_COLOR: Record<TimelineBar["kind"], string> = {
+  install: "#06B6D4",
+  live: "hsl(var(--primary))",
+  removal: "hsl(var(--warn))",
+};
+
+const TOKEN_BORDER: Record<StatusToken, string> = {
+  info: "#06B6D4",
+  success: "hsl(var(--success))",
+  warn: "hsl(var(--warn))",
+  destructive: "hsl(var(--destructive))",
+  muted: "hsl(var(--border-strong))",
+};
 
 function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
-
 function addMonths(d: Date, n: number): Date {
-  return new Date(d.getFullYear(), d.getMonth() + n, d.getDate());
+  return new Date(d.getFullYear(), d.getMonth() + n, 1);
 }
-
 function diffDays(a: Date, b: Date): number {
-  const ms = b.getTime() - a.getTime();
-  return Math.round(ms / 86400000);
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+function parseIso(iso: string): Date | null {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
 }
 
 export function TimelineView({
@@ -54,81 +74,76 @@ export function TimelineView({
   const axisStart = startOfMonth(today);
   const axisEnd = addMonths(axisStart, 8);
   const totalDays = diffDays(axisStart, axisEnd);
+  const slots = Array.from({ length: 8 }, (_, i) => addMonths(axisStart, i));
 
-  const monthSlots = Array.from({ length: 8 }, (_, i) => addMonths(axisStart, i));
-
-  const positionForRange = (startIso: string, endIso?: string | null) => {
-    const [sy, sm, sd] = startIso.split("-").map(Number);
-    const start = new Date(sy, sm - 1, sd);
-    let end: Date;
-    if (endIso) {
-      const [ey, em, ed] = endIso.split("-").map(Number);
-      end = new Date(ey, em - 1, ed);
-    } else {
-      end = start;
-    }
+  const positionFor = (startIso: string, endIso?: string | null) => {
+    const start = parseIso(startIso);
+    if (!start) return null;
+    const end = endIso ? parseIso(endIso) ?? start : start;
     if (end < axisStart || start > axisEnd) return null;
-    const clampedStart = start < axisStart ? axisStart : start;
-    const clampedEnd = end > axisEnd ? axisEnd : end;
-    const offsetDays = diffDays(axisStart, clampedStart);
-    const widthDays = Math.max(1, diffDays(clampedStart, clampedEnd));
+    const cs = start < axisStart ? axisStart : start;
+    const ce = end > axisEnd ? axisEnd : end;
+    const offsetDays = diffDays(axisStart, cs);
+    const widthDays = Math.max(1, diffDays(cs, ce));
     return {
-      left: `calc(${LABEL_COL_PX}px + ${(offsetDays / totalDays) * 100}% - ${(LABEL_COL_PX * offsetDays) / totalDays}px)`,
-      width: `calc(${(widthDays / totalDays) * 100}% - ${(LABEL_COL_PX * widthDays) / totalDays}px)`,
+      left: `${(offsetDays / totalDays) * 100}%`,
+      width: `${(widthDays / totalDays) * 100}%`,
     };
   };
 
-  const axisTemplate = `${LABEL_COL_PX}px repeat(8, 1fr)`;
+  if (rows.length === 0) {
+    return (
+      <div className="empty">
+        <p>No projects with dated milestones in the next 8 months.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="hq-timeline">
-      <div className="hq-timeline-axis" style={{ gridTemplateColumns: axisTemplate }}>
-        <div />
-        {monthSlots.map((m) => (
-          <div key={m.toISOString()}>{MONTHS[m.getMonth()]} {String(m.getFullYear()).slice(-2)}</div>
+    <div className="tl">
+      <div className="tl-head">
+        <div>Project</div>
+        {slots.map((m) => (
+          <div key={m.toISOString()}>{MONTHS[m.getMonth()]}</div>
         ))}
       </div>
-      {rows.length === 0 ? (
-        <div className="hq-dt-empty">
-          <p className="text-sm">No projects with dated milestones.</p>
-        </div>
-      ) : (
-        rows.map((row) => (
+      {rows.map((row) => (
+        <div
+          key={row.id}
+          className="tl-row"
+          onClick={() => onBarClick?.(row.id)}
+        >
           <div
-            key={row.id}
-            className="hq-timeline-row"
-            data-row-token={row.token}
-            style={{ gridTemplateColumns: axisTemplate }}
-            onClick={() => onBarClick?.(row.id)}
+            className="tl-name"
+            style={{
+              borderLeftColor: row.token ? TOKEN_BORDER[row.token] : "transparent",
+            }}
           >
-            <div className="hq-timeline-rowlbl">{row.label}</div>
+            {row.name}
+            {row.subText ? <div className="sub">{row.subText}</div> : null}
+          </div>
+          <div className="tl-track">
+            <div className="tl-grid-lines">
+              {slots.map((m, i) => (
+                <span key={i} style={i === 0 ? { borderLeft: "none" } : undefined} />
+              ))}
+            </div>
             {row.bars.map((bar, i) => {
-              const pos = positionForRange(bar.startIso, bar.endIso);
+              const pos = positionFor(bar.startIso, bar.endIso);
               if (!pos) return null;
               return (
                 <div
                   key={`${row.id}-${i}`}
-                  className={`hq-timeline-bar hq-timeline-bar--${bar.kind}`}
-                  style={pos}
+                  className="tl-bar"
+                  style={{ ...pos, background: BAR_COLOR[bar.kind] }}
                 >
                   {bar.label ?? bar.kind.toUpperCase()}
                 </div>
               );
             })}
           </div>
-        ))
-      )}
-      <div className="flex items-center justify-end gap-3 px-3 py-2 text-[10px] font-mono uppercase tracking-widest text-[hsl(var(--subtle-foreground))]">
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full" style={{ background: "#06B6D4" }} /> Install
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full" style={{ background: "hsl(var(--primary))" }} /> Live
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-full" style={{ background: "hsl(var(--warn))" }} /> Removal
-        </span>
-      </div>
+        </div>
+      ))}
     </div>
   );
 }

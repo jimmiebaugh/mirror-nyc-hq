@@ -2,6 +2,87 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.2.1 Revision (wireframe-fidelity rebuild)
+
+Spec: `OUTPUTS/phase-5-2-1-revision-spec.md`. Forward-fix pass on top of the shipped 5.2.1 squash (`15511af`). Schema + routes + queries stay intact; the visual layer rebinds to the locked wireframe (`OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html`) as the binding source.
+
+### Why the revision
+
+The original 5.2.1 surfaces shipped with parallel Tailwind utility groups (`bg-surface-alt border border-border-strong rounded px-3 py-2 text-xs font-mono`) instead of consuming the wireframe's canonical CSS class names (`.input`, `.viewswitch`, `.fchip`, `.tbl`, `.bcol`, `.tl`, `.calgrid`, `.kv`, `.savebar`, `.stat`, `.pill p-<token>`). The result looked close-but-off against the wireframe across the board (view-switcher rendered as pills instead of the icon-segmented button group; filter bar missed the `.fchip` structure; tables missed the `.tbl thead` mono header; board cards reinvented layout; save bar used inline classes instead of `.savebar`). This pass rebuilds the visual layer against the wireframe DOM byte-for-byte.
+
+### DB reconciliation as a prereq (Step 0)
+
+A halted Phase 5.2.2 attempt left the live linked Supabase DB at the 5.2.2 schema state (organizations rename + people + venues extensions + projects extensions + types regenerated mid-flight) but the worktree was deleted before the .sql files made it onto a branch. Step 0 recreates the four 5.2.2 .sql files locally matching the canonical SQL in `phase-5-2-spec.md` § 4e-4h, uses `supabase migration repair --status applied` to register them as matching the already-applied remote without rerunning, regenerates types, and flips every `clients` / `client_id` / `client:clients` reference in src/ to the renamed `organizations` / `organization_id` / `organization:organizations`. Same commit flips `projects.notes` -> `projects.status_notes` and adds the new `projects.client_notes` body to ProjectDetail + ProjectEdit. This unblocks the live app (which was broken on main while shipping queries pointed at the renamed table) before the visual rebuild.
+
+### CSS lift block (revision spec § 1)
+
+A new "Phase 5.2 HQ Core surfaces" block at the bottom of `@layer components` in `src/index.css`, lifted byte-for-byte from the wireframe's `<style>` section. UNPREFIXED class names so components can be authored against the wireframe markup and DOM-diff for parity. Coexists with the 5.1 chrome classes (`.hq-rail`, `.hq-card`, `.hq-pill`, etc.) which keep the `hq-` prefix; no class collisions by design.
+
+### Data component DOM rewrites (revision spec § 2)
+
+Seven components rewritten:
+- `<ViewSwitch />` -> `.viewswitch > button[.on]` icon-segmented group (was: shadcn-like pill bar).
+- `<FilterBar />` -> `.filterbar > .fchip > .k/.op/.v/.x` chip pattern with `.andor` connector + `.fchip--add` trailing chip.
+- `<SavedViewsDropdown />` -> `.savedviews` chip trigger. Also gains an `onNavigate?: (viewKind) => void` prop fired alongside `onPick` so picking a saved view lands on the right view variant (closes original-5.2.1 code-reviewer C1).
+- `<DataTable />` -> `.tbl-wrap > .tbl[.tbl--flat] > thead/tbody > tr.rb-<token>` shape. Added `flat?: boolean` prop (top-level list pages pass it to strip the row left-border; detail-page inner tables omit it so per-row status colors show).
+- `<BoardView />` -> two layouts via `layout: "horizontal" | "stacked"` prop. Stacked = `.board-stack > .board-rowhead + .board-row > .bcol` (Projects 4-row layout). Horizontal = `.board > .bcol` flex scroll (Tasks; Deliverables one-col-per-project).
+- `<TimelineView />` -> `.tl > .tl-head + .tl-row > .tl-name + .tl-track > .tl-bar` 8-month gantt.
+- `<CalendarMonthView />` -> `.calgrid > .caldow + .calcell > .cal-ev.<kind>` month grid; 140px cell min-height; banner kinds `.in / .live / .rem / .del / plain`.
+
+`<StickySaveBar />` updated to render the wireframe-canonical `.savebar` class instead of the inline `sticky bottom-0 ...` pattern from original 5.2.1.
+
+### Deliverables Board: one column per project (revision spec § 4.C.2)
+
+Build notes Surface 14 says "one column per project (horizontal scroll)." The original 5.2.1 shipped a rows-per-project layout with status columns inside each row, which code-reviewer C2 flagged as a divergence. This revision flips to the build-notes layout: `<BoardView layout="horizontal">` with columns grouped by `project_id`. Drag-drop is intentionally NOT wired on this view -- moving a card between columns would imply re-parenting the deliverable, which is a heavier intent than drag-drop conveys. Status changes happen via the deliverable detail page (or via the future inline status pill on each card).
+
+### Inline-style allowance
+
+The revision uses inline `style={{ ... }}` props in spots where the wireframe HTML uses inline styles and the lifted CSS doesn't cover them (status-color border-left on `.tl-name`, percentage `left/width` on `.tl-bar`, the right-stack 172px width in ProjectDetail header). Acceptable per revision spec § 0d ("when in doubt, copy the wireframe").
+
+### What did NOT change
+
+Schema, routes, queries (beyond the rename flips), edge functions, 5.1 chrome (`AppShell`, `LeftRail`, `TopBar`, `Home`, `home/*` components, `RailFooter`), rail amendment, sticky-rail hot fix. The Phase 5.2.1 squash's data-loading shape, hooks, and lifecycle stay intact; only the JSX they emit gets rewritten.
+
+## Phase 5.2.2 (entity trio: Organizations + People + Venues)
+
+Spec: `OUTPUTS/phase-5-2-spec.md` §§ 4e-4h + § 13 Q3 + Q8 + Q9 + Q10. The four migrations applied to the linked Supabase project during a halted worktree attempt and were re-registered locally during the 5.2.1 Revision (`supabase migration repair --status applied`). Frontend surfaces (Org / People / Venue list / detail / edit) + `<InternalNotesEditor />` + `<StarRating />` are still pending; they land in a later sub-phase.
+
+### Clients -> Organizations rename (locked Q3)
+
+`ALTER TABLE clients RENAME TO organizations` + `ALTER TABLE projects RENAME COLUMN client_id TO organization_id` + index rename `idx_projects_client_id -> idx_projects_organization_id`. RLS / GRANTs / triggers carry through by table OID; policy identifiers stay `clients_*` (Postgres doesn't auto-rename them) but the access posture is preserved. Existing rows backfill as `type = 'Client'` (the new `org_type` enum default). The shipped `notes` column was renamed to `legacy_notes` so any existing client-row notes survive while Internal Notes flips to the polymorphic `notes_log` table.
+
+### org_type enum (Client / Vendor / Internal)
+
+Venue Owner intentionally dropped per build notes Surface 10. Venues owned by clients live directly on the venues record without a separate org-type.
+
+### internal_rating: Vendor-only field, admin-write-only RLS deferred to 5.4
+
+`internal_rating int CHECK (BETWEEN 0 AND 5)` on organizations. Visible to all standard+admin users per Surface 10 detail. Admin-write-only RLS gating deferred to 5.4 when the Team / Settings tier polish lands. Until then any authenticated user can set the rating via the open-authenticated UPDATE policy inherited from the clients RLS.
+
+### people table
+
+External humans only. Internal Mirror staff stay in `public.users` and surface on the Team page (Surface 12, lands 5.4). Multi-affiliation via `affiliations person_affiliation[]` (GIN-indexed); a single person can be both a Client and a Venue contact (build notes Surface 11 "Dana Whitfield" example). `created_by NOT NULL` with default ON DELETE RESTRICT matches the deliverables created_by posture from 5.2.1.B.
+
+### venues: multi-select venue type + new columns + rate history
+
+The single `venues.venue_type_id` FK is dropped in favor of the `venue_venue_types` join table (existing rows backfilled before drop). New venue columns: `city`, `venue_slide_url`, `total_sq_ft`, `exclusive_vendors_org_ids` (uuid[]). New `venue_rate_history` append-only table (SELECT + INSERT only for authenticated; no UPDATE / no DELETE) drives the "Event Day Rate $X as of <date>" display via the most-recent row per `(venue_id, rate_kind)`. The shipped `square_footage` column coexists with the new `total_sq_ft` per spec § 4g.
+
+### notes_log CHECK widened to include 'venue' (Q9)
+
+`ALTER TABLE notes_log DROP CONSTRAINT notes_log_parent_type_check; ADD CONSTRAINT ... CHECK (parent_type IN ('organization', 'person', 'venue'))`. Lets the shared `<InternalNotesEditor />` component serve Venue detail too.
+
+### people.venue_id (Q8)
+
+Nullable FK to venues for venue-contact attribution. Simpler than a `venue_contact_people` join table; venue contacts typically tie to one venue. Added in the 5.2.2.C migration so it can reference venues after that table exists.
+
+### projects.status_notes / client_notes rename + add (Q10)
+
+`projects.notes` renamed to `status_notes` (Surface 07 detail Status Notes sidebar card body). New `client_notes text` column added for the parallel Surface 07 Client Notes card. Two distinct fields per the wireframe; the single shipped `notes` column was carrying the Status Notes role in 5.2.1 and gets the cleaner identifier in 5.2.2.
+
+### projects.job_number / category / city / tags / budget
+
+Added in the 5.2.2.D migration. Surface 04 List view columns + Surface 07 detail title row (coral `#2604` job number, "Pop-Up · LA" meta row, "Summer 2026 / CPG / Outdoor" tag chips, `$185,000` budget reference). Budget rule: planning reference figure, NOT an invoice amount; never renders on pipeline-summary surfaces (Pipeline counts, Billing tile, List view columns, board cards, timeline labels, calendar event banners). Stays compatible with locked-decisions Q6.
+
 ## Phase 5.2.1 (HQ Core databases: Projects + Tasks + Deliverables + cross-cutting components + rail amendment)
 
 Spec: `OUTPUTS/phase-5-2-spec.md` §§ 0-5.B + 5.C + 7 + 11 + 12 (5.2.1 row) + 13 (Q1-Q4 LOCKED, Q5-Q10 RECOMMENDED) + 14. Rail amendment: `OUTPUTS/phase-5-2-rail-amendment.md`. Locked Phase 5 decisions: `OUTPUTS/phase-5-locked-decisions-2026-05-15.md`.

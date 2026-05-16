@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -174,88 +170,113 @@ export default function DeliverableEdit() {
     }
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading...</p>;
+  if (loading) {
+    return (
+      <div className="empty">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-3xl pb-24">
-      <header className="space-y-2">
-        <Link
-          to={isCreate ? "/deliverables" : `/deliverables/${id}`}
-          className="crumb"
-          onClick={(e) => {
-            if (dirty) {
-              e.preventDefault();
-              setConfirmLeaveOpen(true);
-            }
-          }}
-        >
-          ← Back to {isCreate ? "Deliverables" : "deliverable"}
-        </Link>
-        <h1 className="h-page">{isCreate ? "New Deliverable" : "Edit Deliverable"}</h1>
-      </header>
+    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 760 }}>
+      <Link
+        to={isCreate ? "/deliverables" : `/deliverables/${id}`}
+        className="tlink"
+        onClick={(e) => {
+          if (dirty) {
+            e.preventDefault();
+            setConfirmLeaveOpen(true);
+          }
+        }}
+      >
+        <IconArrowLeft className="ic" />
+        Back to {isCreate ? "Deliverables" : "deliverable"}
+      </Link>
 
-      <section className="hq-card mt-6">
-        <div className="p-6 space-y-4">
+      <div className="pagehead">
+        <h1 className="h-page">{isCreate ? "New Deliverable" : "Edit Deliverable"}</h1>
+      </div>
+
+      <section className="card">
+        <div className="card-pad stack-4">
+          <div className="block-lbl">
+            <span className="label-section">Deliverable</span>
+          </div>
           <Field label="Title" required>
-            <Input
+            <input
+              className={`input ${form.title ? "input--filled" : ""}`}
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             />
           </Field>
           <Field label="Type">
-            <Input
+            <input
+              className={`input ${form.type ? "input--filled" : ""}`}
               value={form.type}
               onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
               placeholder="Kickoff, Venue Recon, Design Round, Client Approval, Install..."
             />
           </Field>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="g2">
             <Field label="Status">
-              <Select
+              <select
+                className="input input--filled"
                 value={form.status}
-                onValueChange={(v) => setForm((f) => ({ ...f, status: v as DeliverableStatus }))}
+                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as DeliverableStatus }))}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {DELIVERABLE_STATUS_VALUES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {DELIVERABLE_STATUS_VALUES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Due date">
-              <Input
+              <input
                 type="date"
+                className={`input ${form.due_date ? "input--filled" : ""}`}
                 value={form.due_date}
                 onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
               />
             </Field>
             <Field label="Project" required>
-              <Select
+              <select
+                className={`input ${form.project_id ? "input--filled" : ""}`}
                 value={form.project_id ?? ""}
-                onValueChange={(v) => setForm((f) => ({ ...f, project_id: v }))}
+                onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value || null }))}
               >
-                <SelectTrigger><SelectValue placeholder="Choose a project" /></SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="">Choose a project</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             </Field>
           </div>
           <Field label="Assignees">
-            <div className="space-y-1.5 max-h-44 overflow-y-auto rounded-md border border-[hsl(var(--border))] p-2">
+            <div
+              className="stack-2"
+              style={{
+                maxHeight: 180,
+                overflowY: "auto",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "var(--radius)",
+                padding: 8,
+              }}
+            >
               {users.map((u) => {
                 const checked = form.assigned_user_ids.includes(u.id);
                 return (
-                  <label key={u.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox
+                  <label
+                    key={u.id}
+                    className="row-c"
+                    style={{ fontSize: 13, cursor: "pointer" }}
+                  >
+                    <input
+                      type="checkbox"
                       checked={checked}
-                      onCheckedChange={(v) =>
+                      onChange={(e) =>
                         setForm((f) => ({
                           ...f,
-                          assigned_user_ids: v === true
+                          assigned_user_ids: e.target.checked
                             ? [...f.assigned_user_ids, u.id]
                             : f.assigned_user_ids.filter((uid) => uid !== u.id),
                         }))
@@ -268,7 +289,8 @@ export default function DeliverableEdit() {
             </div>
           </Field>
           <Field label="Notes">
-            <Textarea
+            <textarea
+              className={`input textarea ${form.notes ? "input--filled" : ""}`}
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               rows={5}
@@ -305,13 +327,21 @@ export default function DeliverableEdit() {
   );
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="space-y-2">
-      <Label className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
+    <div className="field">
+      <label className="label-form">
         {label}
-        {required ? <span className="ml-1 text-primary">*</span> : null}
-      </Label>
+        {required ? <span className="req">*</span> : null}
+      </label>
       {children}
     </div>
   );

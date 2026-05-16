@@ -1,20 +1,27 @@
 import { useState, type ReactNode } from "react";
-import type { StatusToken } from "@/lib/home/projectStatusToken";
 
 /**
  * Month-grid calendar for the Deliverables default view (Surface 14).
+ * Wireframe-fidelity rebuild (Phase 5.2.1 Revision); renders the
+ * `.calgrid > .caldow + .calcell > .cal-ev.<kind> > .en + .ek` structure
+ * from OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html Surface 14 (lines
+ * 2370+).
  *
- * Spec: § 5.C.1. Cells need min-height 140px to fit up to three two-row
- * banners (project title + deliverable title). Banner click routes via
- * onEventClick. Skipped deliverables render strikethrough + opacity-60.
+ * Banner kinds (`.in / .live / .rem / .del`) map per spec § 2.G:
+ *   Complete    -> .del   (success green)
+ *   In Progress -> .in    (info cyan)
+ *   Upcoming    -> .rem   (amber)
+ *   Skipped     -> plain  (strike rendered via `strikethrough: true`)
  */
+
+export type CalendarEventKind = "in" | "live" | "rem" | "del" | "plain";
 
 export type CalendarEvent = {
   id: string;
   dateIso: string;
   projectTitle: string;
   title: string;
-  token: StatusToken;
+  kind: CalendarEventKind;
   strikethrough?: boolean;
 };
 
@@ -22,7 +29,7 @@ const MONTH_LABELS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-const WEEK_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function startOfMonth(year: number, month: number): Date {
   return new Date(year, month, 1);
@@ -30,8 +37,8 @@ function startOfMonth(year: number, month: number): Date {
 
 function buildCells(year: number, month: number) {
   const first = startOfMonth(year, month);
-  // Monday = 0 .. Sunday = 6.
-  const offset = (first.getDay() + 6) % 7;
+  // Sunday-first per the wireframe column order.
+  const offset = first.getDay();
   const cells: { date: Date; outOfMonth: boolean }[] = [];
   const startDate = new Date(year, month, 1 - offset);
   for (let i = 0; i < 42; i++) {
@@ -89,23 +96,23 @@ export function CalendarMonthView({
   const todayIso = isoOf(today);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+    <div className="stack-3">
+      <div className="row between" style={{ alignItems: "center" }}>
+        <div className="row-c">
           <button
             type="button"
-            className="hq-savedview-btn"
+            className="btn btn-secondary btn-sm"
             onClick={goPrev}
             aria-label="Previous month"
           >
             ←
           </button>
-          <div className="font-display text-[20px] uppercase">
+          <div className="h-page" style={{ fontSize: 20, margin: 0 }}>
             {MONTH_LABELS[month]} {year}
           </div>
           <button
             type="button"
-            className="hq-savedview-btn"
+            className="btn btn-secondary btn-sm"
             onClick={goNext}
             aria-label="Next month"
           >
@@ -114,39 +121,43 @@ export function CalendarMonthView({
         </div>
         {toolbarRight}
       </div>
-      <div className="hq-calendar">
-        <div className="hq-calendar-head">
+      <div>
+        <div className="calgrid">
           {WEEK_DAYS.map((d) => (
-            <div key={d}>{d}</div>
+            <div key={d} className="caldow">{d}</div>
           ))}
-        </div>
-        <div className="hq-calendar-grid">
           {cells.map((c, i) => {
             const iso = isoOf(c.date);
             const list = eventsByDay.get(iso) ?? [];
+            const isToday = iso === todayIso;
             return (
               <div
                 key={i}
-                className={`hq-calendar-cell ${c.outOfMonth ? "hq-calendar-cell--out" : ""}`}
+                className={`calcell ${c.outOfMonth ? "calcell--off" : ""} ${isToday ? "calcell--today" : ""}`}
               >
-                <div
-                  className={`hq-calendar-daynum ${iso === todayIso ? "hq-calendar-daynum--today" : ""}`}
-                >
-                  {c.date.getDate()}
-                </div>
+                <div className="dn">{c.date.getDate()}</div>
                 {list.slice(0, 3).map((ev) => (
                   <div
                     key={ev.id}
-                    className={`hq-calendar-event ${ev.strikethrough ? "hq-calendar-event--strike" : ""}`}
-                    data-token={ev.token}
+                    className={`cal-ev ${ev.kind === "plain" ? "" : ev.kind}`}
                     onClick={() => onEventClick?.(ev)}
                   >
-                    <div className="hq-calendar-event-project">{ev.projectTitle}</div>
-                    <div className="hq-calendar-event-title">{ev.title}</div>
+                    <span
+                      className="en"
+                      style={ev.strikethrough ? { textDecoration: "line-through", opacity: 0.6 } : undefined}
+                    >
+                      {ev.projectTitle}
+                    </span>
+                    <span
+                      className="ek"
+                      style={ev.strikethrough ? { textDecoration: "line-through", opacity: 0.6 } : undefined}
+                    >
+                      {ev.title}
+                    </span>
                   </div>
                 ))}
                 {list.length > 3 ? (
-                  <div className="text-[10px] text-[hsl(var(--subtle-foreground))]">
+                  <div className="cap" style={{ marginTop: 3 }}>
                     +{list.length - 3} more
                   </div>
                 ) : null}

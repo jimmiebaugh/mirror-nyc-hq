@@ -1,9 +1,10 @@
-import { Button } from "@/components/ui/button";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 
 /**
- * Phase 5.2.1 canonical sticky bottom save bar, lifted from
- * `src/pages/talent-scout/RoleSettings.tsx` (the shipped Talent Scout edit
- * form). Used by every HQ Core edit form. Reference: design-system.md § 3.
+ * Phase 5.2.1 Revision: Sticky save bar wired to the lifted `.savebar` class
+ * from OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 421-422 (per
+ * revision spec § 1 + § 3.C). Replaces the shadcn Button + inline pattern
+ * the original 5.2.1 squash shipped. Used by every HQ Core edit form.
  */
 
 export function StickySaveBar({
@@ -22,21 +23,21 @@ export function StickySaveBar({
   saveLabel?: string;
 }) {
   return (
-    <div className="sticky bottom-0 z-10 -mx-6 mt-6 border-t-2 border-primary/40 bg-background/90 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-        <Button variant="ghost" onClick={onCancel} type="button">
-          ← {cancelLabel}
-        </Button>
-        <div className="flex items-center gap-3">
-          {dirty ? (
-            <span className="text-xs font-mono uppercase tracking-wider text-amber-400">
-              Unsaved changes
-            </span>
-          ) : null}
-          <Button onClick={onSave} disabled={saving || !dirty} type="button">
-            {saving ? "Saving..." : saveLabel}
-          </Button>
-        </div>
+    <div className="savebar">
+      <button type="button" className="btn btn-tertiary" onClick={onCancel}>
+        <IconArrowLeft className="ic" />
+        {cancelLabel}
+      </button>
+      <div className="row-c">
+        {dirty ? <span className="dirty">Unsaved changes</span> : null}
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!dirty || saving}
+          onClick={onSave}
+        >
+          {saving ? "Saving..." : saveLabel}
+        </button>
       </div>
     </div>
   );

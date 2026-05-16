@@ -3,6 +3,26 @@ import type { Config } from "tailwindcss";
 export default {
   darkMode: ["class"],
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  // Safelist for dynamic-token classes constructed via template literals
+  // (e.g. `pill p-${token}`, `rb-${token}`, `cal-ev ${kind}`). Tailwind's
+  // content scanner cannot detect those suffixes statically, so the
+  // matching @layer components rules in src/index.css get purged from
+  // the production bundle. Without these entries, only the token variants
+  // that happen to also appear as literals elsewhere in source survive,
+  // which is why warn-token pills rendered correctly but info/success/
+  // destructive/muted pills came back as bare dot+text on Home + List.
+  safelist: [
+    // Pills (Phase 5.2 wireframe-canonical + Phase 5.1 hq- prefix variants)
+    "pill", "pill-sm", "pill-lg",
+    "p-warn", "p-success", "p-info", "p-destructive", "p-primary", "p-muted", "p-purple",
+    "hq-pill", "hq-pill--warn", "hq-pill--success", "hq-pill--info", "hq-pill--destructive", "hq-pill--muted",
+    // Calendar event banner kind classes (selectors are `.cal-ev.<kind>`)
+    "cal-ev", "in", "live", "rem", "del",
+    // Row-border tokens (`.tbl tr[.rb-<token>]`, `.bcard[.rb-<token>]`)
+    "rb-warn", "rb-success", "rb-info", "rb-destructive", "rb-muted",
+    // Board + timeline elements referenced through dynamic JSX
+    "bcard", "bcol", "tl-bar", "tl-name",
+  ],
   prefix: "",
   theme: {
     container: {

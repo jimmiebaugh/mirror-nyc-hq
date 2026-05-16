@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { FilterState } from "@/components/data/FilterBar";
+import { IconChevronDown } from "@/components/icons/HQIcons";
 import {
   createSavedView,
   deleteSavedView,
@@ -18,17 +18,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 
 /**
- * Saved Views dropdown trigger. Renders the current view name + a chevron;
- * opens a popover listing every saved view for the (user, entity) pair
- * with a "+ Save current view" affordance.
+ * Saved Views dropdown trigger. Wireframe-fidelity rebuild
+ * (Phase 5.2.1 Revision); renders the `.savedviews` chip from line 993
+ * of OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html.
  *
- * Spec: § 5.A.1 component contract.
+ * Carry-forward fix (code-reviewer C1 from original 5.2.1): when the user
+ * picks a saved view, the component fires `onPick` AND `onNavigate` so the
+ * page lands on the saved view's variant (was: filter applied, view kind
+ * ignored).
  */
 
 export function SavedViewsDropdown({
@@ -37,12 +36,15 @@ export function SavedViewsDropdown({
   activeViewKind,
   activeFilterState,
   onPick,
+  onNavigate,
 }: {
   entityType: EntityType;
   activeName: string;
   activeViewKind: ViewKind;
-  activeFilterState: FilterState;
+  activeFilterState: SavedView["filter_state"];
   onPick: (view: SavedView) => void;
+  /** Optional: route to the picked view's `view_kind`. Wires SavedViews to the URL. */
+  onNavigate?: (viewKind: ViewKind) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [views, setViews] = useState<SavedView[]>([]);
@@ -84,7 +86,9 @@ export function SavedViewsDropdown({
         filterState: activeFilterState,
         isDefault: draftDefault,
       });
-      setViews((vs) => [...vs, v].sort((a, b) => a.name.localeCompare(b.name)));
+      setViews((vs) =>
+        [...vs, v].sort((a, b) => a.name.localeCompare(b.name)),
+      );
       setSaveOpen(false);
       setDraftName("");
       setDraftDefault(false);
@@ -103,57 +107,103 @@ export function SavedViewsDropdown({
   };
 
   return (
-    <div className="relative" ref={popoverRef}>
-      <button
-        type="button"
-        className="hq-savedview-btn"
+    <div style={{ position: "relative" }} ref={popoverRef}>
+      <span
+        className="savedviews"
+        role="button"
         onClick={() => setOpen((v) => !v)}
       >
-        <span>{activeName}</span>
-        <span aria-hidden>▾</span>
-      </button>
+        <IconChevronDown className="ic" style={{ width: 12, height: 12 }} />
+        {activeName}
+      </span>
       {open ? (
-        <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-[hsl(var(--border-strong))] bg-[hsl(var(--surface-raised))] p-1 shadow-lg">
+        <div
+          className="card"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: 0,
+            zIndex: 30,
+            width: 240,
+            padding: 6,
+          }}
+        >
           {views.length === 0 ? (
-            <div className="px-3 py-2 text-[12px] text-[hsl(var(--subtle-foreground))] font-mono">
+            <div
+              className="cap"
+              style={{ padding: "8px 10px" }}
+            >
               No saved views yet
             </div>
           ) : (
             views.map((v) => (
               <div
                 key={v.id}
-                className="flex items-center justify-between gap-2 rounded px-2 py-1.5 hover:bg-[hsl(var(--surface-alt))]"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  padding: "6px 8px",
+                  borderRadius: 4,
+                }}
               >
                 <button
                   type="button"
-                  className="flex-1 text-left text-[13px]"
+                  className="tlink"
+                  style={{
+                    flex: 1,
+                    justifyContent: "flex-start",
+                    color: "hsl(var(--foreground))",
+                    fontSize: 12,
+                  }}
                   onClick={() => {
                     onPick(v);
+                    if (onNavigate) onNavigate(v.view_kind);
                     setOpen(false);
                   }}
                 >
                   {v.name}
                   {v.is_default ? (
-                    <span className="ml-2 text-[10px] uppercase tracking-wider text-primary">
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: 9,
+                        textTransform: "uppercase",
+                        letterSpacing: ".06em",
+                        color: "hsl(var(--primary))",
+                      }}
+                    >
                       default
                     </span>
                   ) : null}
                 </button>
                 <button
                   type="button"
-                  className="text-[12px] text-[hsl(var(--subtle-foreground))] hover:text-[hsl(var(--destructive))]"
+                  className="tlink"
+                  style={{
+                    color: "hsl(var(--subtle-foreground))",
+                    fontSize: 11,
+                  }}
                   onClick={() => handleDelete(v.id)}
                   aria-label={`Delete ${v.name}`}
                 >
-                  ✕
+                  ×
                 </button>
               </div>
             ))
           )}
-          <div className="border-t border-[hsl(var(--border))] mt-1 pt-1">
+          <div
+            style={{
+              borderTop: "1px solid hsl(var(--border))",
+              marginTop: 4,
+              paddingTop: 4,
+            }}
+          >
             <button
               type="button"
-              className="w-full px-2 py-1.5 text-left text-[12px] text-primary hover:bg-[hsl(var(--surface-alt))]"
+              className="tlink"
+              style={{ padding: "6px 8px", fontSize: 11 }}
               onClick={() => {
                 setOpen(false);
                 setSaveOpen(true);
@@ -170,32 +220,48 @@ export function SavedViewsDropdown({
           <AlertDialogHeader>
             <AlertDialogTitle>Save view</AlertDialogTitle>
             <AlertDialogDescription>
-              Capture the active filters and view kind so you can come back
-              to them later.
+              Capture the active filters and view kind so you can come back to
+              them later.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="saved-view-name">Name</Label>
-              <Input
+          <div className="stack-3">
+            <div className="field">
+              <label className="label-form" htmlFor="saved-view-name">
+                Name
+              </label>
+              <input
                 id="saved-view-name"
+                className="input"
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
                 placeholder="Active projects"
                 autoFocus
               />
             </div>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
+            <label
+              className="cap"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                color: "hsl(var(--foreground))",
+                fontSize: 13,
+              }}
+            >
+              <input
+                type="checkbox"
                 checked={draftDefault}
-                onCheckedChange={(v) => setDraftDefault(v === true)}
+                onChange={(e) => setDraftDefault(e.target.checked)}
               />
               Make this my default view
             </label>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSave} disabled={!draftName.trim()}>
+            <AlertDialogAction
+              onClick={handleSave}
+              disabled={!draftName.trim()}
+            >
               Save
             </AlertDialogAction>
           </AlertDialogFooter>

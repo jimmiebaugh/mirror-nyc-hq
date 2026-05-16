@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { deliverableStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
 import { formatMediumDate } from "@/lib/hq/dates";
 import type { DeliverableStatus } from "@/lib/deliverables/queries";
@@ -57,62 +57,90 @@ export default function DeliverableDetail() {
     };
   }, [id]);
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading...</p>;
-  if (!row) return <p className="text-sm text-muted-foreground">Deliverable not found.</p>;
+  if (loading) {
+    return (
+      <div className="empty">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+  if (!row) {
+    return (
+      <div className="empty">
+        <p>Deliverable not found.</p>
+      </div>
+    );
+  }
+
+  const token = deliverableStatusToken(row.status);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <Link to="/deliverables" className="crumb">← Back to Deliverables</Link>
-      <header className="flex items-start justify-between gap-3">
-        <h1 className={`h-page ${statusTextDecoration("deliverable", row.status)}`}>{row.title}</h1>
-        <Button onClick={() => navigate(`/deliverables/${row.id}/edit`)}>Edit Deliverable</Button>
-      </header>
-
-      <div className="hq-card">
-        <div className="p-6 space-y-3 text-sm">
-          <Row label="Status">
-            <span className={`hq-pill hq-pill--${deliverableStatusToken(row.status)}`}>
-              <span className="hq-pill-dt" />
-              {row.status}
-            </span>
-          </Row>
-          <Row label="Type">{row.type ?? "-"}</Row>
-          <Row label="Due">{row.due_date ? formatMediumDate(row.due_date) : "-"}</Row>
-          <Row label="Project">
-            {row.project ? (
-              <Link to={`/projects/${row.project.id}`} className="hq-tlink">{row.project.name}</Link>
-            ) : (
-              "-"
-            )}
-          </Row>
-          <Row label="Assignees">
-            {assignees.length === 0
-              ? "Unassigned"
-              : assignees.map((a) => a.full_name ?? a.email).join(", ")}
-          </Row>
-          {row.completed_at ? (
-            <Row label="Completed">{formatMediumDate(row.completed_at.slice(0, 10))}</Row>
-          ) : null}
-        </div>
+    <div className="stack-4" style={{ maxWidth: 760 }}>
+      <Link to="/deliverables" className="tlink">
+        <IconArrowLeft className="ic" />
+        Back to Deliverables
+      </Link>
+      <div className="row between" style={{ alignItems: "flex-start" }}>
+        <h1 className={`h-page ${statusTextDecoration("deliverable", row.status)}`}>
+          {row.title}
+        </h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate(`/deliverables/${row.id}/edit`)}
+        >
+          Edit Deliverable
+        </button>
       </div>
 
-      <div className="hq-card">
-        <div className="hq-card-headbar">
+      <section className="card">
+        <div className="card-pad">
+          <dl className="kv">
+            <dt>Status</dt>
+            <dd>
+              <span className={`pill p-${token}`}>
+                <span className="dt" />
+                {row.status}
+              </span>
+            </dd>
+            <dt>Type</dt>
+            <dd>{row.type ?? "-"}</dd>
+            <dt>Due</dt>
+            <dd>{row.due_date ? formatMediumDate(row.due_date) : "-"}</dd>
+            <dt>Project</dt>
+            <dd>
+              {row.project ? (
+                <Link to={`/projects/${row.project.id}`} className="tlink">
+                  {row.project.name}
+                </Link>
+              ) : (
+                "-"
+              )}
+            </dd>
+            <dt>Assignees</dt>
+            <dd>
+              {assignees.length === 0
+                ? "Unassigned"
+                : assignees.map((a) => a.full_name ?? a.email).join(", ")}
+            </dd>
+            {row.completed_at ? (
+              <>
+                <dt>Completed</dt>
+                <dd>{formatMediumDate(row.completed_at.slice(0, 10))}</dd>
+              </>
+            ) : null}
+          </dl>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-headbar">
           <span className="h-card">Notes</span>
         </div>
-        <div className="p-6 text-sm whitespace-pre-wrap text-[hsl(var(--muted-foreground))]">
+        <div className="card-pad muted" style={{ whiteSpace: "pre-wrap" }}>
           {row.notes || "(empty)"}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="label-form text-[hsl(var(--subtle-foreground))] min-w-[80px]">{label}</span>
-      <span>{children}</span>
+      </section>
     </div>
   );
 }

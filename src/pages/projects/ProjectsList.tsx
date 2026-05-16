@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ViewSwitch, type ViewKind } from "@/components/data/ViewSwitch";
+import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, emptyFilterState, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { DataTable } from "@/components/data/DataTable";
 import { BoardView, type BoardRow } from "@/components/data/BoardView";
 import { TimelineView } from "@/components/data/TimelineView";
-import { Button } from "@/components/ui/button";
+import { IconPlus } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
-import { formatShortDate } from "@/lib/hq/dates";
+import { formatShortDate, relativeDay } from "@/lib/hq/dates";
 import {
   loadProjects,
   updateProjectStatus,
@@ -17,19 +17,26 @@ import {
   type ProjectListRow,
   type ProjectStatus,
 } from "@/lib/projects/queries";
-import { hqPillClass, projectStatusToken } from "@/lib/home/projectStatusToken";
+import { projectStatusToken } from "@/lib/home/projectStatusToken";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Surfaces 04 / 05 / 06 / 07 list / board / timeline + the calendar tab
- * that stubs to /calendar?source=projects. Lifts the RoleDashboard.tsx
- * shell from Talent Scout and replaces the table with the generic
- * <DataTable />; replaces the kanban with the generic <BoardView />.
+ * that stubs to /calendar?source=projects. Wireframe-fidelity rebuild
+ * (Phase 5.2.1 Revision); consumes the lifted .tbl / .board-stack / .tl
+ * classes through the rewritten data components.
+ *
+ * Wireframe references:
+ *   List     -> lines 938-1053
+ *   Board    -> lines 1056-1207 (stacked 4-row layout per Surface 05 LOCK)
+ *   Timeline -> lines 1210-1315
  */
 
 const FILTER_FIELDS = [
   { key: "status", label: "Status", type: "enum" as const, options: PROJECT_STATUS_VALUES },
-  { key: "clientName", label: "Client", type: "text" as const },
+  { key: "category", label: "Category", type: "text" as const },
+  { key: "city", label: "City", type: "text" as const },
+  { key: "organizationName", label: "Client", type: "text" as const },
   { key: "leadName", label: "Lead", type: "text" as const },
 ];
 
@@ -66,8 +73,6 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
     };
   }, []);
 
-  // Realtime: subscribe to project status changes so Board drag-drop
-  // updates from peers land here without a manual refresh.
   useEffect(() => {
     const ch = supabase
       .channel("projects-list-realtime")
@@ -76,7 +81,9 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
         { event: "UPDATE", schema: "public", table: "projects" },
         (payload) => {
           const next = payload.new as { id: string; status: ProjectStatus };
-          setRows((rs) => rs.map((r) => (r.id === next.id ? { ...r, status: next.status } : r)));
+          setRows((rs) =>
+            rs.map((r) => (r.id === next.id ? { ...r, status: next.status } : r)),
+          );
         },
       )
       .subscribe();
@@ -95,8 +102,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
     [rows, filterState],
   );
 
-  // Calendar tab redirects out to the unified /calendar surface (Surface 15;
-  // lands 5.3). Effect-driven so we never call navigate during render.
+  // Calendar tab routes out to the unified /calendar surface (lands 5.3).
   useEffect(() => {
     if (view !== "calendar") return;
     navigate(`/calendar?source=projects${location.search.replace(/^\?/, "&")}`, { replace: true });
@@ -104,29 +110,48 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
 
   if (view === "calendar") return null;
 
-  const tabs: ViewKind[] = ["list", "board", "timeline", "calendar"];
+  const activeCount = filtered.filter((r) => !TERMINAL_PROJECT_STATUSES.includes(r.status)).length;
+  const terminalCount = filtered.filter((r) => TERMINAL_PROJECT_STATUSES.includes(r.status)).length;
 
   const handleBoardMove = async (project: ProjectListRow, _from: string, to: string) => {
     const next = to as ProjectStatus;
-    setRows((rs) => rs.map((r) => (r.id === project.id ? { ...r, status: next } : r)));
+    setRows((rs) =>
+      rs.map((r) => (r.id === project.id ? { ...r, status: next } : r)),
+    );
     try {
       await updateProjectStatus(project.id, next);
     } catch (err) {
       console.error("status update failed", err);
-      setRows((rs) => rs.map((r) => (r.id === project.id ? { ...r, status: project.status } : r)));
+      setRows((rs) =>
+        rs.map((r) => (r.id === project.id ? { ...r, status: project.status } : r)),
+      );
     }
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <header className="flex items-center justify-between gap-3">
-        <h1 className="h-page">Projects</h1>
-        <Button onClick={() => navigate("/projects/new")}>+ New Project</Button>
-      </header>
+    <div className="stack-4">
+      <div className="pagehead">
+        <div className="row between">
+          <h1 className="h-page">Projects</h1>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate("/projects/new")}
+          >
+            <IconPlus className="ic" />
+            New Project
+          </button>
+        </div>
+        <p className="desc">Every active project across the agency.</p>
+      </div>
 
-      <div className="hq-tbl-toolbar">
-        <div className="flex items-center gap-3">
-          <ViewSwitch active={view} surface="projects" available={tabs} />
+      <div className="row between wrap" style={{ alignItems: "center" }}>
+        <div className="row-c">
+          <ViewSwitch
+            active={view}
+            available={["list", "board", "timeline", "calendar"]}
+            surface="projects"
+          />
           <SavedViewsDropdown
             entityType="project"
             activeName={activeViewName}
@@ -136,97 +161,173 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               setFilterState(v.filter_state);
               setActiveViewName(v.name);
             }}
+            onNavigate={(kind) => {
+              const target = viewSwitchRoute("projects", kind);
+              if (target) navigate(target);
+            }}
           />
+        </div>
+        <div className="row-c">
+          <button type="button" className="btn btn-secondary btn-sm">Columns</button>
+          <button type="button" className="btn btn-secondary btn-sm">Save view</button>
         </div>
       </div>
 
       <FilterBar
-        entityType="project"
         state={filterState}
         onChange={(next) => {
           setFilterState(next);
-          setActiveViewName("All projects");
+          setActiveViewName("Custom filter");
         }}
         fields={FILTER_FIELDS}
       />
 
+      {selected.size > 0 ? (
+        <div className="bulkbar">
+          <span className="cnt">{selected.size} SELECTED</span>
+          <button type="button" className="btn btn-tertiary btn-sm">Change status</button>
+          <button type="button" className="btn btn-tertiary btn-sm">Assign lead</button>
+          <button type="button" className="btn btn-tertiary btn-sm">Add tag</button>
+          <button type="button" className="btn btn-tertiary btn-sm">Export</button>
+          <button
+            type="button"
+            className="btn btn-tertiary btn-sm"
+            style={{ marginLeft: "auto" }}
+            onClick={() => setSelected(new Set())}
+          >
+            Close
+          </button>
+        </div>
+      ) : null}
+
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <div className="empty">
+          <p>Loading...</p>
+        </div>
       ) : view === "list" ? (
-        <DataTable<ProjectListRow>
-          rows={filtered}
-          rowBorderToken={(r) => projectStatusToken(r.status)}
-          onRowClick={(r) => navigate(`/projects/${r.id}`)}
-          selection={{ selectedIds: selected, onChange: setSelected }}
-          twoTier={{
-            isTerminal: (r) => TERMINAL_PROJECT_STATUSES.includes(r.status),
-            dividerLabel: (n) => `Complete & Cancelled · ${n} hidden`,
-          }}
-          empty={{
-            message: "No active projects",
-            ctaLabel: "+ New Project",
-            onCta: () => navigate("/projects/new"),
-          }}
-          columns={[
-            {
-              key: "name",
-              label: "Project / Client",
-              sort: (a, b) => a.name.localeCompare(b.name),
-              render: (r) => (
-                <div>
-                  <div className="font-medium">{r.name}</div>
-                  {r.clientName ? (
-                    <Link
-                      to={`/projects/${r.id}`}
-                      className="text-[11.5px]"
-                      style={{ color: "rgba(190,78,68,0.85)" }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {r.clientName}
-                    </Link>
-                  ) : null}
-                </div>
-              ),
-            },
-            {
-              key: "status",
-              label: "Status",
-              sort: (a, b) => a.status.localeCompare(b.status),
-              render: (r) => (
-                <span className={hqPillClass(r.status)}>
-                  <span className="hq-pill-dt" />
-                  {r.status}
-                </span>
-              ),
-            },
-            {
-              key: "live",
-              label: "Live",
-              sort: (a, b) => (a.liveStartIso ?? "").localeCompare(b.liveStartIso ?? ""),
-              render: (r) =>
-                r.liveStartIso
-                  ? `${formatShortDate(r.liveStartIso)}${r.liveEndIso ? ` to ${formatShortDate(r.liveEndIso)}` : ""}`
-                  : "-",
-            },
-            {
-              key: "leadName",
-              label: "Lead",
-              sort: (a, b) => (a.leadName ?? "").localeCompare(b.leadName ?? ""),
-              render: (r) => r.leadName ?? "-",
-            },
-            {
-              key: "designerName",
-              label: "Design",
-              sort: (a, b) => (a.designerName ?? "").localeCompare(b.designerName ?? ""),
-              render: (r) => r.designerName ?? "-",
-            },
-          ]}
-        />
+        <>
+          <DataTable<ProjectListRow>
+            rows={filtered}
+            flat
+            rowBorderToken={(r) => projectStatusToken(r.status)}
+            onRowClick={(r) => navigate(`/projects/${r.id}`)}
+            selection={{ selectedIds: selected, onChange: setSelected }}
+            twoTier={{
+              isTerminal: (r) => TERMINAL_PROJECT_STATUSES.includes(r.status),
+              dividerLabel: (n) => `Complete & Cancelled · ${n} hidden`,
+            }}
+            empty={{
+              message: "No active projects",
+              ctaLabel: "+ New Project",
+              onCta: () => navigate("/projects/new"),
+            }}
+            columns={[
+              {
+                key: "jobNumber",
+                label: "Job #",
+                width: 76,
+                sort: (a, b) => (a.jobNumber ?? "").localeCompare(b.jobNumber ?? ""),
+                render: (r) => (
+                  <span className="mono muted">{r.jobNumber ?? "-"}</span>
+                ),
+              },
+              {
+                key: "name",
+                label: "Project / Client",
+                sort: (a, b) => a.name.localeCompare(b.name),
+                render: (r) => (
+                  <div>
+                    <div className="lead">{r.name}</div>
+                    {r.organizationName ? (
+                      <Link
+                        to={r.organizationId ? `/organizations/${r.organizationId}` : "#"}
+                        className="sub"
+                        style={{ color: "rgba(190,78,68,0.85)" }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {r.organizationName}
+                      </Link>
+                    ) : null}
+                  </div>
+                ),
+              },
+              {
+                key: "category",
+                label: "Category",
+                sort: (a, b) => (a.category ?? "").localeCompare(b.category ?? ""),
+                render: (r) => r.category ?? "-",
+              },
+              {
+                key: "city",
+                label: "City",
+                sort: (a, b) => (a.city ?? "").localeCompare(b.city ?? ""),
+                render: (r) => r.city ?? "-",
+              },
+              {
+                key: "status",
+                label: "Status",
+                sort: (a, b) => a.status.localeCompare(b.status),
+                render: (r) => (
+                  <span className={`pill p-${projectStatusToken(r.status)}`}>
+                    <span className="dt" />
+                    {r.status}
+                  </span>
+                ),
+              },
+              {
+                key: "nextDeliverable",
+                label: "Next Deliverable",
+                render: (r) =>
+                  r.nextDeliverableTitle ? (
+                    <div>
+                      <div className="lead">{r.nextDeliverableTitle}</div>
+                      <div className="sub">
+                        {r.nextDeliverableDueIso ? relativeDay(r.nextDeliverableDueIso) : ""}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="subtle">-</span>
+                  ),
+              },
+              {
+                key: "live",
+                label: "Live",
+                sort: (a, b) => (a.liveStartIso ?? "").localeCompare(b.liveStartIso ?? ""),
+                render: (r) =>
+                  r.liveStartIso ? (
+                    <span className="mono">
+                      {formatShortDate(r.liveStartIso)}
+                      {r.liveEndIso ? ` to ${formatShortDate(r.liveEndIso)}` : ""}
+                    </span>
+                  ) : (
+                    "-"
+                  ),
+              },
+              {
+                key: "leadName",
+                label: "Lead",
+                sort: (a, b) => (a.leadName ?? "").localeCompare(b.leadName ?? ""),
+                render: (r) => r.leadName ?? "-",
+              },
+              {
+                key: "designerName",
+                label: "Design",
+                sort: (a, b) => (a.designerName ?? "").localeCompare(b.designerName ?? ""),
+                render: (r) => r.designerName ?? "-",
+              },
+            ]}
+          />
+          <span className="cap">
+            {activeCount} active projects shown · {terminalCount} complete or cancelled hidden
+          </span>
+        </>
       ) : view === "board" ? (
         <BoardView<ProjectListRow>
+          layout="stacked"
           rows={
             BOARD_ROWS.map((br): BoardRow<ProjectListRow> => ({
               label: br.label,
+              rowCaption: `${br.statuses.length} columns`,
               columns: br.statuses.map((s) => ({
                 id: s,
                 label: s,
@@ -235,61 +336,67 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               })),
             }))
           }
-          columnsPerRow={(ri) => BOARD_ROWS[ri].statuses.length}
           onCardMove={handleBoardMove}
           onCardClick={(r) => navigate(`/projects/${r.id}`)}
           renderCard={(r) => (
-            <div>
-              <div className="hq-board-card-row">
-                <span className="font-medium">{r.name}</span>
+            <>
+              <div className="nm">
+                {r.organizationName ? `${r.organizationName} · ${r.name}` : r.name}
               </div>
-              <div className="hq-board-card-row">
-                <span className="hq-board-card-sub">{r.clientName ?? "-"}</span>
-                <span className="hq-board-card-sub">
-                  {r.liveStartIso ? formatShortDate(r.liveStartIso) : ""}
+              <div className="meta">
+                <span className="cap">
+                  {[r.city, r.liveStartIso ? formatShortDate(r.liveStartIso) : null]
+                    .filter(Boolean)
+                    .join(" · ") || "-"}
                 </span>
+                {r.leadName ? (
+                  <span className="av-i" title={r.leadName}>
+                    {r.leadName.slice(0, 2).toUpperCase()}
+                  </span>
+                ) : null}
               </div>
-            </div>
+            </>
           )}
         />
       ) : view === "timeline" ? (
-        <TimelineView
-          rows={filtered
-            .filter((r) => r.liveStartIso || r.liveEndIso)
-            .map((r) => ({
-              id: r.id,
-              token: projectStatusToken(r.status),
-              label: (
-                <div>
-                  <div className="font-medium">{r.name}</div>
-                  <div className="text-[11px] text-[hsl(var(--subtle-foreground))]">
-                    {r.clientName ?? ""}
-                  </div>
-                </div>
-              ),
-              bars: r.liveStartIso
-                ? [
-                    {
-                      kind: "live" as const,
-                      startIso: r.liveStartIso,
-                      endIso: r.liveEndIso,
-                      label: r.liveEndIso
-                        ? `Live · ${formatShortDate(r.liveStartIso)} to ${formatShortDate(r.liveEndIso)}`
-                        : `Live · ${formatShortDate(r.liveStartIso)}`,
-                    },
-                  ]
-                : [],
-            }))}
-          onBarClick={(id) => navigate(`/projects/${id}`)}
-        />
-      ) : null}
-
-      {view === "list" ? (
-        <p className="text-[11px] font-mono uppercase tracking-widest text-[hsl(var(--subtle-foreground))]">
-          {filtered.filter((r) => !TERMINAL_PROJECT_STATUSES.includes(r.status)).length} active projects shown ·{" "}
-          {filtered.filter((r) => TERMINAL_PROJECT_STATUSES.includes(r.status)).length} complete or cancelled hidden
-        </p>
+        <>
+          <div className="callegend" style={{ justifyContent: "flex-end" }}>
+            <span>
+              <i style={{ background: "#06B6D4" }} /> Install
+            </span>
+            <span>
+              <i style={{ background: "hsl(var(--primary))" }} /> Live
+            </span>
+            <span>
+              <i style={{ background: "hsl(var(--warn))" }} /> Removal
+            </span>
+          </div>
+          <TimelineView
+            rows={filtered
+              .filter((r) => r.liveStartIso || r.liveEndIso)
+              .map((r) => ({
+                id: r.id,
+                token: projectStatusToken(r.status),
+                name: r.organizationName ? `${r.organizationName} · ${r.name}` : r.name,
+                subText: `${r.jobNumber ? `#${r.jobNumber} · ` : ""}${r.city ?? ""}`.trim(),
+                bars: r.liveStartIso
+                  ? [
+                      {
+                        kind: "live" as const,
+                        startIso: r.liveStartIso,
+                        endIso: r.liveEndIso,
+                        label: r.liveEndIso
+                          ? `Live · ${formatShortDate(r.liveStartIso)} to ${formatShortDate(r.liveEndIso)}`
+                          : `Live · ${formatShortDate(r.liveStartIso)}`,
+                      },
+                    ]
+                  : [],
+              }))}
+            onBarClick={(id) => navigate(`/projects/${id}`)}
+          />
+        </>
       ) : null}
     </div>
   );
 }
+

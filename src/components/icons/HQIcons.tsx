@@ -174,3 +174,64 @@ export const IconComment = (p: IconProps) => (
 export const IconCheck = (p: IconProps) => (
   <Base {...p}><path d="M4 12l5 5L20 6" /></Base>
 );
+
+export const IconList = (p: IconProps) => (
+  <Base {...p}><path d="M3 6h18M3 12h18M3 18h18" /></Base>
+);
+
+export const IconBoard = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="3" y="4" width="5" height="16" rx="1" />
+    <rect x="10" y="4" width="5" height="11" rx="1" />
+    <rect x="17" y="4" width="4" height="8" rx="1" />
+  </Base>
+);
+
+export const IconTimeline = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M3 6h10M5 12h14M3 18h8" />
+  </Base>
+);
+
+export const IconFilter = (p: IconProps) => (
+  <Base {...p}><path d="M3 5h18l-7 9v5l-4 2v-7z" /></Base>
+);
+
+export const IconX = (p: IconProps) => (
+  <Base {...p}><path d="M6 6l12 12M18 6L6 18" /></Base>
+);
+
+export const IconChevronDown = (p: IconProps) => (
+  <Base {...p}><path d="M6 9l6 6 6-6" /></Base>
+);
+
+export const IconArrowLeft = (p: IconProps) => (
+  <Base {...p}><path d="M19 12H5M11 6l-6 6 6 6" /></Base>
+);
+
+export const IconDrive = (p: IconProps) => (
+  <Base {...p}><path d="M7 5l5 9 5-9zM4 19l4-7M20 19l-4-7M4 19h16" /></Base>
+);
+
+export const IconSlack = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="4" y="4" width="6" height="6" rx="1" />
+    <rect x="14" y="4" width="6" height="6" rx="1" />
+    <rect x="4" y="14" width="6" height="6" rx="1" />
+    <rect x="14" y="14" width="6" height="6" rx="1" />
+  </Base>
+);
+
+export const IconSlides = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="3" y="4" width="18" height="13" rx="1" />
+    <path d="M8 21h8M12 17v4" />
+  </Base>
+);
+
+export const IconLink = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M10 14a4 4 0 005.5 0l3-3a4 4 0 00-5.5-5.5L11 7" />
+    <path d="M14 10a4 4 0 00-5.5 0l-3 3A4 4 0 0011 18.5l2-2" />
+  </Base>
+);

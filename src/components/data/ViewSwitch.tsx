@@ -1,14 +1,22 @@
 import { useNavigate } from "react-router-dom";
+import {
+  IconList,
+  IconBoard,
+  IconTimeline,
+  IconCalendar,
+} from "@/components/icons/HQIcons";
 
 /**
- * Tabbed view switcher for HQ Core database list pages. Each surface owns
- * its own subset of view kinds (Projects has all four; Tasks drops
- * Timeline; Deliverables drops Timeline; Organizations / People drop
- * Timeline + Calendar). The mapping from view kind to route is per-surface
- * because some calendar tabs route into the unified /calendar surface
- * pre-filtered.
+ * Tabbed view switcher for HQ Core database list pages. Wireframe-fidelity
+ * rebuild (Phase 5.2.1 Revision); renders the icon-segmented inline-flex
+ * pattern from lines 985-991 / 1095-1100 / 1249-1254 / 2218-2219 of
+ * OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html, NOT shadcn Tabs / pills.
  *
- * Spec: OUTPUTS/phase-5-2-spec.md § 5.A.1 (component contract).
+ * The component used to take a `surface` enum + route the user via
+ * navigate(). The revision keeps that behavior available (pass `surface`
+ * and omit `onChange`) but also lets the parent override via `onChange`
+ * (so SavedViewsDropdown can drive view-kind navigation through the same
+ * route map).
  */
 
 export type ViewKind = "list" | "board" | "timeline" | "calendar";
@@ -21,14 +29,14 @@ export type Surface =
   | "organizations"
   | "people";
 
-const LABEL: Record<ViewKind, string> = {
-  list: "List",
-  board: "Board",
-  timeline: "Timeline",
-  calendar: "Calendar",
-};
+const ITEMS: Array<{ kind: ViewKind; label: string; Icon: typeof IconList }> = [
+  { kind: "list", label: "List", Icon: IconList },
+  { kind: "board", label: "Board", Icon: IconBoard },
+  { kind: "timeline", label: "Timeline", Icon: IconTimeline },
+  { kind: "calendar", label: "Calendar", Icon: IconCalendar },
+];
 
-const ROUTES: Record<Surface, Partial<Record<ViewKind, string>>> = {
+const SURFACE_ROUTES: Record<Surface, Partial<Record<ViewKind, string>>> = {
   projects: {
     list: "/projects",
     board: "/projects/board",
@@ -58,35 +66,51 @@ const ROUTES: Record<Surface, Partial<Record<ViewKind, string>>> = {
   },
 };
 
+export function viewSwitchRoute(surface: Surface, kind: ViewKind): string | undefined {
+  return SURFACE_ROUTES[surface][kind];
+}
+
 export function ViewSwitch({
   active,
-  surface,
   available,
+  surface,
+  onChange,
 }: {
   active: ViewKind;
-  surface: Surface;
-  available?: ViewKind[];
+  available: ViewKind[];
+  /** Optional: enables the default navigate-on-click handler. */
+  surface?: Surface;
+  /** Caller overrides default navigation. Receives the picked view kind. */
+  onChange?: (kind: ViewKind) => void;
 }) {
   const navigate = useNavigate();
-  const tabs: ViewKind[] = available ?? (["list", "board", "timeline", "calendar"] as ViewKind[])
-    .filter((k) => Boolean(ROUTES[surface][k]));
+
+  const handle = (kind: ViewKind) => {
+    if (onChange) {
+      onChange(kind);
+      return;
+    }
+    if (surface) {
+      const target = SURFACE_ROUTES[surface][kind];
+      if (target) navigate(target);
+    }
+  };
 
   return (
-    <div className="hq-viewswitch" role="tablist">
-      {tabs.map((kind) => {
-        const isActive = kind === active;
-        const target = ROUTES[surface][kind];
+    <div className="viewswitch" role="tablist">
+      {ITEMS.filter((i) => available.includes(i.kind)).map((i) => {
+        const isActive = i.kind === active;
         return (
           <button
-            key={kind}
+            key={i.kind}
             type="button"
             role="tab"
             aria-selected={isActive}
-            className={`hq-viewswitch-tab ${isActive ? "hq-viewswitch-tab--active" : ""}`}
-            onClick={() => target && navigate(target)}
-            disabled={!target}
+            className={isActive ? "on" : undefined}
+            onClick={() => handle(i.kind)}
           >
-            {LABEL[kind]}
+            <i.Icon className="ic" />
+            {i.label}
           </button>
         );
       })}
