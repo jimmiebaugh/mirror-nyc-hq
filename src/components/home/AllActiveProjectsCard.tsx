@@ -25,6 +25,7 @@ type DbProjectRow = {
   id: string;
   name: string;
   status: string | null;
+  job_number: string | null;
   client: { name: string | null } | null;
   account_managers: { user: { full_name: string | null; email: string | null } | null }[] | null;
   designers: { user: { full_name: string | null; email: string | null } | null }[] | null;
@@ -45,24 +46,19 @@ async function loadActive(): Promise<Row[]> {
   const { data } = await supabase
     .from("projects")
     .select(
-      `id, name, status,
+      `id, name, status, job_number,
        client:clients(name),
        account_managers:project_account_managers(user:users(full_name, email)),
        designers:project_designers(user:users(full_name, email))`,
     )
     .is("archived_at", null)
-    // Spec § 7a step 4: status NOT IN ('Complete', 'Cancelled'). The shipped
-    // project_status enum has 'Complete' but no 'Cancelled' (the canonical
-    // label lands when 5.2 reshapes the enum); filtering for 'Cancelled'
-    // here would error from PostgREST's enum cast. Filter on Complete only
-    // for 5.1, and revisit when 5.2 adds Cancelled.
-    .not("status", "in", '("Complete")');
+    .not("status", "in", '("Complete","Cancelled")');
   const rows: Row[] = ((data ?? []) as unknown as DbProjectRow[]).map((p) => {
     const am = (p.account_managers ?? []).map((j) => j.user).filter(Boolean);
     const ds = (p.designers ?? []).map((j) => j.user).filter(Boolean);
     return {
       id: p.id,
-      jobNumber: null,
+      jobNumber: p.job_number,
       name: p.name,
       status: p.status ?? "",
       clientName: p.client?.name ?? null,

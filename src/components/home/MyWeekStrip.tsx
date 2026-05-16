@@ -9,10 +9,10 @@ import { currentWeekWindow, formatRangeLabel, formatWeekcardDate } from "@/lib/h
  * calendar week (Mon-Sun, local timezone). Up to 3 cards plus a fourth
  * placeholder when fewer than 3 events exist.
  *
- * Data scope in 5.1: project-side dates only (Live and Removal driven by
- * `projects.live_dates_start` and `projects.live_dates_end`). Deliverable
- * dates land in 5.2 once the `deliverables` table ships; the component is
- * shaped so adding that source is a single additional fetch + merge.
+ * Data scope after 5.2.1: project-side Install / Live / Removal dates
+ * (driven by `projects.live_dates_start` and `projects.live_dates_end`)
+ * union'd with deliverable due dates for the same projects, taken from
+ * the new `deliverables` table.
  */
 
 type WeekEntry = {
@@ -20,20 +20,22 @@ type WeekEntry = {
   dateIso: string;
   projectName: string;
   clientName: string | null;
-  milestone: "Live" | "Removal";
+  milestone: "Live" | "Removal" | "Deliverable";
 };
 
-type Token = "success" | "warn" | "muted";
+type Token = "success" | "warn" | "info" | "muted";
 
 const TOKEN_FOR: Record<WeekEntry["milestone"], Token> = {
   Live: "success",
   Removal: "warn",
+  Deliverable: "info",
 };
 
 function tokenColor(token: Token): string {
   switch (token) {
     case "success": return "hsl(var(--success))";
     case "warn": return "hsl(var(--warn))";
+    case "info": return "#06B6D4";
     case "muted": return "hsl(var(--border-strong))";
   }
 }
@@ -55,14 +57,25 @@ async function loadEntries(userId: string, mondayIso: string, sundayIso: string)
   for (const r of dRes.data ?? []) ids.add(r.project_id);
   if (ids.size === 0) return [];
 
-  const { data: projects } = await supabase
-    .from("projects")
-    .select("id, name, live_dates_start, live_dates_end, client:clients(name)")
-    .in("id", Array.from(ids))
-    .is("archived_at", null);
+  const projectIds = Array.from(ids);
+  const [projectsRes, deliverablesRes] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id, name, live_dates_start, live_dates_end, client:clients(name)")
+      .in("id", projectIds)
+      .is("archived_at", null),
+    supabase
+      .from("deliverables")
+      .select("id, project_id, title, due_date, status, project:projects(name, client:clients(name))")
+      .in("project_id", projectIds)
+      .not("due_date", "is", null)
+      .gte("due_date", mondayIso)
+      .lte("due_date", sundayIso)
+      .in("status", ["Upcoming", "In Progress"]),
+  ]);
 
   const out: WeekEntry[] = [];
-  for (const p of projects ?? []) {
+  for (const p of projectsRes.data ?? []) {
     const clientName = (p.client as { name?: string } | null)?.name ?? null;
     if (p.live_dates_start && p.live_dates_start >= mondayIso && p.live_dates_start <= sundayIso) {
       out.push({
@@ -82,6 +95,21 @@ async function loadEntries(userId: string, mondayIso: string, sundayIso: string)
         milestone: "Removal",
       });
     }
+  }
+  type DeliverableRow = {
+    id: string;
+    title: string;
+    due_date: string;
+    project: { name: string; client: { name: string | null } | null } | null;
+  };
+  for (const d of (deliverablesRes.data ?? []) as unknown as DeliverableRow[]) {
+    out.push({
+      key: `d-${d.id}`,
+      dateIso: d.due_date,
+      projectName: d.project?.name ?? d.title,
+      clientName: d.project?.client?.name ?? null,
+      milestone: "Deliverable",
+    });
   }
   out.sort((a, b) => a.dateIso.localeCompare(b.dateIso));
   return out;

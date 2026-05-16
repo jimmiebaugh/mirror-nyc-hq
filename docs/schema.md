@@ -16,25 +16,58 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `active` (bool, default true; soft-delete column)
 - `created_at`, `updated_at`
 
-### clients
+### organizations (renamed from clients in Phase 5.2.2; split into vendors + clients in Phase 5.2.3)
+
+**Doc drift note:** The section below describes the 5.2.2-era unified `organizations` table. Phase 5.2.3 (migrations `20260516130000` through `20260516130004`) split this into `vendors` (renamed from organizations) + `clients` (new table). Phase 5.2 cleanup adds `vendors.primary_address` (text, nullable) and fixes the `vendor_capabilities` GRANT DELETE for the authenticated role. A full rewrite of this section reflecting the split shape is carried forward as a doc-debt item; canonical column lists live in the migration files and in `src/integrations/supabase/types.ts` until then.
+
+5.2.3 + cleanup deltas (minimum coverage for the migrations applied here):
+- `vendors`: renamed from `organizations`. Dropped `type` enum + `org_type` type. Added `category_id` (uuid, FK to `vendor_categories`, nullable, ON DELETE SET NULL). Added `primary_address` (text, nullable) in Phase 5.2 cleanup. All other columns from the organizations shape carry through.
+- `clients`: new slim table created fresh in 5.2.3.A; columns: id, name, industry, contact_name, contact_email, contact_phone, primary_address, city, website_url, tags[], created_by, created_at, updated_at. Open-auth RLS (SELECT/INSERT/UPDATE) + admin-only DELETE. Existing organizations rows of type=Client migrated preserving UUIDs.
+- `vendor_capabilities`: renamed from `org_capabilities` in 5.2.3.A. GRANT to authenticated extended to include DELETE in Phase 5.2 cleanup so the admin-only DELETE RLS policy is reachable.
+- `vendor_categories`: new lookup table (same shape as `cities`) added in 5.2.3.A.
+- `projects.organization_id` renamed to `client_id` (FK -> clients).
+- `people.organization_id` split into `client_id` + `vendor_id` (mutex CHECK); `affiliations` enum array dropped.
+- `notes_log.parent_type` CHECK widened to `('client', 'vendor', 'person', 'venue')`.
+- `venues.exclusive_vendors_org_ids` renamed to `exclusive_vendor_ids`.
+
+The legacy `organizations` entry below is preserved for historical reference; treat the migration files + `types.ts` as authoritative for the live shape.
+
 - `id` (uuid, PK)
 - `name` (text, not null)
-- `contact_name`, `contact_email`, `contact_phone` (text)
-- `notes` (text)
+- `type` (enum `org_type`, default `Client`): `Client`, `Vendor`, `Internal`. Added in Phase 5.2.2 (`20260515140000_phase_5_2_2_organizations.sql`). **DROPPED in Phase 5.2.3.B.** Backfill: every shipped clients row migrated as `type = 'Client'`. Venue Owner is intentionally NOT in the enum per build notes Surface 10 (venues owned by clients live on the venues record).
+- `city` (text, nullable). Added Phase 5.2.2.
+- `capabilities` (text[], default `{}`). Vendor-side free-text capability tags. Added Phase 5.2.2.
+- `website_url` (text, nullable). Added Phase 5.2.2.
+- `tags` (text[], default `{}`). Added Phase 5.2.2.
+- `internal_rating` (int, CHECK 0-5, nullable). Vendor-only Internal Rating. Visible to all standard+admin users per Surface 10 detail. Admin-write-only RLS gating deferred to 5.4. Added Phase 5.2.2.
+- `contact_name`, `contact_email`, `contact_phone` (text). Shipped from initial schema; carried through the rename.
+- `primary_address` (text, nullable). Added in Phase 5.2 cleanup (`20260516140000_phase_5_2_cleanup_primary_address_and_vendor_capabilities_grant.sql`) on the renamed vendors table; matches the `clients.primary_address` shape lifted from the 5.2.3 setup migration. Existing vendor rows receive NULL.
+- `legacy_notes` (text). Renamed from `notes` in Phase 5.2.2. Internal Notes UI uses the polymorphic `notes_log` table instead; `legacy_notes` preserves any pre-rename content for a future backfill into notes_log.
 - `created_by` (uuid, FK to users)
 - `created_at`, `updated_at`
+- Indexes: `organizations_type_idx (type)` **(dropped in 5.2.3.B alongside type column)**, `organizations_city_idx (city) WHERE city IS NOT NULL` (renamed to track the table rename per OID-stable index naming).
+- Triggers: `trg_activity_log_organizations` (AFTER INSERT/UPDATE/DELETE; uses the Phase 5.2.1.B-extended `activity_log_writer`).
+- RLS: SELECT/INSERT/UPDATE all-auth, DELETE admin-only (inherited from the shipped clients RLS; rename preserves policies by table OID, identifiers remain `clients_*`).
+- Internal Notes: surfaced via the shared `notes_log` table with `parent_type = 'vendor'` (renamed from `'organization'` in 5.2.3.D).
 
 ### projects
 - `id` (uuid, PK)
 - `name` (text, not null)
-- `client_id` (uuid, FK to clients, nullable)
-- `status` (enum: Quoting, Quote Sent, On Hold, Awaiting FB, Awaiting Files, Awaiting Approval, In Progress, Complete, In Production, Event Live, Billing, Proof Out, Location Scouting, In Review). May be refined later.
+- `organization_id` (uuid, FK to organizations, nullable). Renamed from `client_id` in Phase 5.2.2 alongside the clients -> organizations rename. The btree `idx_projects_client_id` renamed to `idx_projects_organization_id`.
+- `status` (enum `project_status`, 14 values, default `Queued`): `Approved`, `In Production`, `In Progress`, `Location Scouting`, `Install`, `Removal`, `Billing`, `Queued`, `Quoting`, `Quote Sent`, `Awaiting Feedback`, `On Hold`, `Complete`, `Cancelled`. Reshaped in Phase 5.2.1 (`20260515130000_phase_5_2_1_project_task_enum_reshape.sql`) from the 14-value shipped enum to the locked 14-value list per `OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 4. Backfill mapping: `Awaiting FB` -> `Awaiting Feedback`, `Awaiting Files` -> `In Progress` (catch-all), `Awaiting Approval` -> `Awaiting Feedback`, `Event Live` -> `In Production`, `Proof Out` -> `In Production` (catch-all), `In Review` -> `In Progress` (catch-all); other 8 values map to themselves.
+- `job_number` (text, nullable). Surface 07 detail coral `#2604` job number. Added Phase 5.2.2 (`20260515140003_phase_5_2_2_project_extensions.sql`). Partial btree index `projects_job_number_idx WHERE job_number IS NOT NULL`.
+- `category` (text, nullable). "Pop-Up" / "Window Install" / "Trade Show" etc. Added Phase 5.2.2.
+- `city` (text, nullable). Surface 04 List view column. Added Phase 5.2.2.
+- `tags` (text[], default `{}`). Surface 07 detail "Summer 2026 / CPG / Outdoor" tag chips. Added Phase 5.2.2.
+- `budget` (numeric, nullable). Surface 07 detail + Surface 08 edit. Planning reference figure, NOT an invoice amount; never renders on pipeline-summary surfaces per locked-decisions Q6 + spec § 5.A.7. Added Phase 5.2.2.
 - `live_dates_start`, `live_dates_end` (date, nullable)
 - `production_folder_url`, `design_decks_folder_url`, `budget_sheet_url`, `latest_creative_deck_url`, `slack_channel_url` (text, all nullable)
-- `notes` (text)
+- `status_notes` (text, renamed from `notes` in Phase 5.2.2). Surface 07 detail Status Notes sidebar card body + Surface 08 edit Status Notes textarea.
+- `client_notes` (text, nullable). Surface 07 detail Client Notes sidebar card body + Surface 08 edit Client Notes textarea. Added Phase 5.2.2 alongside the `notes` rename.
 - `archived_at` (timestamptz, nullable; null = active, non-null = archived; default queries filter `archived_at IS NULL`)
 - `created_by` (uuid, FK to users)
 - `created_at`, `updated_at`
+- Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` (Phase 5.2.1) so the Projects Board view subscribes to status changes via `postgres_changes`.
 
 ### project_account_managers (join, every project must have at least one row)
 - `project_id`, `user_id` (PK composite)
@@ -49,18 +82,63 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 ### venues
 - `id` (uuid, PK)
 - `name` (text, not null), `address`, `neighborhood` (text)
-- `venue_type_id` (uuid, FK to venue_types, nullable)
+- `city` (text, nullable). Added Phase 5.2.2 (`20260515140002_phase_5_2_2_venues_extensions.sql`). Partial btree index `venues_city_idx WHERE city IS NOT NULL`.
+- `venue_slide_url` (text, nullable). Google Slides URL surfaced on Surface 09 detail as a "Venue Slide" button next to the Edit button. Added Phase 5.2.2.
+- `total_sq_ft` (int, nullable). Added Phase 5.2.2 alongside the shipped `square_footage`; the two coexist for now (total_sq_ft surfaced as "Total Sq Ft" in the wireframe).
+- `exclusive_vendors_org_ids` (uuid[], default `{}`). Org references for "Exclusive Vendors" link list on Surface 09 detail. Added Phase 5.2.2. Postgres cannot FK array elements; app validates entries reference valid organizations before write.
 - `capacity`, `square_footage` (int)
 - `website_url`, `contact_name`, `contact_email`, `contact_phone` (text)
 - `features` (text[])
-- `notes` (text)
+- `notes` (text). Free-form About Venue body on Surface 09 detail.
 - `photos` (text[]; Supabase Storage paths)
 - `created_by` (uuid, FK)
 - `created_at`, `updated_at`
+- Note: the shipped single `venue_type_id` FK was dropped in Phase 5.2.2 in favor of the `venue_venue_types` join table.
+
+### venue_venue_types (Phase 5.2.2)
+Multi-select venue-type join table. Replaces the single `venues.venue_type_id` FK.
+
+- `venue_id` (uuid, FK to venues, ON DELETE CASCADE)
+- `venue_type_id` (uuid, FK to venue_types, ON DELETE CASCADE)
+- Composite PK on `(venue_id, venue_type_id)`.
+- Indexes: `venue_venue_types_venue_idx (venue_id)`, `venue_venue_types_type_idx (venue_type_id)`.
+- RLS: open-authenticated on SELECT/INSERT/UPDATE/DELETE (matches the shipped join-table convention).
+- Backfill: every shipped `venues.venue_type_id` value migrated as a single `(venue_id, venue_type_id)` row before the column drop.
+
+### venue_rate_history (Phase 5.2.2)
+Append-only history of Event Day Rate + Prod Day Rate per venue. The Surface 09 detail page reads the most-recent row per `(venue_id, rate_kind)` for the "Event Day Rate $X as of <date>" display.
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `venue_id` (uuid, FK to venues, ON DELETE CASCADE)
+- `rate_kind` (enum `venue_rate_kind`): `event_day`, `prod_day`.
+- `amount_usd` (int). Whole dollars; reference rate for producers, NOT an invoice amount (stays compatible with locked-decisions Q6).
+- `effective_from` (date, default `current_date`)
+- `created_by` (uuid, FK to users)
+- `created_at` (timestamptz, default `now()`)
+- Index: `venue_rate_history_lookup_idx (venue_id, rate_kind, effective_from DESC)`.
+- RLS: SELECT + INSERT open to authenticated; NO UPDATE policy, NO DELETE policy (append-only history; corrections happen via a new history row).
+- Grants: SELECT, INSERT to authenticated; ALL to service_role.
 
 ### venue_types (lookup; free-text canonicalization)
 - `id` (uuid, PK), `name` (text, unique, not null), `created_at`
 - Free-text canonicalization. Producer's sheet supplies any string; `vs-parse-sheet` maps to the canonical list (Retail, Event Venue, Industrial, Warehouse, Gallery, Studio, Outdoor, Mobile) via substring matching. No lookup table writes needed for Venue Scout. See `docs/templates/venue-scout-sheet-template.md`.
+
+### people (Phase 5.2.2)
+External humans (Client / Vendor / Internal partners / Venue contacts). Internal Mirror staff stay in `public.users` and surface on the Team page (Surface 12, lands 5.4).
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `full_name` (text, not null)
+- `affiliations` (enum array `person_affiliation[]`, default `{}`): `Client`, `Vendor`, `Internal`, `Venue`. Multi-affiliation per build notes Surface 11 (e.g. "Dana Whitfield" can carry Client + Venue tags). GIN-indexed for the Affiliation filter chip.
+- `organization_id` (uuid, FK to organizations, nullable, ON DELETE SET NULL). Not every person ties to an org (Venue contacts may not).
+- `venue_id` (uuid, FK to venues, nullable, ON DELETE SET NULL). Nullable per spec Q8 recommendation. Surface 09 Contacts card pulls `WHERE 'Venue' = ANY(affiliations) AND venue_id = ?`. Added in the 5.2.2.C migration alongside the venues extensions so it can reference venues after the table exists.
+- `role_title` (text), `email` (text), `phone` (text), `linkedin_url` (text)
+- `tags` (text[], default `{}`)
+- `created_by` (uuid, FK to users, NOT NULL, default ON DELETE RESTRICT)
+- `created_at`, `updated_at`
+- Indexes: `people_org_idx (organization_id) WHERE organization_id IS NOT NULL`, `people_affiliation_gin_idx (GIN affiliations)`, `people_full_name_idx (lower(full_name))`, `people_venue_idx (venue_id) WHERE venue_id IS NOT NULL`.
+- Triggers: `trg_people_updated_at`, `trg_activity_log_people` (AFTER INSERT/UPDATE/DELETE).
+- RLS: open-authenticated on SELECT/INSERT/UPDATE/DELETE (matches HQ Core convention).
+- Internal Notes: surfaced via the shared `notes_log` table with `parent_type = 'person'`.
 
 ### tasks
 - `id` (uuid, PK)
@@ -68,9 +146,12 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `project_id` (uuid, FK, nullable for personal tasks)
 - `assignee_id` (uuid, FK to users, nullable)
 - `created_by` (uuid, FK to users, not null)
-- `status` (enum: `todo`, `in_progress`, `blocked`, `done`)
+- `status` (enum `task_status`, 4 values, default `To Do`): `To Do`, `Doing`, `Blocked`, `Done`. Reshaped in Phase 5.2.1 from the lowercase shipped enum (`todo` / `in_progress` / `blocked` / `done`) per `OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 4. `tasks_completed_at_set` trigger function was `CREATE OR REPLACE`'d in the same migration to compare against the new `Done` literal.
+- `priority` (text, default `Normal`, CHECK in `Urgent` / `High` / `Normal` / `Low`). Added in Phase 5.2.1 (`20260515130003_phase_5_2_1_tasks_priority_blocks.sql`) to back the Surface 13 Priority pill.
+- `blocked_by` (uuid[] of task ids, default `{}`, GIN-indexed). Added in Phase 5.2.1; surfaces the Surface 13 "Notes / Blocks" cell. Postgres can't FK-enforce array elements; the app validates that entries reference valid task ids before write.
 - `due_date` (date, nullable)
 - `created_at`, `updated_at`, `completed_at`
+- Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` (Phase 5.2.1) so the Tasks Board view subscribes to status changes via `postgres_changes`.
 
 ## Talent Scout (siloed from HQ)
 
@@ -251,11 +332,42 @@ Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSi
 - `payload` (jsonb)
 - `created_at`
 
-### notes_log (Phase 5.1)
-Polymorphic Internal Notes log shared by Organizations and People. Both surfaces land in Phase 5.2; this table is forward-compatible across both today.
+### deliverables (Phase 5.2.1)
+Per-project workflow checkpoints surfaced on Surface 14 (Calendar default view) and on the Project detail (Surface 07).
 
 - `id` (uuid, PK, default `gen_random_uuid()`)
-- `parent_type` (text, NOT NULL, CHECK `IN ('organization', 'person')`)
+- `project_id` (uuid, NOT NULL, FK to `projects.id` ON DELETE CASCADE)
+- `title` (text, NOT NULL)
+- `type` (text): free-text Kickoff / Venue Recon / Design Round / Client Approval / Install / Removal etc. Future sub-phase may promote to a lookup.
+- `status` (enum `deliverable_status`, 4 values, default `Upcoming`): `Upcoming`, `In Progress`, `Complete`, `Skipped`. Skipped renders with strikethrough + opacity-60 per locked-decisions § 4.
+- `due_date` (date, nullable). Calendar view filters out NULL due dates.
+- `notes` (text, nullable)
+- `assigned_user_ids` (uuid[], NOT NULL, default `{}`, GIN-indexed). Multi-assignee per build notes Surface 14 board card "first-name" stack.
+- `created_by` (uuid, NOT NULL, FK to `users.id` default ON DELETE RESTRICT)
+- `created_at`, `updated_at`, `completed_at` (timestamptz). `completed_at` is set by the `deliverables_completed_at_set` trigger when status flips to `Complete`; cleared on flip away.
+- Triggers: `trg_deliverables_updated_at` (updated_at_auto), `trg_deliverables_completed_at` (completed_at on Complete), `trg_activity_log_deliverables` (INSERT OR UPDATE OR DELETE -> activity_log via the extended `activity_log_writer`; Phase 5.2.1 added the DELETE branch).
+- RLS: SELECT/INSERT/UPDATE/DELETE open to authenticated.
+- Realtime: published via `supabase_realtime` with `REPLICA IDENTITY FULL` so the Board drag-drop status changes reach peers via `postgres_changes`.
+
+### saved_views (Phase 5.2.1)
+Per-user named filter / sort / view-kind snapshots for the HQ Core database list pages.
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `user_id` (uuid, NOT NULL, FK to `users.id` ON DELETE CASCADE)
+- `entity_type` (text, NOT NULL, CHECK in `project / task / deliverable / organization / person / venue`)
+- `name` (text, NOT NULL)
+- `view_kind` (text, NOT NULL, CHECK in `list / board / timeline / calendar`)
+- `filter_state` (jsonb, NOT NULL, default `'{}'::jsonb`). Shape: `{ connector: 'AND'|'OR', chips: [{field, op, value}], sort?: {field, dir}, columns?: [string] }`.
+- `is_default` (bool, NOT NULL, default false). One per `(user_id, entity_type)` enforced in app via a transactional "clear then set" upsert; the DB does not carry a unique partial index for it.
+- `created_at`, `updated_at` (timestamptz)
+- RLS: per-user (`USING user_id = auth.uid()`) on SELECT/INSERT/UPDATE/DELETE. Unlike every other HQ Core table this is personal preference data; no cross-user reads.
+- Index: `(user_id, entity_type)` btree.
+
+### notes_log (Phase 5.1; widened Phase 5.2.2)
+Polymorphic Internal Notes log shared by Organizations, People, and Venues. The CHECK constraint was widened in Phase 5.2.2 (`20260515140002_phase_5_2_2_venues_extensions.sql`) so the shared `<InternalNotesEditor />` component can serve Venue detail too.
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `parent_type` (text, NOT NULL, CHECK `IN ('organization', 'person', 'venue')`)
 - `parent_id` (uuid, NOT NULL): logical FK to the parent record. Not a real FK because the parent table varies. Tightening to per-type split tables can land later if it ever matters.
 - `body` (text, NOT NULL)
 - `author_id` (uuid, NOT NULL, FK to `users.id`)
@@ -267,8 +379,9 @@ Polymorphic Internal Notes log shared by Organizations and People. Both surfaces
 ## Postgres triggers
 
 - `vs_candidate_venues_shortlist_sync`: re-introduced in Phase 4.6-port (migration `20260512230000_phase_4_6_port_shortlist_sync_trigger.sql`) at a simplified shape after being dropped in Phase 4.1-port. BEFORE UPDATE on `vs_candidate_venues`, fires only when `shortlisted` flips false to true. Matches HQ `venues` by `website_url` first, then by case-insensitive `name + neighborhood`; sets `linked_venue_id` on match. If no match, INSERTs a new HQ `venues` row (carrying `name`, `address`, `neighborhood`, `website_url`, `features` from `key_features`, and `created_by` pulled from the parent `vs_scouts` row) and sets `linked_venue_id`. SECURITY DEFINER so the INSERT bypasses RLS on `venues`. Never updates an existing HQ venue row; the master `venues` table is treated as append-only by this trigger.
-- `tasks_completed_at_set`: when `tasks.status` flips to `done`, set `completed_at = now()`.
-- `activity_log_writer`: on insert/update/status-change to projects, venues, tasks, write an activity_log row.
+- `tasks_completed_at_set`: when `tasks.status` flips to `Done`, set `completed_at = now()`. Body `CREATE OR REPLACE`'d in Phase 5.2.1 to compare against the mixed-case enum label after the task_status reshape.
+- `deliverables_completed_at_set` (Phase 5.2.1): mirror of `tasks_completed_at_set` for the `deliverables` table; flips `completed_at` on `status -> 'Complete'`.
+- `activity_log_writer`: on insert / update / delete / status-change to projects, venues, tasks, deliverables, write an `activity_log` row. Extended in Phase 5.2.1 with a `TG_OP = 'DELETE'` branch (`action = 'deleted'`, payload `{ old: to_jsonb(OLD) }`) so the new `trg_activity_log_deliverables` trigger can fire on AFTER DELETE; existing projects / venues / tasks triggers remain on AFTER INSERT OR UPDATE only.
 - `updated_at_auto`: standard updated_at trigger on every table with the column.
 - `handle_new_user`: on `auth.users` INSERT, mirror to `public.users` with `permission_role = 'pending'` (Phase 5.1; was `'member'` pre-rewrite). Also inserts one `notifications` row per active admin (`type='user_pending'`) and fires the `notify-admin-of-pending-user` edge function via `public.invoke_edge_function`. Runs as service role.
 

@@ -48,8 +48,21 @@ cd /Users/jimmie/Code/mirror-nyc-hq && \
   echo "=== branch ===" && git branch --show-current && \
   echo "=== status ===" && git status --short && \
   echo "=== worktrees ===" && git worktree list && \
-  echo "=== unmerged claude branches ===" && (git branch | grep '^  claude/' || echo "(none)")
+  echo "=== unmerged claude branches ===" && (git branch | grep '^  claude/' || echo "(none)") && \
+  echo "=== sync-doc drift check ===" && \
+  ACTUAL=$(git log -1 origin/main --format=%H) && \
+  CLAIMED=$(grep -oP 'SHIPPED at[ \x60]+\K[a-f0-9]{7,40}' /Users/jimmie/Claude/Mirror\ NYC\ HQ/OUTPUTS/COWORK_SYNC.md 2>/dev/null || echo "(no SHIPPED hash)") && \
+  echo "  origin/main: $ACTUAL" && \
+  echo "  sync doc:    $CLAIMED" && \
+  ( [ "${ACTUAL:0:7}" = "${CLAIMED:0:7}" ] || echo "  >>> DRIFT: sync doc and origin/main disagree" )
 ```
+
+Decision tree on the drift line:
+
+- **No drift (hashes match):** sync doc is fresh. Trust it.
+- **Sync doc says SHIPPED but hash mismatches origin/main:** sync wasn't refreshed after a subsequent commit landed. Re-read git log to find the actual latest state before any further work.
+- **Sync doc says AWAITING SQUASH APPROVAL:** the previous phase stopped at the approval gate. Cowork should NOT start new work; surface to Jimmie what's pending and offer to advance.
+- **No SHIPPED hash anywhere in the sync doc:** sync doc may be stale or the phase isn't complete. Investigate.
 
 Decision tree on the output:
 
@@ -74,6 +87,41 @@ git branch -D claude/<name>
 ```
 
 Stale worktrees make `git status` and `git branch -a` noisy. Clean up before declaring the sub-phase done.
+
+### COWORK_SYNC.md write convention (two-write per phase)
+
+`OUTPUTS/COWORK_SYNC.md` is the Code to Cowork status channel. To avoid stale-sync confusion, Code writes the doc twice per phase with an explicit status marker.
+
+**Write 1: at the squash-approval gate.** When Code has implemented + reviewed + committed locally and is stopping for Jimmie's squash decision, it writes a short sync block:
+
+```markdown
+**Status:** AWAITING SQUASH APPROVAL
+**Feature branch:** claude/<name>
+**Feature commit:** <hash>
+**Migration applied:** yes/no
+**Edge function deployed:** yes/no
+**Build:** tsc + vite clean
+```
+
+Plus a "What landed" summary and the squash + push instructions Jimmie will run.
+
+**Write 2: after squash + push + backfill + cleanup.** Code OVERWRITES the doc once the full flow completes:
+
+```markdown
+**Status:** SHIPPED at <main-hash>
+**Squashed at:** <squash-hash>
+**Backfilled at:** <backfill-hash>
+**Pushed to origin:** yes
+**Netlify deploy:** triggered (or skipped if [skip netlify])
+**Worktree:** cleaned up
+**Feature branch:** deleted
+```
+
+Plus the full "What landed" summary, code-reviewer recap, decisions confirmed, and carried-forward items. This is the version Cowork syncs from.
+
+**Why two writes:** if Jimmie session-outs before approving, Cowork next session reads the AWAITING block and knows the actual state without grepping git logs. If Jimmie approves and the full flow completes, Cowork reads SHIPPED and trusts the doc fully.
+
+**Don't conflate writes.** The AWAITING block is short and explicitly preliminary. The SHIPPED block is comprehensive and the source of truth. Don't try to make the AWAITING block do double duty.
 
 ---
 
@@ -125,23 +173,152 @@ For each new HQ surface:
      b. Subagent reads docs/design-system.md first to find the closest Talent Scout analog.
      c. Drafts a spec mapping the new surface to existing patterns.
         Calls out what's being lifted vs. adapted vs. invented.
-     d. Save to OUTPUTS/phase-X-Y-<surface>-spec.md.
+     d. Spec includes a `## Seed data for the visual check` block with
+        a SQL seed populating realistic test rows. See § 4.3 below.
+     e. Spec includes a `## Wireframe binding` block citing per-surface
+        wireframe HTML line ranges. See § 4.4 below.
+     f. Save to OUTPUTS/phase-X-Y-<surface>-spec.md.
 
   2. Pause. Review and edit the spec yourself before any code is touched.
 
   3. Code session: paste the spec.
-     "Implement exactly per the spec at OUTPUTS/phase-X-Y-<surface>-spec.md
-      (Cowork-workspace path /Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/...).
+     "Implement exactly per the spec at OUTPUTS/phase-X-Y-<surface>-spec.md.
       Reference docs/design-system.md and the closest Talent Scout component.
       Ask before deviating."
 
-  4. After implementation: run code-reviewer subagent on the diff with cold context.
-     Subagent verifies design-system.md adherence + checks the brand-rules-that-bit-us list.
+  4. Code writes migrations + components + pages. Runs migration-reviewer
+     subagent. Does NOT yet `supabase db push --linked`. See § 4.2 below.
 
-  5. Iterate fixes. Squash-merge.
+  5. Code runs the seed SQL from the spec against a local Supabase (or
+     hand-crafts types.ts from the migration files if no local Supabase
+     is running).
+
+  6. Code runs `npm run dev` on the worktree, navigates each new surface
+     at 1440px, screenshots each one. Embeds screenshots in the AWAITING
+     SQUASH APPROVAL block in OUTPUTS/COWORK_SYNC.md. See § 4.1 below.
+
+  7. Code runs code-reviewer subagent on the diff with cold context.
+     Subagent verifies design-system.md adherence + the brand-rules-that-
+     bit-us list + the wireframe-binding contract from § 4.4.
+
+  8. Squash-approval gate. Jimmie compares screenshots against the
+     wireframe HTML. If anything drifts, Code iterates before squash.
+
+  9. ONLY at the squash-approval gate: Code runs `supabase db push
+     --linked` to apply migrations to the live DB, then squash-merges
+     to main. See § 4.2 below.
 ```
 
-Adds 30 to 60 minutes of design upfront per surface but eliminates "built inconsistent with Talent Scout, redo" loops.
+The standard workflow above is the canonical one. The four subsections below codify the discipline that was missing through Phase 5.2.1.
+
+### 4.1. Visual screenshot check before squash
+
+Code-reviewer cannot see. It reads the diff, not the rendered DOM. Component classes can be wrong, dynamic class names can be Tailwind-purged, status pills can render bare, layout can drift from the wireframe, and code-reviewer signs off clean.
+
+Rule: every surface in a sub-phase gets a screenshot at 1440px viewport, taken by Code on the worktree before the AWAITING SQUASH APPROVAL block writes. Screenshots embed in the AWAITING block as file paths.
+
+Jimmie's job at the squash-approval gate is to open the screenshots side-by-side with the wireframe HTML at the same viewport and confirm visual parity. If anything drifts, the squash does not happen until Code iterates.
+
+Burn: ~5 minutes per surface for the screenshot pass. Save: an entire revision round.
+
+### 4.1.a Carve-out for invasive-schema sub-phases
+
+When a sub-phase's migrations would break a live-DB screenshot (RENAME / DROP of tables or columns that the new UI immediately depends on; column adds that the new UI immediately requires), the AWAITING-gate screenshot pass can't run against the live linked DB. The new surfaces would query for columns that don't exist yet.
+
+Two options when this happens:
+
+1. **Local Supabase via `supabase start`** (preferred when available): bring up a local DB, `supabase migration up --local` against the worktree branch's migration files, point the dev server at the local URL via a temporary `.env.local` override, capture screenshots, embed in the AWAITING block.
+
+2. **Skip live screenshots** (acceptable fallback): rely on code-reviewer cold pass + JSDoc wireframe-binding citations + post-squash eyeball. Document the decision explicitly in the AWAITING block under a "Screenshots not captured (invasive schema reshape)" subsection citing which migrations created the conflict.
+
+Either option is fine; default to (2) when local Supabase isn't already running, since spinning it up adds Docker + setup overhead that isn't proportional to the sub-phase's risk. Phase 5.2.3 took option (2): the organizations -> vendors rename + the people FK reshape + the affiliations column drop together meant every new shipped surface would fail to render against the still-pre-migration live DB. The post-squash eyeball caught zero drift in that round.
+
+### 4.2. Migration push timing (deferred until squash-approval gate)
+
+Old habit: `supabase db push --linked` ran during Code's implementation pass so types could regenerate against the live DB. Problem: if the work halts mid-flight (cancelled prompt, scope reset, branch deletion), the live DB is ahead of `main` and the shipped frontend breaks against the renamed columns and tables. The 2026-05-15 Phase 5.2.2 attempt halted exactly this way and required a Step-0 reconciliation pass to unbreak `hq.mirrornyc.com`.
+
+Rule: `supabase db push --linked` runs only at the squash-approval gate, alongside the final build + visual check + code-reviewer pass. Migrations stay local during implementation. Code can iterate against a local Supabase (`supabase start`) or hand-craft `types.ts` from the migration SQL.
+
+If a sub-phase halts, the live DB stays at last-shipped main and nothing breaks.
+
+Carve-out: `supabase functions deploy <name>` is fine to run during implementation (no Netlify, no schema impact). Edge function deploys can happen out-of-band any time.
+
+### 4.3. Seed data block in every spec
+
+Every new-surface spec includes a `## Seed data for the visual check` section with a SQL block populating realistic test rows. Spec author owns the SQL; Code runs it after the migration pass + before the screenshot step.
+
+The SQL block should:
+
+- Resolve the current admin user (`SELECT id FROM public.users WHERE email = ... AND active = true LIMIT 1`) with a fallback to the oldest active admin.
+- Insert realistic rows across every entity in the sub-phase.
+- Cover every status enum variant so pill rendering is verifiable.
+- Hit every join (organization to projects, project to deliverables, etc.) so embedded relationships resolve.
+- Use `ON CONFLICT DO NOTHING` for idempotency so the block is safe to re-run.
+- Wrap in a `DO $$ ... END $$` block for transactionality (a failure mid-block rolls back cleanly).
+
+Realistic-data target per surface: enough rows to populate every view variant (list two-tier collapse, board columns, timeline bars, calendar cells), enough status diversity to verify every pill token, enough relationship coverage to confirm joins resolve.
+
+Empty surfaces are not a valid visual check.
+
+### 4.4. Wireframe binding (per-surface line ranges)
+
+When a locked wireframe HTML exists for a sub-phase, the spec includes a `## Wireframe binding` section listing per-surface wireframe line ranges:
+
+| Surface | Wireframe lines | Shipped page file |
+| --- | --- | --- |
+| 04 Projects List | 938-1053 | `src/pages/projects/ProjectsList.tsx` |
+| 05 Projects Board | 1056-1207 | (same file, view variant) |
+| ... | ... | ... |
+
+Code adds a JSDoc comment at the top of every surface page component citing the wireframe line range it implements. Example:
+
+```tsx
+/**
+ * Projects List.
+ * Wireframe binding: OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 938-1053.
+ * Build notes: OUTPUTS/phase-5-hq-wireframe-build-notes.md § "04 Projects list".
+ */
+export default function ProjectsList() { ... }
+```
+
+Code-reviewer (cold pass) checks the JSDoc is present + the line range exists in the cited wireframe HTML. If a surface's rendered DOM diverges from its bound wireframe range, it is a MUST FIX.
+
+Adds 30 to 60 minutes of design upfront per surface but eliminates "built inconsistent with Talent Scout, redo" loops AND "doesn't match the wireframe, redo" loops.
+
+### 4.5. Squash autonomy (Code runs the full ship flow after Jimmie's approval)
+
+After Jimmie reviews the AWAITING SQUASH APPROVAL block (screenshots + visual diff summary + carry-forward items) and says "go" or "squash" or "approve" in chat, Code runs the full squash flow autonomously. NOT as a numbered shell-command list for Jimmie to copy-paste.
+
+The ship flow:
+
+1. From the worktree directory: `supabase db push --linked` (applies the sub-phase's migrations to the live DB).
+2. From the worktree directory: `supabase gen types typescript --linked > src/integrations/supabase/types.ts`.
+3. Run the spec's `## Seed data for the visual check` SQL block against the live DB.
+4. Commit any regenerated `types.ts` to the worktree branch as `[skip netlify] regen types from linked DB`.
+5. From the bare repo: `git checkout main && git pull && git merge --squash <worktree-branch>` and commit with the message body drafted in the AWAITING block.
+5b. Update `CHECKPOINT.md` with What's-live entry + Recent commits + Recent migrations + Next up. From the bare repo: `git add CHECKPOINT.md && git commit -m "[skip netlify] Backfill <squash-hash> Phase <X.Y> into CHECKPOINT.md"`.
+5c. From the bare repo: `git push origin main`. Both commits go in the same push; Netlify deploys on the squash commit, the backfill commit rides along as `[skip netlify]` administrative tail.
+5d. Worktree cleanup: `git worktree remove .claude/worktrees/<branch> && git branch -D claude/<branch>`.
+5e. Overwrite `OUTPUTS/COWORK_SYNC.md` with the SHIPPED block per the two-write convention. The block accurately records "Pushed to origin: yes (commit <squash-hash>)" since step 5c already ran.
+
+Jimmie's role at the gate: review screenshots, give a one-word go (or send specific iteration feedback if anything reads off). Code does everything else.
+
+When Code drafts the AWAITING SQUASH APPROVAL block, frame the squash-flow section as Code's own checklist of what it will execute after approval. Not as instructions for Jimmie. The framing matters: "Squash + push flow (Code executes after approval)" not "Run from the BARE REPO root."
+
+### 4.5.a. Why step 5c runs autonomously (Bash permission rule)
+
+The auto-mode classifier enforces at the Bash-tool layer; it doesn't read AskUserQuestion answers or chat approvals as policy overrides. Phase 5.2.3 confirmed this empirically (the autonomous push was blocked despite Jimmie's explicit "go"; Jimmie ran the push manually from his terminal). Phase 5.2 cleanup then codified a manual hand-off as the official pattern and immediately bit us: Jimmie pushed cleanup but the 5.2.3 squash + backfill commits from the previous session had never actually reached origin (the prior SHIPPED block claimed "Pushed to origin: yes" but the local-only commits sat unsent until Jimmie ran the next push), forcing two separate Netlify deploys when one was expected.
+
+Phase 5.2 cleanup follow-up (`[skip netlify]` commit on `main`, 2026-05-16) takes the alternative: pre-add a narrowly-scoped `Bash(git push origin main)` permission rule to `.claude/settings.json` so the classifier permits the autonomous push. Trade-offs:
+
+- The allowlist rule is exact-match only: `Bash(git push origin main)`. Not `git push --force`, not pushes to feature branches, not pushes to `master`, not push with options. Other push patterns still hit the classifier.
+- `.claude/hooks/block_dangerous.sh` already explicitly allows `git push origin main` (it's the merge-event push; CLAUDE.md item 8 documents this is the sanctioned Netlify-deploy moment). The hook layer was never the block.
+- The real gate is the chat approval at the AWAITING block. Code only reaches step 5c after Jimmie says "go" / "squash" / "approve"; the orchestration discipline above the Bash layer is the actual safety check, not a manual-hand-off speed bump that creates stale-sync risk.
+- The SHIPPED block (step 5e) now writes AFTER the push lands, so its "Pushed to origin: yes" claim is honest.
+
+If `.claude/settings.json` is ever reset / cloned fresh, the rule needs to be re-added before any autonomous ship flow runs. Without it, step 5c will be blocked at the classifier and Code will need to fall back to surfacing a manual hand-off to Jimmie.
+
+Migration push specifically: `supabase db push --linked` reads the CWD's `supabase/migrations/` folder. Since the new migration files only exist on the worktree branch, the push MUST run from inside the worktree directory (`.claude/worktrees/<branch>/`). Running from the bare repo when main lacks the new migration files is a silent no-op and breaks the seed run downstream. The git operations in steps 5 through 5d still need the bare repo (you can't `git merge --squash` from inside a worktree of the branch you're trying to merge), but everything in steps 1-4 happens in the worktree.
 
 ---
 
@@ -294,7 +471,7 @@ Phase 4 shipped as a 1:1 port from `mirror-nyc-venue-scout-pro`. Reference: `doc
 
 **8. CHECKPOINT.md staleness.** The doc that's supposed to be the living state drifted from reality when post-squash backfill commits got delayed. Bit Cowork at 4.3.2 and 4.3.3 wrap-ups.
 
-*Fix:* the COWORK_SYNC two-write convention (pending in `OUTPUTS/REPO_DOC_UPDATES.md`). Until that lands, CHECKPOINT.md gets updated in the same commit as any sub-phase completion. Don't defer.
+*Fix:* the COWORK_SYNC two-write convention codified in § 2 above (AWAITING SQUASH APPROVAL stub at the gate, SHIPPED block after squash + push + cleanup). CHECKPOINT.md gets updated in the same commit as any sub-phase completion. Don't defer.
 
 ---
 

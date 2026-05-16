@@ -1,11 +1,11 @@
 /**
- * Phase 5.1 status -> design-system token map.
+ * Status -> design-system token map for the three HQ Core list enums.
  *
  * Source: docs/design-system.md § 5b "Status color mapping (canonical)".
- * Project status enum has 14 values; the shipped Postgres enum still uses a
- * partial subset of those labels. The map below covers both the shipped
- * labels and the locked Phase 5 names so it works on existing data plus any
- * 5.2 schema reshape.
+ * Reshaped in Phase 5.2.1 to drop the legacy alias rows (Awaiting FB /
+ * Files / Approval / Event Live / Proof Out / In Review); the Postgres
+ * enum was rebuilt to the locked 14-value list in migration
+ * 20260515130000_phase_5_2_1_project_task_enum_reshape.sql.
  *
  * Returned token is one of `info | success | warn | destructive | muted`,
  * which maps 1:1 to the `.hq-pill--<token>` classes in src/index.css. Use
@@ -15,7 +15,6 @@
 export type StatusToken = "info" | "success" | "warn" | "destructive" | "muted";
 
 const PROJECT_STATUS_TOKENS: Record<string, StatusToken> = {
-  // Locked Phase 5 labels per spec § 5a + locked-decisions § 4
   Approved: "success",
   "In Production": "info",
   "In Progress": "info",
@@ -30,13 +29,6 @@ const PROJECT_STATUS_TOKENS: Record<string, StatusToken> = {
   "On Hold": "muted",
   Complete: "muted",
   Cancelled: "destructive",
-  // Shipped enum aliases that survive into 5.1 until 5.2 reshapes the enum
-  "Awaiting FB": "warn",
-  "Awaiting Files": "warn",
-  "Awaiting Approval": "warn",
-  "Event Live": "info",
-  "Proof Out": "warn",
-  "In Review": "info",
 };
 
 export function projectStatusToken(status: string | null | undefined): StatusToken {
@@ -49,10 +41,10 @@ export function hqPillClass(status: string | null | undefined) {
 }
 
 const TASK_STATUS_TOKENS: Record<string, StatusToken> = {
-  todo: "muted",
-  in_progress: "info",
-  blocked: "destructive",
-  done: "success",
+  "To Do": "muted",
+  Doing: "info",
+  Blocked: "destructive",
+  Done: "success",
 };
 
 export function taskStatusToken(status: string | null | undefined): StatusToken {
@@ -60,12 +52,28 @@ export function taskStatusToken(status: string | null | undefined): StatusToken 
   return TASK_STATUS_TOKENS[status] ?? "muted";
 }
 
-export function taskStatusLabel(status: string | null | undefined): string {
-  switch (status) {
-    case "todo": return "To Do";
-    case "in_progress": return "Doing";
-    case "blocked": return "Blocked";
-    case "done": return "Done";
-    default: return status ?? "";
-  }
+const DELIVERABLE_STATUS_TOKENS: Record<string, StatusToken> = {
+  Upcoming: "muted",
+  "In Progress": "warn",
+  Complete: "success",
+  Skipped: "muted",
+};
+
+export function deliverableStatusToken(status: string | null | undefined): StatusToken {
+  if (!status) return "muted";
+  return DELIVERABLE_STATUS_TOKENS[status] ?? "muted";
+}
+
+/**
+ * Skipped deliverables and Done tasks render with strikethrough + reduced
+ * opacity on the title text per locked-decisions § 4. Component code can
+ * call this helper to derive the right class fragment.
+ */
+export function statusTextDecoration(
+  entity: "task" | "deliverable",
+  status: string | null | undefined,
+): string {
+  if (entity === "task" && status === "Done") return "line-through opacity-60";
+  if (entity === "deliverable" && status === "Skipped") return "line-through opacity-60";
+  return "";
 }

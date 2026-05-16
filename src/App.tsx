@@ -10,7 +10,28 @@ import { StandardOrAdminRoute } from "@/components/StandardOrAdminRoute";
 import AppShell from "@/components/AppShell";
 import Home from "./pages/Home";
 import PendingState from "./pages/PendingState";
-import Projects from "./pages/Projects";
+import ProjectsList from "./pages/projects/ProjectsList";
+import ProjectDetail from "./pages/projects/ProjectDetail";
+import ProjectEdit from "./pages/projects/ProjectEdit";
+import TasksList from "./pages/tasks/TasksList";
+import TaskDetail from "./pages/tasks/TaskDetail";
+import TaskEdit from "./pages/tasks/TaskEdit";
+import DeliverablesList from "./pages/deliverables/DeliverablesList";
+import DeliverableDetail from "./pages/deliverables/DeliverableDetail";
+import DeliverableEdit from "./pages/deliverables/DeliverableEdit";
+import ClientsList from "./pages/clients/ClientsList";
+import ClientDetail from "./pages/clients/ClientDetail";
+import ClientEdit from "./pages/clients/ClientEdit";
+import VendorsList from "./pages/vendors/VendorsList";
+import VendorDetail from "./pages/vendors/VendorDetail";
+import VendorEdit from "./pages/vendors/VendorEdit";
+import OrganizationsRedirect from "./pages/clients/OrganizationsRedirect";
+import PeopleList from "./pages/people/PeopleList";
+import PersonDetail from "./pages/people/PersonDetail";
+import PersonEdit from "./pages/people/PersonEdit";
+import VenuesList from "./pages/venues/VenuesList";
+import VenueDetail from "./pages/venues/VenueDetail";
+import VenueEdit from "./pages/venues/VenueEdit";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound.tsx";
 import TalentScoutIndex from "./pages/talent-scout/Index";
@@ -86,7 +107,31 @@ const App = () => (
                 path="/projects"
                 element={
                   <StandardOrAdminRoute>
-                    <Projects />
+                    <ProjectsList view="list" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects/board"
+                element={
+                  <StandardOrAdminRoute>
+                    <ProjectsList view="board" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects/timeline"
+                element={
+                  <StandardOrAdminRoute>
+                    <ProjectsList view="timeline" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <ProjectEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -94,7 +139,15 @@ const App = () => (
                 path="/projects/:id"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Project detail" />
+                    <ProjectDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/projects/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <ProjectEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -102,7 +155,23 @@ const App = () => (
                 path="/tasks"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Tasks" />
+                    <TasksList view="list" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/tasks/board"
+                element={
+                  <StandardOrAdminRoute>
+                    <TasksList view="board" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/tasks/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <TaskEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -110,7 +179,15 @@ const App = () => (
                 path="/tasks/:id"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Task detail" />
+                    <TaskDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/tasks/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <TaskEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -118,7 +195,47 @@ const App = () => (
                 path="/deliverables"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Deliverables" />
+                    <DeliverablesList view="calendar" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/list"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverablesList view="list" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/board"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverablesList view="board" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverableEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverableDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverableEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -134,7 +251,15 @@ const App = () => (
                 path="/venues"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Venues" />
+                    <VenuesList />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/venues/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <VenueEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -142,7 +267,15 @@ const App = () => (
                 path="/venues/:id"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Venue detail" />
+                    <VenueDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/venues/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <VenueEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -150,15 +283,91 @@ const App = () => (
                 path="/clients"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Clients" />
+                    <ClientsList />
                   </StandardOrAdminRoute>
                 }
               />
               <Route
-                path="/organizations"
+                path="/clients/new"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Organizations" />
+                    <ClientEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/clients/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <ClientDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/clients/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <ClientEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/vendors"
+                element={
+                  <StandardOrAdminRoute>
+                    <VendorsList />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/vendors/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <VendorEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/vendors/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <VendorDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/vendors/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <VendorEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              {/* Backward-compat redirects for the shipped /organizations URLs.
+                  Old bookmarks resolve to the right post-split surface based on
+                  which table the id is in. Drop this pair in a future polish
+                  pass once Mirror's bookmarks update. */}
+              <Route
+                path="/organizations"
+                element={<Navigate to="/vendors" replace />}
+              />
+              <Route
+                path="/organizations/new"
+                element={<Navigate to="/vendors/new" replace />}
+              />
+              <Route
+                path="/organizations/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <OrganizationsRedirect />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/organizations/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <OrganizationsRedirect editMode />
                   </StandardOrAdminRoute>
                 }
               />
@@ -166,7 +375,31 @@ const App = () => (
                 path="/people"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="People" />
+                    <PeopleList />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/people/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <PersonEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/people/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <PersonDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/people/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <PersonEdit />
                   </StandardOrAdminRoute>
                 }
               />

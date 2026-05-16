@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { MirrorMark } from "@/components/MirrorMark";
 import {
   IconHome,
@@ -9,6 +9,7 @@ import {
   IconCalendar,
   IconVenues,
   IconOrgs,
+  IconClients,
   IconPeople,
   IconActivity,
   IconSearch,
@@ -20,14 +21,26 @@ import {
 } from "@/components/icons/HQIcons";
 import { RailFooter } from "@/components/shell/RailFooter";
 
+// Phase 5.2.1 rail amendment (OUTPUTS/phase-5-2-rail-amendment.md):
+// - Single ordered Tools group with per-item adminOnly flag (no second
+//   sub-heading for admin-only items).
+// - Tool-app rail variant: when the route is under /talent-scout or
+//   /venue-scout, the Primary group collapses to HQ Home + Activity Feed.
+
 type RailItem = {
   to: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
   /** Render the in-row count badge with this number. Renders nothing when 0. */
   count?: number;
+  /** Hide for non-admin users when true. */
+  adminOnly?: boolean;
 };
 
+// Phase 5.2.3 rail order (locked Q2 of phase-5-2-3-spec.md § 0c): high-
+// frequency lookups first (Venues / Vendors near top); Clients fall to
+// the bottom of the entity group since rare use. Organizations row from
+// the 5.2.2 ship is replaced with Vendors + Clients per the table split.
 const PRIMARY_ITEMS: RailItem[] = [
   { to: "/home", label: "Home", icon: IconHome },
   { to: "/projects", label: "Projects", icon: IconProjects },
@@ -35,22 +48,26 @@ const PRIMARY_ITEMS: RailItem[] = [
   { to: "/deliverables", label: "Deliverables", icon: IconDeliverables },
   { to: "/calendar", label: "Calendar", icon: IconCalendar },
   { to: "/venues", label: "Venues", icon: IconVenues },
-  { to: "/organizations", label: "Organizations", icon: IconOrgs },
+  { to: "/vendors", label: "Vendors", icon: IconOrgs },
   { to: "/people", label: "People", icon: IconPeople },
+  { to: "/clients", label: "Clients", icon: IconClients },
   { to: "/activity", label: "Activity Feed", icon: IconActivity },
   { to: "/search", label: "Search", icon: IconSearch },
 ];
 
+// Locked ordering per rail amendment § 1.
 const TOOLS_ITEMS: RailItem[] = [
-  { to: "/venue-scout", label: "Venue Scout", icon: IconScout },
   { to: "/wiki", label: "Wiki", icon: IconWiki },
+  { to: "/talent-scout", label: "Talent Scout", icon: IconScout, adminOnly: true },
+  { to: "/venue-scout", label: "Venue Scout", icon: IconScout },
+  { to: "/team", label: "Team", icon: IconTeam, adminOnly: true },
+  { to: "/outlook", label: "Outlook", icon: IconOutlook, adminOnly: true },
+  { to: "/settings", label: "Settings", icon: IconSettings, adminOnly: true },
 ];
 
-const ADMIN_ITEMS: RailItem[] = [
-  { to: "/talent-scout", label: "Talent Scout", icon: IconScout },
-  { to: "/team", label: "Team", icon: IconTeam },
-  { to: "/outlook", label: "Outlook", icon: IconOutlook },
-  { to: "/settings", label: "Settings", icon: IconSettings },
+const TOOL_APP_PRIMARY: RailItem[] = [
+  { to: "/home", label: "HQ Home", icon: IconHome },
+  { to: "/activity", label: "Activity Feed", icon: IconActivity },
 ];
 
 function RailLink({ item }: { item: RailItem }) {
@@ -86,9 +103,17 @@ export function LeftRail({
   email: string;
   tier: Tier;
 }) {
-  const primary = PRIMARY_ITEMS.map((item) =>
-    item.to === "/tasks" ? { ...item, count: tasksOpenCount } : item,
-  );
+  const { pathname } = useLocation();
+  const isToolApp =
+    pathname.startsWith("/talent-scout") || pathname.startsWith("/venue-scout");
+
+  const primary = isToolApp
+    ? TOOL_APP_PRIMARY
+    : PRIMARY_ITEMS.map((item) =>
+        item.to === "/tasks" ? { ...item, count: tasksOpenCount } : item,
+      );
+
+  const tools = TOOLS_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <aside className="hq-rail">
@@ -103,12 +128,9 @@ export function LeftRail({
           <RailLink key={item.to} item={item} />
         ))}
         <div className="hq-rail-grp">Tools</div>
-        {TOOLS_ITEMS.map((item) => (
+        {tools.map((item) => (
           <RailLink key={item.to} item={item} />
         ))}
-        {isAdmin
-          ? ADMIN_ITEMS.map((item) => <RailLink key={item.to} item={item} />)
-          : null}
       </nav>
       <RailFooter fullName={fullName} email={email} tier={tier} />
     </aside>
