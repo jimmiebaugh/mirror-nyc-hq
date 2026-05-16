@@ -19,6 +19,15 @@ import TaskEdit from "./pages/tasks/TaskEdit";
 import DeliverablesList from "./pages/deliverables/DeliverablesList";
 import DeliverableDetail from "./pages/deliverables/DeliverableDetail";
 import DeliverableEdit from "./pages/deliverables/DeliverableEdit";
+import OrganizationsList from "./pages/organizations/OrganizationsList";
+import OrganizationDetail from "./pages/organizations/OrganizationDetail";
+import OrganizationEdit from "./pages/organizations/OrganizationEdit";
+import PeopleList from "./pages/people/PeopleList";
+import PersonDetail from "./pages/people/PersonDetail";
+import PersonEdit from "./pages/people/PersonEdit";
+import VenuesList from "./pages/venues/VenuesList";
+import VenueDetail from "./pages/venues/VenueDetail";
+import VenueEdit from "./pages/venues/VenueEdit";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound.tsx";
 import TalentScoutIndex from "./pages/talent-scout/Index";
@@ -238,7 +247,15 @@ const App = () => (
                 path="/venues"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Venues" />
+                    <VenuesList />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/venues/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <VenueEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -246,7 +263,15 @@ const App = () => (
                 path="/venues/:id"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Venue detail" />
+                    <VenueDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/venues/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <VenueEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -255,7 +280,31 @@ const App = () => (
                 path="/organizations"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Organizations" />
+                    <OrganizationsList />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/organizations/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <OrganizationEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/organizations/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <OrganizationDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/organizations/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <OrganizationEdit />
                   </StandardOrAdminRoute>
                 }
               />
@@ -263,7 +312,31 @@ const App = () => (
                 path="/people"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="People" />
+                    <PeopleList />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/people/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <PersonEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/people/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <PersonDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/people/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <PersonEdit />
                   </StandardOrAdminRoute>
                 }
               />
