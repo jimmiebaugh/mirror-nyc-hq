@@ -247,3 +247,49 @@ export const IconLink = (p: IconProps) => (
     <path d="M14 10a4 4 0 00-5.5 0l-3 3A4 4 0 0011 18.5l2-2" />
   </Base>
 );
+
+// Phase 5.4 wireframe sprite lifts (Surfaces 12, 17, 18, 20).
+export const IconLock = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="5" y="11" width="14" height="9" rx="1.5" />
+    <path d="M8 11V8a4 4 0 018 0v3" />
+  </Base>
+);
+
+export const IconEye = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
+    <circle cx="12" cy="12" r="3" />
+  </Base>
+);
+
+export const IconEyeOff = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M2 12s4-7 10-7c2 0 3.7.7 5.2 1.6M22 12s-4 7-10 7c-2 0-3.7-.7-5.2-1.6M3 3l18 18M9.5 9.5a3 3 0 004 4" />
+  </Base>
+);
+
+export const IconCopy = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="9" y="9" width="12" height="12" rx="2" />
+    <path d="M5 15V5a2 2 0 012-2h8" />
+  </Base>
+);
+
+export const IconPencil = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" />
+  </Base>
+);
+
+export const IconAlert = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M12 4l9 16H3zM12 10v5M12 18h.01" />
+  </Base>
+);
+
+export const IconStar = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
+  </Base>
+);

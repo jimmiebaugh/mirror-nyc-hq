@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -162,6 +163,57 @@ export type Database = {
           },
         ]
       }
+      credentials: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          password: string
+          service_name: string
+          updated_at: string
+          updated_by: string | null
+          url: string | null
+          username: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          password: string
+          service_name: string
+          updated_at?: string
+          updated_by?: string | null
+          url?: string | null
+          username?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          password?: string
+          service_name?: string
+          updated_at?: string
+          updated_by?: string | null
+          url?: string | null
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credentials_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credentials_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deliverables: {
         Row: {
           assigned_user_ids: string[]
@@ -222,6 +274,35 @@ export type Database = {
           },
         ]
       }
+      departments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "departments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       global_settings: {
         Row: {
           anthropic_spend_cap_monthly_usd: number
@@ -263,6 +344,38 @@ export type Database = {
           venue_research_priority_sites?: string[]
         }
         Relationships: []
+      }
+      mirror_holidays: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          date: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          date: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mirror_holidays_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notes_log: {
         Row: {
@@ -1331,36 +1444,56 @@ export type Database = {
           active: boolean
           avatar_url: string | null
           created_at: string
-          department_tags: string[]
+          department_id: string | null
           email: string
           full_name: string | null
           id: string
+          last_active_at: string | null
           permission_role: Database["public"]["Enums"]["permission_role"]
+          role_title: string | null
+          slack_handle: string | null
+          slack_user_id: string | null
           updated_at: string
         }
         Insert: {
           active?: boolean
           avatar_url?: string | null
           created_at?: string
-          department_tags?: string[]
+          department_id?: string | null
           email: string
           full_name?: string | null
           id: string
+          last_active_at?: string | null
           permission_role?: Database["public"]["Enums"]["permission_role"]
+          role_title?: string | null
+          slack_handle?: string | null
+          slack_user_id?: string | null
           updated_at?: string
         }
         Update: {
           active?: boolean
           avatar_url?: string | null
           created_at?: string
-          department_tags?: string[]
+          department_id?: string | null
           email?: string
           full_name?: string | null
           id?: string
+          last_active_at?: string | null
           permission_role?: Database["public"]["Enums"]["permission_role"]
+          role_title?: string | null
+          slack_handle?: string | null
+          slack_user_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "users_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendor_capabilities: {
         Row: {
@@ -1434,6 +1567,7 @@ export type Database = {
           internal_rating: number | null
           legacy_notes: string | null
           name: string
+          preferred: boolean
           primary_address: string | null
           tags: string[]
           updated_at: string
@@ -1452,6 +1586,7 @@ export type Database = {
           internal_rating?: number | null
           legacy_notes?: string | null
           name: string
+          preferred?: boolean
           primary_address?: string | null
           tags?: string[]
           updated_at?: string
@@ -1470,6 +1605,7 @@ export type Database = {
           internal_rating?: number | null
           legacy_notes?: string | null
           name?: string
+          preferred?: boolean
           primary_address?: string | null
           tags?: string[]
           updated_at?: string
@@ -1929,6 +2065,63 @@ export type Database = {
           },
         ]
       }
+      wiki_pages: {
+        Row: {
+          body: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          page_type: string
+          slug: string
+          sort_order: number
+          title: string
+          updated_at: string
+          updated_by: string | null
+          visibility: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          page_type?: string
+          slug: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+          visibility?: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          page_type?: string
+          slug?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+          visibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wiki_pages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wiki_pages_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -2169,3 +2362,6 @@ export const Constants = {
     },
   },
 } as const
+<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
+A new version of Supabase CLI is available: v2.98.2 (currently installed v2.98.1)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

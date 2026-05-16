@@ -7,14 +7,45 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 ## HQ Core
 
 ### users (synced from auth.users via `handle_new_user` trigger)
-- `id` (uuid, PK, FK to `auth.users.id` ON DELETE CASCADE)
+- `id` (uuid, PK). Phase 5.4 dropped the FK to `auth.users(id)` so admins can pre-provision Team members before they sign in. `handle_new_user` swaps the placeholder id to the auth uid on first sign-in (id-swap pattern; see `docs/decisions.md` Phase 5.4).
 - `email` (text, unique, not null)
 - `full_name` (text)
 - `avatar_url` (text)
-- `permission_role` (enum: `admin`, `standard`, `freelance`, `pending`; default `pending`). Reshaped in Phase 5.1 from the 3-tier model (`member`/`producer`/`admin`) per the locked Phase 5 decisions memo. Backfill: admin -> admin, producer -> admin, member -> standard. New signups land in `pending` until an admin assigns a tier from the Team page (lands 5.4).
-- `department_tags` (text[]; allowed values: 'Account Manager', 'Production', 'Design', 'Creative'; users self-tag)
-- `active` (bool, default true; soft-delete column)
+- `permission_role` (enum: `admin`, `standard`, `freelance`, `pending`; default `pending`). Reshaped in Phase 5.1 from the 3-tier model (`member`/`producer`/`admin`) per the locked Phase 5 decisions memo. Backfill: admin -> admin, producer -> admin, member -> standard. New signups land in `pending` until an admin assigns a tier from the Team page.
+- `role_title` (text, nullable). Added Phase 5.4. Free-text producer / designer / etc.
+- `department_id` (uuid, FK to `departments.id` ON DELETE SET NULL, nullable). Added Phase 5.4. Replaces the Phase-5.1 `department_tags` text[] (dropped). Seeded values: Leadership, Accounts, Creative, Design, Event Production.
+- `slack_handle` (text, nullable). Added Phase 5.4. Future Slack-DM notification dispatch reads this.
+- `slack_user_id` (text, nullable). Added Phase 5.4. Slack workspace user id (e.g. `U01234ABCD`) for DM addressing.
+- `last_active_at` (timestamptz, nullable). Added Phase 5.4. Stamped by `handle_new_user` on sign-in.
+- `active` (bool, default true; soft-delete column). `ProtectedRoute` checks this on every authed nav: a row with `active = false` triggers an immediate sign-out + "Account deactivated" screen (Phase 5.4).
 - `created_at`, `updated_at`
+
+### departments (Phase 5.4 lookup)
+- `id` (uuid, PK), `name` (text, unique, not null)
+- `created_by` (uuid, FK to users, nullable), `created_at`
+- RLS: open SELECT for authenticated; admin INSERT/UPDATE/DELETE via `is_admin()`.
+
+### wiki_pages (Phase 5.4)
+- `id`, `slug` (text, unique), `title`, `body` (text, markdown for prose pages)
+- `page_type` (text CHECK in `prose`, `team_directory`, `vendors_glance`, `account_logins`; default `prose`). Special pages (non-prose) render hardcoded components instead of body markdown; they're seeded in the migration and can't be created from the UI.
+- `visibility` (text CHECK in `all`, `no_freelance`; default `all`). Filters the wiki nav; `account-logins` ships with `no_freelance`.
+- `sort_order` (int, default 0). Drives nav order (asc).
+- `created_by`, `updated_by` (uuid FKs to users, nullable), `created_at`, `updated_at`
+- Triggers: `updated_at_auto`, `activity_log_writer`.
+- RLS: open SELECT for authenticated; admin INSERT/UPDATE/DELETE.
+
+### credentials (Phase 5.4)
+- `id`, `service_name` (text, not null), `username` (text, nullable), `password` (text, not null, plaintext-at-rest; see `docs/decisions.md` Phase 5.4 for rationale), `url` (text, nullable), `related_note` (text, nullable)
+- `created_by`, `updated_by` (uuid FKs to users, nullable), `created_at`, `updated_at`
+- Triggers: `updated_at_auto`, `activity_log_writer`.
+- RLS: Freelance blocked entirely. SELECT for `admin` + `standard`. Admin-only INSERT/UPDATE/DELETE.
+
+### mirror_holidays (Phase 5.4 — replaces 5.3 hardcoded constant)
+- `id`, `name` (text), `date` (date), `created_by` (uuid FK to users, nullable), `created_at`
+- Index on `(date asc)`.
+- Trigger: `activity_log_writer`.
+- RLS: open SELECT for authenticated; admin INSERT/UPDATE/DELETE.
+- Seeded from the prior `src/lib/calendar/holidays.ts` `MIRROR_HOLIDAYS` constant; the Calendar now reads via `useMirrorHolidays()` hook.
 
 ### organizations (renamed from clients in Phase 5.2.2; split into vendors + clients in Phase 5.2.3)
 

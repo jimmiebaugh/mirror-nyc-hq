@@ -26,7 +26,8 @@ export type LookupTable =
   | "project_categories"
   | "vendor_capabilities"
   | "vendor_categories"
-  | "venue_types";
+  | "venue_types"
+  | "departments";
 
 export type LookupOption = { id: string; name: string };
 
