@@ -16,23 +16,39 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `active` (bool, default true; soft-delete column)
 - `created_at`, `updated_at`
 
-### organizations (renamed from clients in Phase 5.2.2)
+### organizations (renamed from clients in Phase 5.2.2; split into vendors + clients in Phase 5.2.3)
+
+**Doc drift note:** The section below describes the 5.2.2-era unified `organizations` table. Phase 5.2.3 (migrations `20260516130000` through `20260516130004`) split this into `vendors` (renamed from organizations) + `clients` (new table). Phase 5.2 cleanup adds `vendors.primary_address` (text, nullable) and fixes the `vendor_capabilities` GRANT DELETE for the authenticated role. A full rewrite of this section reflecting the split shape is carried forward as a doc-debt item; canonical column lists live in the migration files and in `src/integrations/supabase/types.ts` until then.
+
+5.2.3 + cleanup deltas (minimum coverage for the migrations applied here):
+- `vendors`: renamed from `organizations`. Dropped `type` enum + `org_type` type. Added `category_id` (uuid, FK to `vendor_categories`, nullable, ON DELETE SET NULL). Added `primary_address` (text, nullable) in Phase 5.2 cleanup. All other columns from the organizations shape carry through.
+- `clients`: new slim table created fresh in 5.2.3.A; columns: id, name, industry, contact_name, contact_email, contact_phone, primary_address, city, website_url, tags[], created_by, created_at, updated_at. Open-auth RLS (SELECT/INSERT/UPDATE) + admin-only DELETE. Existing organizations rows of type=Client migrated preserving UUIDs.
+- `vendor_capabilities`: renamed from `org_capabilities` in 5.2.3.A. GRANT to authenticated extended to include DELETE in Phase 5.2 cleanup so the admin-only DELETE RLS policy is reachable.
+- `vendor_categories`: new lookup table (same shape as `cities`) added in 5.2.3.A.
+- `projects.organization_id` renamed to `client_id` (FK -> clients).
+- `people.organization_id` split into `client_id` + `vendor_id` (mutex CHECK); `affiliations` enum array dropped.
+- `notes_log.parent_type` CHECK widened to `('client', 'vendor', 'person', 'venue')`.
+- `venues.exclusive_vendors_org_ids` renamed to `exclusive_vendor_ids`.
+
+The legacy `organizations` entry below is preserved for historical reference; treat the migration files + `types.ts` as authoritative for the live shape.
+
 - `id` (uuid, PK)
 - `name` (text, not null)
-- `type` (enum `org_type`, default `Client`): `Client`, `Vendor`, `Internal`. Added in Phase 5.2.2 (`20260515140000_phase_5_2_2_organizations.sql`). Backfill: every shipped clients row migrated as `type = 'Client'`. Venue Owner is intentionally NOT in the enum per build notes Surface 10 (venues owned by clients live on the venues record).
+- `type` (enum `org_type`, default `Client`): `Client`, `Vendor`, `Internal`. Added in Phase 5.2.2 (`20260515140000_phase_5_2_2_organizations.sql`). **DROPPED in Phase 5.2.3.B.** Backfill: every shipped clients row migrated as `type = 'Client'`. Venue Owner is intentionally NOT in the enum per build notes Surface 10 (venues owned by clients live on the venues record).
 - `city` (text, nullable). Added Phase 5.2.2.
 - `capabilities` (text[], default `{}`). Vendor-side free-text capability tags. Added Phase 5.2.2.
 - `website_url` (text, nullable). Added Phase 5.2.2.
 - `tags` (text[], default `{}`). Added Phase 5.2.2.
 - `internal_rating` (int, CHECK 0-5, nullable). Vendor-only Internal Rating. Visible to all standard+admin users per Surface 10 detail. Admin-write-only RLS gating deferred to 5.4. Added Phase 5.2.2.
 - `contact_name`, `contact_email`, `contact_phone` (text). Shipped from initial schema; carried through the rename.
+- `primary_address` (text, nullable). Added in Phase 5.2 cleanup (`20260516140000_phase_5_2_cleanup_primary_address_and_vendor_capabilities_grant.sql`) on the renamed vendors table; matches the `clients.primary_address` shape lifted from the 5.2.3 setup migration. Existing vendor rows receive NULL.
 - `legacy_notes` (text). Renamed from `notes` in Phase 5.2.2. Internal Notes UI uses the polymorphic `notes_log` table instead; `legacy_notes` preserves any pre-rename content for a future backfill into notes_log.
 - `created_by` (uuid, FK to users)
 - `created_at`, `updated_at`
-- Indexes: `organizations_type_idx (type)`, `organizations_city_idx (city) WHERE city IS NOT NULL`.
+- Indexes: `organizations_type_idx (type)` **(dropped in 5.2.3.B alongside type column)**, `organizations_city_idx (city) WHERE city IS NOT NULL` (renamed to track the table rename per OID-stable index naming).
 - Triggers: `trg_activity_log_organizations` (AFTER INSERT/UPDATE/DELETE; uses the Phase 5.2.1.B-extended `activity_log_writer`).
 - RLS: SELECT/INSERT/UPDATE all-auth, DELETE admin-only (inherited from the shipped clients RLS; rename preserves policies by table OID, identifiers remain `clients_*`).
-- Internal Notes: surfaced via the shared `notes_log` table with `parent_type = 'organization'`.
+- Internal Notes: surfaced via the shared `notes_log` table with `parent_type = 'vendor'` (renamed from `'organization'` in 5.2.3.D).
 
 ### projects
 - `id` (uuid, PK)

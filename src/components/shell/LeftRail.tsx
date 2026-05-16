@@ -9,6 +9,7 @@ import {
   IconCalendar,
   IconVenues,
   IconOrgs,
+  IconClients,
   IconPeople,
   IconActivity,
   IconSearch,
@@ -49,7 +50,7 @@ const PRIMARY_ITEMS: RailItem[] = [
   { to: "/venues", label: "Venues", icon: IconVenues },
   { to: "/vendors", label: "Vendors", icon: IconOrgs },
   { to: "/people", label: "People", icon: IconPeople },
-  { to: "/clients", label: "Clients", icon: IconOrgs },
+  { to: "/clients", label: "Clients", icon: IconClients },
   { to: "/activity", label: "Activity Feed", icon: IconActivity },
   { to: "/search", label: "Search", icon: IconSearch },
 ];

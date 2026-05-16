@@ -1343,6 +1343,7 @@ export type Database = {
           internal_rating: number | null
           legacy_notes: string | null
           name: string
+          primary_address: string | null
           tags: string[]
           updated_at: string
           website_url: string | null
@@ -1360,6 +1361,7 @@ export type Database = {
           internal_rating?: number | null
           legacy_notes?: string | null
           name: string
+          primary_address?: string | null
           tags?: string[]
           updated_at?: string
           website_url?: string | null
@@ -1377,6 +1379,7 @@ export type Database = {
           internal_rating?: number | null
           legacy_notes?: string | null
           name?: string
+          primary_address?: string | null
           tags?: string[]
           updated_at?: string
           website_url?: string | null

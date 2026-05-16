@@ -25,6 +25,10 @@ import { toast } from "@/hooks/use-toast";
  * surfaces in Details kv from the new vendor_categories lookup.
  * Wireframe-v2 redraw deferred to a future polish pass; see
  * design-system § 11.
+ *
+ * 5.2 cleanup: Primary Address row added to the Details kv (matches
+ * ClientDetail shape; backed by the new `vendors.primary_address`
+ * column added in the cleanup migration).
  */
 
 type Vendor = {
@@ -38,6 +42,7 @@ type Vendor = {
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  primary_address: string | null;
   tags: string[] | null;
   internal_rating: number | null;
 };
@@ -71,7 +76,7 @@ export default function VendorDetail() {
         supabase
           .from("vendors")
           .select(
-            "id, name, category_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, tags, internal_rating, " +
+            "id, name, category_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating, " +
               "category:vendor_categories!vendors_category_id_fkey(id, name)",
           )
           .eq("id", id)
@@ -277,6 +282,14 @@ export default function VendorDetail() {
                 <dt>Phone</dt>
                 <dd className="mono" style={{ fontSize: 13 }}>
                   {vendor.contact_phone ?? <span className="muted subtle">-</span>}
+                </dd>
+                <dt>Primary Address</dt>
+                <dd>
+                  {vendor.primary_address ? (
+                    <span style={{ whiteSpace: "pre-wrap" }}>{vendor.primary_address}</span>
+                  ) : (
+                    <span className="muted subtle">-</span>
+                  )}
                 </dd>
                 <dt>City</dt>
                 <dd>

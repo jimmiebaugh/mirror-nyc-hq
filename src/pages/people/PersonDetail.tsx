@@ -14,11 +14,14 @@ import { personType, personTypeToken } from "@/lib/people/queries";
  * Type / Affiliation rendering adapted in Phase 5.2.3: the wireframe's
  * multi-pill `affiliations[]` is gone (locked Q4: at most one org type
  * per person; FK presence resolves type). Single Type pill + single
- * Affiliation link (to /clients/<id> OR /vendors/<id>). For
+ * Organization link (to /clients/<id> OR /vendors/<id>). For
  * Venue-contact people, a Venues block lists the venues they contact
  * via the venue_contact_people join. Projects sidebar pulls projects
  * linked to the person's client (Vendor-touched projects + venue-contact
  * coverage deferred to a future polish pass).
+ *
+ * 5.2 cleanup: kv label flipped from "Affiliation" -> "Organization" to
+ * match wireframe Surface 11 line 2019.
  */
 
 type Person = {
@@ -195,7 +198,7 @@ export default function PersonDetail() {
               <dd>
                 <span className={`pill pill-sm p-${personTypeToken(t)}`}>{t}</span>
               </dd>
-              <dt>Affiliation</dt>
+              <dt>Organization</dt>
               <dd>
                 {person.client_id && person.client?.name ? (
                   <Link to={`/clients/${person.client_id}`} className="tlink">

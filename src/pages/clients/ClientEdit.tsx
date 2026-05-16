@@ -298,7 +298,7 @@ export default function ClientEdit() {
           </div>
           <FormField label="Primary Address">
             <textarea
-              className={`input ${form.primary_address ? "input--filled" : ""}`}
+              className={`input textarea ${form.primary_address ? "input--filled" : ""}`}
               value={form.primary_address}
               onChange={(e) => setForm((f) => ({ ...f, primary_address: e.target.value }))}
               placeholder="123 Main St, Brooklyn NY 11201"
