@@ -26,7 +26,8 @@ export type Surface =
   | "tasks"
   | "deliverables"
   | "venues"
-  | "organizations"
+  | "clients"
+  | "vendors"
   | "people";
 
 const ITEMS: Array<{ kind: ViewKind; label: string; Icon: typeof IconList }> = [
@@ -57,9 +58,11 @@ const SURFACE_ROUTES: Record<Surface, Partial<Record<ViewKind, string>>> = {
     list: "/venues",
     board: "/venues/board",
   },
-  organizations: {
-    list: "/organizations",
-    board: "/organizations/board",
+  clients: {
+    list: "/clients",
+  },
+  vendors: {
+    list: "/vendors",
   },
   people: {
     list: "/people",

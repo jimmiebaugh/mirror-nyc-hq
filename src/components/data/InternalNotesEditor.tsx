@@ -15,11 +15,13 @@ import {
 } from "@/components/ui/alert-dialog";
 
 /**
- * Append-only Internal Notes editor shared by Organization / Person /
- * Venue detail surfaces (Phase 5.2.2 § 6.A).
+ * Append-only Internal Notes editor shared by Client / Vendor / Person /
+ * Venue detail surfaces (Phase 5.2.2 § 6.A; parentType union widened in
+ * Phase 5.2.3 to absorb the organizations -> clients + vendors split).
  *
  * Wireframe reference: OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines
- * 1917-1934 (Org detail Internal Notes card). DOM is the canonical
+ * 1917-1934 (Org detail Internal Notes card; same DOM applies to both
+ * Client + Vendor Detail surfaces in 5.2.3). DOM is the canonical
  * `.card > .card-headbar (h-card + cap) > .card-pad (column gap:14px) >
  * note rows + Add a note block`.
  *
@@ -39,7 +41,7 @@ type Note = {
   author: Author | null;
 };
 
-const PARENT_TYPES = ["organization", "person", "venue"] as const;
+const PARENT_TYPES = ["client", "vendor", "person", "venue"] as const;
 type ParentType = (typeof PARENT_TYPES)[number];
 
 export function InternalNotesEditor({

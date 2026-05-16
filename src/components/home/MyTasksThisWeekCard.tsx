@@ -34,7 +34,7 @@ type DbTaskRow = {
   project: {
     id: string;
     name: string;
-    organization: { name: string | null } | null;
+    client: { name: string | null } | null;
   } | null;
 };
 
@@ -77,7 +77,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
       const { data } = await supabase
         .from("tasks")
         .select(
-          "id, title, due_date, status, priority, project:projects(id, name, organization:organizations(name))",
+          "id, title, due_date, status, priority, project:projects(id, name, client:clients(name))",
         )
         .eq("assignee_id", userId)
         .gte("due_date", mondayIso)
@@ -91,7 +91,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
         priority: t.priority,
         dueDateIso: t.due_date,
         projectName: t.project?.name ?? null,
-        clientName: t.project?.organization?.name ?? null,
+        clientName: t.project?.client?.name ?? null,
       }));
       setRows(next);
     })();

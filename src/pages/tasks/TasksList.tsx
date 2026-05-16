@@ -135,7 +135,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
       assigneeId: t.assignee?.id ?? "",
       assigneeName: t.assignee?.full_name ?? t.assignee?.email ?? "",
       projectName: t.project?.name ?? "",
-      clientName: t.project?.organization?.name ?? "",
+      clientName: t.project?.client?.name ?? "",
     }));
   }, [rows]);
 
@@ -168,7 +168,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
       })
       .select(
         `id, title, description, status, priority, due_date, blocked_by,
-         project:projects(id, name, organization:organizations(id, name)),
+         project:projects(id, name, client:clients(id, name)),
          assignee:users!tasks_assignee_id_fkey(id, full_name, email)`,
       )
       .single();
@@ -313,13 +313,13 @@ export default function TasksList({ view }: { view: ViewKind }) {
                     <Link to={`/projects/${r.project.id}`} className="lead">
                       {r.project.name}
                     </Link>
-                    {r.project.organization ? (
+                    {r.project.client ? (
                       <Link
-                        to={`/organizations/${r.project.organization.id}`}
+                        to={`/clients/${r.project.client.id}`}
                         className="sub"
                         style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
                       >
-                        {r.project.organization.name}
+                        {r.project.client.name}
                       </Link>
                     ) : null}
                   </div>

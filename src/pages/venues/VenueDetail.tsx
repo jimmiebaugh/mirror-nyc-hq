@@ -39,7 +39,7 @@ type Venue = {
   venue_slide_url: string | null;
   features: string[];
   notes: string | null;
-  exclusive_vendors_org_ids: string[];
+  exclusive_vendor_ids: string[];
 };
 
 type Contact = { id: string; full_name: string; role_title: string | null };
@@ -64,7 +64,7 @@ export default function VenueDetail() {
       const venueRes = await supabase
         .from("venues")
         .select(
-          "id, name, address, neighborhood, city, capacity, total_sq_ft, website_url, venue_slide_url, features, notes, exclusive_vendors_org_ids",
+          "id, name, address, neighborhood, city, capacity, total_sq_ft, website_url, venue_slide_url, features, notes, exclusive_vendor_ids",
         )
         .eq("id", id)
         .single();
@@ -90,11 +90,11 @@ export default function VenueDetail() {
           .from("project_venues")
           .select("project:projects!project_venues_project_id_fkey(id, name, job_number)")
           .eq("venue_id", id),
-        row.exclusive_vendors_org_ids.length > 0
+        row.exclusive_vendor_ids.length > 0
           ? supabase
-              .from("organizations")
+              .from("vendors")
               .select("id, name")
-              .in("id", row.exclusive_vendors_org_ids)
+              .in("id", row.exclusive_vendor_ids)
           : Promise.resolve({ data: [], error: null }),
         loadLatestVenueRates(row.id),
       ]);
@@ -236,7 +236,7 @@ export default function VenueDetail() {
                       <span className="row-c wrap" style={{ display: "inline-flex", gap: 8 }}>
                         {vendors.map((v, i) => (
                           <span key={v.id}>
-                            <Link to={`/organizations/${v.id}`} className="tlink">
+                            <Link to={`/vendors/${v.id}`} className="tlink">
                               {v.name}
                             </Link>
                             {i < vendors.length - 1 ? <span className="muted">, </span> : null}

@@ -36,7 +36,7 @@ const FILTER_FIELDS = [
   { key: "status", label: "Status", type: "enum" as const, options: PROJECT_STATUS_VALUES },
   { key: "category", label: "Category", type: "text" as const },
   { key: "city", label: "City", type: "text" as const },
-  { key: "organizationName", label: "Client", type: "text" as const },
+  { key: "clientName", label: "Client", type: "text" as const },
   { key: "leadName", label: "Lead", type: "text" as const },
 ];
 
@@ -238,14 +238,14 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                 render: (r) => (
                   <div>
                     <div className="lead">{r.name}</div>
-                    {r.organizationName ? (
+                    {r.clientName ? (
                       <Link
-                        to={r.organizationId ? `/organizations/${r.organizationId}` : "#"}
+                        to={r.clientId ? `/clients/${r.clientId}` : "#"}
                         className="sub"
                         style={{ color: "rgba(190,78,68,0.85)" }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {r.organizationName}
+                        {r.clientName}
                       </Link>
                     ) : null}
                   </div>
@@ -341,7 +341,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
           renderCard={(r) => (
             <>
               <div className="nm">
-                {r.organizationName ? `${r.organizationName} · ${r.name}` : r.name}
+                {r.clientName ? `${r.clientName} · ${r.name}` : r.name}
               </div>
               <div className="meta">
                 <span className="cap">
@@ -377,7 +377,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               .map((r) => ({
                 id: r.id,
                 token: projectStatusToken(r.status),
-                name: r.organizationName ? `${r.organizationName} · ${r.name}` : r.name,
+                name: r.clientName ? `${r.clientName} · ${r.name}` : r.name,
                 subText: `${r.jobNumber ? `#${r.jobNumber} · ` : ""}${r.city ?? ""}`.trim(),
                 bars: r.liveStartIso
                   ? [

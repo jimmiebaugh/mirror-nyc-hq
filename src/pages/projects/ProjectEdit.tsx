@@ -36,7 +36,7 @@ import { toast } from "@/hooks/use-toast";
 type FormState = {
   name: string;
   status: ProjectStatus;
-  organizationId: string | null;
+  clientId: string | null;
   jobNumber: string;
   category: string;
   city: string;
@@ -55,7 +55,7 @@ type FormState = {
 const EMPTY: FormState = {
   name: "",
   status: "Queued",
-  organizationId: null,
+  clientId: null,
   jobNumber: "",
   category: "",
   city: "",
@@ -71,7 +71,7 @@ const EMPTY: FormState = {
   clientNotes: "",
 };
 
-type OrganizationOption = { id: string; name: string | null; type: "Client" | "Vendor" | "Internal" };
+type ClientOption = { id: string; name: string | null };
 
 export default function ProjectEdit() {
   const { id } = useParams<{ id?: string }>();
@@ -79,7 +79,7 @@ export default function ProjectEdit() {
   const navigate = useNavigate();
   const [initial, setInitial] = useState<FormState>(EMPTY);
   const [form, setForm] = useState<FormState>(EMPTY);
-  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
@@ -88,29 +88,28 @@ export default function ProjectEdit() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [orgsRes, projectRes] = await Promise.all([
+      const [clientsRes, projectRes] = await Promise.all([
         supabase
-          .from("organizations")
-          .select("id, name, type")
-          .eq("type", "Client")
+          .from("clients")
+          .select("id, name")
           .order("name", { ascending: true }),
         isCreate
           ? Promise.resolve({ data: null, error: null })
           : supabase
               .from("projects")
               .select(
-                "id, name, status, organization_id, job_number, category, city, budget, tags, live_dates_start, live_dates_end, production_folder_url, design_decks_folder_url, budget_sheet_url, slack_channel_url, status_notes, client_notes",
+                "id, name, status, client_id, job_number, category, city, budget, tags, live_dates_start, live_dates_end, production_folder_url, design_decks_folder_url, budget_sheet_url, slack_channel_url, status_notes, client_notes",
               )
               .eq("id", id)
               .single(),
       ]);
       if (!active) return;
-      setOrganizations((orgsRes.data ?? []) as OrganizationOption[]);
+      setClients((clientsRes.data ?? []) as ClientOption[]);
       if (!isCreate && projectRes && "data" in projectRes && projectRes.data) {
         type Row = {
           name: string;
           status: ProjectStatus;
-          organization_id: string | null;
+          client_id: string | null;
           job_number: string | null;
           category: string | null;
           city: string | null;
@@ -129,7 +128,7 @@ export default function ProjectEdit() {
         const next: FormState = {
           name: p.name,
           status: p.status,
-          organizationId: p.organization_id,
+          clientId: p.client_id,
           jobNumber: p.job_number ?? "",
           category: p.category ?? "",
           city: p.city ?? "",
@@ -196,7 +195,7 @@ export default function ProjectEdit() {
     const payload = {
       name: form.name,
       status: form.status,
-      organization_id: form.organizationId,
+      client_id: form.clientId,
       job_number: form.jobNumber || null,
       category: form.category || null,
       city: form.city || null,
@@ -296,17 +295,17 @@ export default function ProjectEdit() {
             </FormField>
             <FormField label="Client">
               <select
-                className={`input ${form.organizationId ? "input--filled" : ""}`}
-                value={form.organizationId ?? "__none"}
+                className={`input ${form.clientId ? "input--filled" : ""}`}
+                value={form.clientId ?? "__none"}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
-                    organizationId: e.target.value === "__none" ? null : e.target.value,
+                    clientId: e.target.value === "__none" ? null : e.target.value,
                   }))
                 }
               >
                 <option value="__none">No client</option>
-                {organizations.map((c) => (
+                {clients.map((c) => (
                   <option key={c.id} value={c.id}>{c.name ?? "Untitled"}</option>
                 ))}
               </select>

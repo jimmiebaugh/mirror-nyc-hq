@@ -14,27 +14,28 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
-import {
-  PERSON_AFFILIATIONS,
-  affiliationToken,
-  type PersonAffiliation,
-} from "@/lib/people/queries";
 
 /**
  * Person Edit (Surface 11 create + edit).
  * Wireframe binding: Surface 08 Project Edit pattern (lines 1487-1583)
- * adapted per spec § 5.B.3.
+ * adapted per spec § 4.C.3 of Phase 5.2.3.
  *
- * Affiliations renders as a multi-select chip row. When the selection
- * includes 'Venue', a "Venues this person contacts" multi-select appears
- * pulling from `venues` and writing to `venue_contact_people` join rows
- * (insert net new, delete dropped) on save.
+ * Type selector adapted in Phase 5.2.3: the multi-chip affiliations
+ * picker is gone (locked Q4: at most one org type per person). Replaced
+ * with a single Type radio (Client / Vendor / Venue contact /
+ * Unaffiliated); switching the radio re-routes which FK is set (clears
+ * the opposite). DB mutex CHECK on (client_id, vendor_id) is the
+ * safety net. When Type=Venue contact, a multi-select picks venues
+ * this person contacts; save logic syncs venue_contact_people rows.
  */
+
+type PersonType = "Client" | "Vendor" | "Venue contact" | "Unaffiliated";
 
 type FormState = {
   full_name: string;
-  affiliations: PersonAffiliation[];
-  organization_id: string | null;
+  type: PersonType;
+  client_id: string | null;
+  vendor_id: string | null;
   role_title: string;
   email: string;
   phone: string;
@@ -44,8 +45,9 @@ type FormState = {
 
 const EMPTY: FormState = {
   full_name: "",
-  affiliations: [],
-  organization_id: null,
+  type: "Unaffiliated",
+  client_id: null,
+  vendor_id: null,
   role_title: "",
   email: "",
   phone: "",
@@ -53,7 +55,8 @@ const EMPTY: FormState = {
   tags: "",
 };
 
-type OrgOption = { id: string; name: string };
+type ClientOption = { id: string; name: string };
+type VendorOption = { id: string; name: string };
 type VenueOption = { id: string; name: string };
 
 export default function PersonEdit() {
@@ -62,7 +65,8 @@ export default function PersonEdit() {
   const navigate = useNavigate();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [initial, setInitial] = useState<FormState>(EMPTY);
-  const [orgs, setOrgs] = useState<OrgOption[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [venues, setVenues] = useState<VenueOption[]>([]);
   const [venueIds, setVenueIds] = useState<string[]>([]);
   const [initialVenueIds, setInitialVenueIds] = useState<string[]>([]);
@@ -73,15 +77,16 @@ export default function PersonEdit() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [orgRes, venueRes, personRes, joinRes] = await Promise.all([
-        supabase.from("organizations").select("id, name").order("name", { ascending: true }),
+      const [clientsRes, vendorsRes, venuesRes, personRes, joinRes] = await Promise.all([
+        supabase.from("clients").select("id, name").order("name", { ascending: true }),
+        supabase.from("vendors").select("id, name").order("name", { ascending: true }),
         supabase.from("venues").select("id, name").order("name", { ascending: true }),
         isCreate
           ? Promise.resolve({ data: null, error: null })
           : supabase
               .from("people")
               .select(
-                "full_name, affiliations, organization_id, role_title, email, phone, linkedin_url, tags",
+                "full_name, client_id, vendor_id, role_title, email, phone, linkedin_url, tags",
               )
               .eq("id", id)
               .single(),
@@ -93,23 +98,33 @@ export default function PersonEdit() {
               .eq("person_id", id),
       ]);
       if (!active) return;
-      setOrgs((orgRes.data ?? []) as unknown as OrgOption[]);
-      setVenues((venueRes.data ?? []) as unknown as VenueOption[]);
+      setClients((clientsRes.data ?? []) as unknown as ClientOption[]);
+      setVendors((vendorsRes.data ?? []) as unknown as VendorOption[]);
+      setVenues((venuesRes.data ?? []) as unknown as VenueOption[]);
+      const ids = ((joinRes.data ?? []) as { venue_id: string }[]).map((r) => r.venue_id);
+      setVenueIds(ids);
+      setInitialVenueIds(ids);
+
       if (!isCreate && "data" in personRes && personRes.data) {
         const row = personRes.data as unknown as {
           full_name: string;
-          affiliations: PersonAffiliation[];
-          organization_id: string | null;
+          client_id: string | null;
+          vendor_id: string | null;
           role_title: string | null;
           email: string | null;
           phone: string | null;
           linkedin_url: string | null;
           tags: string[] | null;
         };
+        let resolvedType: PersonType = "Unaffiliated";
+        if (row.client_id) resolvedType = "Client";
+        else if (row.vendor_id) resolvedType = "Vendor";
+        else if (ids.length > 0) resolvedType = "Venue contact";
         const next: FormState = {
           full_name: row.full_name,
-          affiliations: row.affiliations ?? [],
-          organization_id: row.organization_id,
+          type: resolvedType,
+          client_id: row.client_id,
+          vendor_id: row.vendor_id,
           role_title: row.role_title ?? "",
           email: row.email ?? "",
           phone: row.phone ?? "",
@@ -119,9 +134,6 @@ export default function PersonEdit() {
         setForm(next);
         setInitial(next);
       }
-      const ids = ((joinRes.data ?? []) as { venue_id: string }[]).map((r) => r.venue_id);
-      setVenueIds(ids);
-      setInitialVenueIds(ids);
       setLoading(false);
     })();
     return () => {
@@ -132,17 +144,21 @@ export default function PersonEdit() {
   const dirty = useMemo(
     () =>
       JSON.stringify(form) !== JSON.stringify(initial) ||
-      JSON.stringify([...venueIds].sort()) !== JSON.stringify([...initialVenueIds].sort()),
+      JSON.stringify([...venueIds].sort()) !==
+        JSON.stringify([...initialVenueIds].sort()),
     [form, initial, venueIds, initialVenueIds],
   );
 
-  const toggleAffiliation = (a: PersonAffiliation) => {
+  const onTypeChange = (t: PersonType) => {
     setForm((f) => ({
       ...f,
-      affiliations: f.affiliations.includes(a)
-        ? f.affiliations.filter((x) => x !== a)
-        : [...f.affiliations, a],
+      type: t,
+      client_id: t === "Client" ? f.client_id : null,
+      vendor_id: t === "Vendor" ? f.vendor_id : null,
     }));
+    if (t !== "Venue contact") {
+      setVenueIds([]);
+    }
   };
 
   const onCancel = () => {
@@ -162,8 +178,8 @@ export default function PersonEdit() {
 
     const payload = {
       full_name: form.full_name.trim(),
-      affiliations: form.affiliations,
-      organization_id: form.organization_id,
+      client_id: form.type === "Client" ? form.client_id : null,
+      vendor_id: form.type === "Vendor" ? form.vendor_id : null,
       role_title: form.role_title || null,
       email: form.email || null,
       phone: form.phone || null,
@@ -178,6 +194,11 @@ export default function PersonEdit() {
     if (isCreate) {
       const { data: userRes } = await supabase.auth.getUser();
       const created_by = userRes.user?.id;
+      if (!created_by) {
+        setSaving(false);
+        toast({ title: "Not signed in", variant: "destructive" });
+        return;
+      }
       const { data, error } = await supabase
         .from("people")
         .insert({ ...payload, created_by })
@@ -198,9 +219,9 @@ export default function PersonEdit() {
       }
     }
 
-    // Sync venue_contact_people rows when affiliations includes 'Venue'.
+    // Sync venue_contact_people rows when Type=Venue contact; otherwise clear all.
     if (personId) {
-      const effectiveVenueIds = form.affiliations.includes("Venue") ? venueIds : [];
+      const effectiveVenueIds = form.type === "Venue contact" ? venueIds : [];
       const toAdd = effectiveVenueIds.filter((v) => !initialVenueIds.includes(v));
       const toRemove = initialVenueIds.filter((v) => !effectiveVenueIds.includes(v));
       for (const venueId of toAdd) {
@@ -219,7 +240,7 @@ export default function PersonEdit() {
 
     setSaving(false);
     setInitial(form);
-    setInitialVenueIds(venueIds);
+    setInitialVenueIds(form.type === "Venue contact" ? venueIds : []);
     if (isCreate && personId) {
       toast({ title: "Person created" });
       navigate(`/people/${personId}`);
@@ -236,7 +257,9 @@ export default function PersonEdit() {
     );
   }
 
-  const showVenuePicker = form.affiliations.includes("Venue");
+  const showClientPicker = form.type === "Client";
+  const showVendorPicker = form.type === "Vendor";
+  const showVenuePicker = form.type === "Venue contact";
   const availableVenues = venues.filter((v) => !venueIds.includes(v.id));
 
   return (
@@ -274,47 +297,69 @@ export default function PersonEdit() {
             />
           </FormField>
 
-          <FormField label="Affiliations">
-            <div className="row-c wrap" style={{ gap: 6 }}>
-              {PERSON_AFFILIATIONS.map((a) => {
-                const active = form.affiliations.includes(a);
-                return (
-                  <button
-                    key={a}
-                    type="button"
-                    className={`pill pill-sm p-${affiliationToken(a)}`}
-                    style={{
-                      cursor: "pointer",
-                      opacity: active ? 1 : 0.55,
-                      border: 0,
-                    }}
-                    onClick={() => toggleAffiliation(a)}
+          <FormField label="Type">
+            <div className="row-c wrap" style={{ gap: 12 }}>
+              {(["Client", "Vendor", "Venue contact", "Unaffiliated"] as PersonType[]).map(
+                (t) => (
+                  <label
+                    key={t}
+                    className="row-c"
+                    style={{ gap: 6, cursor: "pointer", fontSize: 13 }}
                   >
-                    {a}
-                  </button>
-                );
-              })}
+                    <input
+                      type="radio"
+                      name="person-type"
+                      checked={form.type === t}
+                      onChange={() => onTypeChange(t)}
+                    />
+                    {t}
+                  </label>
+                ),
+              )}
             </div>
           </FormField>
 
-          <div className="g2">
-            <FormField label="Organization">
+          {showClientPicker ? (
+            <FormField label="Client">
               <select
-                className={`input ${form.organization_id ? "input--filled" : ""}`}
-                value={form.organization_id ?? ""}
+                className={`input ${form.client_id ? "input--filled" : ""}`}
+                value={form.client_id ?? ""}
                 onChange={(e) =>
                   setForm((f) => ({
                     ...f,
-                    organization_id: e.target.value || null,
+                    client_id: e.target.value || null,
                   }))
                 }
               >
-                <option value="">No organization</option>
-                {orgs.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
+                <option value="">No client</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </FormField>
+          ) : null}
+
+          {showVendorPicker ? (
+            <FormField label="Vendor">
+              <select
+                className={`input ${form.vendor_id ? "input--filled" : ""}`}
+                value={form.vendor_id ?? ""}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    vendor_id: e.target.value || null,
+                  }))
+                }
+              >
+                <option value="">No vendor</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </FormField>
+          ) : null}
+
+          <div className="g2">
             <FormField label="Role / Title">
               <input
                 className={`input ${form.role_title ? "input--filled" : ""}`}

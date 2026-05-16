@@ -19,9 +19,13 @@ import TaskEdit from "./pages/tasks/TaskEdit";
 import DeliverablesList from "./pages/deliverables/DeliverablesList";
 import DeliverableDetail from "./pages/deliverables/DeliverableDetail";
 import DeliverableEdit from "./pages/deliverables/DeliverableEdit";
-import OrganizationsList from "./pages/organizations/OrganizationsList";
-import OrganizationDetail from "./pages/organizations/OrganizationDetail";
-import OrganizationEdit from "./pages/organizations/OrganizationEdit";
+import ClientsList from "./pages/clients/ClientsList";
+import ClientDetail from "./pages/clients/ClientDetail";
+import ClientEdit from "./pages/clients/ClientEdit";
+import VendorsList from "./pages/vendors/VendorsList";
+import VendorDetail from "./pages/vendors/VendorDetail";
+import VendorEdit from "./pages/vendors/VendorEdit";
+import OrganizationsRedirect from "./pages/clients/OrganizationsRedirect";
 import PeopleList from "./pages/people/PeopleList";
 import PersonDetail from "./pages/people/PersonDetail";
 import PersonEdit from "./pages/people/PersonEdit";
@@ -275,28 +279,87 @@ const App = () => (
                   </StandardOrAdminRoute>
                 }
               />
-              <Route path="/clients" element={<Navigate to="/organizations" replace />} />
               <Route
-                path="/organizations"
+                path="/clients"
                 element={
                   <StandardOrAdminRoute>
-                    <OrganizationsList />
+                    <ClientsList />
                   </StandardOrAdminRoute>
                 }
               />
               <Route
-                path="/organizations/new"
+                path="/clients/new"
                 element={
                   <StandardOrAdminRoute>
-                    <OrganizationEdit />
+                    <ClientEdit />
                   </StandardOrAdminRoute>
                 }
+              />
+              <Route
+                path="/clients/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <ClientDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/clients/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <ClientEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/vendors"
+                element={
+                  <StandardOrAdminRoute>
+                    <VendorsList />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/vendors/new"
+                element={
+                  <StandardOrAdminRoute>
+                    <VendorEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/vendors/:id"
+                element={
+                  <StandardOrAdminRoute>
+                    <VendorDetail />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/vendors/:id/edit"
+                element={
+                  <StandardOrAdminRoute>
+                    <VendorEdit />
+                  </StandardOrAdminRoute>
+                }
+              />
+              {/* Backward-compat redirects for the shipped /organizations URLs.
+                  Old bookmarks resolve to the right post-split surface based on
+                  which table the id is in. Drop this pair in a future polish
+                  pass once Mirror's bookmarks update. */}
+              <Route
+                path="/organizations"
+                element={<Navigate to="/vendors" replace />}
+              />
+              <Route
+                path="/organizations/new"
+                element={<Navigate to="/vendors/new" replace />}
               />
               <Route
                 path="/organizations/:id"
                 element={
                   <StandardOrAdminRoute>
-                    <OrganizationDetail />
+                    <OrganizationsRedirect />
                   </StandardOrAdminRoute>
                 }
               />
@@ -304,7 +367,7 @@ const App = () => (
                 path="/organizations/:id/edit"
                 element={
                   <StandardOrAdminRoute>
-                    <OrganizationEdit />
+                    <OrganizationsRedirect editMode />
                   </StandardOrAdminRoute>
                 }
               />

@@ -61,12 +61,12 @@ async function loadEntries(userId: string, mondayIso: string, sundayIso: string)
   const [projectsRes, deliverablesRes] = await Promise.all([
     supabase
       .from("projects")
-      .select("id, name, live_dates_start, live_dates_end, organization:organizations(name)")
+      .select("id, name, live_dates_start, live_dates_end, client:clients(name)")
       .in("id", projectIds)
       .is("archived_at", null),
     supabase
       .from("deliverables")
-      .select("id, project_id, title, due_date, status, project:projects(name, organization:organizations(name))")
+      .select("id, project_id, title, due_date, status, project:projects(name, client:clients(name))")
       .in("project_id", projectIds)
       .not("due_date", "is", null)
       .gte("due_date", mondayIso)
@@ -76,7 +76,7 @@ async function loadEntries(userId: string, mondayIso: string, sundayIso: string)
 
   const out: WeekEntry[] = [];
   for (const p of projectsRes.data ?? []) {
-    const clientName = (p.organization as { name?: string } | null)?.name ?? null;
+    const clientName = (p.client as { name?: string } | null)?.name ?? null;
     if (p.live_dates_start && p.live_dates_start >= mondayIso && p.live_dates_start <= sundayIso) {
       out.push({
         key: `${p.id}-start`,
@@ -100,14 +100,14 @@ async function loadEntries(userId: string, mondayIso: string, sundayIso: string)
     id: string;
     title: string;
     due_date: string;
-    project: { name: string; organization: { name: string | null } | null } | null;
+    project: { name: string; client: { name: string | null } | null } | null;
   };
   for (const d of (deliverablesRes.data ?? []) as unknown as DeliverableRow[]) {
     out.push({
       key: `d-${d.id}`,
       dateIso: d.due_date,
       projectName: d.project?.name ?? d.title,
-      clientName: d.project?.organization?.name ?? null,
+      clientName: d.project?.client?.name ?? null,
       milestone: "Deliverable",
     });
   }

@@ -2,12 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { StarRating } from "@/components/data/StarRating";
 import { InlineAddSelect } from "@/components/data/InlineAddSelect";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { useLookup } from "@/lib/hq/lookups";
-import { ORG_TYPES, type OrgType } from "@/lib/organizations/queries";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,46 +19,43 @@ import {
 import { toast } from "@/hooks/use-toast";
 
 /**
- * Organization Edit (Surface 10 create + edit).
- * Wireframe binding: Surface 08 Project Edit pattern (OUTPUTS/phase-5-hq-
- * wireframe-v1-LOCKED.html lines 1487-1583) applied to the Organization
- * fieldset per spec § 5.A.3.
+ * Client Edit (create + edit).
  *
- *   crumb -> eyebrow + h-page -> .card .card-pad with .block-lbl + .g2 of
- *   .field rows -> .savebar sticky bottom.
- *
- * Capabilities + Internal Rating gate on `type === Vendor | Internal` for
- * Capabilities and `type === Vendor` for Internal Rating, matching the
- * Detail view's conditional render.
+ * Wireframe binding (DEVIATION): Surface 08 Project Edit pattern
+ * (OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 1487-1583) applied
+ * to the Client fieldset. Surface 10 was drawn as a unified
+ * Organization Edit; per the 2026-05-16 locked decisions split (spec
+ * § 0c Q3), this is the Clients half. Single column, two cards:
+ * Details (name / industry / city / website / tags) and Primary
+ * Contact (name / email / phone / address). Wireframe-v2 redraw
+ * deferred to a future polish pass; see design-system § 11.
  */
 
 type FormState = {
   name: string;
-  type: OrgType;
+  industry: string;
   city: string;
-  capabilities: string[];
   website_url: string;
   contact_name: string;
   contact_email: string;
   contact_phone: string;
-  tags: string;
-  internal_rating: number | null;
+  primary_address: string;
+  tags: string[];
 };
 
 const EMPTY: FormState = {
   name: "",
-  type: "Client",
+  industry: "",
   city: "",
-  capabilities: [],
   website_url: "",
   contact_name: "",
   contact_email: "",
   contact_phone: "",
-  tags: "",
-  internal_rating: null,
+  primary_address: "",
+  tags: [],
 };
 
-export default function OrganizationEdit() {
+export default function ClientEdit() {
   const { id } = useParams<{ id?: string }>();
   const isCreate = !id;
   const navigate = useNavigate();
@@ -71,16 +66,15 @@ export default function OrganizationEdit() {
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
 
   const cities = useLookup("cities");
-  const capabilities = useLookup("org_capabilities");
 
   useEffect(() => {
     if (isCreate) return;
     let active = true;
     (async () => {
       const { data, error } = await supabase
-        .from("organizations")
+        .from("clients")
         .select(
-          "name, type, city, capabilities, website_url, contact_name, contact_email, contact_phone, tags, internal_rating",
+          "name, industry, city, website_url, contact_name, contact_email, contact_phone, primary_address, tags",
         )
         .eq("id", id)
         .single();
@@ -91,27 +85,25 @@ export default function OrganizationEdit() {
       }
       const row = data as unknown as {
         name: string;
-        type: OrgType;
+        industry: string | null;
         city: string | null;
-        capabilities: string[] | null;
         website_url: string | null;
         contact_name: string | null;
         contact_email: string | null;
         contact_phone: string | null;
+        primary_address: string | null;
         tags: string[] | null;
-        internal_rating: number | null;
       };
       const next: FormState = {
         name: row.name,
-        type: row.type,
+        industry: row.industry ?? "",
         city: row.city ?? "",
-        capabilities: row.capabilities ?? [],
         website_url: row.website_url ?? "",
         contact_name: row.contact_name ?? "",
         contact_email: row.contact_email ?? "",
         contact_phone: row.contact_phone ?? "",
-        tags: (row.tags ?? []).join(", "),
-        internal_rating: row.internal_rating,
+        primary_address: row.primary_address ?? "",
+        tags: row.tags ?? [],
       };
       setForm(next);
       setInitial(next);
@@ -129,7 +121,7 @@ export default function OrganizationEdit() {
 
   const onCancel = () => {
     if (!dirty) {
-      navigate(isCreate ? "/organizations" : `/organizations/${id}`);
+      navigate(isCreate ? "/clients" : `/clients/${id}`);
       return;
     }
     setConfirmLeaveOpen(true);
@@ -137,30 +129,31 @@ export default function OrganizationEdit() {
 
   const onSave = async () => {
     if (!form.name.trim()) {
-      toast({ title: "Organization name is required", variant: "destructive" });
+      toast({ title: "Client name is required", variant: "destructive" });
       return;
     }
     setSaving(true);
     const payload = {
       name: form.name.trim(),
-      type: form.type,
+      industry: form.industry || null,
       city: form.city || null,
-      capabilities: form.capabilities,
       website_url: form.website_url || null,
       contact_name: form.contact_name || null,
       contact_email: form.contact_email || null,
       contact_phone: form.contact_phone || null,
-      tags: form.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-      internal_rating: form.type === "Vendor" ? form.internal_rating : null,
+      primary_address: form.primary_address || null,
+      tags: form.tags,
     };
     if (isCreate) {
       const { data: userRes } = await supabase.auth.getUser();
       const created_by = userRes.user?.id;
+      if (!created_by) {
+        setSaving(false);
+        toast({ title: "Not signed in", variant: "destructive" });
+        return;
+      }
       const { data, error } = await supabase
-        .from("organizations")
+        .from("clients")
         .insert({ ...payload, created_by })
         .select("id")
         .single();
@@ -169,11 +162,11 @@ export default function OrganizationEdit() {
         toast({ title: "Save failed", description: error.message, variant: "destructive" });
         return;
       }
-      toast({ title: "Organization created" });
-      navigate(`/organizations/${data.id}`);
+      toast({ title: "Client created" });
+      navigate(`/clients/${data.id}`);
     } else {
       const { error } = await supabase
-        .from("organizations")
+        .from("clients")
         .update(payload)
         .eq("id", id);
       setSaving(false);
@@ -194,13 +187,10 @@ export default function OrganizationEdit() {
     );
   }
 
-  const showCapabilities = form.type === "Vendor" || form.type === "Internal";
-  const showRating = form.type === "Vendor";
-
   return (
     <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
-        to={isCreate ? "/organizations" : `/organizations/${id}`}
+        to={isCreate ? "/clients" : `/clients/${id}`}
         className="tlink"
         onClick={(e) => {
           if (dirty) {
@@ -210,12 +200,12 @@ export default function OrganizationEdit() {
         }}
       >
         <IconArrowLeft className="ic" />
-        Back to {isCreate ? "Organizations" : "organization"}
+        Back to {isCreate ? "Clients" : "client"}
       </Link>
 
       <div className="pagehead">
-        <div className="eyebrow">Organization</div>
-        <h1 className="h-page">{isCreate ? "New Organization" : "Edit Organization"}</h1>
+        <div className="eyebrow">Client</div>
+        <h1 className="h-page">{isCreate ? "New Client" : "Edit Client"}</h1>
       </div>
 
       <section className="card">
@@ -229,19 +219,16 @@ export default function OrganizationEdit() {
                 className={`input ${form.name ? "input--filled" : ""}`}
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Organization name"
+                placeholder="Olipop"
               />
             </FormField>
-            <FormField label="Type">
-              <select
-                className={`input ${form.type ? "input--filled" : ""}`}
-                value={form.type}
-                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as OrgType }))}
-              >
-                {ORG_TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
+            <FormField label="Industry">
+              <input
+                className={`input ${form.industry ? "input--filled" : ""}`}
+                value={form.industry}
+                onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
+                placeholder="Beverage"
+              />
             </FormField>
             <FormField label="City">
               <InlineAddSelect
@@ -262,7 +249,28 @@ export default function OrganizationEdit() {
                 placeholder="https://example.com"
               />
             </FormField>
-            <FormField label="Primary Contact">
+          </div>
+          <FormField label="Tags">
+            <MultiTagInput
+              options={[]}
+              values={form.tags}
+              onChange={(next) => setForm((f) => ({ ...f, tags: next }))}
+              onAdd={async (name) => ({ id: name, name })}
+              entityLabel="tag"
+              exampleName="Net 30"
+              placeholder="Add tag..."
+            />
+          </FormField>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-pad stack-4">
+          <div className="block-lbl">
+            <span className="label-section">Primary Contact</span>
+          </div>
+          <div className="g2">
+            <FormField label="Contact Name">
               <input
                 className={`input ${form.contact_name ? "input--filled" : ""}`}
                 value={form.contact_name}
@@ -279,7 +287,7 @@ export default function OrganizationEdit() {
                 placeholder="sarah@example.com"
               />
             </FormField>
-            <FormField label="Phone">
+            <FormField label="Contact Phone">
               <input
                 className={`input ${form.contact_phone ? "input--filled" : ""}`}
                 value={form.contact_phone}
@@ -287,61 +295,25 @@ export default function OrganizationEdit() {
                 placeholder="(212) 555-0000"
               />
             </FormField>
-            <FormField label="Tags">
-              <input
-                className={`input ${form.tags ? "input--filled" : ""}`}
-                value={form.tags}
-                onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
-                placeholder="Fast turnaround, Net 30"
-              />
-            </FormField>
           </div>
-          {showCapabilities ? (
-            <FormField label="Capabilities">
-              <MultiTagInput
-                options={capabilities.options}
-                values={form.capabilities}
-                onChange={(next) => setForm((f) => ({ ...f, capabilities: next }))}
-                onAdd={capabilities.addOption}
-                entityLabel="capability"
-                exampleName="Custom Fabrication"
-                placeholder="Add capability..."
-              />
-            </FormField>
-          ) : null}
+          <FormField label="Primary Address">
+            <textarea
+              className={`input ${form.primary_address ? "input--filled" : ""}`}
+              value={form.primary_address}
+              onChange={(e) => setForm((f) => ({ ...f, primary_address: e.target.value }))}
+              placeholder="123 Main St, Brooklyn NY 11201"
+              rows={2}
+            />
+          </FormField>
         </div>
       </section>
-
-      {showRating ? (
-        <section className="card">
-          <div className="card-pad stack-4">
-            <div className="block-lbl">
-              <span className="label-section">Internal Rating</span>
-            </div>
-            <div className="row-c" style={{ gap: 12 }}>
-              <StarRating
-                value={form.internal_rating}
-                editable
-                size="lg"
-                onChange={(next) => setForm((f) => ({ ...f, internal_rating: next }))}
-              />
-              <span className="cap">
-                {form.internal_rating != null ? `${form.internal_rating} of 5` : "Not rated"}
-              </span>
-            </div>
-            <p className="cap" style={{ lineHeight: 1.5 }}>
-              Visible to all Standard users on the Detail view.
-            </p>
-          </div>
-        </section>
-      ) : null}
 
       <StickySaveBar
         dirty={dirty}
         saving={saving}
         onCancel={onCancel}
         onSave={onSave}
-        saveLabel={isCreate ? "Create organization" : "Save changes"}
+        saveLabel={isCreate ? "Create client" : "Save changes"}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -355,7 +327,7 @@ export default function OrganizationEdit() {
           <AlertDialogFooter>
             <AlertDialogCancel>Stay</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => navigate(isCreate ? "/organizations" : `/organizations/${id}`)}
+              onClick={() => navigate(isCreate ? "/clients" : `/clients/${id}`)}
             >
               Discard
             </AlertDialogAction>

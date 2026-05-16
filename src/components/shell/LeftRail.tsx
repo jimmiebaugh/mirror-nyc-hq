@@ -36,6 +36,10 @@ type RailItem = {
   adminOnly?: boolean;
 };
 
+// Phase 5.2.3 rail order (locked Q2 of phase-5-2-3-spec.md § 0c): high-
+// frequency lookups first (Venues / Vendors near top); Clients fall to
+// the bottom of the entity group since rare use. Organizations row from
+// the 5.2.2 ship is replaced with Vendors + Clients per the table split.
 const PRIMARY_ITEMS: RailItem[] = [
   { to: "/home", label: "Home", icon: IconHome },
   { to: "/projects", label: "Projects", icon: IconProjects },
@@ -43,8 +47,9 @@ const PRIMARY_ITEMS: RailItem[] = [
   { to: "/deliverables", label: "Deliverables", icon: IconDeliverables },
   { to: "/calendar", label: "Calendar", icon: IconCalendar },
   { to: "/venues", label: "Venues", icon: IconVenues },
-  { to: "/organizations", label: "Organizations", icon: IconOrgs },
+  { to: "/vendors", label: "Vendors", icon: IconOrgs },
   { to: "/people", label: "People", icon: IconPeople },
+  { to: "/clients", label: "Clients", icon: IconOrgs },
   { to: "/activity", label: "Activity Feed", icon: IconActivity },
   { to: "/search", label: "Search", icon: IconSearch },
 ];

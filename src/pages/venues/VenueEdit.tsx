@@ -33,8 +33,8 @@ import { loadLatestVenueRates, type VenueRate } from "@/lib/venues/queries";
  *     3. Rates (Event Day + Prod Day; "Log new rate" opens a mini-dialog
  *        that INSERTs into venue_rate_history; existing rows immutable)
  *     4. Links & References (website_url, venue_slide_url)
- *     5. Exclusive Vendors (multi-select Org picker filtered to
- *        Vendor + Internal; writes to venues.exclusive_vendors_org_ids)
+ *     5. Exclusive Vendors (multi-select Vendor picker;
+ *        writes to venues.exclusive_vendor_ids)
  *     6. About Venue (venues.notes textarea)
  *   -> .savebar sticky bottom.
  */
@@ -96,16 +96,15 @@ export default function VenueEdit() {
     (async () => {
       const [vendorRes, venueRes, typeRes, rateRows] = await Promise.all([
         supabase
-          .from("organizations")
-          .select("id, name, type")
-          .in("type", ["Vendor", "Internal"])
+          .from("vendors")
+          .select("id, name")
           .order("name", { ascending: true }),
         isCreate
           ? Promise.resolve({ data: null, error: null })
           : supabase
               .from("venues")
               .select(
-                "name, address, neighborhood, city, capacity, total_sq_ft, website_url, venue_slide_url, notes, features, exclusive_vendors_org_ids",
+                "name, address, neighborhood, city, capacity, total_sq_ft, website_url, venue_slide_url, notes, features, exclusive_vendor_ids",
               )
               .eq("id", id)
               .single(),
@@ -131,7 +130,7 @@ export default function VenueEdit() {
           venue_slide_url: string | null;
           notes: string | null;
           features: string[] | null;
-          exclusive_vendors_org_ids: string[] | null;
+          exclusive_vendor_ids: string[] | null;
         };
         const next: FormState = {
           name: row.name,
@@ -147,7 +146,7 @@ export default function VenueEdit() {
         };
         setForm(next);
         setInitial(next);
-        const vids = row.exclusive_vendors_org_ids ?? [];
+        const vids = row.exclusive_vendor_ids ?? [];
         setVendorIds(vids);
         setInitialVendorIds(vids);
       }
@@ -209,7 +208,7 @@ export default function VenueEdit() {
         .split(",")
         .map((f) => f.trim())
         .filter(Boolean),
-      exclusive_vendors_org_ids: vendorIds,
+      exclusive_vendor_ids: vendorIds,
     };
 
     let venueId = id ?? null;

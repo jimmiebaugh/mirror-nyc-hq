@@ -1,0 +1,203 @@
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { FilterBar, emptyFilterState, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
+import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { DataTable } from "@/components/data/DataTable";
+import { StarRating } from "@/components/data/StarRating";
+import { IconPlus } from "@/components/icons/HQIcons";
+import { applyFilters } from "@/lib/hq/filterStateApply";
+import {
+  isInternalPartner,
+  loadVendors,
+  type VendorListRow,
+} from "@/lib/vendors/queries";
+
+/**
+ * Vendors List.
+ *
+ * Wireframe binding (DEVIATION): adapted from Surface 10
+ * (OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 1791-1854) which
+ * was drawn as a unified Organizations surface with a Type filter pill
+ * row. Per the 2026-05-16 locked decisions split (spec § 0c Q3),
+ * Organizations breaks into separate Clients + Vendors surfaces. This
+ * is the Vendors half. Type filter pill row dropped (no Client /
+ * Vendor / Internal mix to filter); Category column added via the new
+ * vendor_categories lookup; Internal Partner badge column derived from
+ * the 'Internal Partner' tag (locked Q1 collapses internal into
+ * tags[]). Star Rating shows on every row (every row is a Vendor).
+ * Wireframe-v2 redraw deferred to a future polish pass; see
+ * design-system § 11.
+ */
+
+const VENDOR_FILTER_FIELDS: FilterFieldDef[] = [
+  { key: "category_name", label: "Category", type: "text" },
+  { key: "capabilities", label: "Capabilities", type: "text" },
+  { key: "city", label: "City", type: "text" },
+  { key: "tags", label: "Tags", type: "text" },
+];
+
+export default function VendorsList() {
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<VendorListRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
+  const [activeViewName, setActiveViewName] = useState("All vendors");
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    loadVendors().then((r) => {
+      if (active) {
+        setRows(r);
+        setLoading(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const filtered = useMemo(
+    () =>
+      applyFilters(rows, filterState, (row, key) => {
+        const val = (row as unknown as Record<string, unknown>)[key];
+        if (val == null) return null;
+        if (Array.isArray(val)) return val.map(String);
+        return typeof val === "string" ? val : String(val);
+      }),
+    [rows, filterState],
+  );
+
+  return (
+    <div className="stack-4">
+      <div className="pagehead">
+        <div className="row between">
+          <h1 className="h-page">Vendors</h1>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate("/vendors/new")}
+          >
+            <IconPlus className="ic" />
+            New Vendor
+          </button>
+        </div>
+      </div>
+
+      <div className="row between wrap" style={{ alignItems: "center" }}>
+        <div className="row-c">
+          <SavedViewsDropdown
+            entityType="vendor"
+            activeName={activeViewName}
+            activeViewKind="list"
+            activeFilterState={filterState}
+            onPick={(v) => {
+              setFilterState(v.filter_state);
+              setActiveViewName(v.name);
+            }}
+          />
+        </div>
+        <FilterBar
+          state={filterState}
+          onChange={(next) => {
+            setFilterState(next);
+            setActiveViewName("Custom filter");
+          }}
+          fields={VENDOR_FILTER_FIELDS}
+        />
+      </div>
+
+      {loading ? (
+        <div className="empty">
+          <p>Loading...</p>
+        </div>
+      ) : (
+        <>
+          <DataTable<VendorListRow>
+            rows={filtered}
+            flat
+            onRowClick={(r) => navigate(`/vendors/${r.id}`)}
+            empty={{
+              message: "No vendors match your filters.",
+              ctaLabel: "+ New Vendor",
+              onCta: () => navigate("/vendors/new"),
+            }}
+            columns={[
+              {
+                key: "name",
+                label: "Vendor",
+                sort: (a, b) => a.name.localeCompare(b.name),
+                render: (r) => <span className="lead">{r.name}</span>,
+              },
+              {
+                key: "category_name",
+                label: "Category",
+                sort: (a, b) => (a.category_name ?? "").localeCompare(b.category_name ?? ""),
+                render: (r) =>
+                  r.category_name ? (
+                    <span className="muted">{r.category_name}</span>
+                  ) : (
+                    <span className="muted subtle">-</span>
+                  ),
+              },
+              {
+                key: "capabilities",
+                label: "Capabilities",
+                render: (r) =>
+                  r.capabilities.length > 0 ? (
+                    <span className="muted">{r.capabilities.join(", ")}</span>
+                  ) : (
+                    <span className="muted subtle">-</span>
+                  ),
+              },
+              {
+                key: "internal_partner",
+                label: "Internal Partner",
+                align: "c",
+                render: (r) =>
+                  isInternalPartner(r.tags) ? (
+                    <span className="pill pill-sm p-info">Internal</span>
+                  ) : (
+                    <span className="muted subtle">-</span>
+                  ),
+              },
+              {
+                key: "city",
+                label: "City",
+                sort: (a, b) => (a.city ?? "").localeCompare(b.city ?? ""),
+                render: (r) =>
+                  r.city ? (
+                    <span className="muted">{r.city}</span>
+                  ) : (
+                    <span className="muted subtle">-</span>
+                  ),
+              },
+              {
+                key: "internal_rating",
+                label: "Rating",
+                align: "c",
+                sort: (a, b) => (a.internal_rating ?? -1) - (b.internal_rating ?? -1),
+                render: (r) =>
+                  r.internal_rating != null ? (
+                    <StarRating value={r.internal_rating} size="sm" />
+                  ) : (
+                    <span className="muted subtle">-</span>
+                  ),
+              },
+              {
+                key: "pastProjectsTouchedCount",
+                label: "Projects Touched",
+                align: "r",
+                sort: (a, b) => a.pastProjectsTouchedCount - b.pastProjectsTouchedCount,
+                render: (r) => <span className="muted tnum">{r.pastProjectsTouchedCount}</span>,
+              },
+            ]}
+          />
+          <span className="cap">
+            Showing {filtered.length} vendors &middot; grouped views available in the Wiki "Vendors at a Glance" page
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
