@@ -16,7 +16,7 @@ export type DeliverableListRow = {
   due_date: string | null;
   assigned_user_ids: string[];
   notes: string | null;
-  project: { id: string; name: string; client: { id: string; name: string | null } | null } | null;
+  project: { id: string; name: string; organization: { id: string; name: string | null } | null } | null;
 };
 
 export async function loadDeliverables(): Promise<DeliverableListRow[]> {
@@ -24,7 +24,7 @@ export async function loadDeliverables(): Promise<DeliverableListRow[]> {
     .from("deliverables")
     .select(
       `id, title, type, status, due_date, assigned_user_ids, notes,
-       project:projects(id, name, client:clients(id, name))`,
+       project:projects(id, name, organization:organizations(id, name))`,
     )
     .order("due_date", { ascending: true, nullsFirst: false });
   if (error) {

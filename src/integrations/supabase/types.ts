@@ -78,50 +78,6 @@ export type Database = {
           },
         ]
       }
-      clients: {
-        Row: {
-          contact_email: string | null
-          contact_name: string | null
-          contact_phone: string | null
-          created_at: string
-          created_by: string | null
-          id: string
-          name: string
-          notes: string | null
-          updated_at: string
-        }
-        Insert: {
-          contact_email?: string | null
-          contact_name?: string | null
-          contact_phone?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          name: string
-          notes?: string | null
-          updated_at?: string
-        }
-        Update: {
-          contact_email?: string | null
-          contact_name?: string | null
-          contact_phone?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          name?: string
-          notes?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "clients_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       deliverables: {
         Row: {
           assigned_user_ids: string[]
@@ -309,6 +265,138 @@ export type Database = {
           },
         ]
       }
+      organizations: {
+        Row: {
+          capabilities: string[]
+          city: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          internal_rating: number | null
+          legacy_notes: string | null
+          name: string
+          tags: string[]
+          type: Database["public"]["Enums"]["org_type"]
+          updated_at: string
+          website_url: string | null
+        }
+        Insert: {
+          capabilities?: string[]
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          internal_rating?: number | null
+          legacy_notes?: string | null
+          name: string
+          tags?: string[]
+          type?: Database["public"]["Enums"]["org_type"]
+          updated_at?: string
+          website_url?: string | null
+        }
+        Update: {
+          capabilities?: string[]
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          internal_rating?: number | null
+          legacy_notes?: string | null
+          name?: string
+          tags?: string[]
+          type?: Database["public"]["Enums"]["org_type"]
+          updated_at?: string
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      people: {
+        Row: {
+          affiliations: Database["public"]["Enums"]["person_affiliation"][]
+          created_at: string
+          created_by: string
+          email: string | null
+          full_name: string
+          id: string
+          linkedin_url: string | null
+          organization_id: string | null
+          phone: string | null
+          role_title: string | null
+          tags: string[]
+          updated_at: string
+          venue_id: string | null
+        }
+        Insert: {
+          affiliations?: Database["public"]["Enums"]["person_affiliation"][]
+          created_at?: string
+          created_by: string
+          email?: string | null
+          full_name: string
+          id?: string
+          linkedin_url?: string | null
+          organization_id?: string | null
+          phone?: string | null
+          role_title?: string | null
+          tags?: string[]
+          updated_at?: string
+          venue_id?: string | null
+        }
+        Update: {
+          affiliations?: Database["public"]["Enums"]["person_affiliation"][]
+          created_at?: string
+          created_by?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          linkedin_url?: string | null
+          organization_id?: string | null
+          phone?: string | null
+          role_title?: string | null
+          tags?: string[]
+          updated_at?: string
+          venue_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "people_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_account_managers: {
         Row: {
           project_id: string
@@ -402,64 +490,82 @@ export type Database = {
       projects: {
         Row: {
           archived_at: string | null
+          budget: number | null
           budget_sheet_url: string | null
-          client_id: string | null
+          category: string | null
+          city: string | null
+          client_notes: string | null
           created_at: string
           created_by: string | null
           design_decks_folder_url: string | null
           id: string
+          job_number: string | null
           latest_creative_deck_url: string | null
           live_dates_end: string | null
           live_dates_start: string | null
           name: string
-          notes: string | null
+          organization_id: string | null
           production_folder_url: string | null
           slack_channel_url: string | null
           status: Database["public"]["Enums"]["project_status"]
+          status_notes: string | null
+          tags: string[]
           updated_at: string
         }
         Insert: {
           archived_at?: string | null
+          budget?: number | null
           budget_sheet_url?: string | null
-          client_id?: string | null
+          category?: string | null
+          city?: string | null
+          client_notes?: string | null
           created_at?: string
           created_by?: string | null
           design_decks_folder_url?: string | null
           id?: string
+          job_number?: string | null
           latest_creative_deck_url?: string | null
           live_dates_end?: string | null
           live_dates_start?: string | null
           name: string
-          notes?: string | null
+          organization_id?: string | null
           production_folder_url?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
+          status_notes?: string | null
+          tags?: string[]
           updated_at?: string
         }
         Update: {
           archived_at?: string | null
+          budget?: number | null
           budget_sheet_url?: string | null
-          client_id?: string | null
+          category?: string | null
+          city?: string | null
+          client_notes?: string | null
           created_at?: string
           created_by?: string | null
           design_decks_folder_url?: string | null
           id?: string
+          job_number?: string | null
           latest_creative_deck_url?: string | null
           live_dates_end?: string | null
           live_dates_start?: string | null
           name?: string
-          notes?: string | null
+          organization_id?: string | null
           production_folder_url?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
+          status_notes?: string | null
+          tags?: string[]
           updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "projects_client_id_fkey"
-            columns: ["client_id"]
+            columns: ["organization_id"]
             isOneToOne: false
-            referencedRelation: "clients"
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
@@ -1107,6 +1213,51 @@ export type Database = {
         }
         Relationships: []
       }
+      venue_rate_history: {
+        Row: {
+          amount_usd: number
+          created_at: string
+          created_by: string
+          effective_from: string
+          id: string
+          rate_kind: Database["public"]["Enums"]["venue_rate_kind"]
+          venue_id: string
+        }
+        Insert: {
+          amount_usd: number
+          created_at?: string
+          created_by: string
+          effective_from?: string
+          id?: string
+          rate_kind: Database["public"]["Enums"]["venue_rate_kind"]
+          venue_id: string
+        }
+        Update: {
+          amount_usd?: number
+          created_at?: string
+          created_by?: string
+          effective_from?: string
+          id?: string
+          rate_kind?: Database["public"]["Enums"]["venue_rate_kind"]
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_rate_history_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "venue_rate_history_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venue_types: {
         Row: {
           created_at: string
@@ -1125,15 +1276,47 @@ export type Database = {
         }
         Relationships: []
       }
+      venue_venue_types: {
+        Row: {
+          venue_id: string
+          venue_type_id: string
+        }
+        Insert: {
+          venue_id: string
+          venue_type_id: string
+        }
+        Update: {
+          venue_id?: string
+          venue_type_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_venue_types_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "venue_venue_types_venue_type_id_fkey"
+            columns: ["venue_type_id"]
+            isOneToOne: false
+            referencedRelation: "venue_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venues: {
         Row: {
           address: string | null
           capacity: number | null
+          city: string | null
           contact_email: string | null
           contact_name: string | null
           contact_phone: string | null
           created_at: string
           created_by: string | null
+          exclusive_vendors_org_ids: string[]
           features: string[]
           id: string
           name: string
@@ -1141,18 +1324,21 @@ export type Database = {
           notes: string | null
           photos: string[]
           square_footage: number | null
+          total_sq_ft: number | null
           updated_at: string
-          venue_type_id: string | null
+          venue_slide_url: string | null
           website_url: string | null
         }
         Insert: {
           address?: string | null
           capacity?: number | null
+          city?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
           created_by?: string | null
+          exclusive_vendors_org_ids?: string[]
           features?: string[]
           id?: string
           name: string
@@ -1160,18 +1346,21 @@ export type Database = {
           notes?: string | null
           photos?: string[]
           square_footage?: number | null
+          total_sq_ft?: number | null
           updated_at?: string
-          venue_type_id?: string | null
+          venue_slide_url?: string | null
           website_url?: string | null
         }
         Update: {
           address?: string | null
           capacity?: number | null
+          city?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
           created_by?: string | null
+          exclusive_vendors_org_ids?: string[]
           features?: string[]
           id?: string
           name?: string
@@ -1179,8 +1368,9 @@ export type Database = {
           notes?: string | null
           photos?: string[]
           square_footage?: number | null
+          total_sq_ft?: number | null
           updated_at?: string
-          venue_type_id?: string | null
+          venue_slide_url?: string | null
           website_url?: string | null
         }
         Relationships: [
@@ -1189,13 +1379,6 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "venues_venue_type_id_fkey"
-            columns: ["venue_type_id"]
-            isOneToOne: false
-            referencedRelation: "venue_types"
             referencedColumns: ["id"]
           },
         ]
@@ -1457,7 +1640,9 @@ export type Database = {
     }
     Enums: {
       deliverable_status: "Upcoming" | "In Progress" | "Complete" | "Skipped"
+      org_type: "Client" | "Vendor" | "Internal"
       permission_role: "admin" | "standard" | "freelance" | "pending"
+      person_affiliation: "Client" | "Vendor" | "Internal" | "Venue"
       project_status:
         | "Approved"
         | "In Production"
@@ -1493,6 +1678,7 @@ export type Database = {
       ts_role_auto_pull_schedule: "off" | "daily" | "every_3_days" | "weekly"
       ts_role_reeval_status: "idle" | "running" | "complete" | "failed"
       ts_role_status: "open" | "closed"
+      venue_rate_kind: "event_day" | "prod_day"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1624,7 +1810,9 @@ export const Constants = {
   public: {
     Enums: {
       deliverable_status: ["Upcoming", "In Progress", "Complete", "Skipped"],
+      org_type: ["Client", "Vendor", "Internal"],
       permission_role: ["admin", "standard", "freelance", "pending"],
+      person_affiliation: ["Client", "Vendor", "Internal", "Venue"],
       project_status: [
         "Approved",
         "In Production",
@@ -1663,6 +1851,7 @@ export const Constants = {
       ts_role_auto_pull_schedule: ["off", "daily", "every_3_days", "weekly"],
       ts_role_reeval_status: ["idle", "running", "complete", "failed"],
       ts_role_status: ["open", "closed"],
+      venue_rate_kind: ["event_day", "prod_day"],
     },
   },
 } as const

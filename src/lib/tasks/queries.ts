@@ -14,7 +14,7 @@ export type TaskListRow = {
   priority: TaskPriority;
   due_date: string | null;
   blocked_by: string[];
-  project: { id: string; name: string; client: { id: string; name: string | null } | null } | null;
+  project: { id: string; name: string; organization: { id: string; name: string | null } | null } | null;
   assignee: { id: string; full_name: string | null; email: string | null } | null;
 };
 
@@ -23,8 +23,8 @@ export async function loadTasks(): Promise<TaskListRow[]> {
     .from("tasks")
     .select(
       `id, title, description, status, priority, due_date, blocked_by,
-       project:projects(id, name, client:clients(id, name)),
-       assignee:users(id, full_name, email)`,
+       project:projects(id, name, organization:organizations(id, name)),
+       assignee:users!tasks_assignee_id_fkey(id, full_name, email)`,
     )
     .order("due_date", { ascending: true, nullsFirst: false });
   if (error) {

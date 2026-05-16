@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { ViewSwitch, type ViewKind } from "@/components/data/ViewSwitch";
+import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, emptyFilterState, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { DataTable } from "@/components/data/DataTable";
 import { BoardView, type BoardColumn } from "@/components/data/BoardView";
-import { CalendarMonthView } from "@/components/data/CalendarMonthView";
+import { CalendarMonthView, type CalendarEventKind } from "@/components/data/CalendarMonthView";
+import { IconPlus } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
 import { supabase } from "@/integrations/supabase/client";
 import {
   loadDeliverables,
-  updateDeliverableStatus,
   DELIVERABLE_STATUS_VALUES,
   type DeliverableListRow,
   type DeliverableStatus,
@@ -19,11 +18,29 @@ import {
 import { deliverableStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
 import { formatShortDate } from "@/lib/hq/dates";
 
+/**
+ * Surface 14 Deliverables list / board / calendar. Wireframe-fidelity
+ * rebuild (Phase 5.2.1 Revision); calendar is the default view per build
+ * notes Surface 14. Board layout flipped to one-column-per-project per
+ * revision spec § 4.C.2 (was rows-per-project in original 5.2.1; code-
+ * reviewer C2 from that pass).
+ */
+
 const FILTER_FIELDS = [
   { key: "status", label: "Status", type: "enum" as const, options: DELIVERABLE_STATUS_VALUES },
   { key: "type", label: "Type", type: "text" as const },
   { key: "projectName", label: "Project", type: "text" as const },
 ];
+
+// Maps deliverable_status -> calendar event banner class per spec § 2.G.
+function calendarKind(status: DeliverableStatus): CalendarEventKind {
+  switch (status) {
+    case "Complete": return "del";
+    case "In Progress": return "in";
+    case "Upcoming": return "rem";
+    case "Skipped": return "plain";
+  }
+}
 
 export default function DeliverablesList({ view }: { view: ViewKind }) {
   const navigate = useNavigate();
@@ -54,9 +71,6 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
         { event: "*", schema: "public", table: "deliverables" },
         (payload) => {
           if (payload.eventType === "UPDATE") {
-            // Patch the local row in place. The Realtime payload doesn't
-            // carry the project join, so keep the existing project subobject
-            // on the row and only update the scalar columns we care about.
             const next = payload.new as Partial<DeliverableListRow> & { id: string };
             setRows((rs) =>
               rs.map((r) => (r.id === next.id ? { ...r, ...next, project: r.project } : r)),
@@ -65,9 +79,6 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
             const oldRow = payload.old as { id: string };
             setRows((rs) => rs.filter((r) => r.id !== oldRow.id));
           } else if (payload.eventType === "INSERT") {
-            // INSERTs need the project join the Realtime payload omits;
-            // a full refetch is the simplest correct path and INSERT
-            // frequency is far lower than UPDATE.
             loadDeliverables().then(setRows);
           }
         },
@@ -83,7 +94,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
       rows.map((d) => ({
         ...d,
         projectName: d.project?.name ?? "",
-        clientName: d.project?.client?.name ?? "",
+        clientName: d.project?.organization?.name ?? "",
       })),
     [rows],
   );
@@ -98,27 +109,32 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
     [flat, filterState],
   );
 
-  const handleBoardMove = async (deliverable: DeliverableListRow, _from: string, to: string) => {
-    const next = to as DeliverableStatus;
-    setRows((rs) => rs.map((r) => (r.id === deliverable.id ? { ...r, status: next } : r)));
-    try {
-      await updateDeliverableStatus(deliverable.id, next);
-    } catch (err) {
-      console.error("deliverable status update failed", err);
-      setRows((rs) => rs.map((r) => (r.id === deliverable.id ? { ...r, status: deliverable.status } : r)));
-    }
-  };
-
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <header className="flex items-center justify-between gap-3">
-        <h1 className="h-page">Deliverables</h1>
-        <Button onClick={() => navigate("/deliverables/new")}>+ New Deliverable</Button>
-      </header>
+    <div className="stack-4">
+      <div className="pagehead">
+        <div className="row between">
+          <h1 className="h-page">Deliverables</h1>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate("/deliverables/new")}
+          >
+            <IconPlus className="ic" />
+            New Deliverable
+          </button>
+        </div>
+        <p className="desc">
+          Every dated project checkpoint. Calendar is the default view.
+        </p>
+      </div>
 
-      <div className="hq-tbl-toolbar">
-        <div className="flex items-center gap-3">
-          <ViewSwitch active={view} surface="deliverables" available={["list", "board", "calendar"]} />
+      <div className="row between wrap" style={{ alignItems: "center" }}>
+        <div className="row-c">
+          <ViewSwitch
+            active={view}
+            available={["list", "board", "calendar"]}
+            surface="deliverables"
+          />
           <SavedViewsDropdown
             entityType="deliverable"
             activeName={activeViewName}
@@ -128,12 +144,19 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               setFilterState(v.filter_state);
               setActiveViewName(v.name);
             }}
+            onNavigate={(kind) => {
+              const target = viewSwitchRoute("deliverables", kind);
+              if (target) navigate(target);
+            }}
           />
+        </div>
+        <div className="row-c">
+          <button type="button" className="btn btn-secondary btn-sm">Columns</button>
+          <button type="button" className="btn btn-secondary btn-sm">Save view</button>
         </div>
       </div>
 
       <FilterBar
-        entityType="deliverable"
         state={filterState}
         onChange={(next) => {
           setFilterState(next);
@@ -143,7 +166,9 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
       />
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <div className="empty">
+          <p>Loading...</p>
+        </div>
       ) : view === "calendar" ? (
         <CalendarMonthView
           events={filtered
@@ -153,14 +178,30 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               dateIso: d.due_date!,
               projectTitle: d.project?.name ?? "(no project)",
               title: d.title,
-              token: deliverableStatusToken(d.status),
+              kind: calendarKind(d.status),
               strikethrough: d.status === "Skipped",
             }))}
           onEventClick={(ev) => navigate(`/deliverables/${ev.id}`)}
+          toolbarRight={
+            <div className="callegend">
+              <span><i style={{ background: "#06B6D4" }} /> In progress</span>
+              <span><i style={{ background: "hsl(var(--warn))" }} /> Upcoming</span>
+              <span><i style={{ background: "hsl(var(--success))" }} /> Complete</span>
+              <span>
+                <i
+                  style={{ background: "hsl(var(--border-strong))" }}
+                />{" "}
+                <span style={{ textDecoration: "line-through", opacity: 0.6 }}>
+                  Skipped
+                </span>
+              </span>
+            </div>
+          }
         />
       ) : view === "list" ? (
         <DataTable<typeof filtered[number]>
           rows={filtered}
+          flat
           rowBorderToken={(r) => deliverableStatusToken(r.status)}
           onRowClick={(r) => navigate(`/deliverables/${r.id}`)}
           empty={{
@@ -174,22 +215,23 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               label: "Title",
               sort: (a, b) => a.title.localeCompare(b.title),
               render: (r) => (
-                <span className={statusTextDecoration("deliverable", r.status)}>{r.title}</span>
+                <span className={`lead ${statusTextDecoration("deliverable", r.status)}`}>
+                  {r.title}
+                </span>
               ),
             },
             {
               key: "projectName",
               label: "Project",
               sort: (a, b) => a.projectName.localeCompare(b.projectName),
-              render: (r) => (
+              render: (r) =>
                 r.project ? (
-                  <Link to={`/projects/${r.project.id}`} className="hq-tlink">
+                  <Link to={`/projects/${r.project.id}`} className="tlink">
                     {r.project.name}
                   </Link>
                 ) : (
                   "-"
-                )
-              ),
+                ),
             },
             {
               key: "type",
@@ -202,8 +244,8 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               label: "Status",
               sort: (a, b) => a.status.localeCompare(b.status),
               render: (r) => (
-                <span className={`hq-pill hq-pill--${deliverableStatusToken(r.status)}`}>
-                  <span className="hq-pill-dt" />
+                <span className={`pill p-${deliverableStatusToken(r.status)}`}>
+                  <span className="dt" />
                   {r.status}
                 </span>
               ),
@@ -211,21 +253,23 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
             {
               key: "due_date",
               label: "Due",
-              align: "right",
+              align: "r",
               sort: (a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""),
-              render: (r) => (r.due_date ? formatShortDate(r.due_date) : "-"),
+              render: (r) =>
+                r.due_date ? <span className="mono">{formatShortDate(r.due_date)}</span> : "-",
             },
             {
               key: "assignees",
               label: "Assignees",
-              render: (r) => (r.assigned_user_ids.length === 0 ? "-" : `${r.assigned_user_ids.length}`),
+              align: "c",
+              render: (r) =>
+                r.assigned_user_ids.length === 0 ? "-" : `${r.assigned_user_ids.length}`,
             },
           ]}
         />
       ) : view === "board" ? (
-        <BoardByProject
+        <DeliverablesByProjectBoard
           rows={filtered}
-          onMove={handleBoardMove}
           onClick={(r) => navigate(`/deliverables/${r.id}`)}
         />
       ) : null}
@@ -233,56 +277,79 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
   );
 }
 
-function BoardByProject({
+/**
+ * Per build notes Surface 14 + revision spec § 4.C.2: one column per
+ * project (horizontal scroll). Cards show deliverable title + due date in
+ * the upper right, plus project + client-link lines below.
+ *
+ * Drag-drop is intentionally omitted on this view. Status drag-drop only
+ * makes sense between status buckets; here every column is a project so
+ * dropping a card into a different column would imply re-parenting the
+ * deliverable, which is a heavier intent than drag-drop conveys. Status
+ * changes happen via the deliverable detail page or the (future) inline
+ * status pill on the card.
+ */
+function DeliverablesByProjectBoard({
   rows,
-  onMove,
   onClick,
 }: {
   rows: DeliverableListRow[];
-  onMove: (row: DeliverableListRow, from: string, to: string) => void;
   onClick: (row: DeliverableListRow) => void;
 }) {
-  // Group by project; columns are still status buckets within each project
-  // group. Recommend grouping by Project per build notes Surface 14: one
-  // column per active project, with cards listing every deliverable for it.
-  // To support drag-drop status changes we use one row per project and
-  // columns = the 4 statuses. Projects with no deliverables are skipped.
-  const grouped = new Map<string, { name: string; rows: DeliverableListRow[] }>();
+  const grouped = new Map<string, { id: string; name: string; rows: DeliverableListRow[] }>();
   for (const r of rows) {
     const pid = r.project?.id ?? "__none";
     if (!grouped.has(pid)) {
-      grouped.set(pid, { name: r.project?.name ?? "(no project)", rows: [] });
+      grouped.set(pid, {
+        id: pid,
+        name: r.project?.name ?? "(no project)",
+        rows: [],
+      });
     }
     grouped.get(pid)!.rows.push(r);
   }
-  const rowsForBoard = Array.from(grouped.entries()).map(([pid, g]) => ({
+  const columns: BoardColumn<DeliverableListRow>[] = Array.from(grouped.values()).map((g) => ({
+    id: g.id,
     label: g.name,
-    columns: DELIVERABLE_STATUS_VALUES.map((s): BoardColumn<DeliverableListRow> => ({
-      id: `${pid}:${s}`,
-      label: s,
-      token: deliverableStatusToken(s),
-      rows: g.rows.filter((r) => r.status === s),
-    })),
+    rows: g.rows.sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")),
   }));
 
   return (
     <BoardView<DeliverableListRow>
-      rows={rowsForBoard}
-      onCardMove={(row, fromId, toId) => {
-        const toStatus = toId.split(":")[1] as DeliverableStatus;
-        onMove(row, fromId, toStatus);
-      }}
+      layout="horizontal"
+      rows={[{ label: "By Project", columns }]}
       onCardClick={onClick}
       renderCard={(r) => (
-        <div>
-          <div className={`hq-board-card-row font-medium ${statusTextDecoration("deliverable", r.status)}`}>
-            {r.title}
+        <>
+          <div className="row between" style={{ alignItems: "flex-start", gap: 8 }}>
+            <div className={`nm flex1 ${statusTextDecoration("deliverable", r.status)}`}>
+              {r.title}
+            </div>
+            <div className="cap" style={{ flex: "none" }}>
+              {r.due_date ? formatShortDate(r.due_date) : ""}
+            </div>
           </div>
-          <div className="hq-board-card-row">
-            <span className="hq-board-card-sub">{r.type ?? "-"}</span>
-            <span className="hq-board-card-sub">{r.due_date ? formatShortDate(r.due_date) : ""}</span>
+          <div style={{ marginTop: 9, display: "flex", flexDirection: "column", gap: 2 }}>
+            {r.project ? (
+              <Link
+                to={`/projects/${r.project.id}`}
+                className="tlink"
+                style={{ fontSize: 11.5 }}
+              >
+                {r.project.name}
+              </Link>
+            ) : null}
+            {r.project?.organization ? (
+              <Link
+                to={`/organizations/${r.project.organization.id}`}
+                className="tlink"
+                style={{ fontSize: 11, color: "rgba(190,78,68,.85)" }}
+              >
+                {r.project.organization.name}
+              </Link>
+            ) : null}
           </div>
-        </div>
+        </>
       )}
     />
   );

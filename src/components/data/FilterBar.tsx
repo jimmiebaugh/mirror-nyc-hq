@@ -1,18 +1,19 @@
-import { useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import {
+  IconFilter,
+  IconX,
+  IconPlus,
+  IconChevronDown,
+} from "@/components/icons/HQIcons";
 
 /**
- * Notion-style chip-builder filter bar. Each chip is a (field, op, value)
- * triple; the chip strip carries an AND / OR connector toggle that
- * applies to every chip in the strip.
+ * Notion-style chip-builder filter bar. Wireframe-fidelity rebuild
+ * (Phase 5.2.1 Revision); renders the `.filterbar > .fchip [.k .op .v .x]`
+ * structure from OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 1002-1010
+ * (with the `.andor` connector between chips + the trailing `.fchip--add`).
  *
- * Spec: OUTPUTS/phase-5-2-spec.md § 5.A.1 (component contract). Locked
- * decisions § 4: "is any of" multi-value chips render the values comma-
- * separated inside the chip body.
- *
- * Adding a chip opens an inline popover with the field picker, then op
- * picker, then value entry. To stay simple in 5.2.1 the value entry uses a
- * text input or a comma-separated multi-value input; richer value pickers
- * (user picker, enum select, date range) drop in here over time.
+ * The "add filter" popover is the field/op/value picker. Inputs inside use
+ * `.input` per the wireframe pattern, not shadcn Select.
  */
 
 export type FilterChip = {
@@ -31,6 +32,13 @@ export type FilterFieldDef = {
   label: string;
   type: "text" | "enum" | "user" | "date";
   options?: string[];
+  /**
+   * When true, this field def participates in chip label resolution but is
+   * NOT offered in the + Add filter popover. Used for surfaces that ship a
+   * default chip (e.g. Tasks `assigneeId is Me`) whose underlying field
+   * doesn't have a usable add-popover input yet.
+   */
+  hidden?: boolean;
 };
 
 const OPS_FOR_TYPE: Record<FilterFieldDef["type"], string[]> = {
@@ -49,100 +57,154 @@ export function FilterBar({
   onChange,
   fields,
 }: {
-  entityType?: string;
   state: FilterState;
   onChange: (next: FilterState) => void;
   fields: FilterFieldDef[];
 }) {
+  const [addOpen, setAddOpen] = useState(false);
   const [building, setBuilding] = useState<{
     field?: FilterFieldDef;
     op?: string;
-  } | null>(null);
-  const [valueDraft, setValueDraft] = useState("");
+    value?: string;
+  }>({});
+  const popRef = useRef<HTMLDivElement>(null);
 
-  const toggleConnector = () => {
-    onChange({ ...state, connector: state.connector === "AND" ? "OR" : "AND" });
-  };
+  useEffect(() => {
+    if (!addOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!popRef.current?.contains(e.target as Node)) {
+        setAddOpen(false);
+        setBuilding({});
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [addOpen]);
+
+  const fieldLabel = (key: string) =>
+    fields.find((f) => f.key === key)?.label ?? key;
 
   const removeChip = (i: number) => {
     onChange({ ...state, chips: state.chips.filter((_, idx) => idx !== i) });
   };
 
-  const commit = () => {
-    if (!building?.field || !building?.op || !valueDraft.trim()) {
-      setBuilding(null);
-      setValueDraft("");
-      return;
-    }
-    const value: string | string[] = building.op === "is any of"
-      ? valueDraft.split(",").map((s) => s.trim()).filter(Boolean)
-      : valueDraft.trim();
+  const toggleConnector = () => {
     onChange({
       ...state,
-      chips: [...state.chips, { field: building.field.key, op: building.op, value }],
+      connector: state.connector === "AND" ? "OR" : "AND",
     });
-    setBuilding(null);
-    setValueDraft("");
   };
 
-  const fieldLabel = (key: string) => fields.find((f) => f.key === key)?.label ?? key;
+  const commit = () => {
+    if (!building.field || !building.op || !building.value?.trim()) return;
+    const value: string | string[] =
+      building.op === "is any of"
+        ? building.value.split(",").map((s) => s.trim()).filter(Boolean)
+        : building.value.trim();
+    onChange({
+      ...state,
+      chips: [
+        ...state.chips,
+        { field: building.field.key, op: building.op, value },
+      ],
+    });
+    setAddOpen(false);
+    setBuilding({});
+  };
 
   return (
-    <div className="hq-filterbar">
-      {state.chips.map((c, i) => (
-        <span key={`${c.field}-${i}`} className="hq-filterchip">
-          <span className="hq-filterchip-field">{fieldLabel(c.field)}</span>
-          <span className="hq-filterchip-op">{c.op}</span>
-          <span>{Array.isArray(c.value) ? c.value.join(", ") : c.value}</span>
-          <span
-            role="button"
-            className="hq-filterchip-x"
-            onClick={() => removeChip(i)}
-            aria-label={`Remove filter ${fieldLabel(c.field)}`}
-          >
-            ×
+    <div className="filterbar">
+      <IconFilter className="ic" style={{ width: 14, height: 14, color: "hsl(var(--subtle-foreground))" }} />
+
+      {state.chips.map((chip, i) => (
+        <Fragment key={i}>
+          <span className="fchip">
+            <span className="k">{fieldLabel(chip.field)}</span>
+            <span className="op">{chip.op}</span>
+            <span className="v">
+              {Array.isArray(chip.value) ? chip.value.join(", ") : chip.value}
+            </span>
+            <span
+              className="x"
+              role="button"
+              aria-label={`Remove filter ${fieldLabel(chip.field)}`}
+              onClick={() => removeChip(i)}
+            >
+              <IconX className="ic" style={{ width: 11, height: 11 }} />
+            </span>
+          </span>
+          {i < state.chips.length - 1 ? (
+            <span
+              className="andor"
+              role="button"
+              title="Toggle AND / OR"
+              onClick={toggleConnector}
+            >
+              {state.connector}
+              <IconChevronDown className="ic" style={{ width: 8, height: 8, marginLeft: 3 }} />
+            </span>
+          ) : null}
+        </Fragment>
+      ))}
+
+      <span ref={popRef} style={{ position: "relative" }}>
+        <span
+          className="fchip fchip--add"
+          role="button"
+          onClick={() => {
+            setAddOpen((v) => !v);
+            if (!addOpen) setBuilding({});
+          }}
+        >
+          <span>
+            <IconPlus className="ic" style={{ width: 11, height: 11, marginRight: 5 }} />
+            Add filter
           </span>
         </span>
-      ))}
-      {state.chips.length >= 2 ? (
-        <button
-          type="button"
-          className="hq-filterchip--connector"
-          onClick={toggleConnector}
-          title="Toggle AND / OR"
-        >
-          {state.connector}
-        </button>
-      ) : null}
-      {building ? (
-        <span className="hq-filterchip">
-          {!building.field ? (
+
+        {addOpen ? (
+          <div
+            className="card card-pad"
+            style={{
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0,
+              zIndex: 30,
+              minWidth: 280,
+              padding: 12,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
             <select
+              className="input"
+              style={{ height: 36 }}
               autoFocus
-              className="bg-transparent text-foreground"
+              value={building.field?.key ?? ""}
               onChange={(e) => {
                 const f = fields.find((x) => x.key === e.target.value);
-                if (f) setBuilding({ field: f });
+                setBuilding({ field: f, op: undefined, value: "" });
               }}
-              defaultValue=""
             >
               <option value="" disabled>
                 Field...
               </option>
-              {fields.map((f) => (
+              {fields.filter((f) => !f.hidden).map((f) => (
                 <option key={f.key} value={f.key}>
                   {f.label}
                 </option>
               ))}
             </select>
-          ) : !building.op ? (
-            <>
-              <span className="hq-filterchip-field">{building.field.label}</span>
+
+            {building.field ? (
               <select
-                autoFocus
-                className="bg-transparent text-foreground"
-                onChange={(e) => setBuilding({ ...building, op: e.target.value })}
-                defaultValue=""
+                className="input"
+                style={{ height: 36 }}
+                value={building.op ?? ""}
+                onChange={(e) =>
+                  setBuilding((b) => ({ ...b, op: e.target.value, value: "" }))
+                }
               >
                 <option value="" disabled>
                   Op...
@@ -153,57 +215,64 @@ export function FilterBar({
                   </option>
                 ))}
               </select>
-            </>
-          ) : (
-            <>
-              <span className="hq-filterchip-field">{building.field.label}</span>
-              <span className="hq-filterchip-op">{building.op}</span>
-              {building.field.options && building.field.type === "enum" && building.op !== "is any of" ? (
+            ) : null}
+
+            {building.field && building.op ? (
+              building.field.type === "enum" &&
+              building.field.options &&
+              building.op !== "is any of" ? (
                 <select
-                  autoFocus
-                  className="bg-transparent text-foreground"
-                  value={valueDraft}
-                  onChange={(e) => setValueDraft(e.target.value)}
-                  onBlur={commit}
+                  className="input"
+                  style={{ height: 36 }}
+                  value={building.value ?? ""}
+                  onChange={(e) =>
+                    setBuilding((b) => ({ ...b, value: e.target.value }))
+                  }
                 >
                   <option value="" disabled>
                     Value...
                   </option>
-                  {building.field.options.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
+                  {building.field.options.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
                     </option>
                   ))}
                 </select>
               ) : (
                 <input
-                  autoFocus
-                  className="bg-transparent text-foreground outline-none w-40"
-                  value={valueDraft}
-                  placeholder={building.op === "is any of" ? "a, b, c" : "value"}
-                  onChange={(e) => setValueDraft(e.target.value)}
+                  className="input"
+                  style={{ height: 36 }}
+                  type={building.field.type === "date" ? "date" : "text"}
+                  placeholder={
+                    building.op === "is any of" ? "a, b, c" : "value"
+                  }
+                  value={building.value ?? ""}
+                  onChange={(e) =>
+                    setBuilding((b) => ({ ...b, value: e.target.value }))
+                  }
                   onKeyDown={(e) => {
                     if (e.key === "Enter") commit();
                     if (e.key === "Escape") {
-                      setBuilding(null);
-                      setValueDraft("");
+                      setAddOpen(false);
+                      setBuilding({});
                     }
                   }}
-                  onBlur={commit}
                 />
-              )}
-            </>
-          )}
-        </span>
-      ) : (
-        <button
-          type="button"
-          className="hq-filterchip--add"
-          onClick={() => setBuilding({})}
-        >
-          + Add filter
-        </button>
-      )}
+              )
+            ) : null}
+
+            {building.field && building.op && building.value?.trim() ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={commit}
+              >
+                Add chip
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </span>
     </div>
   );
 }

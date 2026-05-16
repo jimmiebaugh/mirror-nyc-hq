@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { IconChevronRight } from "@/components/icons/HQIcons";
 import { hqPillClass } from "@/lib/home/projectStatusToken";
@@ -56,7 +56,9 @@ async function loadMyProjects(userId: string): Promise<Row[]> {
 
   const { data: projects } = await supabase
     .from("projects")
-    .select("id, name, status, live_dates_start, live_dates_end, client:clients(name)")
+    .select(
+      "id, name, status, job_number, live_dates_start, live_dates_end, organization:organizations(name)",
+    )
     .in("id", Array.from(ids))
     .is("archived_at", null)
     .order("live_dates_start", { ascending: true });
@@ -67,10 +69,10 @@ async function loadMyProjects(userId: string): Promise<Row[]> {
     const role: Row["role"] = isAm && isD ? "Co-Lead" : isAm ? "Account Lead" : "Designer";
     return {
       id: p.id,
-      jobNumber: null, // 5.2: a Job # column lands when the canonical Projects schema reshape ships.
+      jobNumber: p.job_number ?? null,
       name: p.name,
       status: (p.status as string | null) ?? "",
-      clientName: (p.client as { name?: string } | null)?.name ?? null,
+      clientName: (p.organization as { name?: string } | null)?.name ?? null,
       liveStartIso: p.live_dates_start,
       liveEndIso: p.live_dates_end,
       role,
@@ -86,6 +88,7 @@ export function MyProjectsCard({
   fullWidth?: boolean;
 }) {
   const [rows, setRows] = useState<Row[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!userId) return;
@@ -126,19 +129,23 @@ export function MyProjectsCard({
             </tr>
           ) : (
             rows.map((r) => (
-              <tr key={r.id} className="cursor-pointer">
+              <tr
+                key={r.id}
+                className="cursor-pointer"
+                onClick={() => navigate(`/projects/${r.id}`)}
+              >
                 {fullWidth ? (
                   <td className="font-mono text-[hsl(var(--muted-foreground))]">
                     {r.jobNumber ?? "-"}
                   </td>
                 ) : null}
                 <td>
-                  <Link to={`/projects/${r.id}`}>
-                    <div className="lead">{r.name}</div>
-                    {r.clientName ? (
-                      <span className="hq-tlink text-[11.5px]">{r.clientName}</span>
-                    ) : null}
-                  </Link>
+                  <div className="lead">{r.name}</div>
+                  {r.clientName ? (
+                    <span className="text-[11.5px] text-[hsl(var(--muted-foreground))]">
+                      {r.clientName}
+                    </span>
+                  ) : null}
                 </td>
                 <td>
                   <span className={hqPillClass(r.status)}>

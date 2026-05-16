@@ -250,14 +250,7 @@ const App = () => (
                   </StandardOrAdminRoute>
                 }
               />
-              <Route
-                path="/clients"
-                element={
-                  <StandardOrAdminRoute>
-                    <ComingSoon title="Clients" />
-                  </StandardOrAdminRoute>
-                }
-              />
+              <Route path="/clients" element={<Navigate to="/organizations" replace />} />
               <Route
                 path="/organizations"
                 element={

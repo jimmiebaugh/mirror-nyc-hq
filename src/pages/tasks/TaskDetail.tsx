@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { hqPillClass, taskStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
+import { taskStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
 import { formatMediumDate } from "@/lib/hq/dates";
 import type { TaskPriority, TaskStatus } from "@/lib/tasks/queries";
 
@@ -18,6 +18,17 @@ type DbTask = {
   project: { id: string; name: string } | null;
   assignee: { id: string; full_name: string | null; email: string | null } | null;
 };
+
+function priorityTokenClass(p: TaskPriority): string {
+  switch (p) {
+    case "Urgent":
+      return "pill p-destructive";
+    case "High":
+      return "pill p-warn";
+    default:
+      return "pill p-muted";
+  }
+}
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
@@ -35,7 +46,7 @@ export default function TaskDetail() {
         .select(
           `id, title, description, status, priority, due_date, blocked_by, completed_at,
            project:projects(id, name),
-           assignee:users(id, full_name, email)`,
+           assignee:users!tasks_assignee_id_fkey(id, full_name, email)`,
         )
         .eq("id", id)
         .single();
@@ -59,83 +70,111 @@ export default function TaskDetail() {
     };
   }, [id]);
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading...</p>;
-  if (!task) return <p className="text-sm text-muted-foreground">Task not found.</p>;
+  if (loading) {
+    return (
+      <div className="empty">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+  if (!task) {
+    return (
+      <div className="empty">
+        <p>Task not found.</p>
+      </div>
+    );
+  }
+
+  const token = taskStatusToken(task.status);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <Link to="/tasks" className="crumb">← Back to Tasks</Link>
-      <header className="flex items-start justify-between gap-3">
-        <h1 className={`h-page ${statusTextDecoration("task", task.status)}`}>{task.title}</h1>
-        <Button onClick={() => navigate(`/tasks/${task.id}/edit`)}>Edit Task</Button>
-      </header>
+    <div className="stack-4" style={{ maxWidth: 760 }}>
+      <Link to="/tasks" className="tlink">
+        <IconArrowLeft className="ic" />
+        Back to Tasks
+      </Link>
+      <div className="row between" style={{ alignItems: "flex-start" }}>
+        <h1 className={`h-page ${statusTextDecoration("task", task.status)}`}>
+          {task.title}
+        </h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate(`/tasks/${task.id}/edit`)}
+        >
+          Edit Task
+        </button>
+      </div>
 
-      <div className="grid grid-cols-2 gap-6">
-        <div className="hq-card">
-          <div className="hq-card-headbar">
+      <div className="g2">
+        <section className="card">
+          <div className="card-headbar">
             <span className="h-card">Details</span>
           </div>
-          <div className="p-6 space-y-3 text-sm">
-            <Row label="Status">
-              <span className={`hq-pill hq-pill--${taskStatusToken(task.status)}`}>
-                <span className="hq-pill-dt" />
-                {task.status}
-              </span>
-            </Row>
-            <Row label="Priority">{task.priority}</Row>
-            <Row label="Due">{task.due_date ? formatMediumDate(task.due_date) : "-"}</Row>
-            <Row label="Project">
-              {task.project ? (
-                <Link to={`/projects/${task.project.id}`} className="hq-tlink">{task.project.name}</Link>
-              ) : (
-                "-"
-              )}
-            </Row>
-            <Row label="Assignee">
-              {task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"}
-            </Row>
-            {task.completed_at ? (
-              <Row label="Completed">{formatMediumDate(task.completed_at.slice(0, 10))}</Row>
-            ) : null}
+          <div className="card-pad">
+            <dl className="kv">
+              <dt>Status</dt>
+              <dd>
+                <span className={`pill p-${token}`}>
+                  <span className="dt" />
+                  {task.status}
+                </span>
+              </dd>
+              <dt>Priority</dt>
+              <dd>
+                <span className={priorityTokenClass(task.priority)}>{task.priority}</span>
+              </dd>
+              <dt>Due</dt>
+              <dd>{task.due_date ? formatMediumDate(task.due_date) : "-"}</dd>
+              <dt>Project</dt>
+              <dd>
+                {task.project ? (
+                  <Link to={`/projects/${task.project.id}`} className="tlink">
+                    {task.project.name}
+                  </Link>
+                ) : (
+                  "-"
+                )}
+              </dd>
+              <dt>Assignee</dt>
+              <dd>{task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"}</dd>
+              {task.completed_at ? (
+                <>
+                  <dt>Completed</dt>
+                  <dd>{formatMediumDate(task.completed_at.slice(0, 10))}</dd>
+                </>
+              ) : null}
+            </dl>
           </div>
-        </div>
+        </section>
 
-        <aside className="space-y-6">
+        <aside className="stack-4">
           {blockedTasks.length > 0 ? (
-            <div className="hq-card">
-              <div className="hq-card-headbar">
+            <section className="card">
+              <div className="card-headbar">
                 <span className="h-card">Blocked by</span>
               </div>
-              <ul className="p-6 text-sm space-y-1">
+              <ul className="card-pad stack-2">
                 {blockedTasks.map((b) => (
                   <li key={b.id}>
-                    <Link to={`/tasks/${b.id}`} className="hq-tlink">{b.title}</Link>
+                    <Link to={`/tasks/${b.id}`} className="tlink">
+                      {b.title}
+                    </Link>
                   </li>
                 ))}
               </ul>
-            </div>
+            </section>
           ) : null}
-          <div className="hq-card">
-            <div className="hq-card-headbar">
+          <section className="card">
+            <div className="card-headbar">
               <span className="h-card">Notes</span>
             </div>
-            <div className="p-6 text-sm whitespace-pre-wrap text-[hsl(var(--muted-foreground))]">
+            <div className="card-pad muted" style={{ whiteSpace: "pre-wrap" }}>
               {task.description || "(empty)"}
             </div>
-          </div>
+          </section>
         </aside>
       </div>
-    </div>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="label-form text-[hsl(var(--subtle-foreground))] min-w-[80px]">
-        {label}
-      </span>
-      <span>{children}</span>
     </div>
   );
 }

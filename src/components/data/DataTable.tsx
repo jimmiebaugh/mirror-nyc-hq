@@ -1,22 +1,29 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
+} from "@/components/icons/HQIcons";
 import type { StatusToken } from "@/lib/home/projectStatusToken";
 
 /**
- * Generic two-tier database list table. Lifts the Talent Scout
- * `CandidateTable.tsx` pattern: active rows above a "Complete & Cancelled"
- * divider, sort by clicking a header, status-color left border per row,
- * shift-click + checkbox range select, click-row navigates.
+ * Generic two-tier database list table. Wireframe-fidelity rebuild
+ * (Phase 5.2.1 Revision); renders the canonical `.tbl-wrap > .tbl[.tbl--flat]
+ * > thead/tbody > tr.rb-<token>` structure from
+ * OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 1025-1047.
  *
- * Spec: OUTPUTS/phase-5-2-spec.md § 5.A.1 component contract.
+ * `flat` true => add `.tbl--flat` so the colored row left-border is
+ * stripped (Project / Task / Deliverable top-level lists; the wireframe
+ * revision at line 306-307 calls for this).
  */
 
 export type Column<T> = {
   key: string;
   label: string;
   render: (row: T) => ReactNode;
-  align?: "left" | "right" | "center";
+  align?: "l" | "c" | "r";
+  width?: string | number;
   /** Sort comparator (negative = a before b). Required to enable sort. */
   sort?: (a: T, b: T) => number;
 };
@@ -30,6 +37,7 @@ export function DataTable<T extends { id: string }>({
   onRowClick,
   selection,
   twoTier,
+  flat = false,
   empty,
 }: {
   rows: T[];
@@ -44,6 +52,7 @@ export function DataTable<T extends { id: string }>({
     isTerminal: (row: T) => boolean;
     dividerLabel: (n: number) => string;
   };
+  flat?: boolean;
   empty?: { message: string; ctaLabel?: string; onCta?: () => void };
 }) {
   const [sort, setSort] = useState<SortState>(null);
@@ -98,34 +107,46 @@ export function DataTable<T extends { id: string }>({
     setLastSelectedId(row.id);
   };
 
-  const renderRow = (row: T) => {
+  const renderRow = (row: T, terminalRow: boolean) => {
     const token = rowBorderToken?.(row);
     const checked = selection?.selectedIds.has(row.id) ?? false;
     return (
       <tr
         key={row.id}
-        data-row-token={token}
+        className={token ? `rb-${token}` : undefined}
+        style={{
+          cursor: onRowClick ? "pointer" : undefined,
+          opacity: terminalRow ? 0.6 : undefined,
+        }}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest("[data-row-checkbox]")) return;
           onRowClick?.(row);
         }}
       >
         {selection ? (
-          <td onClick={(e) => e.stopPropagation()} data-row-checkbox className="w-[34px]">
+          <td
+            className="c"
+            style={{ width: 38 }}
+            data-row-checkbox
+            onClick={(e) => e.stopPropagation()}
+          >
             <span
+              className={`checkbox ${checked ? "checkbox--on" : ""}`}
               role="checkbox"
               aria-checked={checked}
-              onClick={(e) => toggleRowSelection(row, e.shiftKey)}
-              className="inline-block"
+              onClick={(e) =>
+                toggleRowSelection(row, (e as React.MouseEvent).shiftKey)
+              }
             >
-              <Checkbox checked={checked} />
+              {checked ? <IconCheck className="ic" /> : null}
             </span>
           </td>
         ) : null}
         {columns.map((c) => (
           <td
             key={c.key}
-            className={c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : ""}
+            className={c.align === "r" ? "r" : c.align === "c" ? "c" : ""}
+            style={c.width ? { width: c.width } : undefined}
           >
             {c.render(row)}
           </td>
@@ -136,13 +157,13 @@ export function DataTable<T extends { id: string }>({
 
   if (rows.length === 0 && empty) {
     return (
-      <div className="hq-dt-empty">
-        <p className="text-sm">{empty.message}</p>
+      <div className="empty">
+        <p>{empty.message}</p>
         {empty.ctaLabel && empty.onCta ? (
           <button
             type="button"
+            className="btn btn-secondary btn-sm"
             onClick={empty.onCta}
-            className="mt-4 inline-flex items-center rounded-md border border-[hsl(var(--border-strong))] px-3 py-1.5 text-sm hover:border-primary"
           >
             {empty.ctaLabel}
           </button>
@@ -151,46 +172,79 @@ export function DataTable<T extends { id: string }>({
     );
   }
 
+  const totalCols = columns.length + (selection ? 1 : 0);
+
   return (
-    <table className="hq-dt">
-      <thead>
-        <tr>
-          {selection ? <th className="w-[34px]"></th> : null}
-          {columns.map((c) => {
-            const isSorted = sort?.key === c.key;
-            const arrow = isSorted ? (sort?.dir === "asc" ? "↑" : "↓") : "";
-            return (
-              <th
-                key={c.key}
-                className={`${c.align === "right" ? "r" : c.align === "center" ? "c" : ""} ${c.sort ? "sortable" : ""}`}
-                onClick={() => c.sort && toggleHeaderSort(c.key)}
-              >
-                {c.label} {arrow}
-              </th>
-            );
-          })}
-        </tr>
-      </thead>
-      <tbody>
-        {active.map(renderRow)}
-        {twoTier && terminal.length > 0 ? (
-          <>
-            <tr className="hq-dt-divider">
-              <td colSpan={columns.length + (selection ? 1 : 0)}>
-                <button
-                  type="button"
-                  onClick={() => setCollapsed((v) => !v)}
-                  className="flex items-center gap-2"
+    <div className="tbl-wrap">
+      <table className={`tbl ${flat ? "tbl--flat" : ""}`}>
+        <thead>
+          <tr>
+            {selection ? <th style={{ width: 38 }}><span className="checkbox" /></th> : null}
+            {columns.map((c) => {
+              const isSorted = sort?.key === c.key;
+              return (
+                <th
+                  key={c.key}
+                  className={c.align === "r" ? "r" : c.align === "c" ? "c" : ""}
+                  style={{
+                    width: c.width,
+                    cursor: c.sort ? "pointer" : undefined,
+                    color: isSorted ? "hsl(var(--foreground))" : undefined,
+                  }}
+                  onClick={() => c.sort && toggleHeaderSort(c.key)}
                 >
-                  <span>{collapsed ? "▸" : "▾"}</span>
-                  <span>{twoTier.dividerLabel(terminal.length)}</span>
-                </button>
-              </td>
-            </tr>
-            {!collapsed ? terminal.map(renderRow) : null}
-          </>
-        ) : null}
-      </tbody>
-    </table>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    {c.label}
+                    {isSorted ? (
+                      <IconChevronDown
+                        className="ic"
+                        style={{
+                          width: 9,
+                          height: 9,
+                          transform: sort?.dir === "asc" ? "rotate(180deg)" : undefined,
+                        }}
+                      />
+                    ) : null}
+                  </span>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {active.map((r) => renderRow(r, false))}
+          {twoTier && terminal.length > 0 ? (
+            <>
+              <tr className="tbl-divider">
+                <td colSpan={totalCols}>
+                  <button
+                    type="button"
+                    className="row-c"
+                    style={{
+                      gap: 6,
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "inherit",
+                      font: "inherit",
+                    }}
+                    onClick={() => setCollapsed((v) => !v)}
+                  >
+                    {collapsed ? (
+                      <IconChevronRight className="ic" style={{ width: 10, height: 10 }} />
+                    ) : (
+                      <IconChevronDown className="ic" style={{ width: 10, height: 10 }} />
+                    )}
+                    {twoTier.dividerLabel(terminal.length)}
+                  </button>
+                </td>
+              </tr>
+              {!collapsed ? terminal.map((r) => renderRow(r, true)) : null}
+            </>
+          ) : null}
+        </tbody>
+      </table>
+    </div>
   );
 }

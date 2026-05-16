@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +13,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   TASK_PRIORITY_VALUES,
   TASK_STATUS_VALUES,
@@ -87,7 +83,9 @@ export default function TaskEdit() {
           ? Promise.resolve({ data: null })
           : supabase
               .from("tasks")
-              .select("id, title, description, status, priority, due_date, project_id, assignee_id, blocked_by")
+              .select(
+                "id, title, description, status, priority, due_date, project_id, assignee_id, blocked_by",
+              )
               .eq("id", id)
               .single(),
       ]);
@@ -200,100 +198,116 @@ export default function TaskEdit() {
     }
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading...</p>;
+  if (loading) {
+    return (
+      <div className="empty">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-3xl pb-24">
-      <header className="space-y-2">
-        <Link
-          to={isCreate ? "/tasks" : `/tasks/${id}`}
-          className="crumb"
-          onClick={(e) => {
-            if (dirty) {
-              e.preventDefault();
-              setConfirmLeaveOpen(true);
-            }
-          }}
-        >
-          ← Back to {isCreate ? "Tasks" : "task"}
-        </Link>
-        <h1 className="h-page">{isCreate ? "New Task" : "Edit Task"}</h1>
-      </header>
+    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 760 }}>
+      <Link
+        to={isCreate ? "/tasks" : `/tasks/${id}`}
+        className="tlink"
+        onClick={(e) => {
+          if (dirty) {
+            e.preventDefault();
+            setConfirmLeaveOpen(true);
+          }
+        }}
+      >
+        <IconArrowLeft className="ic" />
+        Back to {isCreate ? "Tasks" : "task"}
+      </Link>
 
-      <section className="hq-card mt-6">
-        <div className="p-6 space-y-4">
+      <div className="pagehead">
+        <h1 className="h-page">{isCreate ? "New Task" : "Edit Task"}</h1>
+      </div>
+
+      <section className="card">
+        <div className="card-pad stack-4">
+          <div className="block-lbl">
+            <span className="label-section">Task</span>
+          </div>
           <Field label="Title" required>
-            <Input
+            <input
+              className={`input ${form.title ? "input--filled" : ""}`}
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             />
           </Field>
           <Field label="Description">
-            <Textarea
+            <textarea
+              className={`input textarea ${form.description ? "input--filled" : ""}`}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               rows={5}
               placeholder="What needs to happen?"
             />
           </Field>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="g2">
             <Field label="Project">
-              <Select
+              <select
+                className={`input ${form.project_id ? "input--filled" : ""}`}
                 value={form.project_id ?? "__none"}
-                onValueChange={(v) => setForm((f) => ({ ...f, project_id: v === "__none" ? null : v }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    project_id: e.target.value === "__none" ? null : e.target.value,
+                  }))
+                }
               >
-                <SelectTrigger><SelectValue placeholder="Standalone" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">Standalone</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="__none">Standalone</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Assignee">
-              <Select
+              <select
+                className={`input ${form.assignee_id ? "input--filled" : ""}`}
                 value={form.assignee_id ?? "__none"}
-                onValueChange={(v) => setForm((f) => ({ ...f, assignee_id: v === "__none" ? null : v }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    assignee_id: e.target.value === "__none" ? null : e.target.value,
+                  }))
+                }
               >
-                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">Unassigned</SelectItem>
-                  {users.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.full_name ?? u.email}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="__none">Unassigned</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.full_name ?? u.email}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Status">
-              <Select
+              <select
+                className="input input--filled"
                 value={form.status}
-                onValueChange={(v) => setForm((f) => ({ ...f, status: v as TaskStatus }))}
+                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as TaskStatus }))}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TASK_STATUS_VALUES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {TASK_STATUS_VALUES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Priority">
-              <Select
+              <select
+                className="input input--filled"
                 value={form.priority}
-                onValueChange={(v) => setForm((f) => ({ ...f, priority: v as TaskPriority }))}
+                onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as TaskPriority }))}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TASK_PRIORITY_VALUES.map((p) => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {TASK_PRIORITY_VALUES.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Due date">
-              <Input
+              <input
                 type="date"
+                className={`input ${form.due_date ? "input--filled" : ""}`}
                 value={form.due_date}
                 onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
               />
@@ -301,17 +315,31 @@ export default function TaskEdit() {
           </div>
           {siblingTasks.length > 0 ? (
             <Field label="Blocked by">
-              <div className="space-y-1.5 max-h-40 overflow-y-auto rounded-md border border-[hsl(var(--border))] p-2">
+              <div
+                className="stack-2"
+                style={{
+                  maxHeight: 160,
+                  overflowY: "auto",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "var(--radius)",
+                  padding: 8,
+                }}
+              >
                 {siblingTasks.map((s) => {
                   const checked = form.blocked_by.includes(s.id);
                   return (
-                    <label key={s.id} className="flex items-center gap-2 text-sm">
-                      <Checkbox
+                    <label
+                      key={s.id}
+                      className="row-c"
+                      style={{ fontSize: 13, cursor: "pointer" }}
+                    >
+                      <input
+                        type="checkbox"
                         checked={checked}
-                        onCheckedChange={(v) =>
+                        onChange={(e) =>
                           setForm((f) => ({
                             ...f,
-                            blocked_by: v === true
+                            blocked_by: e.target.checked
                               ? [...f.blocked_by, s.id]
                               : f.blocked_by.filter((bid) => bid !== s.id),
                           }))
@@ -355,13 +383,21 @@ export default function TaskEdit() {
   );
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="space-y-2">
-      <Label className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
+    <div className="field">
+      <label className="label-form">
         {label}
-        {required ? <span className="ml-1 text-primary">*</span> : null}
-      </Label>
+        {required ? <span className="req">*</span> : null}
+      </label>
       {children}
     </div>
   );
