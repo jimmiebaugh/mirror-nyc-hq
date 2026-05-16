@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
@@ -27,10 +28,12 @@ import { toast } from "@/hooks/use-toast";
  *   .label-form + .input (with .input--filled on populated fields).
  *   .savebar at the bottom.
  *
- * The Team card is rendered as a placeholder for now (full multi-user
- * picker lands when Team page ships in 5.4); the form persists the
- * shipped account_managers + designers join-table state via the existing
- * routes, but the picker UI is out of scope for the revision pass.
+ * Team card (Phase 5.6.1 catch-up): Account Managers + Designers are
+ * multi RecordCombobox pickers sourced from `users` (active=true). Save
+ * diffs against the initial set and INSERTs/DELETEs join rows on
+ * `project_account_managers` / `project_designers`, same pattern
+ * VenueEdit uses for `venue_venue_types`. There is no role distinction
+ * inside each picker; the schema only carries the two arrays.
  */
 
 type FormState = {
@@ -87,7 +90,12 @@ export default function ProjectEdit() {
   const navigate = useNavigate();
   const [initial, setInitial] = useState<FormState>(EMPTY);
   const [form, setForm] = useState<FormState>(EMPTY);
-  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [clientLabels, setClientLabels] = useState<Map<string, string>>(new Map());
+  const [accountManagerIds, setAccountManagerIds] = useState<string[]>([]);
+  const [initialAccountManagerIds, setInitialAccountManagerIds] = useState<string[]>([]);
+  const [designerIds, setDesignerIds] = useState<string[]>([]);
+  const [initialDesignerIds, setInitialDesignerIds] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
@@ -96,11 +104,16 @@ export default function ProjectEdit() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [clientsRes, projectRes] = await Promise.all([
+      const [clientsRes, usersRes, projectRes, amRes, dsRes] = await Promise.all([
         supabase
           .from("clients")
           .select("id, name")
           .order("name", { ascending: true }),
+        supabase
+          .from("users")
+          .select("id, full_name, email")
+          .eq("active", true)
+          .order("full_name", { ascending: true }),
         isCreate
           ? Promise.resolve({ data: null, error: null })
           : supabase
@@ -110,9 +123,38 @@ export default function ProjectEdit() {
               )
               .eq("id", id)
               .single(),
+        isCreate
+          ? Promise.resolve({ data: [] as { user_id: string }[] })
+          : supabase
+              .from("project_account_managers")
+              .select("user_id")
+              .eq("project_id", id),
+        isCreate
+          ? Promise.resolve({ data: [] as { user_id: string }[] })
+          : supabase
+              .from("project_designers")
+              .select("user_id")
+              .eq("project_id", id),
       ]);
       if (!active) return;
-      setClients((clientsRes.data ?? []) as ClientOption[]);
+      const labels = new Map<string, string>();
+      for (const c of (clientsRes.data ?? []) as ClientOption[]) {
+        labels.set(c.id, c.name ?? "Untitled");
+      }
+      setClientLabels(labels);
+      type UserRow = { id: string; full_name: string | null; email: string };
+      setUserOptions(
+        ((usersRes.data ?? []) as UserRow[]).map((u) => ({
+          id: u.id,
+          label: u.full_name?.trim() || u.email,
+        })),
+      );
+      const amIds = ((amRes.data ?? []) as { user_id: string }[]).map((r) => r.user_id);
+      const dsIds = ((dsRes.data ?? []) as { user_id: string }[]).map((r) => r.user_id);
+      setAccountManagerIds(amIds);
+      setInitialAccountManagerIds(amIds);
+      setDesignerIds(dsIds);
+      setInitialDesignerIds(dsIds);
       if (!isCreate && projectRes && "data" in projectRes && projectRes.data) {
         type Row = {
           name: string;
@@ -170,8 +212,13 @@ export default function ProjectEdit() {
   }, [id, isCreate]);
 
   const dirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(initial),
-    [form, initial],
+    () =>
+      JSON.stringify(form) !== JSON.stringify(initial) ||
+      JSON.stringify([...accountManagerIds].sort()) !==
+        JSON.stringify([...initialAccountManagerIds].sort()) ||
+      JSON.stringify([...designerIds].sort()) !==
+        JSON.stringify([...initialDesignerIds].sort()),
+    [form, initial, accountManagerIds, initialAccountManagerIds, designerIds, initialDesignerIds],
   );
 
   const onStatusChange = (next: ProjectStatus) => {
@@ -196,6 +243,54 @@ export default function ProjectEdit() {
     }
     setConfirmLeaveOpen(true);
   };
+
+  // Client list cached on the page; RecordCombobox loadOptions returns the
+  // pre-fetched array so the trigger renders the selected name immediately
+  // (avoids a UUID flash on edit-mode mount).
+  const clientOptions = useMemo(
+    () =>
+      Array.from(clientLabels.entries()).map(([id, label]) => ({ id, label })),
+    [clientLabels],
+  );
+  const loadClientOptions = useCallback(
+    async () => clientOptions,
+    [clientOptions],
+  );
+
+  const loadUserOptions = useCallback(async () => userOptions, [userOptions]);
+
+  const handleCreateClient = useCallback(
+    async (data: Record<string, string>) => {
+      const { data: userRes } = await supabase.auth.getUser();
+      const created_by = userRes.user?.id;
+      if (!created_by) {
+        toast({ title: "Not signed in", variant: "destructive" });
+        return null;
+      }
+      const payload = {
+        name: data.name,
+        industry: data.industry || null,
+        created_by,
+      };
+      const { data: row, error } = await supabase
+        .from("clients")
+        .insert(payload)
+        .select("id, name")
+        .single();
+      if (error || !row) {
+        toast({ title: "Create failed", description: error?.message, variant: "destructive" });
+        return null;
+      }
+      const created = { id: row.id, label: row.name ?? "Untitled" };
+      setClientLabels((prev) => {
+        const next = new Map(prev);
+        next.set(created.id, created.label);
+        return next;
+      });
+      return created;
+    },
+    [],
+  );
 
   const onSave = async () => {
     if (!form.name.trim()) {
@@ -233,6 +328,7 @@ export default function ProjectEdit() {
       status_notes: form.statusNotes || null,
       client_notes: form.clientNotes || null,
     };
+    let projectId = id;
     if (isCreate) {
       const { data: userRes } = await supabase.auth.getUser();
       const created_by = userRes.user?.id;
@@ -241,21 +337,60 @@ export default function ProjectEdit() {
         .insert({ ...payload, created_by })
         .select("id")
         .single();
-      setSaving(false);
-      if (error) {
-        toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      if (error || !data) {
+        setSaving(false);
+        toast({ title: "Save failed", description: error?.message, variant: "destructive" });
         return;
       }
-      toast({ title: "Project created" });
-      navigate(`/projects/${data.id}`);
+      projectId = data.id;
     } else {
       const { error } = await supabase.from("projects").update(payload).eq("id", id);
-      setSaving(false);
       if (error) {
+        setSaving(false);
         toast({ title: "Save failed", description: error.message, variant: "destructive" });
         return;
       }
-      setInitial(form);
+    }
+
+    if (projectId) {
+      const amAdd = accountManagerIds.filter((u) => !initialAccountManagerIds.includes(u));
+      const amRemove = initialAccountManagerIds.filter((u) => !accountManagerIds.includes(u));
+      for (const userId of amAdd) {
+        await supabase
+          .from("project_account_managers")
+          .insert({ project_id: projectId, user_id: userId });
+      }
+      for (const userId of amRemove) {
+        await supabase
+          .from("project_account_managers")
+          .delete()
+          .eq("project_id", projectId)
+          .eq("user_id", userId);
+      }
+      const dsAdd = designerIds.filter((u) => !initialDesignerIds.includes(u));
+      const dsRemove = initialDesignerIds.filter((u) => !designerIds.includes(u));
+      for (const userId of dsAdd) {
+        await supabase
+          .from("project_designers")
+          .insert({ project_id: projectId, user_id: userId });
+      }
+      for (const userId of dsRemove) {
+        await supabase
+          .from("project_designers")
+          .delete()
+          .eq("project_id", projectId)
+          .eq("user_id", userId);
+      }
+    }
+
+    setSaving(false);
+    setInitial(form);
+    setInitialAccountManagerIds(accountManagerIds);
+    setInitialDesignerIds(designerIds);
+    if (isCreate && projectId) {
+      toast({ title: "Project created" });
+      navigate(`/projects/${projectId}`);
+    } else {
       toast({ title: "Saved" });
     }
   };
@@ -314,21 +449,18 @@ export default function ProjectEdit() {
               />
             </FormField>
             <FormField label="Client">
-              <select
-                className={`input ${form.clientId ? "input--filled" : ""}`}
-                value={form.clientId ?? "__none"}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    clientId: e.target.value === "__none" ? null : e.target.value,
-                  }))
-                }
-              >
-                <option value="__none">No client</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name ?? "Untitled"}</option>
-                ))}
-              </select>
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadClientOptions }}
+                value={form.clientId}
+                onChange={(next) => setForm((f) => ({ ...f, clientId: next }))}
+                entityLabel="Client"
+                placeholder="No client"
+                miniCreateFields={[
+                  { key: "name", label: "Name", required: true, placeholder: "Olipop" },
+                  { key: "industry", label: "Industry", placeholder: "Beverage" },
+                ]}
+                onMiniCreate={handleCreateClient}
+              />
             </FormField>
             <FormField label="Status">
               <select
@@ -342,19 +474,19 @@ export default function ProjectEdit() {
               </select>
             </FormField>
             <FormField label="Category">
-              <input
-                className={`input ${form.category ? "input--filled" : ""}`}
-                value={form.category}
-                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                placeholder="Pop-Up"
+              <RecordCombobox
+                source={{ kind: "lookup", table: "project_categories" }}
+                value={form.category || null}
+                onChange={(v) => setForm((f) => ({ ...f, category: v ?? "" }))}
+                entityLabel="Category"
               />
             </FormField>
             <FormField label="City">
-              <input
-                className={`input ${form.city ? "input--filled" : ""}`}
-                value={form.city}
-                onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                placeholder="LA"
+              <RecordCombobox
+                source={{ kind: "lookup", table: "cities" }}
+                value={form.city || null}
+                onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
+                entityLabel="city"
               />
             </FormField>
             <FormField label="Budget">
@@ -382,11 +514,28 @@ export default function ProjectEdit() {
           <div className="block-lbl">
             <span className="label-section">Team</span>
           </div>
-          <p className="subtle" style={{ fontSize: 13 }}>
-            Account Lead, Co-Lead, Lead Designer, and Designer pickers land
-            when the Team page ships (5.4). Until then, project assignments
-            are managed directly in the Supabase dashboard.
-          </p>
+          <div className="g2">
+            <FormField label="Account Managers">
+              <RecordCombobox
+                multi
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                multiValue={accountManagerIds}
+                onMultiChange={setAccountManagerIds}
+                entityLabel="user"
+                placeholder="Add account manager..."
+              />
+            </FormField>
+            <FormField label="Designers">
+              <RecordCombobox
+                multi
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                multiValue={designerIds}
+                onMultiChange={setDesignerIds}
+                entityLabel="user"
+                placeholder="Add designer..."
+              />
+            </FormField>
+          </div>
         </div>
       </section>
 

@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { InlineAddSelect } from "@/components/data/InlineAddSelect";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
-import { useLookup } from "@/lib/hq/lookups";
+import { formatPhone } from "@/lib/hq/phone";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,8 +64,6 @@ export default function ClientEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
-
-  const cities = useLookup("cities");
 
   useEffect(() => {
     if (isCreate) return;
@@ -231,14 +229,11 @@ export default function ClientEdit() {
               />
             </FormField>
             <FormField label="City">
-              <InlineAddSelect
-                options={cities.options}
+              <RecordCombobox
+                source={{ kind: "lookup", table: "cities" }}
                 value={form.city || null}
-                onSelect={(v) => setForm((f) => ({ ...f, city: v }))}
-                onAdd={cities.addOption}
+                onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
                 entityLabel="city"
-                exampleName="NYC"
-                filled={Boolean(form.city)}
               />
             </FormField>
             <FormField label="Website URL">
@@ -292,6 +287,9 @@ export default function ClientEdit() {
                 className={`input ${form.contact_phone ? "input--filled" : ""}`}
                 value={form.contact_phone}
                 onChange={(e) => setForm((f) => ({ ...f, contact_phone: e.target.value }))}
+                onBlur={() =>
+                  setForm((f) => ({ ...f, contact_phone: formatPhone(f.contact_phone) }))
+                }
                 placeholder="(212) 555-0000"
               />
             </FormField>

@@ -11,11 +11,13 @@ import { applyFilters } from "@/lib/hq/filterStateApply";
 import { supabase } from "@/integrations/supabase/client";
 import {
   loadDeliverables,
+  updateDeliverableStatus,
   DELIVERABLE_STATUS_VALUES,
   type DeliverableListRow,
   type DeliverableStatus,
 } from "@/lib/deliverables/queries";
 import { deliverableStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
+import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { formatShortDate } from "@/lib/hq/dates";
 
 /**
@@ -244,10 +246,19 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               label: "Status",
               sort: (a, b) => a.status.localeCompare(b.status),
               render: (r) => (
-                <span className={`pill p-${deliverableStatusToken(r.status)}`}>
-                  <span className="dt" />
-                  {r.status}
-                </span>
+                <ClickPillCell
+                  value={r.status}
+                  options={DELIVERABLE_STATUS_VALUES}
+                  tokenMap={deliverableStatusToken}
+                  onSave={async (next) => {
+                    await updateDeliverableStatus(r.id, next as DeliverableStatus);
+                    setRows((rs) =>
+                      rs.map((row) =>
+                        row.id === r.id ? { ...row, status: next as DeliverableStatus } : row,
+                      ),
+                    );
+                  }}
+                />
               ),
             },
             {

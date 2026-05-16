@@ -38,3 +38,8 @@ export async function updateTaskStatus(id: string, status: TaskStatus) {
   const { error } = await supabase.from("tasks").update({ status }).eq("id", id);
   if (error) throw error;
 }
+
+export async function updateTaskPriority(id: string, priority: TaskPriority) {
+  const { error } = await supabase.from("tasks").update({ priority }).eq("id", id);
+  if (error) throw error;
+}

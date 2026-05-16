@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   loadTasks,
+  updateTaskPriority,
   updateTaskStatus,
   TASK_PRIORITY_VALUES,
   TASK_STATUS_VALUES,
@@ -18,7 +19,12 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/tasks/queries";
-import { taskStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
+import {
+  statusTextDecoration,
+  taskPriorityToken,
+  taskStatusToken,
+} from "@/lib/home/projectStatusToken";
+import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { formatShortDate } from "@/lib/hq/dates";
 import { toast } from "@/hooks/use-toast";
 
@@ -42,16 +48,7 @@ const FILTER_FIELDS = [
 ];
 
 function priorityTokenClass(p: TaskPriority): string {
-  switch (p) {
-    case "Urgent":
-      return "pill pill-sm p-destructive";
-    case "High":
-      return "pill pill-sm p-warn";
-    case "Low":
-    case "Normal":
-    default:
-      return "pill pill-sm p-muted";
-  }
+  return `pill pill-sm p-${taskPriorityToken(p)}`;
 }
 
 export default function TasksList({ view }: { view: ViewKind }) {
@@ -338,10 +335,19 @@ export default function TasksList({ view }: { view: ViewKind }) {
               label: "Status",
               sort: (a, b) => a.status.localeCompare(b.status),
               render: (r) => (
-                <span className={`pill p-${taskStatusToken(r.status)}`}>
-                  <span className="dt" />
-                  {r.status}
-                </span>
+                <ClickPillCell
+                  value={r.status}
+                  options={TASK_STATUS_VALUES}
+                  tokenMap={taskStatusToken}
+                  onSave={async (next) => {
+                    await updateTaskStatus(r.id, next as TaskStatus);
+                    setRows((rs) =>
+                      rs.map((row) =>
+                        row.id === r.id ? { ...row, status: next as TaskStatus } : row,
+                      ),
+                    );
+                  }}
+                />
               ),
             },
             {
@@ -349,7 +355,19 @@ export default function TasksList({ view }: { view: ViewKind }) {
               label: "Priority",
               sort: (a, b) => a.priority.localeCompare(b.priority),
               render: (r) => (
-                <span className={priorityTokenClass(r.priority)}>{r.priority}</span>
+                <ClickPillCell
+                  value={r.priority}
+                  options={TASK_PRIORITY_VALUES}
+                  tokenMap={taskPriorityToken}
+                  onSave={async (next) => {
+                    await updateTaskPriority(r.id, next as TaskPriority);
+                    setRows((rs) =>
+                      rs.map((row) =>
+                        row.id === r.id ? { ...row, priority: next as TaskPriority } : row,
+                      ),
+                    );
+                  }}
+                />
               ),
             },
             {

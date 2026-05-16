@@ -204,6 +204,17 @@ export async function deleteOutlookEntry(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function updateOutlookConfidence(
+  id: string,
+  confidence: OutlookConfidence,
+): Promise<void> {
+  const { error } = await supabase
+    .from("outlook_entries" as never)
+    .update({ confidence } as never)
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function unlinkOutlookProject(id: string): Promise<OutlookEntry> {
   const { data, error } = await supabase
     .from("outlook_entries" as never)
