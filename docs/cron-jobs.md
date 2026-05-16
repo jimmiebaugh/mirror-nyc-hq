@@ -43,6 +43,17 @@ Cron-only; no UI affordance for manual triggering. The conservative retention wi
 ### `ts-cron-monthly-spend-reset` (1st of each month, 00:01 UTC)
 Resets `global_settings.anthropic_spend_current_month_usd` to 0 and `cap_alert_sent_this_month` to false. Without this, the cap alert never re-arms after the first month it fires.
 
+## HQ Core
+
+### `hq-cron-deliverable-due-3d` (13:00 UTC daily, Phase 5.5)
+Daily 09:00 ET fire. Queries `deliverables WHERE due_date = CURRENT_DATE + 3 AND status NOT IN ('Complete', 'Skipped')`. Per matched deliverable, looks up `project_account_managers` for the deliverable's project and POSTs to `notifications-dispatch` with `event_type='deliverable_due_3d'`. Recipients fall through the user's `user_notification_preferences` + global kill-switch checks at the dispatch layer. No-op rows produce no dispatch calls.
+
+### `hq-cron-task-due-today` (12:00 UTC daily, Phase 5.5)
+Daily 08:00 ET fire. Queries `tasks WHERE due_date = CURRENT_DATE AND status <> 'Done' AND assignee_id IS NOT NULL`. POSTs to `notifications-dispatch` per task with the single assignee as recipient (`event_type='task_due_today'`).
+
+### `hq-cron-event-date-today` (11:00 UTC daily, Phase 5.5)
+Daily 07:00 ET fire. Three parallel queries on `projects` for rows where `install_dates_start`, `live_dates_start`, or `removal_dates_start` equals today. Recipients per project = union of `project_account_managers` + `project_designers` (deduped). POSTs to `notifications-dispatch` per matched project with `event_type='event_date_today'` and `extra.kind` set to `'Install' | 'Live' | 'Removal'` for the body template.
+
 ## Cross-cutting
 
 ### `ts-send-pull-notification` (Phase 3.9, not cron)

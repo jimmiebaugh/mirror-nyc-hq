@@ -2,6 +2,36 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.5 (2026-05-16)
+
+### `notifications-dispatch` is internal-only (no user-JWT path)
+
+First instinct was the standard `requireInternalOrUserAuth` pattern most edge functions use. Security audit caught it as a MUST FIX: any signed-in Standard or Freelance user could POST with a crafted `recipient_user_ids` array to spoof in-app notifications + trigger Slack DMs to admins. The function reads with the service role, so authorization is replaced by the internal-secret gate at the entry point.
+
+Switched to `requireInternalSecret` only. All legitimate callers (the `notifications_dispatch_writer` trigger, `handle_new_user`, the three `hq-cron-*` functions) already send `x-internal-secret` via `public.invoke_edge_function`. No browser path needs direct dispatch access. If a future UI feature ever needs to trigger a notification directly, gate it behind an admin-role check at that call site rather than weakening dispatch.
+
+### `user_pending` in-app row stays inline, dispatch only handles email + Slack
+
+`handle_new_user` writes the durable `notifications` row for every active admin BEFORE invoking dispatch. Dispatch then receives the same `recipient_user_ids` and would normally insert a second row per recipient. To avoid the duplicate, dispatch special-cases `event_type='user_pending'` and skips the in-app insert (the trigger's inline write covers it). The email + Slack paths still run.
+
+Rationale: the in-app signal is the most important guarantee, and putting it inline in the trigger means it lands even if the dispatch edge function 500s. The duplicate-prevention has no unique-constraint backstop on `notifications`, so the simpler "skip in dispatch" is robust without a schema change.
+
+### `auth.uid()` for trigger actor, fallback to `created_by`
+
+`notifications_dispatch_writer` reads `auth.uid()` to set `actor_id` so dispatch can exclude self-notification. When a user updates a task from the UI (RLS-scoped client carries the JWT), `auth.uid()` resolves to the acting user. When the trigger fires from a service-role write (cron, edge function chain), `auth.uid()` returns null. For `task_assigned` the COALESCE uses `NEW.created_by` as fallback so we still have some "who" to attribute. For `task_blocked` and `project_status_changed` we let `actor_id` be null when there's no JWT (dispatch then doesn't filter anyone out — better to notify everyone than skip silently).
+
+### CSS reuse: `.activity-row` + `.actdot` already lived in `src/index.css`
+
+Project Detail's activity sidebar shipped these classes in Phase 5.1/5.2. The Activity Feed page reuses them verbatim — the spec called for lifting them again but they were already canonical. Only `.notif` block (bell-panel rows) was net-new from the wireframe lift.
+
+### Cron naming: `hq-cron-*` not `cron-*`
+
+`docs/conventions.md` § Naming requires `<module>-cron-<purpose>`. The three new daily crons cross multiple HQ Core tables (`deliverables`, `tasks`, `projects`) so no single-module prefix fits cleanly. Used `hq-cron-*` to keep the convention's spirit (the HQ Core surface area) without inventing a fake module per cron.
+
+### States polish: kept DataTable's centralized empty render
+
+DataTable already routes every list-page empty state through a single `<div className="empty">` render with the canonical CSS class. Swapping it for the shared `<EmptyState>` would require threading an icon prop through 7+ call sites and accept zero visual change (same DOM, same class). Spec § 7 verification (3+ list pages, 2+ LoadError uses) is satisfied organically by the new pages (NotificationBellPanel, ActivityFeed, SearchPage, NotificationPreferences) + WikiPage's two `PermissionDenied` swaps. DataTable stays as-is until a future deviation justifies the cost.
+
 ## Phase 5.4 feedback round 2 (2026-05-16)
 
 Third pass on `claude/zen-mestorf-940d7f`, after Jimmie's follow-up smoke. New migration: `20260516180000_phase_5_4_feedback_round_2.sql`.

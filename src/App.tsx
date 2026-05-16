@@ -39,7 +39,9 @@ import WikiPageEdit from "./pages/wiki/WikiPageEdit";
 import TeamList from "./pages/team/TeamList";
 import TeamMemberEdit from "./pages/team/TeamMemberEdit";
 import SettingsPage from "./pages/settings/SettingsPage";
-import ComingSoon from "./pages/ComingSoon";
+import ActivityFeed from "./pages/activity/ActivityFeed";
+import SearchPage from "./pages/search/SearchPage";
+import NotificationPreferences from "./pages/notifications/NotificationPreferences";
 import NotFound from "./pages/NotFound.tsx";
 import TalentScoutIndex from "./pages/talent-scout/Index";
 import TalentScoutSettings from "./pages/talent-scout/Settings";
@@ -420,7 +422,7 @@ const App = () => (
                 path="/activity"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Activity Feed" />
+                    <ActivityFeed />
                   </StandardOrAdminRoute>
                 }
               />
@@ -428,9 +430,18 @@ const App = () => (
                 path="/search"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Search" />
+                    <SearchPage />
                   </StandardOrAdminRoute>
                 }
+              />
+              {/* Phase 5.5 notification preferences. Auth handled by the
+                  outer <ProtectedRoute><AppShell /></ProtectedRoute> group
+                  on line 101; no tier gate so all tiers (including
+                  Freelance) can manage their preferences. Same shape as
+                  /wiki below. */}
+              <Route
+                path="/notifications/preferences"
+                element={<NotificationPreferences />}
               />
               {/* Wiki: all tiers including Freelance. Account Logins page
                   is the only sub-page that excludes Freelance (enforced at

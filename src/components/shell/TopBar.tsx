@@ -8,7 +8,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
-import { IconBell, IconSearch } from "@/components/icons/HQIcons";
+import { IconSearch } from "@/components/icons/HQIcons";
+import { NotificationBellPanel } from "./NotificationBellPanel";
 
 function initialsFor(name?: string | null, email?: string | null) {
   const base = (name || email || "??").trim();
@@ -63,16 +64,7 @@ export function TopBar({
         />
       </form>
       <div className="flex-1" />
-      {/* Phase 5.1: bell is visual chrome only. Click is a no-op until the
-          5.5 bell panel ships. Badge is hardcoded to 0 (no unread query)
-          so no notifications-table read on shell mount. */}
-      <span
-        className="hq-iconbtn opacity-60 cursor-default"
-        aria-label="Notifications (lands in 5.5)"
-        role="img"
-      >
-        <IconBell className="h-[18px] w-[18px]" />
-      </span>
+      <NotificationBellPanel />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" className="hq-avatar">

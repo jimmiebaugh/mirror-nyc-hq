@@ -33,6 +33,10 @@ export default {
     "wikilayout", "wikinav", "wikipage", "wn", "wn--active",
     "cred", "cv", "cv--masked", "ca",
     "toggle", "toggle--on",
+    // Phase 5.5 notification bell + activity feed classes. Notif is built
+    // dynamically (`notif notif--unread`) per row; activity-row + actdot
+    // were already in src/index.css (Project Detail) but render here too.
+    "notif", "notif--unread", "activity-row", "actdot",
   ],
   prefix: "",
   theme: {
