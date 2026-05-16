@@ -27,11 +27,24 @@ export type FilterState = {
   chips: FilterChip[];
 };
 
+export type FilterLookupOption = {
+  id: string;
+  name: string;
+  /** Optional short label shown after the name in the picker (e.g. "Client"). */
+  sublabel?: string;
+};
+
 export type FilterFieldDef = {
   key: string;
   label: string;
-  type: "text" | "enum" | "user" | "date";
+  type: "text" | "enum" | "user" | "date" | "lookup";
   options?: string[];
+  /**
+   * Required for `type: "lookup"`. The picker shows these as a dropdown;
+   * the chip stores the picked `id` as its value. Chip display resolves
+   * the id back to `name` via this list.
+   */
+  lookupOptions?: FilterLookupOption[];
   /**
    * When true, this field def participates in chip label resolution but is
    * NOT offered in the + Add filter popover. Used for surfaces that ship a
@@ -46,6 +59,7 @@ const OPS_FOR_TYPE: Record<FilterFieldDef["type"], string[]> = {
   enum: ["is", "is not", "is any of"],
   user: ["is", "is not"],
   date: ["is", "is before", "is after"],
+  lookup: ["is", "is not"],
 };
 
 export function emptyFilterState(): FilterState {
@@ -84,6 +98,22 @@ export function FilterBar({
   const fieldLabel = (key: string) =>
     fields.find((f) => f.key === key)?.label ?? key;
 
+  /**
+   * Lookup chips store the picked option's id as their value (uuid). For
+   * display, resolve id -> name via the field's lookupOptions so the chip
+   * reads as the human-readable picked name, not a bare uuid.
+   */
+  const chipDisplayValue = (chip: FilterChip): string => {
+    const def = fields.find((f) => f.key === chip.field);
+    if (def?.type === "lookup" && def.lookupOptions) {
+      const raw = Array.isArray(chip.value) ? chip.value[0] : chip.value;
+      const match = def.lookupOptions.find((o) => o.id === raw);
+      if (match) return match.name;
+      return raw;
+    }
+    return Array.isArray(chip.value) ? chip.value.join(", ") : chip.value;
+  };
+
   const removeChip = (i: number) => {
     onChange({ ...state, chips: state.chips.filter((_, idx) => idx !== i) });
   };
@@ -121,9 +151,7 @@ export function FilterBar({
           <span className="fchip">
             <span className="k">{fieldLabel(chip.field)}</span>
             <span className="op">{chip.op}</span>
-            <span className="v">
-              {Array.isArray(chip.value) ? chip.value.join(", ") : chip.value}
-            </span>
+            <span className="v">{chipDisplayValue(chip)}</span>
             <span
               className="x"
               role="button"
@@ -218,9 +246,28 @@ export function FilterBar({
             ) : null}
 
             {building.field && building.op ? (
-              building.field.type === "enum" &&
-              building.field.options &&
-              building.op !== "is any of" ? (
+              building.field.type === "lookup" &&
+              building.field.lookupOptions ? (
+                <select
+                  className="input"
+                  style={{ height: 36 }}
+                  value={building.value ?? ""}
+                  onChange={(e) =>
+                    setBuilding((b) => ({ ...b, value: e.target.value }))
+                  }
+                >
+                  <option value="" disabled>
+                    Value...
+                  </option>
+                  {building.field.lookupOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.sublabel ? `${o.name} (${o.sublabel})` : o.name}
+                    </option>
+                  ))}
+                </select>
+              ) : building.field.type === "enum" &&
+                building.field.options &&
+                building.op !== "is any of" ? (
                 <select
                   className="input"
                   style={{ height: 36 }}

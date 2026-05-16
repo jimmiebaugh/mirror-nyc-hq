@@ -221,6 +221,18 @@ Jimmie's job at the squash-approval gate is to open the screenshots side-by-side
 
 Burn: ~5 minutes per surface for the screenshot pass. Save: an entire revision round.
 
+### 4.1.a Carve-out for invasive-schema sub-phases
+
+When a sub-phase's migrations would break a live-DB screenshot (RENAME / DROP of tables or columns that the new UI immediately depends on; column adds that the new UI immediately requires), the AWAITING-gate screenshot pass can't run against the live linked DB. The new surfaces would query for columns that don't exist yet.
+
+Two options when this happens:
+
+1. **Local Supabase via `supabase start`** (preferred when available): bring up a local DB, `supabase migration up --local` against the worktree branch's migration files, point the dev server at the local URL via a temporary `.env.local` override, capture screenshots, embed in the AWAITING block.
+
+2. **Skip live screenshots** (acceptable fallback): rely on code-reviewer cold pass + JSDoc wireframe-binding citations + post-squash eyeball. Document the decision explicitly in the AWAITING block under a "Screenshots not captured (invasive schema reshape)" subsection citing which migrations created the conflict.
+
+Either option is fine; default to (2) when local Supabase isn't already running, since spinning it up adds Docker + setup overhead that isn't proportional to the sub-phase's risk. Phase 5.2.3 took option (2): the organizations -> vendors rename + the people FK reshape + the affiliations column drop together meant every new shipped surface would fail to render against the still-pre-migration live DB. The post-squash eyeball caught zero drift in that round.
+
 ### 4.2. Migration push timing (deferred until squash-approval gate)
 
 Old habit: `supabase db push --linked` ran during Code's implementation pass so types could regenerate against the live DB. Problem: if the work halts mid-flight (cancelled prompt, scope reset, branch deletion), the live DB is ahead of `main` and the shipped frontend breaks against the renamed columns and tables. The 2026-05-15 Phase 5.2.2 attempt halted exactly this way and required a Step-0 reconciliation pass to unbreak `hq.mirrornyc.com`.
@@ -275,7 +287,7 @@ Adds 30 to 60 minutes of design upfront per surface but eliminates "built incons
 
 ### 4.5. Squash autonomy (Code runs the full ship flow after Jimmie's approval)
 
-After Jimmie reviews the AWAITING SQUASH APPROVAL block (screenshots + visual diff summary + carry-forward items) and says "go" or "squash" or "approve" in chat, Code runs the full squash flow autonomously. NOT as a numbered shell-command list for Jimmie to copy-paste.
+After Jimmie reviews the AWAITING SQUASH APPROVAL block (screenshots + visual diff summary + carry-forward items) and says "go" or "squash" or "approve" in chat, Code runs the autonomous portion of the ship flow + then surfaces a manual push hand-off. NOT as a numbered shell-command list for Jimmie to copy-paste, except for the final two `git push` lines which the auto-mode classifier blocks at the Bash-tool layer (see step 5e below).
 
 The ship flow:
 
@@ -283,18 +295,31 @@ The ship flow:
 2. From the worktree directory: `supabase gen types typescript --linked > src/integrations/supabase/types.ts`.
 3. Run the spec's `## Seed data for the visual check` SQL block against the live DB.
 4. Commit any regenerated `types.ts` to the worktree branch as `[skip netlify] regen types from linked DB`.
-5. From the bare repo: `git checkout main && git pull && git merge --squash <worktree-branch>` and commit with the message body drafted in the AWAITING block.
-6. From the bare repo: `git push origin main`.
-7. Update `CHECKPOINT.md` with the new What's-live entry + Recent commits + Recent migrations + Next up.
-8. From the bare repo: `git add CHECKPOINT.md && git commit -m "[skip netlify] Backfill <squash-hash> Phase <X.Y> into CHECKPOINT.md" && git push origin main`.
-9. Worktree cleanup: `git worktree remove <path> && git branch -D <branch>`.
-10. Overwrite `OUTPUTS/COWORK_SYNC.md` with the SHIPPED block per the two-write convention.
+5. From the bare repo: `git checkout main && git pull && git merge --squash <worktree-branch>` and commit with the message body drafted in the AWAITING block. **Squash commit lands locally; do NOT push yet.**
+5b. (Continues automatically.) Update `CHECKPOINT.md` with What's-live entry + Recent commits + Recent migrations + Next up. From the bare repo: `git add CHECKPOINT.md && git commit -m "[skip netlify] Backfill <squash-hash> Phase <X.Y> into CHECKPOINT.md"`. **Backfill commit lands locally; still do NOT push yet.**
+5c. (Continues automatically.) Worktree cleanup: `git worktree remove .claude/worktrees/<branch> && git branch -D claude/<branch>`.
+5d. (Continues automatically.) Overwrite `OUTPUTS/COWORK_SYNC.md` with the SHIPPED block per the two-write convention. The block documents that the push is pending Jimmie's hand-off (see the 5.2.3 SHIPPED block for the canonical phrasing: "Pushed to origin: yes (Jimmie ran the push manually; auto-mode classifier blocked the autonomous `git push origin main` despite explicit chat approval)").
+5e. **Manual hand-off to Jimmie.** Code surfaces in chat:
 
-Jimmie's role at the gate: review screenshots, give a one-word go (or send specific iteration feedback if anything reads off). Jimmie does NOT run git or supabase commands; Code does.
+    > Ship flow complete locally. Two commits ahead of origin/main:
+    >   <squash-hash>  Phase X.Y: <summary>
+    >   <backfill-hash> [skip netlify] Backfill <squash-hash> into CHECKPOINT.md
+    >
+    > Run from the bare repo to push (Netlify deploys on the squash commit; backfill commit rides along as administrative tail):
+    >
+    >   git push origin main
+    >
+    > After the push lands, paste the deploy URL back so I can confirm.
 
-When Code drafts the AWAITING SQUASH APPROVAL block, frame the squash-flow section as Code's own checklist of what it will execute after approval. Not as instructions for Jimmie. The framing matters: "Squash + push flow (Code executes after approval)" not "Run from the BARE REPO root."
+    Jimmie runs `git push origin main` from his terminal. The auto-mode classifier blocking autonomous push doesn't apply to Jimmie's terminal session.
 
-Migration push specifically: `supabase db push --linked` reads the CWD's `supabase/migrations/` folder. Since the new migration files only exist on the worktree branch, the push MUST run from inside the worktree directory (`.claude/worktrees/<branch>/`). Running from the bare repo when main lacks the new migration files is a silent no-op and breaks the seed run downstream. The git operations in steps 5-9 still need the bare repo (you can't `git merge --squash` from inside a worktree of the branch you're trying to merge), but everything in steps 1-4 happens in the worktree.
+Jimmie's role at the gate: review screenshots, give a one-word go (or send specific iteration feedback if anything reads off). Jimmie runs only the final `git push` (per step 5e). Code does everything else.
+
+When Code drafts the AWAITING SQUASH APPROVAL block, frame the squash-flow section as Code's own checklist of what it will execute after approval. Not as instructions for Jimmie. The framing matters: "Squash + push flow (Code executes after approval)" not "Run from the BARE REPO root." The step 5e push hand-off is the only explicit instruction-for-Jimmie line in the block.
+
+Why manual push: the auto-mode classifier enforces at the Bash-tool layer; it doesn't read AskUserQuestion answers or chat approvals as policy overrides. Phase 5.2.3 confirmed this empirically (the autonomous push was blocked despite Jimmie's explicit "go"; Jimmie ran the push manually from his terminal). Two options on the table at the time: pre-add a Bash permission rule for `git push origin main` in `.claude/settings.json`, OR formalize a manual hand-off. The manual hand-off won because the push is the ONE Netlify-deploy-firing step per sub-phase; an explicit hand-off keeps the deploy moment intentional. Code still handles 90% of the toil (migrations + types + seed + squash + backfill + cleanup + sync-doc overwrite).
+
+Migration push specifically: `supabase db push --linked` reads the CWD's `supabase/migrations/` folder. Since the new migration files only exist on the worktree branch, the push MUST run from inside the worktree directory (`.claude/worktrees/<branch>/`). Running from the bare repo when main lacks the new migration files is a silent no-op and breaks the seed run downstream. The git operations in steps 5 through 5c still need the bare repo (you can't `git merge --squash` from inside a worktree of the branch you're trying to merge), but everything in steps 1-4 happens in the worktree.
 
 ---
 

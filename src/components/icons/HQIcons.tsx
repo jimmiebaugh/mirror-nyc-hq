@@ -83,6 +83,18 @@ export const IconOrgs = (p: IconProps) => (
   </Base>
 );
 
+// Phase 5.2 cleanup: distinct glyph for the Clients rail item so it
+// reads differently from Vendors (which keeps IconOrgs). Briefcase
+// shape evokes the revenue-side relationship; IconOrgs (office
+// building) stays with Vendors for the operations-side semantic.
+export const IconClients = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="3" y="7" width="18" height="13" rx="2" />
+    <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2" />
+    <path d="M3 13h18" />
+  </Base>
+);
+
 export const IconPeople = (p: IconProps) => (
   <Base {...p}>
     <circle cx="9" cy="8" r="3.2" />

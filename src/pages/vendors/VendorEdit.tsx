@@ -32,6 +32,10 @@ import { toast } from "@/hooks/use-toast";
  * carry the literal 'Internal Partner' string when the vendor is
  * Mirror-internal (locked Q1). Wireframe-v2 redraw deferred to a
  * future polish pass; see design-system § 11.
+ *
+ * 5.2 cleanup: Primary Address textarea added below the contact
+ * grid (matches ClientEdit shape; backed by the new
+ * `vendors.primary_address` column added in the cleanup migration).
  */
 
 type FormState = {
@@ -43,6 +47,7 @@ type FormState = {
   contact_name: string;
   contact_email: string;
   contact_phone: string;
+  primary_address: string;
   tags: string[];
   internal_rating: number | null;
 };
@@ -56,6 +61,7 @@ const EMPTY: FormState = {
   contact_name: "",
   contact_email: "",
   contact_phone: "",
+  primary_address: "",
   tags: [],
   internal_rating: null,
 };
@@ -81,7 +87,7 @@ export default function VendorEdit() {
       const { data, error } = await supabase
         .from("vendors")
         .select(
-          "name, category_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, tags, internal_rating",
+          "name, category_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating",
         )
         .eq("id", id)
         .single();
@@ -99,6 +105,7 @@ export default function VendorEdit() {
         contact_name: string | null;
         contact_email: string | null;
         contact_phone: string | null;
+        primary_address: string | null;
         tags: string[] | null;
         internal_rating: number | null;
       };
@@ -111,6 +118,7 @@ export default function VendorEdit() {
         contact_name: row.contact_name ?? "",
         contact_email: row.contact_email ?? "",
         contact_phone: row.contact_phone ?? "",
+        primary_address: row.primary_address ?? "",
         tags: row.tags ?? [],
         internal_rating: row.internal_rating,
       };
@@ -174,6 +182,7 @@ export default function VendorEdit() {
       contact_name: form.contact_name || null,
       contact_email: form.contact_email || null,
       contact_phone: form.contact_phone || null,
+      primary_address: form.primary_address || null,
       tags: form.tags,
       internal_rating: form.internal_rating,
     };
@@ -343,6 +352,15 @@ export default function VendorEdit() {
               />
             </FormField>
           </div>
+          <FormField label="Primary Address">
+            <textarea
+              className={`input textarea ${form.primary_address ? "input--filled" : ""}`}
+              value={form.primary_address}
+              onChange={(e) => setForm((f) => ({ ...f, primary_address: e.target.value }))}
+              placeholder="50 W 34th St, New York NY 10001"
+              rows={2}
+            />
+          </FormField>
         </div>
       </section>
 
