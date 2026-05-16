@@ -238,17 +238,24 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                 sort: (a, b) => a.name.localeCompare(b.name),
                 render: (r) => (
                   <div>
-                    <div className="lead">{r.name}</div>
                     {r.clientName ? (
                       <Link
                         to={r.clientId ? `/clients/${r.clientId}` : "#"}
                         className="sub"
-                        style={{ color: "rgba(190,78,68,0.85)" }}
+                        style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {r.clientName}
                       </Link>
                     ) : null}
+                    <Link
+                      to={`/projects/${r.id}`}
+                      className="lead"
+                      style={{ display: "block" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {r.name}
+                    </Link>
                   </div>
                 ),
               },
@@ -267,6 +274,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "status",
                 label: "Status",
+                width: 96,
                 sort: (a, b) => a.status.localeCompare(b.status),
                 render: (r) => (
                   <ClickPillCell
@@ -316,12 +324,14 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "leadName",
                 label: "Lead",
+                width: 140,
                 sort: (a, b) => (a.leadName ?? "").localeCompare(b.leadName ?? ""),
                 render: (r) => r.leadName ?? "-",
               },
               {
                 key: "designerName",
                 label: "Design",
+                width: 140,
                 sort: (a, b) => (a.designerName ?? "").localeCompare(b.designerName ?? ""),
                 render: (r) => r.designerName ?? "-",
               },

@@ -1165,6 +1165,13 @@
   .fchip .x:hover{color:hsl(var(--destructive));}
   .fchip--add{background:transparent;border-style:dashed;cursor:pointer;}
   .fchip--add span{color:hsl(var(--subtle-foreground));}
+  /* Toggle-style fchip used as a single-tap filter button (e.g. PeopleList
+     Affiliation row). Inline `style={{color}}` from the caller drives the
+     active fill. */
+  .fchip--btn{cursor:pointer;padding:0;}
+  .fchip--btn span{padding:0 12px;color:hsl(var(--muted-foreground));}
+  .fchip--btn.fchip--active{border-color:currentColor;background:color-mix(in srgb, currentColor 12%, transparent);}
+  .fchip--btn.fchip--active span{color:currentColor;font-weight:700;}
   .andor{font-family:var(--font-mono);font-size:10px;font-weight:700;color:hsl(var(--primary));letter-spacing:.06em;padding:0 2px;cursor:pointer;}
 
   /* Saved views dropdown trigger */

@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -705,6 +706,49 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_vendors: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          project_id: string
+          vendor_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          project_id: string
+          vendor_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          project_id?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_vendors_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_vendors_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_vendors_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
         ]
@@ -1593,6 +1637,45 @@ export type Database = {
           },
         ]
       }
+      vendor_subcategories: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          parent_category_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          parent_category_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          parent_category_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_subcategories_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_subcategories_parent_category_id_fkey"
+            columns: ["parent_category_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendors: {
         Row: {
           capabilities: string[]
@@ -1609,6 +1692,7 @@ export type Database = {
           name: string
           preferred: boolean
           primary_address: string | null
+          subcategory_id: string | null
           tags: string[]
           updated_at: string
           website_url: string | null
@@ -1628,6 +1712,7 @@ export type Database = {
           name: string
           preferred?: boolean
           primary_address?: string | null
+          subcategory_id?: string | null
           tags?: string[]
           updated_at?: string
           website_url?: string | null
@@ -1647,6 +1732,7 @@ export type Database = {
           name?: string
           preferred?: boolean
           primary_address?: string | null
+          subcategory_id?: string | null
           tags?: string[]
           updated_at?: string
           website_url?: string | null
@@ -1664,6 +1750,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "vendor_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendors_subcategory_id_fkey"
+            columns: ["subcategory_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_subcategories"
             referencedColumns: ["id"]
           },
         ]

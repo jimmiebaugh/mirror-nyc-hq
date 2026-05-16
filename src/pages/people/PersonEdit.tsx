@@ -30,7 +30,7 @@ import { formatPhone } from "@/lib/hq/phone";
  * this person contacts; save logic syncs venue_contact_people rows.
  */
 
-type PersonType = "Client" | "Vendor" | "Venue contact" | "Unaffiliated";
+type PersonType = "Client" | "Vendor" | "Venue" | "Unaffiliated";
 
 type FormState = {
   full_name: string;
@@ -120,7 +120,7 @@ export default function PersonEdit() {
         let resolvedType: PersonType = "Unaffiliated";
         if (row.client_id) resolvedType = "Client";
         else if (row.vendor_id) resolvedType = "Vendor";
-        else if (ids.length > 0) resolvedType = "Venue contact";
+        else if (ids.length > 0) resolvedType = "Venue";
         const next: FormState = {
           full_name: row.full_name,
           type: resolvedType,
@@ -157,7 +157,7 @@ export default function PersonEdit() {
       client_id: t === "Client" ? f.client_id : null,
       vendor_id: t === "Vendor" ? f.vendor_id : null,
     }));
-    if (t !== "Venue contact") {
+    if (t !== "Venue") {
       setVenueIds([]);
     }
   };
@@ -222,7 +222,7 @@ export default function PersonEdit() {
 
     // Sync venue_contact_people rows when Type=Venue contact; otherwise clear all.
     if (personId) {
-      const effectiveVenueIds = form.type === "Venue contact" ? venueIds : [];
+      const effectiveVenueIds = form.type === "Venue" ? venueIds : [];
       const toAdd = effectiveVenueIds.filter((v) => !initialVenueIds.includes(v));
       const toRemove = initialVenueIds.filter((v) => !effectiveVenueIds.includes(v));
       for (const venueId of toAdd) {
@@ -241,7 +241,7 @@ export default function PersonEdit() {
 
     setSaving(false);
     setInitial(form);
-    setInitialVenueIds(form.type === "Venue contact" ? venueIds : []);
+    setInitialVenueIds(form.type === "Venue" ? venueIds : []);
     if (isCreate && personId) {
       toast({ title: "Person created" });
       navigate(`/people/${personId}`);
@@ -260,7 +260,7 @@ export default function PersonEdit() {
 
   const showClientPicker = form.type === "Client";
   const showVendorPicker = form.type === "Vendor";
-  const showVenuePicker = form.type === "Venue contact";
+  const showVenuePicker = form.type === "Venue";
   const availableVenues = venues.filter((v) => !venueIds.includes(v.id));
 
   return (
@@ -300,7 +300,7 @@ export default function PersonEdit() {
 
           <FormField label="Type">
             <div className="row-c wrap" style={{ gap: 12 }}>
-              {(["Client", "Vendor", "Venue contact", "Unaffiliated"] as PersonType[]).map(
+              {(["Client", "Vendor", "Venue", "Unaffiliated"] as PersonType[]).map(
                 (t) => (
                   <label
                     key={t}

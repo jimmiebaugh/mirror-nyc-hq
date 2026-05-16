@@ -307,18 +307,24 @@ export default function TasksList({ view }: { view: ViewKind }) {
               render: (r) =>
                 r.project ? (
                   <div>
-                    <Link to={`/projects/${r.project.id}`} className="lead">
-                      {r.project.name}
-                    </Link>
                     {r.project.client ? (
                       <Link
                         to={`/clients/${r.project.client.id}`}
                         className="sub"
                         style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {r.project.client.name}
                       </Link>
                     ) : null}
+                    <Link
+                      to={`/projects/${r.project.id}`}
+                      className="lead"
+                      style={{ display: "block" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {r.project.name}
+                    </Link>
                   </div>
                 ) : (
                   <span className="subtle">-</span>

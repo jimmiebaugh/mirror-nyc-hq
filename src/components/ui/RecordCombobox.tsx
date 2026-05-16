@@ -48,7 +48,16 @@ import { useLookup, type LookupTable } from "@/lib/hq/lookups";
 
 export type Option = { id: string; label: string };
 
-type LookupSource = { kind: "lookup"; table: LookupTable };
+type LookupSource = {
+  kind: "lookup";
+  table: LookupTable;
+  /**
+   * Phase 5.6.2: scope option list to rows whose `parent_category_id`
+   * matches. Only `vendor_subcategories` supports this today; the hook
+   * passes it through to the SELECT filter and the INSERT payload.
+   */
+  parentScopeId?: string | null;
+};
 type RecordSource = {
   kind: "record";
   loadOptions: () => Promise<Option[]>;
@@ -97,7 +106,9 @@ export function RecordCombobox(props: RecordComboboxProps) {
 function LookupCombobox(
   props: RecordComboboxProps & { source: LookupSource },
 ) {
-  const lookup = useLookup(props.source.table);
+  const lookup = useLookup(props.source.table, {
+    parentScopeId: props.source.parentScopeId ?? null,
+  });
   const options: Option[] = useMemo(
     () => lookup.options.map((o) => ({ id: o.name, label: o.name })),
     [lookup.options],
