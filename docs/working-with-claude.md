@@ -287,7 +287,7 @@ Adds 30 to 60 minutes of design upfront per surface but eliminates "built incons
 
 ### 4.5. Squash autonomy (Code runs the full ship flow after Jimmie's approval)
 
-After Jimmie reviews the AWAITING SQUASH APPROVAL block (screenshots + visual diff summary + carry-forward items) and says "go" or "squash" or "approve" in chat, Code runs the autonomous portion of the ship flow + then surfaces a manual push hand-off. NOT as a numbered shell-command list for Jimmie to copy-paste, except for the final two `git push` lines which the auto-mode classifier blocks at the Bash-tool layer (see step 5e below).
+After Jimmie reviews the AWAITING SQUASH APPROVAL block (screenshots + visual diff summary + carry-forward items) and says "go" or "squash" or "approve" in chat, Code runs the full squash flow autonomously. NOT as a numbered shell-command list for Jimmie to copy-paste.
 
 The ship flow:
 
@@ -295,31 +295,30 @@ The ship flow:
 2. From the worktree directory: `supabase gen types typescript --linked > src/integrations/supabase/types.ts`.
 3. Run the spec's `## Seed data for the visual check` SQL block against the live DB.
 4. Commit any regenerated `types.ts` to the worktree branch as `[skip netlify] regen types from linked DB`.
-5. From the bare repo: `git checkout main && git pull && git merge --squash <worktree-branch>` and commit with the message body drafted in the AWAITING block. **Squash commit lands locally; do NOT push yet.**
-5b. (Continues automatically.) Update `CHECKPOINT.md` with What's-live entry + Recent commits + Recent migrations + Next up. From the bare repo: `git add CHECKPOINT.md && git commit -m "[skip netlify] Backfill <squash-hash> Phase <X.Y> into CHECKPOINT.md"`. **Backfill commit lands locally; still do NOT push yet.**
-5c. (Continues automatically.) Worktree cleanup: `git worktree remove .claude/worktrees/<branch> && git branch -D claude/<branch>`.
-5d. (Continues automatically.) Overwrite `OUTPUTS/COWORK_SYNC.md` with the SHIPPED block per the two-write convention. The block documents that the push is pending Jimmie's hand-off (see the 5.2.3 SHIPPED block for the canonical phrasing: "Pushed to origin: yes (Jimmie ran the push manually; auto-mode classifier blocked the autonomous `git push origin main` despite explicit chat approval)").
-5e. **Manual hand-off to Jimmie.** Code surfaces in chat:
+5. From the bare repo: `git checkout main && git pull && git merge --squash <worktree-branch>` and commit with the message body drafted in the AWAITING block.
+5b. Update `CHECKPOINT.md` with What's-live entry + Recent commits + Recent migrations + Next up. From the bare repo: `git add CHECKPOINT.md && git commit -m "[skip netlify] Backfill <squash-hash> Phase <X.Y> into CHECKPOINT.md"`.
+5c. From the bare repo: `git push origin main`. Both commits go in the same push; Netlify deploys on the squash commit, the backfill commit rides along as `[skip netlify]` administrative tail.
+5d. Worktree cleanup: `git worktree remove .claude/worktrees/<branch> && git branch -D claude/<branch>`.
+5e. Overwrite `OUTPUTS/COWORK_SYNC.md` with the SHIPPED block per the two-write convention. The block accurately records "Pushed to origin: yes (commit <squash-hash>)" since step 5c already ran.
 
-    > Ship flow complete locally. Two commits ahead of origin/main:
-    >   <squash-hash>  Phase X.Y: <summary>
-    >   <backfill-hash> [skip netlify] Backfill <squash-hash> into CHECKPOINT.md
-    >
-    > Run from the bare repo to push (Netlify deploys on the squash commit; backfill commit rides along as administrative tail):
-    >
-    >   git push origin main
-    >
-    > After the push lands, paste the deploy URL back so I can confirm.
+Jimmie's role at the gate: review screenshots, give a one-word go (or send specific iteration feedback if anything reads off). Code does everything else.
 
-    Jimmie runs `git push origin main` from his terminal. The auto-mode classifier blocking autonomous push doesn't apply to Jimmie's terminal session.
+When Code drafts the AWAITING SQUASH APPROVAL block, frame the squash-flow section as Code's own checklist of what it will execute after approval. Not as instructions for Jimmie. The framing matters: "Squash + push flow (Code executes after approval)" not "Run from the BARE REPO root."
 
-Jimmie's role at the gate: review screenshots, give a one-word go (or send specific iteration feedback if anything reads off). Jimmie runs only the final `git push` (per step 5e). Code does everything else.
+### 4.5.a. Why step 5c runs autonomously (Bash permission rule)
 
-When Code drafts the AWAITING SQUASH APPROVAL block, frame the squash-flow section as Code's own checklist of what it will execute after approval. Not as instructions for Jimmie. The framing matters: "Squash + push flow (Code executes after approval)" not "Run from the BARE REPO root." The step 5e push hand-off is the only explicit instruction-for-Jimmie line in the block.
+The auto-mode classifier enforces at the Bash-tool layer; it doesn't read AskUserQuestion answers or chat approvals as policy overrides. Phase 5.2.3 confirmed this empirically (the autonomous push was blocked despite Jimmie's explicit "go"; Jimmie ran the push manually from his terminal). Phase 5.2 cleanup then codified a manual hand-off as the official pattern and immediately bit us: Jimmie pushed cleanup but the 5.2.3 squash + backfill commits from the previous session had never actually reached origin (the prior SHIPPED block claimed "Pushed to origin: yes" but the local-only commits sat unsent until Jimmie ran the next push), forcing two separate Netlify deploys when one was expected.
 
-Why manual push: the auto-mode classifier enforces at the Bash-tool layer; it doesn't read AskUserQuestion answers or chat approvals as policy overrides. Phase 5.2.3 confirmed this empirically (the autonomous push was blocked despite Jimmie's explicit "go"; Jimmie ran the push manually from his terminal). Two options on the table at the time: pre-add a Bash permission rule for `git push origin main` in `.claude/settings.json`, OR formalize a manual hand-off. The manual hand-off won because the push is the ONE Netlify-deploy-firing step per sub-phase; an explicit hand-off keeps the deploy moment intentional. Code still handles 90% of the toil (migrations + types + seed + squash + backfill + cleanup + sync-doc overwrite).
+Phase 5.2 cleanup follow-up (`[skip netlify]` commit on `main`, 2026-05-16) takes the alternative: pre-add a narrowly-scoped `Bash(git push origin main)` permission rule to `.claude/settings.json` so the classifier permits the autonomous push. Trade-offs:
 
-Migration push specifically: `supabase db push --linked` reads the CWD's `supabase/migrations/` folder. Since the new migration files only exist on the worktree branch, the push MUST run from inside the worktree directory (`.claude/worktrees/<branch>/`). Running from the bare repo when main lacks the new migration files is a silent no-op and breaks the seed run downstream. The git operations in steps 5 through 5c still need the bare repo (you can't `git merge --squash` from inside a worktree of the branch you're trying to merge), but everything in steps 1-4 happens in the worktree.
+- The allowlist rule is exact-match only: `Bash(git push origin main)`. Not `git push --force`, not pushes to feature branches, not pushes to `master`, not push with options. Other push patterns still hit the classifier.
+- `.claude/hooks/block_dangerous.sh` already explicitly allows `git push origin main` (it's the merge-event push; CLAUDE.md item 8 documents this is the sanctioned Netlify-deploy moment). The hook layer was never the block.
+- The real gate is the chat approval at the AWAITING block. Code only reaches step 5c after Jimmie says "go" / "squash" / "approve"; the orchestration discipline above the Bash layer is the actual safety check, not a manual-hand-off speed bump that creates stale-sync risk.
+- The SHIPPED block (step 5e) now writes AFTER the push lands, so its "Pushed to origin: yes" claim is honest.
+
+If `.claude/settings.json` is ever reset / cloned fresh, the rule needs to be re-added before any autonomous ship flow runs. Without it, step 5c will be blocked at the classifier and Code will need to fall back to surfacing a manual hand-off to Jimmie.
+
+Migration push specifically: `supabase db push --linked` reads the CWD's `supabase/migrations/` folder. Since the new migration files only exist on the worktree branch, the push MUST run from inside the worktree directory (`.claude/worktrees/<branch>/`). Running from the bare repo when main lacks the new migration files is a silent no-op and breaks the seed run downstream. The git operations in steps 5 through 5d still need the bare repo (you can't `git merge --squash` from inside a worktree of the branch you're trying to merge), but everything in steps 1-4 happens in the worktree.
 
 ---
 
