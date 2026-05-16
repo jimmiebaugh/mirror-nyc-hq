@@ -448,6 +448,16 @@ When designing a new HQ surface, find the closest analog in Talent Scout and sta
 | A loading-while-AI-runs page (Final review generation, Venue research) | `FinalReviewLoading.tsx` |
 | A status-monitor surface (pull progress, scout progress) | `PullDetail.tsx` (PullStepsList live-updating via Realtime) |
 
+### Wireframe-canonical class names (binding rule)
+
+When a locked wireframe HTML exists for a sub-phase (`OUTPUTS/phase-X-*-wireframe-v*-LOCKED.html`), components MUST consume the wireframe's CSS class names byte-for-byte. Lift the wireframe's `<style>` block into `src/index.css` as a single "Phase X HQ Core surfaces" block; render JSX that mirrors the wireframe's DOM structure exactly.
+
+Do NOT reinvent the wireframe's visual layer with parallel Tailwind utilities. Parallel Tailwind drifts. The 5.2.1 Revision rebuilt seven data components after the original 5.2.1 squash shipped them in parallel Tailwind that read "close but off" against the wireframe (view switchers as pills instead of icon-segmented buttons, filter chips missing `.fchip` shape, tables missing `.tbl` header styling). Cost: a full revision round.
+
+If the wireframe uses a class that Tailwind would purge as dynamic (`pill p-${token}`, `cal-ev ${kind}`, `rb-${token}`), add the variants to `tailwind.config.{ts,js}` `safelist` so the production build keeps them. Tailwind purge cannot detect template-literal class names statically.
+
+Wireframe-canonical class names + the per-surface wireframe binding (per `docs/working-with-claude.md` § 4.4) are the two contracts that prevent visual fidelity drift.
+
 ---
 
 ## 12. Brand rules that bit us (don't forget these)

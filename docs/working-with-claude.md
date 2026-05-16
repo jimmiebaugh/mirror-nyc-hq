@@ -173,23 +173,105 @@ For each new HQ surface:
      b. Subagent reads docs/design-system.md first to find the closest Talent Scout analog.
      c. Drafts a spec mapping the new surface to existing patterns.
         Calls out what's being lifted vs. adapted vs. invented.
-     d. Save to OUTPUTS/phase-X-Y-<surface>-spec.md.
+     d. Spec includes a `## Seed data for the visual check` block with
+        a SQL seed populating realistic test rows. See § 4.3 below.
+     e. Spec includes a `## Wireframe binding` block citing per-surface
+        wireframe HTML line ranges. See § 4.4 below.
+     f. Save to OUTPUTS/phase-X-Y-<surface>-spec.md.
 
   2. Pause. Review and edit the spec yourself before any code is touched.
 
   3. Code session: paste the spec.
-     "Implement exactly per the spec at OUTPUTS/phase-X-Y-<surface>-spec.md
-      (Cowork-workspace path /Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/...).
+     "Implement exactly per the spec at OUTPUTS/phase-X-Y-<surface>-spec.md.
       Reference docs/design-system.md and the closest Talent Scout component.
       Ask before deviating."
 
-  4. After implementation: run code-reviewer subagent on the diff with cold context.
-     Subagent verifies design-system.md adherence + checks the brand-rules-that-bit-us list.
+  4. Code writes migrations + components + pages. Runs migration-reviewer
+     subagent. Does NOT yet `supabase db push --linked`. See § 4.2 below.
 
-  5. Iterate fixes. Squash-merge.
+  5. Code runs the seed SQL from the spec against a local Supabase (or
+     hand-crafts types.ts from the migration files if no local Supabase
+     is running).
+
+  6. Code runs `npm run dev` on the worktree, navigates each new surface
+     at 1440px, screenshots each one. Embeds screenshots in the AWAITING
+     SQUASH APPROVAL block in OUTPUTS/COWORK_SYNC.md. See § 4.1 below.
+
+  7. Code runs code-reviewer subagent on the diff with cold context.
+     Subagent verifies design-system.md adherence + the brand-rules-that-
+     bit-us list + the wireframe-binding contract from § 4.4.
+
+  8. Squash-approval gate. Jimmie compares screenshots against the
+     wireframe HTML. If anything drifts, Code iterates before squash.
+
+  9. ONLY at the squash-approval gate: Code runs `supabase db push
+     --linked` to apply migrations to the live DB, then squash-merges
+     to main. See § 4.2 below.
 ```
 
-Adds 30 to 60 minutes of design upfront per surface but eliminates "built inconsistent with Talent Scout, redo" loops.
+The standard workflow above is the canonical one. The four subsections below codify the discipline that was missing through Phase 5.2.1.
+
+### 4.1. Visual screenshot check before squash
+
+Code-reviewer cannot see. It reads the diff, not the rendered DOM. Component classes can be wrong, dynamic class names can be Tailwind-purged, status pills can render bare, layout can drift from the wireframe, and code-reviewer signs off clean.
+
+Rule: every surface in a sub-phase gets a screenshot at 1440px viewport, taken by Code on the worktree before the AWAITING SQUASH APPROVAL block writes. Screenshots embed in the AWAITING block as file paths.
+
+Jimmie's job at the squash-approval gate is to open the screenshots side-by-side with the wireframe HTML at the same viewport and confirm visual parity. If anything drifts, the squash does not happen until Code iterates.
+
+Burn: ~5 minutes per surface for the screenshot pass. Save: an entire revision round.
+
+### 4.2. Migration push timing (deferred until squash-approval gate)
+
+Old habit: `supabase db push --linked` ran during Code's implementation pass so types could regenerate against the live DB. Problem: if the work halts mid-flight (cancelled prompt, scope reset, branch deletion), the live DB is ahead of `main` and the shipped frontend breaks against the renamed columns and tables. The 2026-05-15 Phase 5.2.2 attempt halted exactly this way and required a Step-0 reconciliation pass to unbreak `hq.mirrornyc.com`.
+
+Rule: `supabase db push --linked` runs only at the squash-approval gate, alongside the final build + visual check + code-reviewer pass. Migrations stay local during implementation. Code can iterate against a local Supabase (`supabase start`) or hand-craft `types.ts` from the migration SQL.
+
+If a sub-phase halts, the live DB stays at last-shipped main and nothing breaks.
+
+Carve-out: `supabase functions deploy <name>` is fine to run during implementation (no Netlify, no schema impact). Edge function deploys can happen out-of-band any time.
+
+### 4.3. Seed data block in every spec
+
+Every new-surface spec includes a `## Seed data for the visual check` section with a SQL block populating realistic test rows. Spec author owns the SQL; Code runs it after the migration pass + before the screenshot step.
+
+The SQL block should:
+
+- Resolve the current admin user (`SELECT id FROM public.users WHERE email = ... AND active = true LIMIT 1`) with a fallback to the oldest active admin.
+- Insert realistic rows across every entity in the sub-phase.
+- Cover every status enum variant so pill rendering is verifiable.
+- Hit every join (organization to projects, project to deliverables, etc.) so embedded relationships resolve.
+- Use `ON CONFLICT DO NOTHING` for idempotency so the block is safe to re-run.
+- Wrap in a `DO $$ ... END $$` block for transactionality (a failure mid-block rolls back cleanly).
+
+Realistic-data target per surface: enough rows to populate every view variant (list two-tier collapse, board columns, timeline bars, calendar cells), enough status diversity to verify every pill token, enough relationship coverage to confirm joins resolve.
+
+Empty surfaces are not a valid visual check.
+
+### 4.4. Wireframe binding (per-surface line ranges)
+
+When a locked wireframe HTML exists for a sub-phase, the spec includes a `## Wireframe binding` section listing per-surface wireframe line ranges:
+
+| Surface | Wireframe lines | Shipped page file |
+| --- | --- | --- |
+| 04 Projects List | 938-1053 | `src/pages/projects/ProjectsList.tsx` |
+| 05 Projects Board | 1056-1207 | (same file, view variant) |
+| ... | ... | ... |
+
+Code adds a JSDoc comment at the top of every surface page component citing the wireframe line range it implements. Example:
+
+```tsx
+/**
+ * Projects List.
+ * Wireframe binding: OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 938-1053.
+ * Build notes: OUTPUTS/phase-5-hq-wireframe-build-notes.md § "04 Projects list".
+ */
+export default function ProjectsList() { ... }
+```
+
+Code-reviewer (cold pass) checks the JSDoc is present + the line range exists in the cited wireframe HTML. If a surface's rendered DOM diverges from its bound wireframe range, it is a MUST FIX.
+
+Adds 30 to 60 minutes of design upfront per surface but eliminates "built inconsistent with Talent Scout, redo" loops AND "doesn't match the wireframe, redo" loops.
 
 ---
 
