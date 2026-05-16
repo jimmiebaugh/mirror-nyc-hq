@@ -2,6 +2,61 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.3 (Calendar + Outlook)
+
+Spec: `OUTPUTS/phase-5-3-spec.md`. Surfaces 15 (unified Calendar) + 16 (admin-only Outlook). One feature branch, one squash. Three migrations: `outlook_entries` + RPC, projects install/removal date columns, saved_views.entity_type CHECK widen.
+
+### Outlook Confidence color override (locked-decisions § 4)
+
+The locked wireframe HTML (`OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html`) defined the `.ol-rad` / `.ol-like` / `.ol-conf` / `.ol-comp` CSS classes with colors that disagree with the locked confidence-color mapping in `OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 4 (and `docs/design-system.md` § 5b). The locked mapping is the source of truth:
+
+- `On Radar` -> amber (`--warn`) -> `.ol-rad`
+- `Likely` -> cyan (`--info`) -> `.ol-like`
+- `Confirmed` -> green (`--success`) -> `.ol-conf`
+- `Complete` -> gray (`--border-strong`) -> `.ol-comp`
+
+Reads as a step-up ladder: speculative -> looking good -> locked -> done.
+
+**The CSS block lifted into `src/index.css` flips the four color rules in place** so the class names match their semantic meaning. Spec § 12 + § 11.9 (brand rule) call this out. The alternative (lift verbatim + let JS assign the "wrong" class name for the right color) was rejected because it produced "Confirmed gets `.ol-conf` which renders amber" cognitive dissonance for any reader of the wireframe vs the shipped code.
+
+### Outlook entries: shared toggle drives Calendar visibility, not Outlook page visibility
+
+`outlook_entries.shared_with_team` is the gate for whether an entry surfaces on the unified Calendar for non-admins. The Outlook page itself is admin-only via the `<AdminRoute>` gate; standard / freelance users never see it. Their only path to an Outlook entry is the shared banner on the Calendar, which is non-clickable (cursor default, no hover, no-op on click). Admins see the same banner clickable, with click routing to `/outlook?year=YYYY&month=MM#entry=<uuid>` with the panel pre-opened.
+
+Locked-decisions § 3 explicitly chose non-clickable over hide-from-standard so producers can see "the team has a planning event in that week" without being able to drill into the admin-only Outlook page.
+
+### Promote vs Unlink vs Delete (locked-decisions § 1)
+
+Three distinct actions on an Outlook entry:
+
+- **Promote to Project:** runs `promote_outlook_to_project(target_entry_id)` RPC. Creates a `projects` row from the entry's name + client + city + `status='Queued'` + caller as `created_by`. Sets `outlook_entries.linked_project_id` to the new project id. Atomic; SECURITY DEFINER; admin-gated.
+- **Unlink Project:** clears `outlook_entries.linked_project_id` only. The Project row stays untouched and visible to the team.
+- **Delete entry:** removes the `outlook_entries` row. The linked Project (if any) stays in the system, just unlinked. The FK is `ON DELETE SET NULL` from the entry's side; `projects` has no FK back to `outlook_entries` so deleting the entry can't cascade to the project.
+
+These are intentionally separate so the producer flow can detach a speculative entry from a real project (e.g. project repurposed) without nuking either record.
+
+### Mirror Holidays seeded as a static constant (5.4 Settings editor lands later)
+
+`MIRROR_HOLIDAYS` is a hardcoded array in `src/lib/calendar/holidays.ts`, sourced from Mirror's official 2026 Holiday Calendar PDF. Multi-day windows (Christmas / New Year's: Thu Dec 24 - Fri Jan 1) expanded into one entry per non-weekend closed day so the Calendar renders a banner on every closed day.
+
+5.4 will ship a Settings-page CRUD editor against a `mirror_holidays` table. The static-constant approach is intentional 5.3 scope: a real CRUD editor without a Settings page surface to host it would be premature.
+
+### Per-user Calendar visibility persists via saved_views (locked-decisions § 6)
+
+The four toggles on the Calendar right rail (Deliverables / Mirror Holidays / Shared Outlook / per-project) persist per-user via a single implicit `saved_views` row (`entity_type='calendar'`, `name='__calendar_default'`, `view_kind='calendar'`, `is_default=true`). One row per user; no naming UI (Calendar has exactly one persisted preference state, unlike Projects / Tasks / etc. which support multiple named views).
+
+The migration extends `saved_views.entity_type` CHECK to include `'calendar'`. The `useCalendarVisibility` hook handles the lazy-INSERT on first visit + debounced UPDATE on toggle change.
+
+`?source=projects` / `?source=tasks` first-visit defaults (Deliverables + Holidays + Outlook-shared off, per-project on) only apply when no saved row exists yet. Saved state wins on subsequent visits.
+
+### Filter chips stay component-local (not persisted)
+
+Lead + Category filter chips on the Calendar reset each visit. Same convention as `<FilterBar />` everywhere else in HQ: chip state is per-session, saved views capture chip state only when explicitly saved. The Calendar doesn't ship a saved-views dropdown in 5.3, so chip state has nowhere to persist to.
+
+### Branch name cosmetic deviation
+
+Spec called for `claude/phase-5-3-calendar-outlook`. The worktree was created as `claude/priceless-jang-b6de74` (auto-generated). Since the branch squash-merges to main, the branch label has no shipping impact; the worktree branch name was not renamed.
+
 ## Phase 5.2.1 Revision (wireframe-fidelity rebuild)
 
 Spec: `OUTPUTS/phase-5-2-1-revision-spec.md`. Forward-fix pass on top of the shipped 5.2.1 squash (`15511af`). Schema + routes + queries stay intact; the visual layer rebinds to the locked wireframe (`OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html`) as the binding source.

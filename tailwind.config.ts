@@ -18,6 +18,11 @@ export default {
     "hq-pill", "hq-pill--warn", "hq-pill--success", "hq-pill--info", "hq-pill--destructive", "hq-pill--muted",
     // Calendar event banner kind classes (selectors are `.cal-ev.<kind>`)
     "cal-ev", "in", "live", "rem", "del",
+    // Phase 5.3 Calendar additions: shared Outlook + Mirror Holiday banners
+    "olk", "hol",
+    // Phase 5.3 Outlook 12-month grid confidence-color modifiers
+    // (selectors are `.ol-ev.<kind>` and `ol-${kind}` via confidenceClass())
+    "ol-ev", "ol-rad", "ol-like", "ol-conf", "ol-comp",
     // Row-border tokens (`.tbl tr[.rb-<token>]`, `.bcard[.rb-<token>]`)
     "rb-warn", "rb-success", "rb-info", "rb-destructive", "rb-muted",
     // Board + timeline elements referenced through dynamic JSX

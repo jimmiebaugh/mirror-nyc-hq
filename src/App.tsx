@@ -32,6 +32,8 @@ import PersonEdit from "./pages/people/PersonEdit";
 import VenuesList from "./pages/venues/VenuesList";
 import VenueDetail from "./pages/venues/VenueDetail";
 import VenueEdit from "./pages/venues/VenueEdit";
+import CalendarPage from "./pages/calendar/CalendarPage";
+import OutlookPage from "./pages/outlook/OutlookPage";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound.tsx";
 import TalentScoutIndex from "./pages/talent-scout/Index";
@@ -243,7 +245,7 @@ const App = () => (
                 path="/calendar"
                 element={
                   <StandardOrAdminRoute>
-                    <ComingSoon title="Calendar" />
+                    <CalendarPage />
                   </StandardOrAdminRoute>
                 }
               />
@@ -439,7 +441,7 @@ const App = () => (
                 path="/outlook"
                 element={
                   <AdminRoute>
-                    <ComingSoon title="Outlook" />
+                    <OutlookPage />
                   </AdminRoute>
                 }
               />

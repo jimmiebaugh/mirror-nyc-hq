@@ -14,7 +14,14 @@ import { useState, type ReactNode } from "react";
  *   Skipped     -> plain  (strike rendered via `strikethrough: true`)
  */
 
-export type CalendarEventKind = "in" | "live" | "rem" | "del" | "plain";
+export type CalendarEventKind =
+  | "in"
+  | "live"
+  | "rem"
+  | "del"
+  | "olk"
+  | "hol"
+  | "plain";
 
 export type CalendarEvent = {
   id: string;
@@ -59,14 +66,30 @@ export function CalendarMonthView({
   events,
   onEventClick,
   toolbarRight,
+  activeMonth,
+  onActiveMonthChange,
+  hideInternalNav,
 }: {
   events: CalendarEvent[];
   onEventClick?: (event: CalendarEvent) => void;
   toolbarRight?: ReactNode;
+  /** Controlled-month override. When set, the component reads year/month
+   *  from this prop and emits `onActiveMonthChange` on prev/next clicks.
+   *  When omitted, the component owns its own internal month state. */
+  activeMonth?: Date;
+  onActiveMonthChange?: (next: Date) => void;
+  /** When true, skip rendering the component's internal prev/next/title
+   *  cluster. Use when the parent page renders its own header nav (the
+   *  Phase 5.3 Calendar page does this so the nav cluster lives in the
+   *  pagehead next to the title). */
+  hideInternalNav?: boolean;
 }) {
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
+  const [internalYear, setInternalYear] = useState(today.getFullYear());
+  const [internalMonth, setInternalMonth] = useState(today.getMonth());
+  const controlled = activeMonth != null;
+  const year = controlled ? activeMonth!.getFullYear() : internalYear;
+  const month = controlled ? activeMonth!.getMonth() : internalMonth;
 
   const cells = buildCells(year, month);
   const eventsByDay = new Map<string, CalendarEvent[]>();
@@ -77,19 +100,21 @@ export function CalendarMonthView({
   }
 
   const goPrev = () => {
-    if (month === 0) {
-      setYear((y) => y - 1);
-      setMonth(11);
+    const next = new Date(year, month - 1, 1);
+    if (controlled) {
+      onActiveMonthChange?.(next);
     } else {
-      setMonth((m) => m - 1);
+      setInternalYear(next.getFullYear());
+      setInternalMonth(next.getMonth());
     }
   };
   const goNext = () => {
-    if (month === 11) {
-      setYear((y) => y + 1);
-      setMonth(0);
+    const next = new Date(year, month + 1, 1);
+    if (controlled) {
+      onActiveMonthChange?.(next);
     } else {
-      setMonth((m) => m + 1);
+      setInternalYear(next.getFullYear());
+      setInternalMonth(next.getMonth());
     }
   };
 
@@ -97,30 +122,32 @@ export function CalendarMonthView({
 
   return (
     <div className="stack-3">
-      <div className="row between" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={goPrev}
-            aria-label="Previous month"
-          >
-            ←
-          </button>
-          <div className="h-page" style={{ fontSize: 20, margin: 0 }}>
-            {MONTH_LABELS[month]} {year}
+      {hideInternalNav ? null : (
+        <div className="row between" style={{ alignItems: "center" }}>
+          <div className="row-c">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={goPrev}
+              aria-label="Previous month"
+            >
+              ←
+            </button>
+            <div className="h-page" style={{ fontSize: 20, margin: 0 }}>
+              {MONTH_LABELS[month]} {year}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={goNext}
+              aria-label="Next month"
+            >
+              →
+            </button>
           </div>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={goNext}
-            aria-label="Next month"
-          >
-            →
-          </button>
+          {toolbarRight}
         </div>
-        {toolbarRight}
-      </div>
+      )}
       <div>
         <div className="calgrid">
           {WEEK_DAYS.map((d) => (
