@@ -1246,9 +1246,46 @@
   .cal-ev.live{background:rgba(190,78,68,.18);color:hsl(var(--primary));}
   .cal-ev.rem{background:rgba(245,158,11,.16);color:hsl(var(--warn));}
   .cal-ev.del{background:rgba(74,222,128,.14);color:hsl(var(--success));}
+  /* Phase 5.3 new cal-ev modifiers: shared Outlook entries + Mirror Holidays.
+     Both render gray, but tone differs so the two are distinguishable. */
+  .cal-ev.olk{background:rgba(58,58,58,.35);color:hsl(var(--muted-foreground));border-left:2px solid hsl(var(--border-strong));}
+  .cal-ev.hol{background:rgba(58,58,58,.20);color:hsl(var(--subtle-foreground));font-style:italic;}
   .callegend{display:flex;gap:16px;flex-wrap:wrap;}
   .callegend span{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--muted-foreground));}
   .callegend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  /* Phase 5.3 HQ Core surfaces: Outlook 12-month grid + tabs strip.
+     Lifted from OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html Surface 16
+     `<style>` block. Confidence-color rules (`.ol-rad` / `.ol-like` /
+     `.ol-conf` / `.ol-comp`) FLIP the wireframe-canonical mapping per
+     locked-decisions § 4: On Radar = amber, Likely = cyan, Confirmed =
+     green, Complete = gray. Documented in docs/decisions.md Phase 5.3. */
+  .olgrid{border:1px solid hsl(var(--border));border-radius:var(--radius);overflow:hidden;}
+  .ol-head{display:grid;grid-template-columns:88px repeat(4,1fr);background:hsl(var(--surface-alt));border-bottom:1px solid hsl(var(--border));}
+  .ol-head div{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.06em;color:hsl(var(--subtle-foreground));padding:8px 10px;text-transform:uppercase;border-left:1px solid hsl(var(--border));}
+  .ol-head div:first-child{border-left:none;}
+  .ol-row{display:grid;grid-template-columns:88px repeat(4,1fr);border-bottom:1px solid hsl(var(--border));}
+  .ol-row:last-child{border-bottom:none;}
+  .ol-mn{font-family:var(--font-mono);font-size:11px;font-weight:700;padding:10px;display:flex;align-items:center;background:hsl(var(--surface));text-transform:uppercase;letter-spacing:.04em;}
+  .ol-cell{border-left:1px solid hsl(var(--border));padding:6px;min-height:62px;display:flex;flex-direction:column;gap:4px;}
+  .ol-ev{border-radius:3px;padding:5px 7px;border-left:3px solid;font-size:11.5px;line-height:1.32;cursor:pointer;text-align:left;background:transparent;border-top:none;border-right:none;border-bottom:none;width:100%;}
+  .ol-ev .en{font-weight:600;color:hsl(var(--foreground));display:block;}
+  .ol-ev .em{font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--subtle-foreground));margin-top:2px;display:block;}
+  /* Confidence colors per LOCKED DECISIONS § 4 (overrides wireframe CSS). */
+  .ol-rad{background:rgba(245,158,11,.10);border-color:hsl(var(--warn));}
+  .ol-like{background:rgba(6,182,212,.10);border-color:hsl(var(--info));}
+  .ol-conf{background:rgba(74,222,128,.10);border-color:hsl(var(--success));}
+  .ol-comp{background:rgba(255,255,255,.04);border-color:hsl(var(--border-strong));}
+  .ol-legend{display:flex;gap:16px;flex-wrap:wrap;}
+  .ol-legend span{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--muted-foreground));}
+  .ol-legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  /* Year-tab strip (Outlook page). Mono uppercase pill-style tabs with a
+     bottom-border underline on the active tab. */
+  .tabs{display:flex;gap:4px;border-bottom:1px solid hsl(var(--border));padding-bottom:0;}
+  .tabs button{padding:8px 14px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:hsl(var(--subtle-foreground));background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1px;}
+  .tabs button.on{color:hsl(var(--foreground));border-bottom-color:hsl(var(--primary));}
+  .tabs button:hover{color:hsl(var(--foreground));}
 
   /* Activity row + actdot (used by Project Detail Project Activity sidebar) */
   .activity-row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid hsl(var(--border));}

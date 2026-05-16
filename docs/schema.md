@@ -60,7 +60,9 @@ The legacy `organizations` entry below is preserved for historical reference; tr
 - `city` (text, nullable). Surface 04 List view column. Added Phase 5.2.2.
 - `tags` (text[], default `{}`). Surface 07 detail "Summer 2026 / CPG / Outdoor" tag chips. Added Phase 5.2.2.
 - `budget` (numeric, nullable). Surface 07 detail + Surface 08 edit. Planning reference figure, NOT an invoice amount; never renders on pipeline-summary surfaces per locked-decisions Q6 + spec § 5.A.7. Added Phase 5.2.2.
+- `install_dates_start`, `install_dates_end` (date, nullable). Added Phase 5.3 (`20260516150001_phase_5_3_projects_install_removal_dates.sql`). Drives Calendar Install banners + Project Timeline Install bar + Project Detail "Days Until Install" countdown.
 - `live_dates_start`, `live_dates_end` (date, nullable)
+- `removal_dates_start`, `removal_dates_end` (date, nullable). Added Phase 5.3. Drives Calendar Removal banners + Project Timeline Removal bar.
 - `production_folder_url`, `design_decks_folder_url`, `budget_sheet_url`, `latest_creative_deck_url`, `slack_channel_url` (text, all nullable)
 - `status_notes` (text, renamed from `notes` in Phase 5.2.2). Surface 07 detail Status Notes sidebar card body + Surface 08 edit Status Notes textarea.
 - `client_notes` (text, nullable). Surface 07 detail Client Notes sidebar card body + Surface 08 edit Client Notes textarea. Added Phase 5.2.2 alongside the `notes` rename.
@@ -354,7 +356,7 @@ Per-user named filter / sort / view-kind snapshots for the HQ Core database list
 
 - `id` (uuid, PK, default `gen_random_uuid()`)
 - `user_id` (uuid, NOT NULL, FK to `users.id` ON DELETE CASCADE)
-- `entity_type` (text, NOT NULL, CHECK in `project / task / deliverable / organization / person / venue`)
+- `entity_type` (text, NOT NULL, CHECK in `project / task / deliverable / organization / person / venue / calendar`). `calendar` added in Phase 5.3 (`20260516150002_phase_5_3_saved_views_calendar_check.sql`) so the unified Calendar page can persist per-user visibility toggles via a single implicit row (`name='__calendar_default'`, `view_kind='calendar'`).
 - `name` (text, NOT NULL)
 - `view_kind` (text, NOT NULL, CHECK in `list / board / timeline / calendar`)
 - `filter_state` (jsonb, NOT NULL, default `'{}'::jsonb`). Shape: `{ connector: 'AND'|'OR', chips: [{field, op, value}], sort?: {field, dir}, columns?: [string] }`.
@@ -362,6 +364,29 @@ Per-user named filter / sort / view-kind snapshots for the HQ Core database list
 - `created_at`, `updated_at` (timestamptz)
 - RLS: per-user (`USING user_id = auth.uid()`) on SELECT/INSERT/UPDATE/DELETE. Unlike every other HQ Core table this is personal preference data; no cross-user reads.
 - Index: `(user_id, entity_type)` btree.
+
+### outlook_entries (Phase 5.3)
+Admin-only planning surface for speculative engagements that haven't yet converted into a Project. Drives Surface 16 (Outlook) and the admin Home condensed card. Shared entries (`shared_with_team = true`) surface as gray banners on the unified Calendar for all tiers.
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `name` (text, NOT NULL). Event name pre-conversion (e.g. "Office Refresh").
+- `client_id` (uuid, FK to `clients.id` ON DELETE SET NULL, nullable)
+- `city` (text, nullable)
+- `year` (int, NOT NULL)
+- `month` (int, NOT NULL, CHECK `BETWEEN 1 AND 12`)
+- `week` (int, NOT NULL, CHECK `BETWEEN 1 AND 4`). Week index within the month (1 = days 1-7, 2 = 8-14, etc.). Calendar shared-entry rendering derives a calendar date from `(year, month, week)` as `day = (week - 1) * 7 + 1`.
+- `date_text` (text, nullable). Freeform e.g. "Early June" / "Jun 5 - 6". Planning surface; producers rarely have a locked date.
+- `budget` (numeric, nullable). Planning estimate; NOT an invoice amount. Coexists with the locked-decisions Q6 budget rule because Outlook is a pre-pipeline planning surface.
+- `confidence` (enum `outlook_confidence`, NOT NULL, default `On Radar`): `On Radar`, `Likely`, `Confirmed`, `Complete`. Color mapping per locked-decisions § 4: amber / cyan / green / gray. **This flips the wireframe CSS mapping**; build enforces the locked mapping (see `docs/decisions.md` Phase 5.3).
+- `notes` (text, nullable)
+- `linked_project_id` (uuid, FK to `projects.id` ON DELETE SET NULL, nullable). Set by the `promote_outlook_to_project` RPC. Unlink action clears it but leaves the Project row untouched per locked-decisions § 1.
+- `shared_with_team` (boolean, NOT NULL, default `false`). When true the entry surfaces as a banner on the unified Calendar for all tiers; standard users see the banner but cannot click through (Outlook page is admin-only).
+- `created_by` (uuid, NOT NULL, FK to `users.id`)
+- `created_at`, `updated_at` (timestamptz)
+- Indexes: `outlook_entries_year_month_idx (year, month)`; partial btree on `(client_id)`, `(linked_project_id)`, `(shared_with_team) WHERE shared_with_team = true`.
+- Triggers: `trg_outlook_entries_updated_at` (updated_at_auto), `trg_activity_log_outlook_entries` (AFTER INSERT/UPDATE/DELETE -> `activity_log` via `activity_log_writer`).
+- RLS: admin full CRUD; standard + freelance SELECT only on rows with `shared_with_team = true`. Pending users blocked at the route gate (`/outlook` is `<AdminRoute>`).
+- Realtime: NOT in the `supabase_realtime` publication in 5.3. Single-admin edit pattern; the side panel doesn't need multi-admin live-merge. Add later if multi-admin concurrent editing surfaces as a need.
 
 ### notes_log (Phase 5.1; widened Phase 5.2.2)
 Polymorphic Internal Notes log shared by Organizations, People, and Venues. The CHECK constraint was widened in Phase 5.2.2 (`20260515140002_phase_5_2_2_venues_extensions.sql`) so the shared `<InternalNotesEditor />` component can serve Venue detail too.
@@ -388,6 +413,8 @@ Polymorphic Internal Notes log shared by Organizations, People, and Venues. The 
 ## Postgres functions (RPCs)
 
 - `start_over_scout(target_scout_id uuid) RETURNS jsonb` (Phase 4.9-port, migration `20260513000000_phase_4_9_port_start_over_rpc.sql`; CREATE OR REPLACE in Phase 4.10.3-port migration `20260514000001_phase_4_10_3_port_start_over_scout_pipeline_error.sql` to clear `pipeline_error` instead of `research_error` post-rename): transactional reset of a scout to `current_step='sheet_prompt'`. Cascade-deletes `vs_candidate_venues` (photos cascade via FK ON DELETE CASCADE). Resets `status` to `'draft'`, clears `pipeline_error`, `derived_columns` (-> `[]`), `sheet_storage_path`, `deck_order` (-> `[]`), and strips idempotency timestamps (`research_started_at`, `compile_started_at`, `deck_generation_started_at`) from `brief_data`. Keeps brief fields, `project_id`, `generated_decks` history, `brief_data.uploaded_files`. `SECURITY INVOKER`. `GRANT EXECUTE TO authenticated`.
+
+- `promote_outlook_to_project(target_entry_id uuid) RETURNS uuid` (Phase 5.3, migration `20260516150000_phase_5_3_outlook_entries_table.sql`): atomic promotion of an `outlook_entries` row to a `projects` row. INSERTs into `projects` with `name`, `client_id`, `city` from the entry + `status='Queued'` + `created_by=auth.uid()`; UPDATEs the entry's `linked_project_id` to the new project id; returns the new project id. Pre-checks `public.is_admin()` at the top (raises ERRCODE 42501 on non-admin). Refuses to promote an already-linked entry (raises 23505). `SECURITY DEFINER` so the cross-table writes don't trip RLS mid-flight. `GRANT EXECUTE TO authenticated`.
 
 - `reset_scout_for_deck_regenerate(target_scout_id uuid) RETURNS void` (Phase 4.10.6-port, migration `20260514100000_phase_4_10_6_port_reset_scout_for_deck_regenerate.sql`): atomic state-reset RPC for the Deck Prep regenerate flow. Called from DeckPrep.tsx `generate()` when a producer clicks Generate Deck on a scout that already has a successful prior deck. Sets `current_step='deck_prep'` + strips `deck_generation_started_at` from `brief_data` via the `jsonb -` operator + clears `status='in_progress'` + `pipeline_error=null` + bumps `last_touched_at`. Single SQL statement so there's no TOCTOU race between a read and a write (which the prior frontend read-modify-write had). Idempotent: calling on a scout that's never been deck-generated still resets the columns; the `brief_data -` is a no-op for the missing key. `SECURITY INVOKER`. `GRANT EXECUTE TO authenticated`.
 

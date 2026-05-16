@@ -37,8 +37,12 @@ type Project = {
   id: string;
   name: string;
   status: ProjectStatus;
+  install_dates_start: string | null;
+  install_dates_end: string | null;
   live_dates_start: string | null;
   live_dates_end: string | null;
+  removal_dates_start: string | null;
+  removal_dates_end: string | null;
   production_folder_url: string | null;
   design_decks_folder_url: string | null;
   slack_channel_url: string | null;
@@ -94,7 +98,9 @@ export default function ProjectDetail() {
         supabase
           .from("projects")
           .select(
-            `id, name, status, live_dates_start, live_dates_end,
+            `id, name, status, install_dates_start, install_dates_end,
+             live_dates_start, live_dates_end,
+             removal_dates_start, removal_dates_end,
              production_folder_url, design_decks_folder_url, slack_channel_url,
              budget_sheet_url, status_notes, client_notes,
              job_number, category, city, tags, budget,
@@ -171,7 +177,11 @@ export default function ProjectDetail() {
     );
   })();
 
-  const installDays = project.live_dates_start ? daysUntil(project.live_dates_start) : null;
+  // Days-until-Install prefers the new install_dates_start column; falls
+  // back to live_dates_start for projects that haven't been backfilled.
+  const installCountdownIso =
+    project.install_dates_start ?? project.live_dates_start;
+  const installDays = installCountdownIso ? daysUntil(installCountdownIso) : null;
 
   const folderButtons = [
     { label: "Production", url: project.production_folder_url, Icon: IconDrive },
@@ -215,7 +225,13 @@ export default function ProjectDetail() {
             <div>
               <div className="label-form">Install</div>
               <div className="mono" style={{ marginTop: 4 }}>
-                {project.live_dates_start ? formatShortDate(project.live_dates_start) : "-"}
+                {project.install_dates_start
+                  ? `${formatShortDate(project.install_dates_start)}${
+                      project.install_dates_end
+                        ? ` to ${formatShortDate(project.install_dates_end)}`
+                        : ""
+                    }`
+                  : "-"}
               </div>
             </div>
             <div>
@@ -231,7 +247,13 @@ export default function ProjectDetail() {
             <div>
               <div className="label-form">Removal</div>
               <div className="mono" style={{ marginTop: 4 }}>
-                {project.live_dates_end ? formatShortDate(project.live_dates_end) : "-"}
+                {project.removal_dates_start
+                  ? `${formatShortDate(project.removal_dates_start)}${
+                      project.removal_dates_end
+                        ? ` to ${formatShortDate(project.removal_dates_end)}`
+                        : ""
+                    }`
+                  : "-"}
               </div>
             </div>
           </div>
@@ -301,7 +323,7 @@ export default function ProjectDetail() {
           <div className="lbl">Days Until Install</div>
           <div className="num">{installDays != null ? `${installDays}` : "-"}</div>
           <div className="sub">
-            {project.live_dates_start ? formatMediumDate(project.live_dates_start) : "No install date"}
+            {installCountdownIso ? formatMediumDate(installCountdownIso) : "No install date"}
           </div>
         </div>
       </div>
@@ -353,7 +375,13 @@ export default function ProjectDetail() {
               <dl className="kv">
                 <dt>Install</dt>
                 <dd>
-                  {project.live_dates_start ? formatShortDate(project.live_dates_start) : "-"}
+                  {project.install_dates_start
+                    ? `${formatShortDate(project.install_dates_start)}${
+                        project.install_dates_end
+                          ? ` to ${formatShortDate(project.install_dates_end)}`
+                          : ""
+                      }`
+                    : <span className="muted subtle">Not set</span>}
                 </dd>
                 <dt>Live</dt>
                 <dd>
@@ -361,11 +389,17 @@ export default function ProjectDetail() {
                     ? `${formatShortDate(project.live_dates_start)}${
                         project.live_dates_end ? ` to ${formatShortDate(project.live_dates_end)}` : ""
                       }`
-                    : "-"}
+                    : <span className="muted subtle">Not set</span>}
                 </dd>
                 <dt>Removal</dt>
                 <dd>
-                  {project.live_dates_end ? formatShortDate(project.live_dates_end) : "-"}
+                  {project.removal_dates_start
+                    ? `${formatShortDate(project.removal_dates_start)}${
+                        project.removal_dates_end
+                          ? ` to ${formatShortDate(project.removal_dates_end)}`
+                          : ""
+                      }`
+                    : <span className="muted subtle">Not set</span>}
                 </dd>
                 <dt>Budget</dt>
                 <dd>{formatBudget(project.budget)}</dd>
