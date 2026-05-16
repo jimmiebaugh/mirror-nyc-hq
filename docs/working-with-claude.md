@@ -273,6 +273,29 @@ Code-reviewer (cold pass) checks the JSDoc is present + the line range exists in
 
 Adds 30 to 60 minutes of design upfront per surface but eliminates "built inconsistent with Talent Scout, redo" loops AND "doesn't match the wireframe, redo" loops.
 
+### 4.5. Squash autonomy (Code runs the full ship flow after Jimmie's approval)
+
+After Jimmie reviews the AWAITING SQUASH APPROVAL block (screenshots + visual diff summary + carry-forward items) and says "go" or "squash" or "approve" in chat, Code runs the full squash flow autonomously. NOT as a numbered shell-command list for Jimmie to copy-paste.
+
+The ship flow:
+
+1. From the worktree directory: `supabase db push --linked` (applies the sub-phase's migrations to the live DB).
+2. From the worktree directory: `supabase gen types typescript --linked > src/integrations/supabase/types.ts`.
+3. Run the spec's `## Seed data for the visual check` SQL block against the live DB.
+4. Commit any regenerated `types.ts` to the worktree branch as `[skip netlify] regen types from linked DB`.
+5. From the bare repo: `git checkout main && git pull && git merge --squash <worktree-branch>` and commit with the message body drafted in the AWAITING block.
+6. From the bare repo: `git push origin main`.
+7. Update `CHECKPOINT.md` with the new What's-live entry + Recent commits + Recent migrations + Next up.
+8. From the bare repo: `git add CHECKPOINT.md && git commit -m "[skip netlify] Backfill <squash-hash> Phase <X.Y> into CHECKPOINT.md" && git push origin main`.
+9. Worktree cleanup: `git worktree remove <path> && git branch -D <branch>`.
+10. Overwrite `OUTPUTS/COWORK_SYNC.md` with the SHIPPED block per the two-write convention.
+
+Jimmie's role at the gate: review screenshots, give a one-word go (or send specific iteration feedback if anything reads off). Jimmie does NOT run git or supabase commands; Code does.
+
+When Code drafts the AWAITING SQUASH APPROVAL block, frame the squash-flow section as Code's own checklist of what it will execute after approval. Not as instructions for Jimmie. The framing matters: "Squash + push flow (Code executes after approval)" not "Run from the BARE REPO root."
+
+Migration push specifically: `supabase db push --linked` reads the CWD's `supabase/migrations/` folder. Since the new migration files only exist on the worktree branch, the push MUST run from inside the worktree directory (`.claude/worktrees/<branch>/`). Running from the bare repo when main lacks the new migration files is a silent no-op and breaks the seed run downstream. The git operations in steps 5-9 still need the bare repo (you can't `git merge --squash` from inside a worktree of the branch you're trying to merge), but everything in steps 1-4 happens in the worktree.
+
 ---
 
 ## 5. Code observations (passive logging)
