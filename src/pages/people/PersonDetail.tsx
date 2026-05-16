@@ -4,32 +4,35 @@ import { Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { IconArrowLeft, IconLink } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
-import { affiliationToken, type PersonAffiliation } from "@/lib/people/queries";
+import { personType, personTypeToken } from "@/lib/people/queries";
 
 /**
  * Person Detail (Surface 11).
  * Wireframe binding: OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 2033-2110.
  * Build notes: OUTPUTS/phase-5-hq-wireframe-build-notes.md § "11 . People".
  *
- *   crumb -> avatar + eyebrow "Person" + h-page name + cap "Role . Org"
- *   2-col grid (1fr 332px):
- *     Left: Details card with .kv block (affiliations / org / role / email
- *           / phone / linkedin / tags).
- *     Right: Projects (linked via primary organization) /
- *            Notes (InternalNotesEditor).
+ * Type / Affiliation rendering adapted in Phase 5.2.3: the wireframe's
+ * multi-pill `affiliations[]` is gone (locked Q4: at most one org type
+ * per person; FK presence resolves type). Single Type pill + single
+ * Affiliation link (to /clients/<id> OR /vendors/<id>). For
+ * Venue-contact people, a Venues block lists the venues they contact
+ * via the venue_contact_people join. Projects sidebar pulls projects
+ * linked to the person's client (Vendor-touched projects + venue-contact
+ * coverage deferred to a future polish pass).
  */
 
 type Person = {
   id: string;
   full_name: string;
-  affiliations: PersonAffiliation[];
-  organization_id: string | null;
+  client_id: string | null;
+  vendor_id: string | null;
   role_title: string | null;
   email: string | null;
   phone: string | null;
   linkedin_url: string | null;
   tags: string[];
-  organization: { id: string; name: string | null } | null;
+  client: { id: string; name: string | null } | null;
+  vendor: { id: string; name: string | null } | null;
 };
 
 type ProjectLink = {
@@ -38,42 +41,77 @@ type ProjectLink = {
   job_number: string | null;
 };
 
+type VenueLink = {
+  id: string;
+  name: string;
+};
+
 export default function PersonDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [person, setPerson] = useState<Person | null>(null);
   const [projects, setProjects] = useState<ProjectLink[]>([]);
+  const [venues, setVenues] = useState<VenueLink[]>([]);
+  const [isVenueContact, setIsVenueContact] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     let active = true;
     (async () => {
-      const { data, error } = await supabase
-        .from("people")
-        .select(
-          "id, full_name, affiliations, organization_id, role_title, email, phone, linkedin_url, tags, organization:organizations!people_organization_id_fkey(id, name)",
-        )
-        .eq("id", id)
-        .single();
+      // Person fetch + venue-contacts fetch run in parallel; both depend
+      // only on the URL `id`. The projects fetch chains off person.client_id
+      // (only fires when the person actually has a client tie).
+      const [personRes, vcpRes] = await Promise.all([
+        supabase
+          .from("people")
+          .select(
+            "id, full_name, client_id, vendor_id, role_title, email, phone, linkedin_url, tags, " +
+              "client:clients!people_client_id_fkey(id, name), " +
+              "vendor:vendors!people_vendor_id_fkey(id, name)",
+          )
+          .eq("id", id)
+          .single(),
+        supabase
+          .from("venue_contact_people")
+          .select("venue_id, venue:venues!venue_contact_people_venue_id_fkey(id, name)")
+          .eq("person_id", id),
+      ]);
       if (!active) return;
-      if (error || !data) {
+      if (personRes.error || !personRes.data) {
         setLoading(false);
         return;
       }
-      const row = data as unknown as Person;
+      const row = personRes.data as unknown as Person;
       setPerson(row);
-      if (row.organization_id) {
+
+      const vRows = (vcpRes.data ?? []) as unknown as {
+        venue: { id: string; name: string | null } | null;
+      }[];
+      const venueList: VenueLink[] = [];
+      for (const r of vRows) {
+        if (r.venue) {
+          venueList.push({ id: r.venue.id, name: r.venue.name ?? "Untitled" });
+        }
+      }
+      setVenues(venueList);
+      setIsVenueContact(venueList.length > 0);
+
+      // Projects card: pull projects linked to this person's client (if any).
+      if (row.client_id) {
         const { data: projData } = await supabase
           .from("projects")
           .select("id, name, job_number")
-          .eq("organization_id", row.organization_id)
+          .eq("client_id", row.client_id)
           .order("created_at", { ascending: false })
           .limit(8);
         if (active) {
           setProjects((projData ?? []) as unknown as ProjectLink[]);
         }
+      } else if (active) {
+        setProjects([]);
       }
+
       setLoading(false);
     })();
     return () => {
@@ -96,7 +134,19 @@ export default function PersonDetail() {
     );
   }
 
-  const initials = (person.full_name || "?").split(" ").slice(0, 2).map((s) => s.charAt(0).toUpperCase()).join("");
+  const initials = (person.full_name || "?")
+    .split(" ")
+    .slice(0, 2)
+    .map((s) => s.charAt(0).toUpperCase())
+    .join("");
+
+  const t = personType({
+    client_id: person.client_id,
+    vendor_id: person.vendor_id,
+    is_venue_contact: isVenueContact,
+  });
+
+  const affiliationLabel = person.client?.name ?? person.vendor?.name ?? null;
 
   return (
     <div className="stack-6">
@@ -116,7 +166,7 @@ export default function PersonDetail() {
               <div className="eyebrow">Person</div>
               <h1 className="h-page" style={{ marginTop: 3 }}>{person.full_name}</h1>
               <div className="cap" style={{ marginTop: 6 }}>
-                {[person.role_title, person.organization?.name].filter(Boolean).join(" . ") || "-"}
+                {[person.role_title, affiliationLabel].filter(Boolean).join(" . ") || "-"}
               </div>
             </div>
           </div>
@@ -141,28 +191,19 @@ export default function PersonDetail() {
           </div>
           <div className="card-pad">
             <dl className="kv">
+              <dt>Type</dt>
+              <dd>
+                <span className={`pill pill-sm p-${personTypeToken(t)}`}>{t}</span>
+              </dd>
               <dt>Affiliation</dt>
               <dd>
-                {person.affiliations.length === 0 ? (
-                  <span className="muted subtle">-</span>
-                ) : (
-                  <span className="row-c wrap" style={{ display: "inline-flex", gap: 6 }}>
-                    {person.affiliations.map((a) => (
-                      <span key={a} className={`pill pill-sm p-${affiliationToken(a)}`}>
-                        {a}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </dd>
-              <dt>Organization</dt>
-              <dd>
-                {person.organization?.id && person.organization.name ? (
-                  <Link
-                    to={`/organizations/${person.organization.id}`}
-                    className="tlink"
-                  >
-                    {person.organization.name}
+                {person.client_id && person.client?.name ? (
+                  <Link to={`/clients/${person.client_id}`} className="tlink">
+                    {person.client.name}
+                  </Link>
+                ) : person.vendor_id && person.vendor?.name ? (
+                  <Link to={`/vendors/${person.vendor_id}`} className="tlink">
+                    {person.vendor.name}
                   </Link>
                 ) : (
                   <span className="muted subtle">-</span>
@@ -206,8 +247,8 @@ export default function PersonDetail() {
                   <span className="muted subtle">-</span>
                 ) : (
                   <span className="row-c wrap" style={{ display: "inline-flex", gap: 6 }}>
-                    {person.tags.map((t) => (
-                      <span key={t} className="tag">{t}</span>
+                    {person.tags.map((tag) => (
+                      <span key={tag} className="tag">{tag}</span>
                     ))}
                   </span>
                 )}
@@ -217,30 +258,47 @@ export default function PersonDetail() {
         </section>
 
         <aside className="stack-6">
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Projects</span>
-            </div>
-            {projects.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>
-                No projects yet.
-              </p>
-            ) : (
+          {venues.length > 0 ? (
+            <section className="card card-pad">
+              <div className="block-lbl">
+                <span className="label-section">Venues contacted</span>
+              </div>
               <div className="stack-2">
-                {projects.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/projects/${p.id}`}
-                    className="tlink"
-                    style={{ fontSize: 12.5 }}
-                  >
-                    {p.job_number ? `#${p.job_number} . ` : ""}
-                    {p.name}
+                {venues.map((v) => (
+                  <Link key={v.id} to={`/venues/${v.id}`} className="tlink" style={{ fontSize: 12.5 }}>
+                    {v.name}
                   </Link>
                 ))}
               </div>
-            )}
-          </section>
+            </section>
+          ) : null}
+
+          {person.client_id ? (
+            <section className="card card-pad">
+              <div className="block-lbl">
+                <span className="label-section">Projects</span>
+              </div>
+              {projects.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>
+                  No projects yet.
+                </p>
+              ) : (
+                <div className="stack-2">
+                  {projects.map((p) => (
+                    <Link
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      className="tlink"
+                      style={{ fontSize: 12.5 }}
+                    >
+                      {p.job_number ? `#${p.job_number} . ` : ""}
+                      {p.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : null}
 
           <InternalNotesEditor parentType="person" parentId={person.id} />
         </aside>

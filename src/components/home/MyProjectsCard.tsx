@@ -57,7 +57,7 @@ async function loadMyProjects(userId: string): Promise<Row[]> {
   const { data: projects } = await supabase
     .from("projects")
     .select(
-      "id, name, status, job_number, live_dates_start, live_dates_end, organization:organizations(name)",
+      "id, name, status, job_number, live_dates_start, live_dates_end, client:clients(name)",
     )
     .in("id", Array.from(ids))
     .is("archived_at", null)
@@ -72,7 +72,7 @@ async function loadMyProjects(userId: string): Promise<Row[]> {
       jobNumber: p.job_number ?? null,
       name: p.name,
       status: (p.status as string | null) ?? "",
-      clientName: (p.organization as { name?: string } | null)?.name ?? null,
+      clientName: (p.client as { name?: string } | null)?.name ?? null,
       liveStartIso: p.live_dates_start,
       liveEndIso: p.live_dates_end,
       role,

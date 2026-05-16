@@ -1,28 +1,41 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
 
 /**
- * Shared loaders + types for People (Phase 5.2.2 § 5.B). The list query
- * pulls the organization name via a single FK embed so the muted-coral
- * `<Link>` in the Organization cell can route on the org id without an
- * extra round trip.
+ * Shared loaders + types for People (Phase 5.2.2 § 5.B; reshaped in
+ * Phase 5.2.3 § 4.C).
+ *
+ * 5.2.3 changes:
+ *   - `affiliations` enum array dropped (locked Q4: at most one org
+ *     type per person; FK presence resolves type at query time).
+ *   - `organization_id` split into nullable `client_id` + nullable
+ *     `vendor_id`. DB mutex CHECK prevents both being set; UI radio
+ *     enforces the same.
+ *   - `is_venue_contact` boolean folded into the row by joining
+ *     `venue_contact_people` so the List can resolve "Venue contact"
+ *     type without an extra round trip.
+ *
+ * Embed uses constraint-named FKs per the 5.2.2 PGRST201 lesson; without
+ * them PostgREST throws when more than one FK points at the same target
+ * from people.
  */
 
-export type PersonAffiliation =
-  Database["public"]["Enums"]["person_affiliation"];
-export const PERSON_AFFILIATIONS: PersonAffiliation[] = [
+export type PersonType = "Client" | "Vendor" | "Venue contact" | "Unaffiliated";
+
+export const PERSON_TYPES: PersonType[] = [
   "Client",
   "Vendor",
-  "Internal",
-  "Venue",
+  "Venue contact",
+  "Unaffiliated",
 ];
 
 export type PersonListRow = {
   id: string;
   full_name: string;
-  affiliations: PersonAffiliation[];
-  organization_id: string | null;
-  organization_name: string | null;
+  client_id: string | null;
+  client_name: string | null;
+  vendor_id: string | null;
+  vendor_name: string | null;
+  is_venue_contact: boolean;
   role_title: string | null;
   email: string | null;
   phone: string | null;
@@ -30,34 +43,50 @@ export type PersonListRow = {
 };
 
 export async function loadPeople(): Promise<PersonListRow[]> {
-  const { data, error } = await supabase
-    .from("people")
-    .select(
-      "id, full_name, affiliations, organization_id, role_title, email, phone, tags, organization:organizations!people_organization_id_fkey(id, name)",
-    )
-    .order("full_name", { ascending: true });
-  if (error) {
-    console.warn("people load failed", error);
+  const [peopleRes, venueContactsRes] = await Promise.all([
+    supabase
+      .from("people")
+      .select(
+        "id, full_name, client_id, vendor_id, role_title, email, phone, tags, " +
+          "client:clients!people_client_id_fkey(id, name), " +
+          "vendor:vendors!people_vendor_id_fkey(id, name)",
+      )
+      .order("full_name", { ascending: true }),
+    supabase.from("venue_contact_people").select("person_id"),
+  ]);
+
+  if (peopleRes.error) {
+    console.warn("people load failed", peopleRes.error);
     return [];
   }
-  return (data ?? []).map((p) => {
+
+  const venueContactSet = new Set<string>();
+  for (const r of venueContactsRes.data ?? []) {
+    const pid = (r as { person_id: string | null }).person_id;
+    if (pid) venueContactSet.add(pid);
+  }
+
+  return (peopleRes.data ?? []).map((p) => {
     const row = p as unknown as {
       id: string;
       full_name: string;
-      affiliations: PersonAffiliation[] | null;
-      organization_id: string | null;
+      client_id: string | null;
+      vendor_id: string | null;
       role_title: string | null;
       email: string | null;
       phone: string | null;
       tags: string[] | null;
-      organization: { id: string; name: string | null } | null;
+      client: { id: string; name: string | null } | null;
+      vendor: { id: string; name: string | null } | null;
     };
     return {
       id: row.id,
       full_name: row.full_name,
-      affiliations: row.affiliations ?? [],
-      organization_id: row.organization_id,
-      organization_name: row.organization?.name ?? null,
+      client_id: row.client_id,
+      client_name: row.client?.name ?? null,
+      vendor_id: row.vendor_id,
+      vendor_name: row.vendor?.name ?? null,
+      is_venue_contact: venueContactSet.has(row.id),
       role_title: row.role_title,
       email: row.email,
       phone: row.phone,
@@ -66,11 +95,22 @@ export async function loadPeople(): Promise<PersonListRow[]> {
   });
 }
 
-export function affiliationToken(
-  a: PersonAffiliation,
+export function personType(p: {
+  client_id: string | null;
+  vendor_id: string | null;
+  is_venue_contact: boolean;
+}): PersonType {
+  if (p.client_id) return "Client";
+  if (p.vendor_id) return "Vendor";
+  if (p.is_venue_contact) return "Venue contact";
+  return "Unaffiliated";
+}
+
+export function personTypeToken(
+  t: PersonType,
 ): "primary" | "purple" | "info" | "muted" {
-  if (a === "Client") return "primary";
-  if (a === "Vendor") return "purple";
-  if (a === "Internal") return "info";
+  if (t === "Client") return "primary";
+  if (t === "Vendor") return "purple";
+  if (t === "Venue contact") return "info";
   return "muted";
 }

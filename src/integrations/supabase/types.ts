@@ -106,6 +106,62 @@ export type Database = {
           },
         ]
       }
+      clients: {
+        Row: {
+          city: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by: string
+          id: string
+          industry: string | null
+          name: string
+          primary_address: string | null
+          tags: string[]
+          updated_at: string
+          website_url: string | null
+        }
+        Insert: {
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          industry?: string | null
+          name: string
+          primary_address?: string | null
+          tags?: string[]
+          updated_at?: string
+          website_url?: string | null
+        }
+        Update: {
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          industry?: string | null
+          name?: string
+          primary_address?: string | null
+          tags?: string[]
+          updated_at?: string
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_created_by_fkey1"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deliverables: {
         Row: {
           assigned_user_ids: string[]
@@ -293,144 +349,60 @@ export type Database = {
           },
         ]
       }
-      org_capabilities: {
-        Row: {
-          created_at: string
-          created_by: string
-          id: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          created_by: string
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string
-          id?: string
-          name?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "org_capabilities_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      organizations: {
-        Row: {
-          capabilities: string[]
-          city: string | null
-          contact_email: string | null
-          contact_name: string | null
-          contact_phone: string | null
-          created_at: string
-          created_by: string | null
-          id: string
-          internal_rating: number | null
-          legacy_notes: string | null
-          name: string
-          tags: string[]
-          type: Database["public"]["Enums"]["org_type"]
-          updated_at: string
-          website_url: string | null
-        }
-        Insert: {
-          capabilities?: string[]
-          city?: string | null
-          contact_email?: string | null
-          contact_name?: string | null
-          contact_phone?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          internal_rating?: number | null
-          legacy_notes?: string | null
-          name: string
-          tags?: string[]
-          type?: Database["public"]["Enums"]["org_type"]
-          updated_at?: string
-          website_url?: string | null
-        }
-        Update: {
-          capabilities?: string[]
-          city?: string | null
-          contact_email?: string | null
-          contact_name?: string | null
-          contact_phone?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          internal_rating?: number | null
-          legacy_notes?: string | null
-          name?: string
-          tags?: string[]
-          type?: Database["public"]["Enums"]["org_type"]
-          updated_at?: string
-          website_url?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "clients_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       people: {
         Row: {
-          affiliations: Database["public"]["Enums"]["person_affiliation"][]
+          client_id: string | null
           created_at: string
           created_by: string
           email: string | null
           full_name: string
           id: string
           linkedin_url: string | null
-          organization_id: string | null
           phone: string | null
           role_title: string | null
           tags: string[]
           updated_at: string
+          vendor_id: string | null
           venue_id: string | null
         }
         Insert: {
-          affiliations?: Database["public"]["Enums"]["person_affiliation"][]
+          client_id?: string | null
           created_at?: string
           created_by: string
           email?: string | null
           full_name: string
           id?: string
           linkedin_url?: string | null
-          organization_id?: string | null
           phone?: string | null
           role_title?: string | null
           tags?: string[]
           updated_at?: string
+          vendor_id?: string | null
           venue_id?: string | null
         }
         Update: {
-          affiliations?: Database["public"]["Enums"]["person_affiliation"][]
+          client_id?: string | null
           created_at?: string
           created_by?: string
           email?: string | null
           full_name?: string
           id?: string
           linkedin_url?: string | null
-          organization_id?: string | null
           phone?: string | null
           role_title?: string | null
           tags?: string[]
           updated_at?: string
+          vendor_id?: string | null
           venue_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "people_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "people_created_by_fkey"
             columns: ["created_by"]
@@ -439,10 +411,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "people_organization_id_fkey"
-            columns: ["organization_id"]
+            foreignKeyName: "people_vendor_id_fkey"
+            columns: ["vendor_id"]
             isOneToOne: false
-            referencedRelation: "organizations"
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
           {
@@ -580,6 +552,7 @@ export type Database = {
           budget_sheet_url: string | null
           category: string | null
           city: string | null
+          client_id: string | null
           client_notes: string | null
           created_at: string
           created_by: string | null
@@ -590,7 +563,6 @@ export type Database = {
           live_dates_end: string | null
           live_dates_start: string | null
           name: string
-          organization_id: string | null
           production_folder_url: string | null
           slack_channel_url: string | null
           status: Database["public"]["Enums"]["project_status"]
@@ -604,6 +576,7 @@ export type Database = {
           budget_sheet_url?: string | null
           category?: string | null
           city?: string | null
+          client_id?: string | null
           client_notes?: string | null
           created_at?: string
           created_by?: string | null
@@ -614,7 +587,6 @@ export type Database = {
           live_dates_end?: string | null
           live_dates_start?: string | null
           name: string
-          organization_id?: string | null
           production_folder_url?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
@@ -628,6 +600,7 @@ export type Database = {
           budget_sheet_url?: string | null
           category?: string | null
           city?: string | null
+          client_id?: string | null
           client_notes?: string | null
           created_at?: string
           created_by?: string | null
@@ -638,7 +611,6 @@ export type Database = {
           live_dates_end?: string | null
           live_dates_start?: string | null
           name?: string
-          organization_id?: string | null
           production_folder_url?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
@@ -649,9 +621,9 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "projects_client_id_fkey"
-            columns: ["organization_id"]
+            columns: ["client_id"]
             isOneToOne: false
-            referencedRelation: "organizations"
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
           {
@@ -1299,6 +1271,133 @@ export type Database = {
         }
         Relationships: []
       }
+      vendor_capabilities: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_capabilities_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_categories: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_categories_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendors: {
+        Row: {
+          capabilities: string[]
+          category_id: string | null
+          city: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          internal_rating: number | null
+          legacy_notes: string | null
+          name: string
+          tags: string[]
+          updated_at: string
+          website_url: string | null
+        }
+        Insert: {
+          capabilities?: string[]
+          category_id?: string | null
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          internal_rating?: number | null
+          legacy_notes?: string | null
+          name: string
+          tags?: string[]
+          updated_at?: string
+          website_url?: string | null
+        }
+        Update: {
+          capabilities?: string[]
+          category_id?: string | null
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          internal_rating?: number | null
+          legacy_notes?: string | null
+          name?: string
+          tags?: string[]
+          updated_at?: string
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendors_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venue_contact_people: {
         Row: {
           created_at: string
@@ -1435,7 +1534,7 @@ export type Database = {
           contact_phone: string | null
           created_at: string
           created_by: string | null
-          exclusive_vendors_org_ids: string[]
+          exclusive_vendor_ids: string[]
           features: string[]
           id: string
           name: string
@@ -1457,7 +1556,7 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           created_by?: string | null
-          exclusive_vendors_org_ids?: string[]
+          exclusive_vendor_ids?: string[]
           features?: string[]
           id?: string
           name: string
@@ -1479,7 +1578,7 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           created_by?: string | null
-          exclusive_vendors_org_ids?: string[]
+          exclusive_vendor_ids?: string[]
           features?: string[]
           id?: string
           name?: string
@@ -1759,9 +1858,7 @@ export type Database = {
     }
     Enums: {
       deliverable_status: "Upcoming" | "In Progress" | "Complete" | "Skipped"
-      org_type: "Client" | "Vendor" | "Internal"
       permission_role: "admin" | "standard" | "freelance" | "pending"
-      person_affiliation: "Client" | "Vendor" | "Internal" | "Venue"
       project_status:
         | "Approved"
         | "In Production"
@@ -1929,9 +2026,7 @@ export const Constants = {
   public: {
     Enums: {
       deliverable_status: ["Upcoming", "In Progress", "Complete", "Skipped"],
-      org_type: ["Client", "Vendor", "Internal"],
       permission_role: ["admin", "standard", "freelance", "pending"],
-      person_affiliation: ["Client", "Vendor", "Internal", "Venue"],
       project_status: [
         "Approved",
         "In Production",

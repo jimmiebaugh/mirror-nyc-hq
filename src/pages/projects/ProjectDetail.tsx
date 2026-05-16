@@ -50,7 +50,7 @@ type Project = {
   city: string | null;
   tags: string[] | null;
   budget: number | null;
-  organization: { id: string; name: string | null; type: "Client" | "Vendor" | "Internal" } | null;
+  client: { id: string; name: string | null } | null;
   venues: { venue: { id: string; name: string | null } | null }[];
   account_managers: { user: { id: string; full_name: string | null; email: string | null } | null }[];
   designers: { user: { id: string; full_name: string | null; email: string | null } | null }[];
@@ -98,7 +98,7 @@ export default function ProjectDetail() {
              production_folder_url, design_decks_folder_url, slack_channel_url,
              budget_sheet_url, status_notes, client_notes,
              job_number, category, city, tags, budget,
-             organization:organizations(id, name, type),
+             client:clients(id, name),
              venues:project_venues(venue:venues(id, name)),
              account_managers:project_account_managers(user:users(id, full_name, email)),
              designers:project_designers(user:users(id, full_name, email))`,
@@ -198,9 +198,9 @@ export default function ProjectDetail() {
             {project.job_number ? (
               <span className="text-primary">#{project.job_number}</span>
             ) : null}
-            {project.organization?.name ? (
+            {project.client?.name ? (
               <>
-                <span>{project.organization.name}</span>
+                <span>{project.client.name}</span>
                 <span className="subtle">·</span>
               </>
             ) : null}
@@ -322,13 +322,13 @@ export default function ProjectDetail() {
                 <dd>{project.city ?? "-"}</dd>
                 <dt>Client</dt>
                 <dd>
-                  {project.organization?.id ? (
+                  {project.client?.id ? (
                     <Link
-                      to={`/organizations/${project.organization.id}`}
+                      to={`/clients/${project.client.id}`}
                       className="tlink"
                       style={{ color: "rgba(190,78,68,.85)" }}
                     >
-                      {project.organization.name}
+                      {project.client.name}
                     </Link>
                   ) : (
                     "-"

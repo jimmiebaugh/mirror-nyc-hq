@@ -26,7 +26,7 @@ type DbProjectRow = {
   name: string;
   status: string | null;
   job_number: string | null;
-  organization: { name: string | null } | null;
+  client: { name: string | null } | null;
   account_managers: { user: { full_name: string | null; email: string | null } | null }[] | null;
   designers: { user: { full_name: string | null; email: string | null } | null }[] | null;
 };
@@ -47,7 +47,7 @@ async function loadActive(): Promise<Row[]> {
     .from("projects")
     .select(
       `id, name, status, job_number,
-       organization:organizations(name),
+       client:clients(name),
        account_managers:project_account_managers(user:users(full_name, email)),
        designers:project_designers(user:users(full_name, email))`,
     )
@@ -61,7 +61,7 @@ async function loadActive(): Promise<Row[]> {
       jobNumber: p.job_number,
       name: p.name,
       status: p.status ?? "",
-      clientName: p.organization?.name ?? null,
+      clientName: p.client?.name ?? null,
       leadName: am[0] ? firstName(am[0]?.full_name, am[0]?.email) : null,
       designerName: ds[0] ? firstName(ds[0]?.full_name, ds[0]?.email) : null,
     };

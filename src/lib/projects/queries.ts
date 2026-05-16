@@ -43,8 +43,8 @@ export type ProjectListRow = {
   category: string | null;
   city: string | null;
   tags: string[];
-  organizationId: string | null;
-  organizationName: string | null;
+  clientId: string | null;
+  clientName: string | null;
   liveStartIso: string | null;
   liveEndIso: string | null;
   nextDeliverableTitle: string | null;
@@ -64,8 +64,8 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
     .from("projects")
     .select(
       `id, name, status, job_number, category, city, tags,
-       live_dates_start, live_dates_end, organization_id,
-       organization:organizations(id, name),
+       live_dates_start, live_dates_end, client_id,
+       client:clients(id, name),
        account_managers:project_account_managers(user:users(full_name, email)),
        designers:project_designers(user:users(full_name, email)),
        deliverables(id, title, due_date, status)`,
@@ -85,8 +85,8 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
     tags: string[] | null;
     live_dates_start: string | null;
     live_dates_end: string | null;
-    organization_id: string | null;
-    organization: { id: string; name: string | null } | null;
+    client_id: string | null;
+    client: { id: string; name: string | null } | null;
     account_managers: { user: { full_name: string | null; email: string | null } | null }[] | null;
     designers: { user: { full_name: string | null; email: string | null } | null }[] | null;
     deliverables: { id: string; title: string; due_date: string | null; status: string }[] | null;
@@ -105,8 +105,8 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
       category: p.category,
       city: p.city,
       tags: p.tags ?? [],
-      organizationId: p.organization_id,
-      organizationName: p.organization?.name ?? null,
+      clientId: p.client_id,
+      clientName: p.client?.name ?? null,
       liveStartIso: p.live_dates_start,
       liveEndIso: p.live_dates_end,
       nextDeliverableTitle: nextDeliverable?.title ?? null,

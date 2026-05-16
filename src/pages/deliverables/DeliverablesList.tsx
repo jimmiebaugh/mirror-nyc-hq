@@ -94,7 +94,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
       rows.map((d) => ({
         ...d,
         projectName: d.project?.name ?? "",
-        clientName: d.project?.organization?.name ?? "",
+        clientName: d.project?.client?.name ?? "",
       })),
     [rows],
   );
@@ -339,13 +339,13 @@ function DeliverablesByProjectBoard({
                 {r.project.name}
               </Link>
             ) : null}
-            {r.project?.organization ? (
+            {r.project?.client ? (
               <Link
-                to={`/organizations/${r.project.organization.id}`}
+                to={`/clients/${r.project.client.id}`}
                 className="tlink"
                 style={{ fontSize: 11, color: "rgba(190,78,68,.85)" }}
               >
-                {r.project.organization.name}
+                {r.project.client.name}
               </Link>
             ) : null}
           </div>
