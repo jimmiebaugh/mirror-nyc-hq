@@ -82,11 +82,29 @@ Resets `global_settings.anthropic_spend_current_month_usd=0` and `cap_alert_sent
 
 ## Cross-cutting
 
-### `notifications-dispatch(event_type, entity_id, recipient_user_ids)`: Phase 5
-Insert `notifications` rows + send email via Gmail API service account (`jobs@mirrornyc.com`). Phase 3.8's `ts-send-pull-notification` and Phase 5.1's `notify-admin-of-pending-user` both fold into this here.
+### `notifications-dispatch(event_type, entity_type, entity_id, entity_name, recipient_user_ids, actor_id?, extra?)`: Phase 5.5
+Central notification fan-out. Receives event payloads from:
+1. `public.notifications_dispatch_writer` trigger (tasks + projects, via `invoke_edge_function`)
+2. `public.handle_new_user` trigger (`event_type='user_pending'`)
+3. The three daily crons: `hq-cron-deliverable-due-3d`, `hq-cron-task-due-today`, `hq-cron-event-date-today`
 
-### `notify-admin-of-pending-user(user_id, email)`: Phase 5.1
-Sends a one-time email to every active admin when a new user signs in for the first time. Called from the `handle_new_user` trigger via `public.invoke_edge_function` (server-to-server with `x-internal-secret`). Composes a plain-text + HTML body via `_shared/sendEmail.ts` and sends via the service account's `gmail.send` scope from `jobs@mirrornyc.com`. Failures are logged, not thrown: the pending user is already in `public.users` and the durable `notifications` rows are written by the trigger before the function fires. Standalone in 5.1; folds into `notifications-dispatch` in 5.5. `verify_jwt = false`.
+For each recipient: validates `event_type` against an allowlist, drops the actor + dedupes, checks `global_settings.in_app_notifications_enabled` + `email_notifications_enabled`, reads the per-user `user_notification_preferences` row (falls back to system defaults when no row exists), writes a `notifications` row (skips for `user_pending` since `handle_new_user` writes inline; avoids the duplicate), sends a Slack DM via `_shared/slackDm.ts` if `slack_dm` pref + `users.slack_user_id` is populated, and for `user_pending` only also fires the admin email via `_shared/sendEmail.ts` (preserves legacy behavior).
+
+Auth: **`requireInternalSecret` only** (no user-JWT path). Phase 5.5 security audit MUST-FIX: `requireInternalOrUserAuth` would let any signed-in user POST a crafted `recipient_user_ids` array to spoof notifications to admins. All legitimate callers send `x-internal-secret`. `verify_jwt = false`.
+
+Returns `{ ok: true, sent_in_app: N, sent_slack: M, skipped: K }`. Slack mrkdwn special chars in title/body are escaped before send.
+
+### `hq-cron-deliverable-due-3d`: Phase 5.5
+Daily 13:00 UTC (09:00 ET). Queries `deliverables WHERE due_date = CURRENT_DATE + 3 AND status NOT IN ('Complete','Skipped')`. Resolves recipients from `project_account_managers` per deliverable, POSTs to `notifications-dispatch` per row. `verify_jwt = false`. Scheduled via pg_cron in migration `20260517000000_phase_5_5_notifications_activity_search.sql`.
+
+### `hq-cron-task-due-today`: Phase 5.5
+Daily 12:00 UTC (08:00 ET). Queries `tasks WHERE due_date = CURRENT_DATE AND status <> 'Done' AND assignee_id IS NOT NULL`. POSTs to `notifications-dispatch` per task with the single assignee as recipient. `verify_jwt = false`.
+
+### `hq-cron-event-date-today`: Phase 5.5
+Daily 11:00 UTC (07:00 ET). Three parallel queries for `projects` where `install_dates_start`, `live_dates_start`, or `removal_dates_start` equals today. Recipients per project = union of `project_account_managers` + `project_designers` (deduped). `extra.kind` carries `'Install' | 'Live' | 'Removal'` for the body template. `verify_jwt = false`.
+
+### `notify-admin-of-pending-user(user_id, email)`: Phase 5.1 (deprecated 5.5)
+Sends a one-time email to every active admin when a new user signs in for the first time. **Phase 5.5: `handle_new_user` now calls `notifications-dispatch` instead.** This function stays deployed one phase as a fallback in case dispatch fails for the user_pending event type. Composes a plain-text + HTML body via `_shared/sendEmail.ts` and sends via the service account's `gmail.send` scope from `jobs@mirrornyc.com`. Failures are logged, not thrown. `verify_jwt = false`. Removable in Phase 5.6 once dispatch is proven stable in prod.
 
 ### `auth-on-signup` (deprecated: use `handle_new_user` trigger)
 The original spec mentioned an `auth-on-signup` Edge Function. Phase 2 implemented this as a Postgres trigger on `auth.users` instead (`handle_new_user`), running with service-role privileges. No Edge Function needed.
@@ -120,7 +138,10 @@ Generic Google OAuth2 access-token helper via service account JWT bearer flow. `
 Gmail-scoped wrapper around `googleServiceAccount.ts`. `getGmailAccessToken()` calls `getGoogleAccessToken([gmail.readonly, gmail.send], { impersonateUser: 'jobs@mirrornyc.com' })`. Public API preserved at the 4.8.1-port refactor; internal implementation thinner (~30 lines vs ~130 pre-refactor). Callers: `ts-pull-candidates`, `ts-evaluate-candidate`, `_shared/sendEmail.ts`, `_shared/packetRender.ts`. Template for any service-account-authenticated Google API call.
 
 ### `sendEmail.ts`: Phase 3.8
-Generic Gmail send helper for transactional notifications outside the packet path. `sendGmail({to, subject, bodyText, bodyHtml?, fromName?})` builds a MIME message (plain or `multipart/alternative`), gets a Gmail token via `gmailServiceAccount.ts`, POSTs to `users/me/messages/send`. Returns `boolean`: never throws. Also exports `getAdminEmail(sb)` which finds the oldest active admin in `public.users`. Used by `_shared/anthropic.ts` (cap alerts) and `ts-send-pull-notification`. The packet-render module keeps its own `sendPacketEmail` since it appends the signed-URL footer.
+Generic Gmail send helper for transactional notifications outside the packet path. `sendGmail({to, subject, bodyText, bodyHtml?, fromName?})` builds a MIME message (plain or `multipart/alternative`), gets a Gmail token via `gmailServiceAccount.ts`, POSTs to `users/me/messages/send`. Returns `boolean`: never throws. Also exports `getAdminEmail(sb)` which finds the oldest active admin in `public.users`. Used by `_shared/anthropic.ts` (cap alerts), `ts-send-pull-notification`, and `notifications-dispatch` (Phase 5.5 user_pending path). The packet-render module keeps its own `sendPacketEmail` since it appends the signed-URL footer.
+
+### `slackDm.ts`: Phase 5.5
+Slack `chat.postMessage` helper. `sendSlackDm(slackUserId, text)` POSTs to Slack with the bot token from `SLACK_BOT_TOKEN`. Channel = user id (the bot must have `im:write`). Returns `boolean`: never throws. Logs missing token as a warning + Slack API errors as `console.error`. Sole caller: `notifications-dispatch`. The dispatch fn pre-escapes mrkdwn special chars (`&`, `<`, `>`) on the title/body before composing the message to prevent crafted entity names from rendering misleading autolinks.
 
 ### `parseClaudeJson.ts`
 Lifted from the source repo. Strips markdown fences and parses the model's JSON response with a fallback for trailing-comma issues.

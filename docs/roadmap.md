@@ -123,12 +123,73 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   user-management read path). Adds `mirror_holidays` table + Settings
   CRUD editor (replaces the static `MIRROR_HOLIDAYS` constant shipped in
   5.3).
-- **5.5 Notifications + Activity Feed + states polish.** `notifications-
-  dispatch` edge function absorbing `ts-send-pull-notification` and any
-  Phase 5.1 placeholder admin-notification function, the bell panel with
-  unread state, dedicated Activity Feed page, and the state-gallery polish
-  pass across empty / loading / error / permission-denied + toasts +
-  dialogs.
+- **5.5 Notifications + Activity Feed + Search + states polish.**
+  - **Bell panel (Surface 21).** TopBar bell stub replaced with the
+    `<NotificationBellPanel />` popover (392px wide, Radix Popover anchored
+    to the bell icon). Coral badge on the bell with unread count (caps at
+    "9+"). Realtime: `postgres_changes` on `public.notifications` filtered
+    to `user_id=eq.{uid}` lights up new rows live + bumps the badge.
+    Mark all read + per-row mark-read + click-to-navigate to `link_url`.
+    Footer tlinks to `/activity` and `/notifications/preferences`.
+  - **Notification Preferences (`/notifications/preferences`).** 7 trigger
+    rows x 2 channels (In-App / Slack DM). Auto-save upsert per toggle.
+    Slack status footer reflects `users.slack_user_id` presence. New
+    table: `user_notification_preferences` (per-user, per-trigger rows;
+    fall back to system defaults when no row exists). All-tier route.
+  - **Activity Feed (`/activity`, Surface 22).** Full `activity_log`
+    feed with cursor-based "Load more" pagination, day-bucket headers,
+    `FilterBar` chips for Record type / Person / Date range. Sentence
+    builder pattern-matches on payload to surface created/updated/
+    status_changed/assigned/deleted templates with field-change detail
+    when available. Wireframe-canonical `.activity-row` + `.actdot`
+    classes reused from Project Detail's activity sidebar.
+  - **Search (`/search?q=`).** Cross-entity ilike against
+    projects/tasks/deliverables/venues/vendors/clients/people/wiki_pages,
+    grouped by section, ranked starts-with > contains > alpha. Page-level
+    autofocus input + 300ms debounce; TopBar submit + on-page input both
+    update the URL ?q= param.
+  - **States polish (Surface 23).** Three shared components:
+    `<EmptyState>` / `<LoadError>` / `<PermissionDenied>` in
+    `src/components/ui/`. `<AdminRoute>` swapped from silent redirect to
+    rendering `<PermissionDenied>` in-place with route-aware title +
+    tier-specific description.
+  - **Dispatch infrastructure.** New `notifications-dispatch` edge
+    function (internal-only via `requireInternalSecret`; receives event
+    payloads from Postgres triggers + crons; per-user preference +
+    global kill-switch checks before writing rows + sending Slack DMs).
+    New shared module `_shared/slackDm.ts`. `handle_new_user` rewired
+    to call dispatch with `event_type='user_pending'`; legacy
+    `notify-admin-of-pending-user` stays deployed one phase as fallback.
+    New `notifications_dispatch_writer` trigger on tasks + projects
+    fires `task_assigned` / `task_blocked` / `project_status_changed`
+    automatically. Three new pg_cron jobs + edge functions:
+    `hq-cron-deliverable-due-3d` (13:00 UTC),
+    `hq-cron-task-due-today` (12:00 UTC), `hq-cron-event-date-today`
+    (11:00 UTC).
+  - **Schema additions.** `user_notification_preferences` table +
+    `notifications.delivered_slack` column + `notifications` joins
+    `supabase_realtime` publication with `REPLICA IDENTITY FULL`.
+  - **Status:** DONE 2026-05-16. Spec: `OUTPUTS/phase-5-5-spec.md`.
+- **5.5.1 Sign-in page (Surface 01 part 1).** Replaces the Phase 5.1
+  stealth coming-soon Landing (hidden "STRATEGY / DESIGN / PRODUCTION"
+  trigger at the bottom) with the wireframe Surface 01 sign-in page:
+  centered Montserrat ExtraBold "MIRROR NYC HQ" wordmark (HQ in coral)
+  + visible 48px white Google Sign-In button with the 4-color G icon on
+  a full-viewport dark background. Optimistic `signingIn` flag prevents
+  double-clicks during the OAuth round-trip; already-authed mounts
+  redirect to `/home`. White button color is intentional (the one HQ
+  surface where coral does NOT win the primary CTA, since Google brand
+  guidelines win on the sign-in button). Pending state (Surface 01
+  part 2) was already shipped in Phase 5.1 at `/pending` via
+  `PendingState.tsx`. Two files: `src/pages/Landing.tsx` (rewrite),
+  `src/components/icons/GoogleColorIcon.tsx` (new). No migration, no
+  edge function changes, no schema impact. Slug retention plumbing
+  already complete pre-spec (`ProtectedRoute` writes, `useAuth` reads
+  + clears the sessionStorage key; every route including VS/TS nests
+  inside the parent `<ProtectedRoute>` group, so deep links survive
+  the OAuth round trip without additional gate code).
+  - **Status:** DONE 2026-05-16. Commit: `0f122c1`. Spec:
+    `OUTPUTS/phase-5-5-1-signin-spec.md`.
 
 **Convention:** every 5.x sub-phase ship updates `docs/roadmap.md` with
 its **Status:** DONE line in the same commit. Pair with the existing

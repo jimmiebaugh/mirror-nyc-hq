@@ -1,4 +1,3 @@
-Initialising login role...
 export type Json =
   | string
   | number
@@ -418,6 +417,7 @@ export type Database = {
           created_at: string
           delivered_email: boolean
           delivered_in_app: boolean
+          delivered_slack: boolean
           id: string
           link_url: string | null
           read: boolean
@@ -431,6 +431,7 @@ export type Database = {
           created_at?: string
           delivered_email?: boolean
           delivered_in_app?: boolean
+          delivered_slack?: boolean
           id?: string
           link_url?: string | null
           read?: boolean
@@ -444,6 +445,7 @@ export type Database = {
           created_at?: string
           delivered_email?: boolean
           delivered_in_app?: boolean
+          delivered_slack?: boolean
           id?: string
           link_url?: string | null
           read?: boolean
@@ -1433,6 +1435,44 @@ export type Database = {
           {
             foreignKeyName: "ts_roles_hiring_manager_id_fkey"
             columns: ["hiring_manager_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_notification_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          in_app: boolean
+          slack_dm: boolean
+          trigger_key: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          in_app?: boolean
+          slack_dm?: boolean
+          trigger_key: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          in_app?: boolean
+          slack_dm?: boolean
+          trigger_key?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notification_preferences_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
