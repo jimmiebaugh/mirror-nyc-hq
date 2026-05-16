@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -34,6 +34,11 @@ import VenueDetail from "./pages/venues/VenueDetail";
 import VenueEdit from "./pages/venues/VenueEdit";
 import CalendarPage from "./pages/calendar/CalendarPage";
 import OutlookPage from "./pages/outlook/OutlookPage";
+import WikiPage from "./pages/wiki/WikiPage";
+import WikiPageEdit from "./pages/wiki/WikiPageEdit";
+import TeamList from "./pages/team/TeamList";
+import TeamMemberEdit from "./pages/team/TeamMemberEdit";
+import SettingsPage from "./pages/settings/SettingsPage";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound.tsx";
 import TalentScoutIndex from "./pages/talent-scout/Index";
@@ -66,6 +71,12 @@ import ErrorState from "./pages/venue-scout/ErrorState";
 import ScoutSettings from "./pages/venue-scout/ScoutSettings";
 
 const queryClient = new QueryClient();
+
+// Phase 5.4 feedback: /team/:id/edit -> /users/:id/edit redirect carrier.
+function TeamRedirectEdit() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/users/${id}/edit`} replace />;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -421,22 +432,57 @@ const App = () => (
                   </StandardOrAdminRoute>
                 }
               />
+              {/* Wiki: all tiers including Freelance. Account Logins page
+                  is the only sub-page that excludes Freelance (enforced at
+                  component level + RLS on credentials). */}
+              <Route path="/wiki" element={<WikiPage />} />
               <Route
-                path="/wiki"
-                element={
-                  <StandardOrAdminRoute>
-                    <ComingSoon title="Wiki" />
-                  </StandardOrAdminRoute>
-                }
-              />
-              <Route
-                path="/team"
+                path="/wiki/new"
                 element={
                   <AdminRoute>
-                    <ComingSoon title="Team" />
+                    <WikiPageEdit />
                   </AdminRoute>
                 }
               />
+              <Route
+                path="/wiki/:slug/edit"
+                element={
+                  <AdminRoute>
+                    <WikiPageEdit />
+                  </AdminRoute>
+                }
+              />
+              <Route path="/wiki/:slug" element={<WikiPage />} />
+              <Route
+                path="/users"
+                element={
+                  <AdminRoute>
+                    <TeamList />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/users/new"
+                element={
+                  <AdminRoute>
+                    <TeamMemberEdit />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/users/:id/edit"
+                element={
+                  <AdminRoute>
+                    <TeamMemberEdit />
+                  </AdminRoute>
+                }
+              />
+              {/* Phase 5.4 feedback round: /team renamed to /users. Keep
+                  redirects so old bookmarks + pre-feedback notifications
+                  (link_url = '/team') still land on the right surface. */}
+              <Route path="/team" element={<Navigate to="/users" replace />} />
+              <Route path="/team/new" element={<Navigate to="/users/new" replace />} />
+              <Route path="/team/:id/edit" element={<TeamRedirectEdit />} />
               <Route
                 path="/outlook"
                 element={
@@ -449,7 +495,7 @@ const App = () => (
                 path="/settings"
                 element={
                   <AdminRoute>
-                    <ComingSoon title="Settings" />
+                    <SettingsPage />
                   </AdminRoute>
                 }
               />

@@ -20,7 +20,7 @@ import {
   weekToDateIso,
   type CalendarProjectRow,
 } from "@/lib/calendar/queries";
-import { MIRROR_HOLIDAYS } from "@/lib/calendar/holidays";
+import { useMirrorHolidays } from "@/lib/calendar/holidays";
 import {
   useCalendarVisibility,
   type CalendarSource,
@@ -145,6 +145,7 @@ export default function CalendarPage() {
   const projects = projectsQuery.data ?? [];
   const deliverables = deliverablesQuery.data ?? [];
   const outlookEntries = outlookQuery.data ?? [];
+  const { holidays: mirrorHolidays } = useMirrorHolidays();
 
   // Filter chip option sources.
   const leadOptions = useMemo(() => {
@@ -261,7 +262,7 @@ export default function CalendarPage() {
     // subtle-foreground, italic) so it's distinguishable from shared
     // Outlook banners + plain Deliverables.
     if (visibility.state.showHolidays) {
-      for (const h of MIRROR_HOLIDAYS) {
+      for (const h of mirrorHolidays) {
         out.push({
           id: `hol-${h.dateIso}-${h.label}`,
           dateIso: h.dateIso,
@@ -273,7 +274,7 @@ export default function CalendarPage() {
     }
 
     return out;
-  }, [filteredProjects, deliverables, outlookEntries, visibility.state]);
+  }, [filteredProjects, deliverables, outlookEntries, mirrorHolidays, visibility.state]);
 
   // Click routing.
   const onEventClick = (ev: CalendarEvent) => {

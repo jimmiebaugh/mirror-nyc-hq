@@ -60,7 +60,7 @@ const TOOLS_ITEMS: RailItem[] = [
   { to: "/wiki", label: "Wiki", icon: IconWiki },
   { to: "/talent-scout", label: "Talent Scout", icon: IconScout, adminOnly: true },
   { to: "/venue-scout", label: "Venue Scout", icon: IconScout },
-  { to: "/team", label: "Team", icon: IconTeam, adminOnly: true },
+  { to: "/users", label: "Users", icon: IconTeam, adminOnly: true },
   { to: "/outlook", label: "Outlook", icon: IconOutlook, adminOnly: true },
   { to: "/settings", label: "Settings", icon: IconSettings, adminOnly: true },
 ];

@@ -166,7 +166,7 @@ export async function loadCalendarOutlook(
   year: number,
 ): Promise<CalendarOutlookRow[]> {
   const { data, error } = await supabase
-    .from("outlook_entries" as never)
+    .from("outlook_entries")
     .select(
       `id, name, city, year, month, week, date_text, confidence, shared_with_team,
        client:clients(name)`,

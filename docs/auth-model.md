@@ -26,8 +26,12 @@ A user can be assigned to projects (as account manager or designer) regardless o
 
 ## RLS policies
 
-- `users`: SELECT any auth user. INSERT blocked from API (only via `handle_new_user` trigger with service role). UPDATE: own row for `avatar_url`, `full_name`, `department_tags`; admin can update anyone's `permission_role`. DELETE admin only.
-- HQ tables (`projects`, `clients`, `venues`, `venue_types`, `tasks`, all join tables): SELECT/INSERT/UPDATE any auth user. DELETE: admin only for projects, venues, clients. Tasks: any auth user can DELETE.
+- `users`: SELECT any auth user. INSERT: admin only (Phase 5.4 `users_insert_admin` policy + GRANT INSERT) for pre-provisioning Team members; otherwise the `handle_new_user` SECURITY DEFINER trigger inserts on first sign-in. UPDATE: own row OR admin (`id = auth.uid() OR is_admin()`) for any column. DELETE admin only. Phase 5.4 also dropped the `users.id` FK to `auth.users(id)` so pre-provisioned rows can exist with placeholder UUIDs; `handle_new_user` swaps the id to the auth uid on first sign-in (id-swap pattern; see `docs/decisions.md` Phase 5.4).
+- HQ tables (`projects`, `clients`, `venues`, `venue_types`, `tasks`, all join tables): SELECT/INSERT/UPDATE any auth user. DELETE: admin only for projects, venues, clients. Tasks: any auth user can DELETE. Phase 5.4 also fixed missing GRANT DELETE on `cities` + `project_categories` so the admin-only DELETE RLS policy is reachable for Settings admin deletes.
+- `wiki_pages` (Phase 5.4): SELECT any auth user. INSERT/UPDATE/DELETE admin only.
+- `credentials` (Phase 5.4): SELECT `admin` + `standard` only (freelance blocked). INSERT/UPDATE/DELETE admin only.
+- `mirror_holidays` (Phase 5.4): SELECT any auth user. INSERT/UPDATE/DELETE admin only.
+- `departments` (Phase 5.4): SELECT any auth user. INSERT/UPDATE/DELETE admin only.
 - `ts_*`: all operations admin only.
 - `vs_*`: all operations open to all authenticated users (no role gating, no admin DELETE restriction). Single permissive `FOR ALL TO authenticated USING (true) WITH CHECK (true)` policy per table. Locked in port plan § 8.6 as the collaborative agency-wide model: any authenticated `@mirrornyc.com` user can read or write any scout, candidate venue, or photo.
 - `notifications`: SELECT and UPDATE only by recipient. INSERT via service role only.
@@ -38,9 +42,9 @@ Admin checks are done via a SECURITY DEFINER function that reads `permission_rol
 
 ## Frontend route gates
 
-- `<ProtectedRoute>`: any signed-in `@mirrornyc.com` user. **Phase 5.1 behavior change:** when `permission_role = 'pending'`, redirects to `/pending`. The `/pending` route itself wraps in `<ProtectedRoute bypassPending>` so the pending screen renders rather than looping.
+- `<ProtectedRoute>`: any signed-in `@mirrornyc.com` user. **Phase 5.1 behavior change:** when `permission_role = 'pending'`, redirects to `/pending`. The `/pending` route itself wraps in `<ProtectedRoute bypassPending>` so the pending screen renders rather than looping. **Phase 5.4 amendment:** when `active = false`, signs the user out and shows an "Account deactivated" screen instead of rendering the shell.
 - `<StandardOrAdminRoute>` (Phase 5.1): wraps `ProtectedRoute`, additionally requires `permission_role IN ('admin', 'standard')`. Used on `/home` and every HQ Core surface beyond `/pending`. Freelance users see a friendly "access restricted" empty state with a Sign Out button.
-- `<AdminRoute>`: wraps `ProtectedRoute`, additionally requires `permission_role = 'admin'`. Used on every `/talent-scout/*` route plus `/team`, `/outlook`, `/settings`.
+- `<AdminRoute>`: wraps `ProtectedRoute`, additionally requires `permission_role = 'admin'`. Used on every `/talent-scout/*` route plus `/team`, `/outlook`, `/settings`, `/wiki/new`, `/wiki/:slug/edit`, `/team/new`, `/team/:id/edit`. The Wiki read routes (`/wiki`, `/wiki/:slug`) use `<ProtectedRoute>` directly (all tiers including Freelance); component-level + RLS gating handles the Account Logins exclusion.
 - All `/venue-scout/*` routes wrap in `<ProtectedRoute>` only (port plan § 8.6 RLS open-authenticated; Phase 4.2-port landed Scout Index + New Scout with this posture).
 
 ## Storage buckets

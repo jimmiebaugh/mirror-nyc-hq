@@ -13,6 +13,8 @@ type State = {
   isFreelance: boolean;
   isPending: boolean;
   isStandardOrAdmin: boolean;
+  /** True when the row exists and `active = false`. Phase 5.4 added. */
+  isDeactivated: boolean;
 };
 
 const initial: State = {
@@ -23,6 +25,7 @@ const initial: State = {
   isFreelance: false,
   isPending: false,
   isStandardOrAdmin: false,
+  isDeactivated: false,
 };
 
 /**
@@ -46,12 +49,13 @@ export function useUserRole(): State {
     setState((s) => ({ ...s, loading: true }));
     supabase
       .from("users")
-      .select("permission_role")
+      .select("permission_role, active")
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data }) => {
         if (!active) return;
         const role = (data?.permission_role ?? null) as PermissionRole | null;
+        const isActive = data?.active ?? true;
         setState({
           role,
           loading: false,
@@ -60,6 +64,7 @@ export function useUserRole(): State {
           isFreelance: role === "freelance",
           isPending: role === "pending",
           isStandardOrAdmin: role === "admin" || role === "standard",
+          isDeactivated: data != null && !isActive,
         });
       });
     return () => {
