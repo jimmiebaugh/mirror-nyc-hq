@@ -10,6 +10,7 @@ import {
 import { StarRating } from "@/components/data/StarRating";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { isInternalPartner } from "@/lib/vendors/queries";
+import { OverflowList, type OverflowItem } from "@/components/hq/OverflowList";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -53,7 +54,7 @@ type Contact = {
   role_title: string | null;
 };
 
-type ProjectTouched = {
+type ProjectLink = {
   id: string;
   name: string;
   job_number: string | null;
@@ -64,7 +65,7 @@ export default function VendorDetail() {
   const navigate = useNavigate();
   const [vendor, setVendor] = useState<Vendor | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [projectsTouched, setProjectsTouched] = useState<ProjectTouched[]>([]);
+  const [projects, setProjects] = useState<ProjectLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [ratingSaving, setRatingSaving] = useState(false);
 
@@ -72,7 +73,7 @@ export default function VendorDetail() {
     if (!id) return;
     let active = true;
     (async () => {
-      const [vendorRes, contactsRes, venuesRes] = await Promise.all([
+      const [vendorRes, contactsRes, projectsRes] = await Promise.all([
         supabase
           .from("vendors")
           .select(
@@ -88,8 +89,12 @@ export default function VendorDetail() {
           .order("full_name", { ascending: true })
           .limit(5),
         supabase
-          .from("venues")
-          .select("id, exclusive_vendor_ids"),
+          .from("project_vendors")
+          .select(
+            "created_at, project:projects!project_vendors_project_id_fkey(id, name, job_number)",
+          )
+          .eq("vendor_id", id)
+          .order("created_at", { ascending: false }),
       ]);
       if (!active) return;
       if (vendorRes.error || !vendorRes.data) {
@@ -106,41 +111,20 @@ export default function VendorDetail() {
       });
       setContacts((contactsRes.data ?? []) as unknown as Contact[]);
 
-      // Projects touched: collect venue ids whose exclusive_vendor_ids include this vendor,
-      // then pull projects from project_venues joining those venues.
-      const venueIds: string[] = [];
-      for (const r of venuesRes.data ?? []) {
-        const row = r as { id: string; exclusive_vendor_ids: string[] | null };
-        if ((row.exclusive_vendor_ids ?? []).includes(id)) {
-          venueIds.push(row.id);
+      const projs: ProjectLink[] = [];
+      for (const r of projectsRes.data ?? []) {
+        const pr = r as unknown as {
+          project: { id: string; name: string | null; job_number: string | null } | null;
+        };
+        if (pr.project) {
+          projs.push({
+            id: pr.project.id,
+            name: pr.project.name ?? "Untitled",
+            job_number: pr.project.job_number,
+          });
         }
       }
-      if (venueIds.length > 0) {
-        const { data: pvData } = await supabase
-          .from("project_venues")
-          .select("project_id, project:projects!project_venues_project_id_fkey(id, name, job_number)")
-          .in("venue_id", venueIds);
-        if (active) {
-          const seen = new Set<string>();
-          const projs: ProjectTouched[] = [];
-          for (const r of pvData ?? []) {
-            const row = r as unknown as {
-              project: { id: string; name: string | null; job_number: string | null } | null;
-            };
-            if (row.project && !seen.has(row.project.id)) {
-              seen.add(row.project.id);
-              projs.push({
-                id: row.project.id,
-                name: row.project.name ?? "Untitled",
-                job_number: row.project.job_number,
-              });
-            }
-          }
-          setProjectsTouched(projs);
-        }
-      } else if (active) {
-        setProjectsTouched([]);
-      }
+      setProjects(projs);
       setLoading(false);
     })();
     return () => {
@@ -384,23 +368,19 @@ export default function VendorDetail() {
 
           <section className="card card-pad">
             <div className="block-lbl">
-              <span className="label-section">Projects Touched</span>
+              <span className="label-section">Projects</span>
             </div>
-            {projectsTouched.length === 0 ? (
+            {projects.length === 0 ? (
               <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
             ) : (
-              <div className="stack-2">
-                {projectsTouched.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/projects/${p.id}`}
-                    className="tlink"
-                    style={{ fontSize: 12.5 }}
-                  >
-                    {p.job_number ? `#${p.job_number} . ` : ""}
-                    {p.name}
-                  </Link>
-                ))}
+              <div style={{ fontSize: 12.5 }}>
+                <OverflowList
+                  items={projects.map<OverflowItem>((p) => ({
+                    id: p.id,
+                    label: p.job_number ? `#${p.job_number} ${p.name}` : p.name,
+                    href: `/projects/${p.id}`,
+                  }))}
+                />
               </div>
             )}
           </section>

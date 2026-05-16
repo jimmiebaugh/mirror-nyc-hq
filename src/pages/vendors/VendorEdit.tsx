@@ -42,6 +42,7 @@ import { toast } from "@/hooks/use-toast";
 type FormState = {
   name: string;
   category_id: string;
+  subcategory_id: string;
   city: string;
   capabilities: string[];
   website_url: string;
@@ -56,6 +57,7 @@ type FormState = {
 const EMPTY: FormState = {
   name: "",
   category_id: "",
+  subcategory_id: "",
   city: "",
   capabilities: [],
   website_url: "",
@@ -67,37 +69,57 @@ const EMPTY: FormState = {
   internal_rating: null,
 };
 
+type VendorProject = {
+  id: string;
+  name: string;
+  job_number: string | null;
+};
+
 export default function VendorEdit() {
   const { id } = useParams<{ id?: string }>();
   const isCreate = !id;
   const navigate = useNavigate();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [initial, setInitial] = useState<FormState>(EMPTY);
+  const [projects, setProjects] = useState<VendorProject[]>([]);
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
 
   const categories = useLookup("vendor_categories");
+  const subcategories = useLookup("vendor_subcategories", {
+    parentScopeId: form.category_id || null,
+  });
 
   useEffect(() => {
     if (isCreate) return;
     let active = true;
     (async () => {
-      const { data, error } = await supabase
-        .from("vendors")
-        .select(
-          "name, category_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating",
-        )
-        .eq("id", id)
-        .single();
+      const [vendorRes, projectsRes] = await Promise.all([
+        supabase
+          .from("vendors")
+          .select(
+            "name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating",
+          )
+          .eq("id", id)
+          .single(),
+        supabase
+          .from("project_vendors")
+          .select(
+            "created_at, project:projects!project_vendors_project_id_fkey(id, name, job_number)",
+          )
+          .eq("vendor_id", id)
+          .order("created_at", { ascending: false }),
+      ]);
       if (!active) return;
-      if (error || !data) {
+      if (vendorRes.error || !vendorRes.data) {
         setLoading(false);
         return;
       }
-      const row = data as unknown as {
+      const row = vendorRes.data as unknown as {
         name: string;
         category_id: string | null;
+        subcategory_id: string | null;
         city: string | null;
         capabilities: string[] | null;
         website_url: string | null;
@@ -111,6 +133,7 @@ export default function VendorEdit() {
       const next: FormState = {
         name: row.name,
         category_id: row.category_id ?? "",
+        subcategory_id: row.subcategory_id ?? "",
         city: row.city ?? "",
         capabilities: row.capabilities ?? [],
         website_url: row.website_url ?? "",
@@ -123,6 +146,20 @@ export default function VendorEdit() {
       };
       setForm(next);
       setInitial(next);
+      const projs: VendorProject[] = [];
+      for (const r of projectsRes.data ?? []) {
+        const pr = r as unknown as {
+          project: { id: string; name: string | null; job_number: string | null } | null;
+        };
+        if (pr.project) {
+          projs.push({
+            id: pr.project.id,
+            name: pr.project.name ?? "Untitled",
+            job_number: pr.project.job_number,
+          });
+        }
+      }
+      setProjects(projs);
       setLoading(false);
     })();
     return () => {
@@ -150,6 +187,13 @@ export default function VendorEdit() {
     return categories.options.find((o) => o.id === form.category_id)?.name ?? null;
   }, [form.category_id, categories.options]);
 
+  const selectedSubcategoryName = useMemo(() => {
+    if (!form.subcategory_id) return null;
+    return (
+      subcategories.options.find((o) => o.id === form.subcategory_id)?.name ?? null
+    );
+  }, [form.subcategory_id, subcategories.options]);
+
   const onSave = async () => {
     if (!form.name.trim()) {
       toast({ title: "Vendor name is required", variant: "destructive" });
@@ -159,6 +203,7 @@ export default function VendorEdit() {
     const payload = {
       name: form.name.trim(),
       category_id: form.category_id || null,
+      subcategory_id: form.subcategory_id || null,
       city: form.city || null,
       capabilities: form.capabilities,
       website_url: form.website_url || null,
@@ -253,9 +298,31 @@ export default function VendorEdit() {
                 value={selectedCategoryName}
                 onChange={(name) => {
                   const opt = categories.options.find((o) => o.name === name);
-                  setForm((f) => ({ ...f, category_id: opt?.id ?? "" }));
+                  // Changing category clears subcategory (prior pick may not
+                  // belong to the new parent).
+                  setForm((f) => ({
+                    ...f,
+                    category_id: opt?.id ?? "",
+                    subcategory_id: "",
+                  }));
                 }}
                 entityLabel="Category"
+              />
+            </FormField>
+            <FormField label="Subcategory">
+              <RecordCombobox
+                source={{
+                  kind: "lookup",
+                  table: "vendor_subcategories",
+                  parentScopeId: form.category_id || null,
+                }}
+                value={selectedSubcategoryName}
+                onChange={(name) => {
+                  const opt = subcategories.options.find((o) => o.name === name);
+                  setForm((f) => ({ ...f, subcategory_id: opt?.id ?? "" }));
+                }}
+                entityLabel="Subcategory"
+                disabled={!form.category_id}
               />
             </FormField>
             <FormField label="City">
@@ -369,6 +436,42 @@ export default function VendorEdit() {
           </p>
         </div>
       </section>
+
+      {!isCreate ? (
+        <section className="card">
+          <div className="card-pad stack-4">
+            <div className="block-lbl">
+              <span className="label-section">Projects</span>
+            </div>
+            <p className="cap" style={{ lineHeight: 1.5 }}>
+              Projects this vendor has worked on.
+            </p>
+            {projects.length === 0 ? (
+              <div className="empty">
+                <p>
+                  No projects linked yet. Vendors get linked from a project's
+                  edit screen.
+                </p>
+              </div>
+            ) : (
+              <ul className="stack-2" style={{ listStyle: "none", padding: 0 }}>
+                {projects.map((p) => (
+                  <li key={p.id}>
+                    <Link to={`/projects/${p.id}`} className="tlink">
+                      {p.job_number ? (
+                        <span className="mono muted" style={{ marginRight: 8 }}>
+                          #{p.job_number}
+                        </span>
+                      ) : null}
+                      {p.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       <StickySaveBar
         dirty={dirty}

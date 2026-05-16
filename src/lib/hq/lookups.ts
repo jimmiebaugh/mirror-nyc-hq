@@ -26,12 +26,24 @@ export type LookupTable =
   | "project_categories"
   | "vendor_capabilities"
   | "vendor_categories"
+  | "vendor_subcategories"
   | "venue_types"
   | "departments";
 
 export type LookupOption = { id: string; name: string };
 
-export function useLookup(table: LookupTable) {
+/**
+ * `parentScopeId` (Phase 5.6.2): when set, the hook filters options by
+ * `parent_category_id = parentScopeId` and includes `parent_category_id`
+ * in the insert payload. Only `vendor_subcategories` carries a parent
+ * column today; passing `parentScopeId` against other tables is a no-op
+ * load but will fail at insert time (no such column).
+ */
+export function useLookup(
+  table: LookupTable,
+  opts?: { parentScopeId?: string | null },
+) {
+  const parentScopeId = opts?.parentScopeId ?? null;
   const [options, setOptions] = useState<LookupOption[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,10 +51,14 @@ export function useLookup(table: LookupTable) {
     let active = true;
     setLoading(true);
     (async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from(table)
         .select("id, name")
         .order("name", { ascending: true });
+      if (parentScopeId) {
+        q = q.eq("parent_category_id", parentScopeId);
+      }
+      const { data, error } = await q;
       if (!active) return;
       setLoading(false);
       if (error) {
@@ -55,7 +71,7 @@ export function useLookup(table: LookupTable) {
     return () => {
       active = false;
     };
-  }, [table]);
+  }, [table, parentScopeId]);
 
   const addOption = useCallback(
     async (name: string): Promise<LookupOption | null> => {
@@ -66,10 +82,13 @@ export function useLookup(table: LookupTable) {
       if (!created_by) return null;
 
       // venue_types doesn't carry created_by in its shipped schema.
-      const insertPayload: Record<string, unknown> =
+      const basePayload: Record<string, unknown> =
         table === "venue_types"
           ? { name: trimmed }
           : { name: trimmed, created_by };
+      const insertPayload: Record<string, unknown> = parentScopeId
+        ? { ...basePayload, parent_category_id: parentScopeId }
+        : basePayload;
 
       const { data, error } = await supabase
         .from(table)
@@ -86,7 +105,7 @@ export function useLookup(table: LookupTable) {
       );
       return next;
     },
-    [table],
+    [table, parentScopeId],
   );
 
   return { options, loading, addOption };

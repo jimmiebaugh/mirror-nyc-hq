@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
  *     `vendor_id`. DB mutex CHECK prevents both being set; UI radio
  *     enforces the same.
  *   - `is_venue_contact` boolean folded into the row by joining
- *     `venue_contact_people` so the List can resolve "Venue contact"
+ *     `venue_contact_people` so the List can resolve "Venue"
  *     type without an extra round trip.
  *
  * 5.2 cleanup change:
@@ -24,12 +24,12 @@ import { supabase } from "@/integrations/supabase/client";
  * from people.
  */
 
-export type PersonType = "Client" | "Vendor" | "Venue contact" | "Unaffiliated";
+export type PersonType = "Client" | "Vendor" | "Venue" | "Unaffiliated";
 
 export const PERSON_TYPES: PersonType[] = [
   "Client",
   "Vendor",
-  "Venue contact",
+  "Venue",
   "Unaffiliated",
 ];
 
@@ -123,7 +123,7 @@ export function personType(p: {
 }): PersonType {
   if (p.client_id) return "Client";
   if (p.vendor_id) return "Vendor";
-  if (p.is_venue_contact) return "Venue contact";
+  if (p.is_venue_contact) return "Venue";
   return "Unaffiliated";
 }
 
@@ -132,6 +132,6 @@ export function personTypeToken(
 ): "primary" | "purple" | "info" | "muted" {
   if (t === "Client") return "primary";
   if (t === "Vendor") return "purple";
-  if (t === "Venue contact") return "info";
+  if (t === "Venue") return "info";
   return "muted";
 }

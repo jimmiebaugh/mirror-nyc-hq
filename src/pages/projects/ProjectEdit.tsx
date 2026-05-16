@@ -95,7 +95,13 @@ export default function ProjectEdit() {
   const [initialAccountManagerIds, setInitialAccountManagerIds] = useState<string[]>([]);
   const [designerIds, setDesignerIds] = useState<string[]>([]);
   const [initialDesignerIds, setInitialDesignerIds] = useState<string[]>([]);
+  const [vendorIds, setVendorIds] = useState<string[]>([]);
+  const [initialVendorIds, setInitialVendorIds] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
+  const [vendorOptions, setVendorOptions] = useState<{ id: string; label: string }[]>([]);
+  const [vendorCategoryOptions, setVendorCategoryOptions] = useState<
+    { id: string; label: string }[]
+  >([]);
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
@@ -104,7 +110,16 @@ export default function ProjectEdit() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const [clientsRes, usersRes, projectRes, amRes, dsRes] = await Promise.all([
+      const [
+        clientsRes,
+        usersRes,
+        vendorsRes,
+        vendorCategoriesRes,
+        projectRes,
+        amRes,
+        dsRes,
+        pvRes,
+      ] = await Promise.all([
         supabase
           .from("clients")
           .select("id, name")
@@ -114,6 +129,14 @@ export default function ProjectEdit() {
           .select("id, full_name, email")
           .eq("active", true)
           .order("full_name", { ascending: true }),
+        supabase
+          .from("vendors")
+          .select("id, name")
+          .order("name", { ascending: true }),
+        supabase
+          .from("vendor_categories")
+          .select("id, name")
+          .order("name", { ascending: true }),
         isCreate
           ? Promise.resolve({ data: null, error: null })
           : supabase
@@ -135,6 +158,12 @@ export default function ProjectEdit() {
               .from("project_designers")
               .select("user_id")
               .eq("project_id", id),
+        isCreate
+          ? Promise.resolve({ data: [] as { vendor_id: string }[] })
+          : supabase
+              .from("project_vendors")
+              .select("vendor_id")
+              .eq("project_id", id),
       ]);
       if (!active) return;
       const labels = new Map<string, string>();
@@ -149,12 +178,29 @@ export default function ProjectEdit() {
           label: u.full_name?.trim() || u.email,
         })),
       );
+      type VendorRow = { id: string; name: string | null };
+      setVendorOptions(
+        ((vendorsRes.data ?? []) as VendorRow[]).map((v) => ({
+          id: v.id,
+          label: v.name ?? "Untitled",
+        })),
+      );
+      type CategoryRow = { id: string; name: string | null };
+      setVendorCategoryOptions(
+        ((vendorCategoriesRes.data ?? []) as CategoryRow[]).map((c) => ({
+          id: c.id,
+          label: c.name ?? "Untitled",
+        })),
+      );
       const amIds = ((amRes.data ?? []) as { user_id: string }[]).map((r) => r.user_id);
       const dsIds = ((dsRes.data ?? []) as { user_id: string }[]).map((r) => r.user_id);
+      const pvIds = ((pvRes.data ?? []) as { vendor_id: string }[]).map((r) => r.vendor_id);
       setAccountManagerIds(amIds);
       setInitialAccountManagerIds(amIds);
       setDesignerIds(dsIds);
       setInitialDesignerIds(dsIds);
+      setVendorIds(pvIds);
+      setInitialVendorIds(pvIds);
       if (!isCreate && projectRes && "data" in projectRes && projectRes.data) {
         type Row = {
           name: string;
@@ -217,8 +263,19 @@ export default function ProjectEdit() {
       JSON.stringify([...accountManagerIds].sort()) !==
         JSON.stringify([...initialAccountManagerIds].sort()) ||
       JSON.stringify([...designerIds].sort()) !==
-        JSON.stringify([...initialDesignerIds].sort()),
-    [form, initial, accountManagerIds, initialAccountManagerIds, designerIds, initialDesignerIds],
+        JSON.stringify([...initialDesignerIds].sort()) ||
+      JSON.stringify([...vendorIds].sort()) !==
+        JSON.stringify([...initialVendorIds].sort()),
+    [
+      form,
+      initial,
+      accountManagerIds,
+      initialAccountManagerIds,
+      designerIds,
+      initialDesignerIds,
+      vendorIds,
+      initialVendorIds,
+    ],
   );
 
   const onStatusChange = (next: ProjectStatus) => {
@@ -258,6 +315,39 @@ export default function ProjectEdit() {
   );
 
   const loadUserOptions = useCallback(async () => userOptions, [userOptions]);
+
+  const loadVendorOptions = useCallback(async () => vendorOptions, [vendorOptions]);
+
+  const handleCreateVendor = useCallback(
+    async (data: Record<string, string>) => {
+      const { data: userRes } = await supabase.auth.getUser();
+      const created_by = userRes.user?.id;
+      if (!created_by) {
+        toast({ title: "Not signed in", variant: "destructive" });
+        return null;
+      }
+      const payload = {
+        name: data.name,
+        category_id: data.category_id || null,
+        created_by,
+      };
+      const { data: row, error } = await supabase
+        .from("vendors")
+        .insert(payload)
+        .select("id, name")
+        .single();
+      if (error || !row) {
+        toast({ title: "Create failed", description: error?.message, variant: "destructive" });
+        return null;
+      }
+      const created = { id: row.id, label: row.name ?? "Untitled" };
+      setVendorOptions((prev) =>
+        [...prev, created].sort((a, b) => a.label.localeCompare(b.label)),
+      );
+      return created;
+    },
+    [],
+  );
 
   const handleCreateClient = useCallback(
     async (data: Record<string, string>) => {
@@ -381,12 +471,27 @@ export default function ProjectEdit() {
           .eq("project_id", projectId)
           .eq("user_id", userId);
       }
+      const pvAdd = vendorIds.filter((v) => !initialVendorIds.includes(v));
+      const pvRemove = initialVendorIds.filter((v) => !vendorIds.includes(v));
+      for (const vendorId of pvAdd) {
+        await supabase
+          .from("project_vendors")
+          .insert({ project_id: projectId, vendor_id: vendorId });
+      }
+      for (const vendorId of pvRemove) {
+        await supabase
+          .from("project_vendors")
+          .delete()
+          .eq("project_id", projectId)
+          .eq("vendor_id", vendorId);
+      }
     }
 
     setSaving(false);
     setInitial(form);
     setInitialAccountManagerIds(accountManagerIds);
     setInitialDesignerIds(designerIds);
+    setInitialVendorIds(vendorIds);
     if (isCreate && projectId) {
       toast({ title: "Project created" });
       navigate(`/projects/${projectId}`);
@@ -536,6 +641,36 @@ export default function ProjectEdit() {
               />
             </FormField>
           </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-pad stack-4">
+          <div className="block-lbl">
+            <span className="label-section">Project Vendors</span>
+          </div>
+          <FormField label="Vendors">
+            <RecordCombobox
+              multi
+              source={{ kind: "record", loadOptions: loadVendorOptions }}
+              multiValue={vendorIds}
+              onMultiChange={setVendorIds}
+              entityLabel="Vendor"
+              placeholder="Add vendor..."
+              miniCreateFields={[
+                { key: "name", label: "Name", required: true, placeholder: "Testrite" },
+                {
+                  key: "category_id",
+                  label: "Category",
+                  select: {
+                    options: vendorCategoryOptions,
+                    placeholder: "Select category...",
+                  },
+                },
+              ]}
+              onMiniCreate={handleCreateVendor}
+            />
+          </FormField>
         </div>
       </section>
 

@@ -4,6 +4,7 @@ import { FilterBar, emptyFilterState, type FilterFieldDef, type FilterState } fr
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { DataTable } from "@/components/data/DataTable";
 import { StarRating } from "@/components/data/StarRating";
+import { OverflowList, type OverflowItem } from "@/components/hq/OverflowList";
 import { IconPlus } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
 import {
@@ -31,6 +32,7 @@ import {
 
 const VENDOR_FILTER_FIELDS: FilterFieldDef[] = [
   { key: "category_name", label: "Category", type: "text" },
+  { key: "subcategory_name", label: "Subcategory", type: "text" },
   { key: "capabilities", label: "Capabilities", type: "text" },
   { key: "city", label: "City", type: "text" },
   { key: "tags", label: "Tags", type: "text" },
@@ -127,7 +129,14 @@ export default function VendorsList() {
                 key: "name",
                 label: "Vendor",
                 sort: (a, b) => a.name.localeCompare(b.name),
-                render: (r) => <span className="lead">{r.name}</span>,
+                render: (r) => (
+                  <span className="row-c" style={{ display: "inline-flex", gap: 6 }}>
+                    <span className="lead">{r.name}</span>
+                    {isInternalPartner(r.tags) ? (
+                      <span className="pill pill-sm p-info">Internal</span>
+                    ) : null}
+                  </span>
+                ),
               },
               {
                 key: "category_name",
@@ -141,22 +150,13 @@ export default function VendorsList() {
                   ),
               },
               {
-                key: "capabilities",
-                label: "Capabilities",
+                key: "subcategory_name",
+                label: "Subcategory",
+                sort: (a, b) =>
+                  (a.subcategory_name ?? "").localeCompare(b.subcategory_name ?? ""),
                 render: (r) =>
-                  r.capabilities.length > 0 ? (
-                    <span className="muted">{r.capabilities.join(", ")}</span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  ),
-              },
-              {
-                key: "internal_partner",
-                label: "Internal Partner",
-                align: "c",
-                render: (r) =>
-                  isInternalPartner(r.tags) ? (
-                    <span className="pill pill-sm p-info">Internal</span>
+                  r.subcategory_name ? (
+                    <span className="muted">{r.subcategory_name}</span>
                   ) : (
                     <span className="muted subtle">-</span>
                   ),
@@ -173,6 +173,20 @@ export default function VendorsList() {
                   ),
               },
               {
+                key: "capabilities",
+                label: "Capabilities",
+                render: (r) => (
+                  <OverflowList
+                    asChip
+                    items={r.capabilities.map<OverflowItem>((c) => ({
+                      id: c,
+                      label: c,
+                      href: null,
+                    }))}
+                  />
+                ),
+              },
+              {
                 key: "internal_rating",
                 label: "Rating",
                 align: "c",
@@ -185,11 +199,17 @@ export default function VendorsList() {
                   ),
               },
               {
-                key: "pastProjectsTouchedCount",
-                label: "Projects Touched",
-                align: "r",
-                sort: (a, b) => a.pastProjectsTouchedCount - b.pastProjectsTouchedCount,
-                render: (r) => <span className="muted tnum">{r.pastProjectsTouchedCount}</span>,
+                key: "projects",
+                label: "Projects",
+                render: (r) => (
+                  <OverflowList
+                    items={r.recentProjects.map<OverflowItem>((p) => ({
+                      id: p.id,
+                      label: p.name,
+                      href: `/projects/${p.id}`,
+                    }))}
+                  />
+                ),
               },
             ]}
           />

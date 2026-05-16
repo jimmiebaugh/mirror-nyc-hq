@@ -16,33 +16,36 @@ import {
 
 /**
  * People List (Surface 11).
- * Wireframe binding: OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 1979-2031.
- * Build notes: OUTPUTS/phase-5-hq-wireframe-build-notes.md § "11 . People".
  *
- * Affiliation rendering adapted in Phase 5.2.3: the wireframe's multi-pill
- * `affiliations[]` column is gone (locked Q4 dropped the array; at most
- * one org-type per person). Single "Type" pill resolved from which FK is
- * set (client_id / vendor_id / venue_contact_people join).
+ * Phase 5.6.2 reshape: column header "Type" -> "Affiliation"; PERSON_TYPES
+ * value "Venue contact" -> "Venue" (matches PersonEdit radio label).
+ * Default filter chip dropped (page loads with every person visible).
+ * Unaffiliated rows render a blank Affiliation cell (no pill, no
+ * placeholder). New inline Affiliation filter buttons row sits next to
+ * the SavedViewsDropdown: All / Client / Vendor / Venue, single-tap
+ * (radio) toggle, color-keyed to the affiliation pill tokens. The button
+ * state is mirrored into `filterState` as an `affiliation is X` chip so
+ * saved views capture the selection.
  *
- * 5.2 cleanup: column header relabeled "Affiliation" -> "Organization"
- * to match wireframe Surface 11 line 2019. Cell extended for the
- * venue-contact case (no client_id / vendor_id but has venues) to show
- * the venue name (single) or "{N} venues" (multi) as plain `.cap` text.
- * Filter chip "Affiliation" (text) replaced with "Organization"
- * (composite lookup over clients + vendors via useClientsAndVendors).
- *
- * `flat` DataTable (uses `.tbl--flat` per wireframe line 2018).
- * Organization tlinks render in muted coral (`rgba(190,78,68,.85)`) per
- * build-notes Surface 11.
- *
- * Default filter chip: `Type is Client` (replaces the 5.2.2
- * Affiliation-is-Client default; semantically equivalent).
+ * Wireframe binding (DEVIATION carried over from 5.2 cleanup): no
+ * surface-11 wireframe redraw exists for the new column header /
+ * filter-button row. Wireframe-v2 redraw deferred to a future polish
+ * pass; see design-system § 11.
  */
 
 const DEFAULT_FILTER_STATE: FilterState = {
   connector: "AND",
-  chips: [{ field: "type", op: "is", value: "Client" }],
+  chips: [],
 };
+
+type AffiliationFilter = "All" | "Client" | "Vendor" | "Venue";
+
+const AFFILIATION_BUTTONS: { value: AffiliationFilter; label: string; color: string }[] = [
+  { value: "All", label: "All", color: "hsl(var(--muted-foreground))" },
+  { value: "Client", label: "Client", color: "hsl(var(--info))" },
+  { value: "Vendor", label: "Vendor", color: "hsl(var(--warn))" },
+  { value: "Venue", label: "Venue", color: "hsl(var(--success))" },
+];
 
 type PersonRowWithDerived = PersonListRow & {
   type: string;
@@ -81,7 +84,7 @@ export default function PeopleList() {
     () => [
       {
         key: "type",
-        label: "Type",
+        label: "Affiliation",
         type: "enum",
         options: [...PERSON_TYPES],
       },
@@ -95,6 +98,30 @@ export default function PeopleList() {
     ],
     [orgOptions],
   );
+
+  const activeAffiliation: AffiliationFilter = useMemo(() => {
+    const chip = filterState.chips.find(
+      (c) => c.field === "type" && c.op === "is",
+    );
+    if (!chip) return "All";
+    const v = chip.value as string;
+    if (v === "Client" || v === "Vendor" || v === "Venue") return v;
+    return "All";
+  }, [filterState]);
+
+  const setAffiliationFilter = (next: AffiliationFilter) => {
+    setFilterState((prev) => {
+      const others = prev.chips.filter(
+        (c) => !(c.field === "type" && c.op === "is"),
+      );
+      const nextChips =
+        next === "All"
+          ? others
+          : [...others, { field: "type", op: "is" as const, value: next }];
+      return { ...prev, chips: nextChips };
+    });
+    setActiveViewName("Custom filter");
+  };
 
   // Fold the derived Type + organization fields into the row so the
   // FilterBar can filter on those keys via the generic getField accessor.
@@ -148,6 +175,22 @@ export default function PeopleList() {
               setActiveViewName(v.name);
             }}
           />
+          <div className="row-c" style={{ gap: 6 }}>
+            {AFFILIATION_BUTTONS.map((b) => {
+              const isActive = activeAffiliation === b.value;
+              return (
+                <button
+                  key={b.value}
+                  type="button"
+                  className={`fchip fchip--btn ${isActive ? "fchip--active" : ""}`}
+                  style={{ color: b.color }}
+                  onClick={() => setAffiliationFilter(b.value)}
+                >
+                  <span>{b.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         <FilterBar
           state={filterState}
@@ -183,10 +226,11 @@ export default function PeopleList() {
               },
               {
                 key: "type",
-                label: "Type",
+                label: "Affiliation",
                 sort: (a, b) => a.type.localeCompare(b.type),
                 render: (r) => {
                   const t = personType(r);
+                  if (t === "Unaffiliated") return <span />;
                   return (
                     <span className={`pill pill-sm p-${personTypeToken(t)}`}>{t}</span>
                   );
