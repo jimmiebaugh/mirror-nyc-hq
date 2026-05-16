@@ -53,30 +53,87 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   Internal Notes parity on Organizations + People, pending-state flow, new
   left rail AppShell replacing the shipped top-nav, Surface 02 Standard
   Dashboard and Surface 03 Admin Dashboard.
+  - **Status:** DONE 2026-05-15. Commit: `665a311`. Spec:
+    `OUTPUTS/phase-5-1-spec.md`.
 - **5.2 Projects + Tasks + Deliverables + Organizations + People + Venues
   databases.** The canonical database-list pattern (list, board, timeline,
   calendar views) plus detail + edit, applied across all six surfaces. Split
-  into two commits per the Phase 5.2 spec:
+  into multiple commits as the work unfolded:
   - **5.2.1** Project workflow trio (Projects + Tasks + Deliverables) +
     cross-cutting components (`<DataTable />`, `<ViewSwitch />`, `<FilterBar />`,
-    `<SavedViewsDropdown />`, `<BoardView />`, `<TimelineView />`) + the rail
-    amendment from `OUTPUTS/phase-5-2-rail-amendment.md`.
-  - **5.2.2** Entity trio (Organizations + People + Venues) using the cross-
-    cutting components landed in 5.2.1.
-- **5.3 Calendar + Outlook.** Unified Calendar with two-row event banners,
-  per-project visibility toggles, and Outlook 12-month grid + entry edit
-  form with the Promote-to-Project affordance.
+    `<SavedViewsDropdown />`, `<BoardView />`, `<TimelineView />`,
+    `<CalendarMonthView />`) + the rail amendment from
+    `OUTPUTS/phase-5-2-rail-amendment.md`.
+    **Status:** DONE 2026-05-15. Commit: `15511af`. Spec:
+    `OUTPUTS/phase-5-2-spec.md` §§ 0 to 5.B + 5.C + 7 + 11 to 14.
+  - **5.2.1 Revision** Wireframe-fidelity rebuild of the seven 5.2.1
+    surfaces against the locked Phase 5 wireframe. UNPREFIXED canonical
+    CSS lift block in `src/index.css`.
+    **Status:** DONE 2026-05-16. Commit: `62f610e`. Spec:
+    `OUTPUTS/phase-5-2-1-revision-spec.md`.
+  - **5.2.2** Entity trio (Organizations + People + Venues) using the
+    cross-cutting components landed in 5.2.1, plus
+    `<InternalNotesEditor />` + `<StarRating />` + 4 lookup migrations.
+    **Status:** DONE 2026-05-16. Commit: `0356a85`. Spec:
+    `OUTPUTS/phase-5-2-2-spec.md`.
+  - **5.2.3** Clients + vendors table split (5 migrations) + 6 new page
+    files + LeftRail order flip.
+    **Status:** DONE 2026-05-16. Commit: `59c81ba`. Spec:
+    `OUTPUTS/phase-5-2-3-spec.md`.
+  - **5.2 cleanup** Six small carry-forwards (People Org relabel,
+    FilterBar lookup field type, `IconClients` glyph,
+    `vendors.primary_address`, `vendor_capabilities` GRANT DELETE,
+    workflow doc amendments § 4.1.a + § 4.5 step 5e).
+    **Status:** DONE 2026-05-16. Commit: `65159a2`. Spec:
+    `OUTPUTS/phase-5-2-cleanup-spec.md`.
+- **5.3 Calendar + Outlook.** Unified Calendar surface (Surface 15) and
+  admin-only Outlook 12-month grid (Surface 16).
+  - **Calendar (`/calendar`, all tiers).** Reuses `<CalendarMonthView />`.
+    Pulls Install / Live / Removal date ranges from `projects` and due
+    dates from `deliverables`. Color-coded per `docs/design-system.md`
+    § 5b (Install cyan, Live coral, Removal amber, Deliverable green).
+    232px right rail with per-project visibility toggles, master
+    Deliverables toggle, Mirror Holidays toggle (hardcoded list from the
+    official Mirror NYC Holiday Calendar 2026 PDF; Settings-editable in
+    5.4). Filter chips for Lead + Category. Per-user visibility
+    persisted via `saved_views` (`entity_type = 'calendar'`).
+  - **Outlook (`/outlook`, admin-only).** New `outlook_entries` table
+    with `outlook_confidence` enum. 12-month grid
+    (`Month / Week 1-4`) + year tabs. Color per locked-decisions § 4
+    (On Radar amber, Likely cyan, Confirmed green, Complete gray; flips
+    the wireframe CSS). 277px side panel for detail + edit with Promote
+    to Project / Unlink / Delete actions. Shared w/ Team toggle adds the
+    entry to the unified Calendar visible to all tiers.
+  - **Schema additions.** `outlook_entries` table + enum + RLS + GRANTs;
+    four new `projects` date columns (`install_dates_start/end`,
+    `removal_dates_start/end`); `saved_views.entity_type` CHECK widened
+    to include `'calendar'`. One new Postgres RPC
+    (`promote_outlook_to_project`).
+  - **Carry-forwards.** ProjectEdit gets two new date-range pickers
+    (Install + Removal). ProjectDetail Dates kv splits Install / Live /
+    Removal. ProjectsList Timeline view extends to render all three bar
+    kinds (was Live only). OutlookCondensedCard on Home flips from
+    placeholder text to real `outlook_entries` data.
+  - **Status:** DONE 2026-05-16. Commit: `1c21ea9`. Spec:
+    `OUTPUTS/phase-5-3-spec.md`.
 - **5.4 Wiki + Account Logins + Settings + Team.** Wiki pages with admin-
   gated Edit, Account Logins page with reveal-and-copy credential field
   and silent 30-second idle re-redact, global Settings page, Team page
   (admin-only, user-management directory; ties to Settings for the
-  user-management read path).
+  user-management read path). Adds `mirror_holidays` table + Settings
+  CRUD editor (replaces the static `MIRROR_HOLIDAYS` constant shipped in
+  5.3).
 - **5.5 Notifications + Activity Feed + states polish.** `notifications-
   dispatch` edge function absorbing `ts-send-pull-notification` and any
   Phase 5.1 placeholder admin-notification function, the bell panel with
   unread state, dedicated Activity Feed page, and the state-gallery polish
   pass across empty / loading / error / permission-denied + toasts +
   dialogs.
+
+**Convention:** every 5.x sub-phase ship updates `docs/roadmap.md` with
+its **Status:** DONE line in the same commit. Pair with the existing
+squash-time `CHECKPOINT.md` touch so finished-sub-phase state stays in
+two places (roadmap = plan view, CHECKPOINT = live-state view).
 
 **Order matters:** 5.1 is the foundation; every later sub-phase depends on
 the shell, the tier model, and the notes_log table. After 5.1, 5.2 and 5.3
