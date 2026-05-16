@@ -111,6 +111,26 @@ verify_jwt = true
 # Phase 5.1: admin notification for new pending users. Called by the
 # handle_new_user trigger via public.invoke_edge_function (server-to-server
 # with x-internal-secret). requireInternalOrUserAuth handles auth in-fn.
-# Phase 5.5's notifications-dispatch will absorb this.
+# Phase 5.5's notifications-dispatch absorbs this; kept deployed one phase
+# as a fallback.
 [functions.notify-admin-of-pending-user]
+verify_jwt = false
+
+# Phase 5.5: central notification dispatch. Receives event payloads from
+# the notifications_dispatch_writer trigger (tasks + projects), the
+# handle_new_user trigger (user_pending), and the three daily crons below.
+# Per-user preference + global kill-switch lookups happen inside the fn.
+[functions.notifications-dispatch]
+verify_jwt = false
+
+# Phase 5.5 crons. Daily fan-outs that query rows + POST per-record into
+# notifications-dispatch. Scheduled in migration
+# 20260517000000_phase_5_5_notifications_activity_search.sql via pg_cron.
+[functions.hq-cron-deliverable-due-3d]
+verify_jwt = false
+
+[functions.hq-cron-task-due-today]
+verify_jwt = false
+
+[functions.hq-cron-event-date-today]
 verify_jwt = false

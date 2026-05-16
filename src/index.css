@@ -1365,6 +1365,21 @@
   .wiki-editor-body .tiptap p.is-editor-empty:first-child::before{
     content:attr(data-placeholder);color:hsl(var(--subtle-foreground));pointer-events:none;float:left;height:0;
   }
+
+  /* ─── Phase 5.5 Notifications + Activity Feed ──────────────────────────
+     Bell-panel row (.notif) class set lifted from the locked wireframe
+     (OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 3266-3272). The
+     .activity-row / .actdot classes already shipped earlier (Project Detail
+     activity sidebar) and are reused as-is by the Activity Feed page. */
+  .notif{display:flex;gap:11px;padding:12px 14px;border-bottom:1px solid hsl(var(--border));}
+  .notif:last-child{border-bottom:none;}
+  .notif--unread{background:rgba(190,78,68,.05);}
+  .notif .nico{width:30px;height:30px;border-radius:var(--radius);background:hsl(var(--surface-alt));border:1px solid hsl(var(--border));display:flex;align-items:center;justify-content:center;flex:none;color:hsl(var(--muted-foreground));}
+  .notif .nico .ic{width:15px;height:15px;}
+  .notif .nbody{font-size:12.5px;line-height:1.45;}
+  .notif .nbody .src{color:hsl(var(--primary));font-weight:500;}
+  .notif .nts{font-family:var(--font-mono);font-size:10px;color:hsl(var(--subtle-foreground));margin-top:3px;}
+  .notif .udot{width:7px;height:7px;border-radius:999px;background:hsl(var(--primary));flex:none;margin-top:6px;}
 }
 
 @layer utilities {

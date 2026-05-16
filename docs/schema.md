@@ -339,10 +339,27 @@ Storage bucket: `vs_venue_photos` (private, signed URLs 1-hour TTL via `createSi
 
 ### notifications
 - `id`, `user_id` (FK; recipient)
-- `type` (text: `task_assigned`, `task_due`, `project_updated`, `pull_complete`, `final_review_ready`, etc.)
+- `type` (text: `task_assigned`, `task_due_today`, `task_blocked`, `deliverable_due_3d`, `project_status_changed`, `event_date_today`, `mention`, `user_pending`, `pull_complete`, `final_review_ready`, etc.)
 - `title`, `body`, `link_url` (text)
-- `read` (bool), `delivered_in_app` (bool), `delivered_email` (bool)
+- `read` (bool), `delivered_in_app` (bool), `delivered_email` (bool), `delivered_slack` (bool, Phase 5.5)
 - `created_at`, `read_at`
+- Realtime: joined `supabase_realtime` publication with `REPLICA IDENTITY FULL` in Phase 5.5 so the bell badge live-updates via `postgres_changes` on INSERT/UPDATE filtered by `user_id=eq.{uid}`.
+
+### user_notification_preferences (Phase 5.5)
+Per-user, per-trigger opt-in/out overrides for the in-app + Slack DM
+channels. When no row exists for `(user_id, trigger_key)`, the dispatch
+function falls back to system defaults (see spec § 2b).
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `user_id` (uuid, NOT NULL, FK to `users.id` ON DELETE CASCADE)
+- `trigger_key` (text, NOT NULL): one of `deliverable_due_3d`, `task_assigned`, `task_due_today`, `task_blocked`, `project_status_changed`, `mention`, `event_date_today`
+- `in_app` (bool, NOT NULL, default true)
+- `slack_dm` (bool, NOT NULL, default false)
+- `created_at`, `updated_at` (timestamptz)
+- UNIQUE `(user_id, trigger_key)`
+- Index: `user_notification_preferences_user_idx (user_id)`
+- Trigger: `trg_user_notification_preferences_updated_at` (updated_at_auto)
+- RLS: per-user (`user_id = auth.uid()`) on every CRUD verb. No cross-user reads.
 
 ### global_settings (single row)
 - `id` (uuid, PK)
@@ -439,7 +456,8 @@ Polymorphic Internal Notes log shared by Organizations, People, and Venues. The 
 - `deliverables_completed_at_set` (Phase 5.2.1): mirror of `tasks_completed_at_set` for the `deliverables` table; flips `completed_at` on `status -> 'Complete'`.
 - `activity_log_writer`: on insert / update / delete / status-change to projects, venues, tasks, deliverables, write an `activity_log` row. Extended in Phase 5.2.1 with a `TG_OP = 'DELETE'` branch (`action = 'deleted'`, payload `{ old: to_jsonb(OLD) }`) so the new `trg_activity_log_deliverables` trigger can fire on AFTER DELETE; existing projects / venues / tasks triggers remain on AFTER INSERT OR UPDATE only.
 - `updated_at_auto`: standard updated_at trigger on every table with the column.
-- `handle_new_user`: on `auth.users` INSERT, mirror to `public.users` with `permission_role = 'pending'` (Phase 5.1; was `'member'` pre-rewrite). Also inserts one `notifications` row per active admin (`type='user_pending'`) and fires the `notify-admin-of-pending-user` edge function via `public.invoke_edge_function`. Runs as service role.
+- `handle_new_user`: on `auth.users` INSERT, mirror to `public.users` with `permission_role = 'pending'` (Phase 5.1; was `'member'` pre-rewrite). Also inserts one `notifications` row per active admin (`type='user_pending'`). Phase 5.5 rewrite: link_url changed from `/team` to `/users` (Phase 5.4 route rename); calls `notifications-dispatch` with `event_type='user_pending'` instead of `notify-admin-of-pending-user` directly. The legacy admin-notification function stays deployed one phase as a fallback. Inline durable notifications rows remain so the in-app signal lands even if the dispatch edge function 500s. Runs as service role.
+- `notifications_dispatch_writer` (Phase 5.5): AFTER INSERT OR UPDATE on `tasks`, AFTER UPDATE on `projects`. Fires `task_assigned` (assignee_id newly set or changed), `task_blocked` (status flips to `'Blocked'`), and `project_status_changed` (status changes; recipients = `project_account_managers` for the project) via `public.invoke_edge_function('notifications-dispatch', ...)`. SECURITY DEFINER. Reads `auth.uid()` to set `actor_id` so the dispatch fn can exclude self-notification.
 
 ## Postgres functions (RPCs)
 

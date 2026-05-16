@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
-import { IconPencil, IconX } from "@/components/icons/HQIcons";
+import { IconPencil, IconWiki, IconX } from "@/components/icons/HQIcons";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PermissionDenied } from "@/components/ui/PermissionDenied";
 import { WikiLayout } from "@/components/wiki/WikiLayout";
 import { WikiProseRenderer } from "@/components/wiki/WikiProseRenderer";
 import { TeamDirectoryEmbed } from "@/components/wiki/TeamDirectoryEmbed";
@@ -102,21 +104,17 @@ export default function WikiPage() {
   }, [resolvedSlug]);
 
   if (pagesLoading) {
-    return (
-      <div className="empty">
-        <p>Loading wiki...</p>
-      </div>
-    );
+    return <EmptyState icon={IconWiki}>Loading wiki...</EmptyState>;
   }
 
   if (notFound) {
     return (
-      <div className="empty">
-        <p>Page not found.</p>
-        <Link to="/wiki" className="btn btn-secondary btn-sm" style={{ marginTop: 16 }}>
-          Back to Wiki
-        </Link>
-      </div>
+      <EmptyState
+        icon={IconWiki}
+        action={{ label: "Back to Wiki", onClick: () => navigate("/wiki") }}
+      >
+        Page not found.
+      </EmptyState>
     );
   }
 
@@ -246,9 +244,10 @@ function PageContent({
   // freelance. Direct slug nav still has to pass this check.
   if (page.visibility === "admin_only" && !isAdmin) {
     return (
-      <div className="empty" style={{ marginTop: 16 }}>
-        <p>You don't have access to this page.</p>
-      </div>
+      <PermissionDenied
+        title="This wiki page is admin-only"
+        description={`The "${page.title}" page is restricted to admins.`}
+      />
     );
   }
   if (page.page_type === "team_directory") return <TeamDirectoryEmbed />;
@@ -256,9 +255,10 @@ function PageContent({
   if (page.page_type === "account_logins") {
     if (isFreelance) {
       return (
-        <div className="empty" style={{ marginTop: 16 }}>
-          <p>You don't have access to this page.</p>
-        </div>
+        <PermissionDenied
+          title="Account Logins is restricted"
+          description="Your account is a Freelance user. Account Logins is restricted to Standard + Admin users."
+        />
       );
     }
     // canWrite: any non-freelance user can add/edit/delete credentials
