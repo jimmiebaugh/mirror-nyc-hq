@@ -1249,7 +1249,9 @@
   /* Phase 5.3 new cal-ev modifiers: shared Outlook entries + Mirror Holidays.
      Both render gray, but tone differs so the two are distinguishable. */
   .cal-ev.olk{background:rgba(58,58,58,.35);color:hsl(var(--muted-foreground));border-left:2px solid hsl(var(--border-strong));}
-  .cal-ev.hol{background:rgba(58,58,58,.20);color:hsl(var(--subtle-foreground));font-style:italic;}
+  /* Phase 5.4 feedback: holidays render with a yellow (warn-token) background
+     so they read at a glance, distinct from the gray Outlook banner. */
+  .cal-ev.hol{background:rgba(245,158,11,.22);color:hsl(var(--warn));font-style:italic;}
   .callegend{display:flex;gap:16px;flex-wrap:wrap;}
   .callegend span{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--muted-foreground));}
   .callegend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
@@ -1306,6 +1308,63 @@
   .stat .num{font-family:var(--font-display);font-weight:800;font-size:32px;line-height:1.1;margin-top:6px;font-variant-numeric:tabular-nums;}
   .stat .sub{font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--muted-foreground));margin-top:2px;}
   .stat--accent .num{color:hsl(var(--primary));}
+
+  /* ─── Phase 5.4 HQ Core surfaces: Wiki + Account Logins + Team toggle ─
+     Wiki layout, wikinav sidebar, prose typography for rendered markdown,
+     credential reveal field, and the toggle control used by Team active
+     toggles + Settings Integrations card. All lifted from the locked
+     wireframe (OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html Surfaces 12,
+     17, 18, 20). Class names verbatim — design-system § 11 brand rule. */
+
+  /* Wiki layout: 220px sticky nav + scrollable content area. */
+  .wikilayout{display:grid;grid-template-columns:220px 1fr;gap:0;align-items:start;}
+  .wikinav{position:sticky;top:0;padding:0 0 24px 0;border-right:1px solid hsl(var(--border));display:flex;flex-direction:column;gap:2px;}
+  .wn{display:flex;align-items:center;gap:6px;padding:8px 16px;font-size:13px;color:hsl(var(--muted-foreground));cursor:pointer;border-radius:var(--radius);text-decoration:none;}
+  .wn:hover{color:hsl(var(--foreground));background:hsl(var(--surface-alt));}
+  .wn.wn--active{color:hsl(var(--foreground));font-weight:500;background:hsl(var(--surface-alt));}
+  .wn .lk{width:11px;height:11px;color:hsl(var(--subtle-foreground));margin-left:auto;}
+  .wikipage{padding:0 0 0 32px;}
+  .wikipage.prose{max-width:720px;}
+  .wikipage.prose h1{font-size:22px;font-weight:700;margin-top:24px;}
+  .wikipage.prose h2{font-size:18px;font-weight:700;margin-top:28px;}
+  .wikipage.prose h3{font-size:15px;font-weight:600;margin-top:20px;}
+  .wikipage.prose p{font-size:13.5px;line-height:1.7;color:hsl(var(--muted-foreground));margin-top:10px;}
+  .wikipage.prose ul,.wikipage.prose ol{margin-top:10px;padding-left:20px;}
+  .wikipage.prose li{font-size:13.5px;line-height:1.7;color:hsl(var(--muted-foreground));margin-top:6px;}
+  .wikipage.prose strong,.wikipage.prose b{color:hsl(var(--foreground));font-weight:600;}
+  .wikipage.prose code{font-family:var(--font-mono);font-size:12.5px;background:hsl(var(--surface-alt));padding:1px 5px;border-radius:3px;}
+  .wikipage.prose a{color:hsl(var(--primary));text-decoration:underline;}
+  .embed-note{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.06em;color:hsl(var(--subtle-foreground));text-transform:uppercase;display:flex;align-items:center;gap:7px;margin:22px 0 8px;}
+
+  /* Credential reveal field (Account Logins). */
+  .cred{display:inline-flex;align-items:center;gap:8px;}
+  .cv{font-size:13px;font-family:var(--font-mono);color:hsl(var(--foreground));}
+  .cv.cv--masked{color:hsl(var(--muted-foreground));letter-spacing:2px;}
+  .ca{cursor:pointer;color:hsl(var(--subtle-foreground));transition:color 0.15s;background:none;border:none;padding:0;display:inline-flex;align-items:center;}
+  .ca:hover{color:hsl(var(--foreground));}
+
+  /* Toggle (Team Active column, Settings Integrations card). Lifted from
+     wireframe lines 398-401. ::after slides on/off via left position. */
+  .toggle{width:34px;height:19px;border-radius:999px;background:hsl(var(--input));position:relative;flex:none;display:inline-block;border:none;cursor:pointer;padding:0;}
+  .toggle::after{content:"";position:absolute;width:15px;height:15px;border-radius:999px;background:hsl(var(--subtle-foreground));top:2px;left:2px;transition:left 0.15s,background 0.15s;}
+  .toggle.toggle--on{background:rgba(190,78,68,.4);}
+  .toggle.toggle--on::after{background:hsl(var(--primary));left:17px;}
+  .toggle:disabled{cursor:not-allowed;opacity:.7;}
+
+  /* TipTap rich-text editor (Phase 5.4 feedback round). Toolbar + body
+     match the wikipage typography rules so the WYSIWYG preview is 1:1
+     with the read view. */
+  .wiki-editor{border:1px solid hsl(var(--border-strong));border-radius:var(--radius);background:hsl(var(--surface-alt));}
+  .wiki-toolbar{display:flex;align-items:center;gap:4px;padding:8px;border-bottom:1px solid hsl(var(--border));flex-wrap:wrap;}
+  .wiki-tbtn{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;padding:0 8px;background:transparent;border:1px solid transparent;border-radius:4px;color:hsl(var(--muted-foreground));font-family:var(--font-mono);font-size:12px;font-weight:700;cursor:pointer;}
+  .wiki-tbtn:hover{background:hsl(var(--surface-raised));color:hsl(var(--foreground));}
+  .wiki-tbtn.wiki-tbtn--on{background:hsl(var(--surface-raised));color:hsl(var(--primary));border-color:rgba(190,78,68,.4);}
+  .wiki-tsep{width:1px;height:18px;background:hsl(var(--border));margin:0 4px;}
+  .wiki-editor-body{padding:16px 20px;min-height:240px;max-height:60vh;overflow-y:auto;}
+  .wiki-editor-body .tiptap{outline:none;}
+  .wiki-editor-body .tiptap p.is-editor-empty:first-child::before{
+    content:attr(data-placeholder);color:hsl(var(--subtle-foreground));pointer-events:none;float:left;height:0;
+  }
 }
 
 @layer utilities {

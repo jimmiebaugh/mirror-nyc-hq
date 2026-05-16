@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
 import Landing from "@/pages/Landing";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Auth gate for the AppShell layout. When unauthenticated:
@@ -25,8 +27,16 @@ export function ProtectedRoute({
   bypassPending?: boolean;
 }) {
   const { user, loading } = useAuth();
-  const { isPending, loading: roleLoading } = useUserRole();
+  const { isPending, isDeactivated, loading: roleLoading } = useUserRole();
   const location = useLocation();
+
+  // Phase 5.4: signed-in but `users.active = false` means admin deactivated.
+  // Sign them out immediately and show a one-shot message before the redirect.
+  useEffect(() => {
+    if (isDeactivated) {
+      supabase.auth.signOut().catch(() => undefined);
+    }
+  }, [isDeactivated]);
 
   if (loading) {
     return (
@@ -56,6 +66,18 @@ export function ProtectedRoute({
     return (
       <div className="flex min-h-screen items-center justify-center bg-black">
         <div className="text-muted-foreground text-sm">Loading…</div>
+      </div>
+    );
+  }
+
+  if (isDeactivated) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black px-6 text-center">
+        <h1 className="text-lg font-semibold">Account deactivated</h1>
+        <p className="text-muted-foreground max-w-md text-sm">
+          An admin has deactivated your HQ access. Signing you out now. Reach out to
+          a Mirror NYC admin if you think this is a mistake.
+        </p>
       </div>
     );
   }

@@ -2,6 +2,125 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.4 feedback round 2 (2026-05-16)
+
+Third pass on `claude/zen-mestorf-940d7f`, after Jimmie's follow-up smoke. New migration: `20260516180000_phase_5_4_feedback_round_2.sql`.
+
+### Wiki Delete surfaced from the read view
+
+The Delete Page button still lives at the bottom of the edit form, but it was easy to miss. Added a second Delete button to the wiki read-view header, right next to "Edit Page". Same `isSpecialPageType` guard (special pages can't be deleted). Same `AlertDialog` confirmation. Both buttons hit the same supabase `.delete()` and navigate back to `/wiki`.
+
+### Account Logins writes open to Standard
+
+Original 5.4 spec gated INSERT/UPDATE/DELETE on credentials to admin only. Jimmie's smoke pass clarified the intent: writes should be available to everyone except Freelance, matching the SELECT posture. Migration drops the three admin-only policies and replaces them with non-freelance variants (admin + standard can write; freelance still blocked from SELECT entirely). The AccountLoginsPage component prop swapped from `isAdmin` to `canWrite` (always true at the call site, since WikiPage already blocks freelance from reaching it).
+
+### Preferred Vendors curated via `vendors.preferred` flag
+
+Original 5.4 spec rendered ALL vendors grouped by capability on the Wiki "Vendors at a Glance" page. Feedback round 1 renamed the page to "Preferred Vendors". Round 2 makes the list actually curated.
+
+- Migration adds `vendors.preferred boolean NOT NULL DEFAULT false` + a partial index where `preferred = true`.
+- `VendorsGlanceEmbed` filters to `preferred = true` rows. The file + component name stay because the wiki `page_type` enum value is still `vendors_glance`; renaming the enum would be a separate migration with no visible benefit.
+- Admin gets a "Manage Preferred List" button (top right of the embed) that opens a `<ManagePreferredDialog />` with a search input + scrollable list of every vendor in the DB. Each row is a checkbox toggle bound to the desired-set. Save diffs against the initial-set and only writes the rows that flipped — minimizes the bulk UPDATE size.
+- Empty state ("No preferred vendors selected yet.") includes the same Manage CTA so first-time setup is one click away.
+- Rejected alternatives: a dedicated `preferred_vendors(vendor_id)` junction table (overkill for a single curated list) and managing the flag from the Vendor detail page (the wiki page is the discovery surface, so the toggle belongs there).
+
+## Phase 5.4 feedback round (2026-05-16)
+
+Live-smoke feedback from Jimmie after the spec-implementation cut. Wrapped into a second migration (`20260516170000_phase_5_4_feedback.sql`) plus app-side updates. All on the same `claude/zen-mestorf-940d7f` branch.
+
+### Wiki editor switched from markdown to rich-text (TipTap)
+
+The spec shipped a markdown textarea + Preview toggle. Jimmie wanted a WYSIWYG visual editor with bold / italic / underline / headings / lists / link. Picked TipTap (`@tiptap/react` + `@tiptap/starter-kit` + `@tiptap/extension-underline` + `@tiptap/extension-link`) as the standard React rich-text choice. Storage shifts from markdown to HTML.
+
+The 11 seeded prose pages were rewritten to HTML in the feedback migration so the renderer doesn't see literal markdown characters in the new HTML world. The renderer changed from `react-markdown` to `dangerouslySetInnerHTML` (admin-authored, trusted-source content). The `react-markdown` dep stays in `package.json` for now — not referenced anywhere — and can be pruned in a polish pass.
+
+### Wiki visibility gained `admin_only`
+
+The original CHECK was `('all', 'no_freelance')`. Widened to add `'admin_only'`. The wiki nav filters admin_only pages from non-admins (lock glyph reused, same as no_freelance); component-level visibility gate in `WikiPage` blocks direct slug nav. RLS on `wiki_pages` is still open-SELECT (no DB-level visibility enforcement); the user-facing block is the component check + the nav filter.
+
+### `credentials.related_note` dropped
+
+Jimmie wanted the Related column gone entirely. Migration drops the column. UI + dialog updated to remove it. AccountLogins Updated column also gained the day component (`MMM D, YYYY` instead of `MMM YYYY`) and the trailing "admins add new ones inline" caption was removed.
+
+### Vendors at a Glance -> Preferred Vendors
+
+Updated the seeded `wiki_pages` row: slug `vendors-at-a-glance` -> `preferred-vendors`, title `Vendors at a Glance` -> `Preferred Vendors`. The page component (`<VendorsGlanceEmbed />`) was not renamed; its docstring still references "Vendors at a Glance" because it's keyed to `page_type = 'vendors_glance'` which is the DB-level enum value. Renaming the enum would be a bigger migration.
+
+### `/team` route renamed to `/users`
+
+Page label + URL slug. LeftRail says "Users", page heading is "USERS", primary button is "Add User", toasts say "User added / deactivated / not found", Back link says "Back to Users". `/team*` URLs redirect to `/users*` (Navigate components) so pre-feedback notification links (`link_url = '/team'`) and any bookmarks still land. `handle_new_user` was rewritten to emit `link_url = '/users'` going forward.
+
+The page file paths stayed at `src/pages/team/*.tsx` to limit churn; only the route + UI labels moved. Future polish pass can rename the directory + queries lib.
+
+### Settings reorder + Mirror Holidays collapsible
+
+Integrations card moved above Mirror Holidays. Mirror Holidays card is now collapsed by default with a chevron in the headbar; click to expand. Rows lazy-load on first expand (no `mirror_holidays` query fires until the user opens the section).
+
+### Calendar holidays render yellow
+
+`.cal-ev.hol` now uses an amber/yellow background tinted with the existing `--warn` token (`rgba(245,158,11,.22)` + warn-colored italic text), replacing the prior gray. Distinct from `.cal-ev.rem` (Removal, same color family but normal-weight foreground), distinct from `.cal-ev.olk` (Outlook, gray).
+
+## Phase 5.4 (Wiki + Account Logins + Team + Settings)
+
+Spec: `OUTPUTS/phase-5-4-spec.md` (drafted 2026-05-16). Four surfaces lifted from Wireframe Surfaces 12, 17, 18, 20. One feature branch, one squash. One migration (`20260516160000_phase_5_4_wiki_team_settings.sql`) that adds four tables + extends `public.users` + amends `handle_new_user` + drops the auth FK + drops `department_tags`.
+
+### ID-swap on pre-provisioned users
+
+The Team Add form needs to insert a `public.users` row for a teammate who hasn't signed in yet. The shipped FK `users.id REFERENCES auth.users(id)` blocked that (no auth user, no row). Three options were considered:
+
+- **A. Drop the FK; keep id-swap.** Pre-provisioned rows get random UUIDs. On first sign-in, `handle_new_user` checks for a `public.users` row matching the auth user's email and, if found, swaps that row's `id` to the auth uid. Safe because pre-provisioned users have no FK references yet (created_by / updated_by / etc.).
+- **B. Add `auth_user_id` column.** Bigger refactor; every RLS policy comparing against `auth.uid()` would need updating.
+- **C. Skip pre-provisioning.** Team Add becomes a stub until the person signs in.
+
+Locked **A** (Jimmie's call on 2026-05-16). Trade-off accepted: the FK to `auth.users` is gone, so a hard delete in `auth.users` no longer cascades to `public.users` automatically. Mirror rarely hard-deletes auth users; if it ever does, a manual cleanup function can be added later. The Phase 5.4 migration drops the FK + amends `handle_new_user` to perform the id-swap (idempotent: matching id is treated as a no-op stamp; matching email with different id triggers the swap; no match triggers the fresh-pending insert + admin notification flow).
+
+### department_tags dropped in favor of departments lookup + single FK
+
+Phase 5.1 shipped `public.users.department_tags text[]` with four hardcoded values (`Account Manager`, `Production`, `Design`, `Creative`). The wireframe Surface 12 surfaces ONE department per person from a richer list (Leadership, Accounts, Creative, Design, Event Production). The four old values were never surfaced in any current UI (zero usages in `src/` outside `types.ts`).
+
+Phase 5.4 drops `department_tags` + its CHECK constraint and adds `department_id uuid REFERENCES departments(id) ON DELETE SET NULL`. The `departments` lookup table seeds with the five wireframe-matching values. Inline-add from the Team Edit form goes through the existing `useLookup` hook (extended to know about `departments`).
+
+### Credentials stored plaintext-at-rest
+
+The `credentials` table stores `password text NOT NULL` plaintext. This is intentional:
+
+- Access control is RLS-enforced: Freelance blocked entirely, only admins write, only standard + admin read.
+- Supabase provides encryption at rest at the storage layer.
+- The reveal-and-copy UX (eye toggle + 30-second idle re-mask) is a convenience pattern for shoulder-surfing protection, not a security boundary.
+- The data is operational team credentials (shipping accounts, vendor portals), not user secrets. Hash-and-compare doesn't apply because admins need to read the cleartext to populate forms on external sites.
+
+Application-level encryption was considered and rejected: it would require either client-side keys (a fresh key-management problem on each session) or a server-side decryption endpoint (latency + RLS duplication). The current shape matches industry baseline for an internal team password vault and keeps the surface simple.
+
+### Wiki page_type enum + special pages
+
+The `wiki_pages.page_type` column carries one of four values: `prose`, `team_directory`, `vendors_glance`, `account_logins`. Prose pages store markdown in `body` and render via `react-markdown`. The three special types render hardcoded components (TeamDirectoryEmbed, VendorsGlanceEmbed, AccountLoginsPage) and ignore `body`.
+
+The three special pages are seeded by the migration and cannot be created from the UI (create mode is locked to `page_type = 'prose'`). They also cannot be deleted from the UI (the Edit form hides the Delete button when `page_type != 'prose'`). This keeps the special-page surface tightly coupled to the migration so the Calendar / Account Logins / Vendors pages can rely on their slugs existing.
+
+### Wiki accessible to Freelance (except Account Logins)
+
+`/wiki` and `/wiki/:slug` use `<ProtectedRoute>` (all tiers including Freelance) rather than `<StandardOrAdminRoute>`. Operational docs (How We Work, Shipping & Messengers, Pricing, etc.) are useful for freelance contractors who also need to know how Mirror runs jobs. Account Logins is the only exclusion: the wiki page row carries `visibility = 'no_freelance'` (filtered from nav), the wiki page component shows an access-restricted state if Freelance navigates directly, and the underlying `credentials` RLS rejects the SELECT.
+
+### mirror_holidays replaces hardcoded constant
+
+The `MIRROR_HOLIDAYS` array in `src/lib/calendar/holidays.ts` (shipped Phase 5.3) is replaced with a `mirror_holidays` table + `useMirrorHolidays()` hook. The migration seeds the table with the previous constant values exactly so Calendar behavior is unchanged on deploy. The Settings page exposes a CRUD editor (`<MirrorHolidaysEditor />`) so admins can add 2027+ holidays without a code change.
+
+### Integrations card display-only for 5.4
+
+The Settings Integrations card renders three toggles (Google Calendar push, Slack DM notifications, Google Drive link integration) in the "on" state but they are `disabled` and non-interactive. No backend config table backs them in 5.4. They become functional when the corresponding features ship in a later phase (notification dispatch + Google Calendar push are tracked for 5.5+).
+
+### GRANT fixes (cleanup carried in this migration)
+
+Three GRANT gaps blocked Phase 5.4 functionality and got fixed alongside the new tables:
+
+- `GRANT INSERT ON public.users TO authenticated`: required for admin pre-provisioning. RLS still gates to admin via the new `users_insert_admin` policy.
+- `GRANT DELETE ON public.cities TO authenticated`: the admin-only DELETE RLS was unreachable for authenticated. Settings needs the path. Same posture fix as the Phase 5.2 cleanup that did this for `vendor_capabilities`.
+- `GRANT DELETE ON public.project_categories TO authenticated`: same as cities.
+
+### Team "Cards" view deferred
+
+The wireframe Surface 12 ViewSwitch shows List + Cards. 5.4 ships List only; the Cards button is rendered but disabled. The shipped list table with inline tier dropdown + active toggle covers the operational need (assign tiers, deactivate, find the pending users) without the Cards view. Cards lands as a polish item in a later pass.
+
 ## Phase 5.3 (Calendar + Outlook)
 
 Spec: `OUTPUTS/phase-5-3-spec.md`. Surfaces 15 (unified Calendar) + 16 (admin-only Outlook). One feature branch, one squash. Three migrations: `outlook_entries` + RPC, projects install/removal date columns, saved_views.entity_type CHECK widen.

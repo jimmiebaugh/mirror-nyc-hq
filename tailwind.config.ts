@@ -27,6 +27,12 @@ export default {
     "rb-warn", "rb-success", "rb-info", "rb-destructive", "rb-muted",
     // Board + timeline elements referenced through dynamic JSX
     "bcard", "bcol", "tl-bar", "tl-name",
+    // Phase 5.4 wiki + credentials + toggle classes (constructed dynamically
+    // via template literals in WikiPage / CredentialRevealField / Team /
+    // Settings Integrations).
+    "wikilayout", "wikinav", "wikipage", "wn", "wn--active",
+    "cred", "cv", "cv--masked", "ca",
+    "toggle", "toggle--on",
   ],
   prefix: "",
   theme: {

@@ -27,6 +27,7 @@ export type VendorListRow = {
   website_url: string | null;
   internal_rating: number | null;
   tags: string[];
+  preferred: boolean;
   pastProjectsTouchedCount: number;
 };
 
@@ -35,7 +36,7 @@ export async function loadVendors(): Promise<VendorListRow[]> {
     supabase
       .from("vendors")
       .select(
-        "id, name, category_id, capabilities, city, website_url, internal_rating, tags, category:vendor_categories!vendors_category_id_fkey(id, name)",
+        "id, name, category_id, capabilities, city, website_url, internal_rating, tags, preferred, category:vendor_categories!vendors_category_id_fkey(id, name)",
       )
       .order("name", { ascending: true }),
     supabase
@@ -67,6 +68,7 @@ export async function loadVendors(): Promise<VendorListRow[]> {
       website_url: string | null;
       internal_rating: number | null;
       tags: string[] | null;
+      preferred: boolean | null;
       category: { id: string; name: string | null } | null;
     };
     return {
@@ -79,6 +81,7 @@ export async function loadVendors(): Promise<VendorListRow[]> {
       website_url: row.website_url,
       internal_rating: row.internal_rating,
       tags: row.tags ?? [],
+      preferred: row.preferred ?? false,
       pastProjectsTouchedCount: touchedCounts.get(row.id) ?? 0,
     };
   });
