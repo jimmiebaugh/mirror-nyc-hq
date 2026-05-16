@@ -170,6 +170,26 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     `notifications.delivered_slack` column + `notifications` joins
     `supabase_realtime` publication with `REPLICA IDENTITY FULL`.
   - **Status:** DONE 2026-05-16. Spec: `OUTPUTS/phase-5-5-spec.md`.
+- **5.5.1 Sign-in page (Surface 01 part 1).** Replaces the Phase 5.1
+  stealth coming-soon Landing (hidden "STRATEGY / DESIGN / PRODUCTION"
+  trigger at the bottom) with the wireframe Surface 01 sign-in page:
+  centered Montserrat ExtraBold "MIRROR NYC HQ" wordmark (HQ in coral)
+  + visible 48px white Google Sign-In button with the 4-color G icon on
+  a full-viewport dark background. Optimistic `signingIn` flag prevents
+  double-clicks during the OAuth round-trip; already-authed mounts
+  redirect to `/home`. White button color is intentional (the one HQ
+  surface where coral does NOT win the primary CTA, since Google brand
+  guidelines win on the sign-in button). Pending state (Surface 01
+  part 2) was already shipped in Phase 5.1 at `/pending` via
+  `PendingState.tsx`. Two files: `src/pages/Landing.tsx` (rewrite),
+  `src/components/icons/GoogleColorIcon.tsx` (new). No migration, no
+  edge function changes, no schema impact. Slug retention plumbing
+  already complete pre-spec (`ProtectedRoute` writes, `useAuth` reads
+  + clears the sessionStorage key; every route including VS/TS nests
+  inside the parent `<ProtectedRoute>` group, so deep links survive
+  the OAuth round trip without additional gate code).
+  - **Status:** DONE 2026-05-16. Commit: `0f122c1`. Spec:
+    `OUTPUTS/phase-5-5-1-signin-spec.md`.
 
 **Convention:** every 5.x sub-phase ship updates `docs/roadmap.md` with
 its **Status:** DONE line in the same commit. Pair with the existing
