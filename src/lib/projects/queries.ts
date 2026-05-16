@@ -45,8 +45,12 @@ export type ProjectListRow = {
   tags: string[];
   clientId: string | null;
   clientName: string | null;
+  installStartIso: string | null;
+  installEndIso: string | null;
   liveStartIso: string | null;
   liveEndIso: string | null;
+  removalStartIso: string | null;
+  removalEndIso: string | null;
   nextDeliverableTitle: string | null;
   nextDeliverableDueIso: string | null;
   leadName: string | null;
@@ -64,7 +68,9 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
     .from("projects")
     .select(
       `id, name, status, job_number, category, city, tags,
-       live_dates_start, live_dates_end, client_id,
+       install_dates_start, install_dates_end,
+       live_dates_start, live_dates_end,
+       removal_dates_start, removal_dates_end, client_id,
        client:clients(id, name),
        account_managers:project_account_managers(user:users(full_name, email)),
        designers:project_designers(user:users(full_name, email)),
@@ -83,8 +89,12 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
     category: string | null;
     city: string | null;
     tags: string[] | null;
+    install_dates_start: string | null;
+    install_dates_end: string | null;
     live_dates_start: string | null;
     live_dates_end: string | null;
+    removal_dates_start: string | null;
+    removal_dates_end: string | null;
     client_id: string | null;
     client: { id: string; name: string | null } | null;
     account_managers: { user: { full_name: string | null; email: string | null } | null }[] | null;
@@ -107,8 +117,12 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
       tags: p.tags ?? [],
       clientId: p.client_id,
       clientName: p.client?.name ?? null,
+      installStartIso: p.install_dates_start,
+      installEndIso: p.install_dates_end,
       liveStartIso: p.live_dates_start,
       liveEndIso: p.live_dates_end,
+      removalStartIso: p.removal_dates_start,
+      removalEndIso: p.removal_dates_end,
       nextDeliverableTitle: nextDeliverable?.title ?? null,
       nextDeliverableDueIso: nextDeliverable?.due_date ?? null,
       leadName: am[0] ? firstName(am[0]?.full_name, am[0]?.email) : null,

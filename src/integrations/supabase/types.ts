@@ -349,6 +349,85 @@ export type Database = {
           },
         ]
       }
+      outlook_entries: {
+        Row: {
+          budget: number | null
+          city: string | null
+          client_id: string | null
+          confidence: Database["public"]["Enums"]["outlook_confidence"]
+          created_at: string
+          created_by: string
+          date_text: string | null
+          id: string
+          linked_project_id: string | null
+          month: number
+          name: string
+          notes: string | null
+          shared_with_team: boolean
+          updated_at: string
+          week: number
+          year: number
+        }
+        Insert: {
+          budget?: number | null
+          city?: string | null
+          client_id?: string | null
+          confidence?: Database["public"]["Enums"]["outlook_confidence"]
+          created_at?: string
+          created_by: string
+          date_text?: string | null
+          id?: string
+          linked_project_id?: string | null
+          month: number
+          name: string
+          notes?: string | null
+          shared_with_team?: boolean
+          updated_at?: string
+          week: number
+          year: number
+        }
+        Update: {
+          budget?: number | null
+          city?: string | null
+          client_id?: string | null
+          confidence?: Database["public"]["Enums"]["outlook_confidence"]
+          created_at?: string
+          created_by?: string
+          date_text?: string | null
+          id?: string
+          linked_project_id?: string | null
+          month?: number
+          name?: string
+          notes?: string | null
+          shared_with_team?: boolean
+          updated_at?: string
+          week?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outlook_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outlook_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outlook_entries_linked_project_id_fkey"
+            columns: ["linked_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       people: {
         Row: {
           client_id: string | null
@@ -558,12 +637,16 @@ export type Database = {
           created_by: string | null
           design_decks_folder_url: string | null
           id: string
+          install_dates_end: string | null
+          install_dates_start: string | null
           job_number: string | null
           latest_creative_deck_url: string | null
           live_dates_end: string | null
           live_dates_start: string | null
           name: string
           production_folder_url: string | null
+          removal_dates_end: string | null
+          removal_dates_start: string | null
           slack_channel_url: string | null
           status: Database["public"]["Enums"]["project_status"]
           status_notes: string | null
@@ -582,12 +665,16 @@ export type Database = {
           created_by?: string | null
           design_decks_folder_url?: string | null
           id?: string
+          install_dates_end?: string | null
+          install_dates_start?: string | null
           job_number?: string | null
           latest_creative_deck_url?: string | null
           live_dates_end?: string | null
           live_dates_start?: string | null
           name: string
           production_folder_url?: string | null
+          removal_dates_end?: string | null
+          removal_dates_start?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
           status_notes?: string | null
@@ -606,12 +693,16 @@ export type Database = {
           created_by?: string | null
           design_decks_folder_url?: string | null
           id?: string
+          install_dates_end?: string | null
+          install_dates_start?: string | null
           job_number?: string | null
           latest_creative_deck_url?: string | null
           live_dates_end?: string | null
           live_dates_start?: string | null
           name?: string
           production_folder_url?: string | null
+          removal_dates_end?: string | null
+          removal_dates_start?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
           status_notes?: string | null
@@ -1853,6 +1944,10 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_producer_or_admin: { Args: never; Returns: boolean }
+      promote_outlook_to_project: {
+        Args: { target_entry_id: string }
+        Returns: string
+      }
       reset_scout_for_deck_regenerate: {
         Args: { target_scout_id: string }
         Returns: undefined
@@ -1861,6 +1956,7 @@ export type Database = {
     }
     Enums: {
       deliverable_status: "Upcoming" | "In Progress" | "Complete" | "Skipped"
+      outlook_confidence: "On Radar" | "Likely" | "Confirmed" | "Complete"
       permission_role: "admin" | "standard" | "freelance" | "pending"
       project_status:
         | "Approved"
@@ -2029,6 +2125,7 @@ export const Constants = {
   public: {
     Enums: {
       deliverable_status: ["Upcoming", "In Progress", "Complete", "Skipped"],
+      outlook_confidence: ["On Radar", "Likely", "Confirmed", "Complete"],
       permission_role: ["admin", "standard", "freelance", "pending"],
       project_status: [
         "Approved",

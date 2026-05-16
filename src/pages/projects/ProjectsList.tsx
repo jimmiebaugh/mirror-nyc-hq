@@ -373,25 +373,54 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
           </div>
           <TimelineView
             rows={filtered
-              .filter((r) => r.liveStartIso || r.liveEndIso)
-              .map((r) => ({
-                id: r.id,
-                token: projectStatusToken(r.status),
-                name: r.clientName ? `${r.clientName} · ${r.name}` : r.name,
-                subText: `${r.jobNumber ? `#${r.jobNumber} · ` : ""}${r.city ?? ""}`.trim(),
-                bars: r.liveStartIso
-                  ? [
-                      {
-                        kind: "live" as const,
-                        startIso: r.liveStartIso,
-                        endIso: r.liveEndIso,
-                        label: r.liveEndIso
-                          ? `Live · ${formatShortDate(r.liveStartIso)} to ${formatShortDate(r.liveEndIso)}`
-                          : `Live · ${formatShortDate(r.liveStartIso)}`,
-                      },
-                    ]
-                  : [],
-              }))}
+              .filter(
+                (r) =>
+                  r.installStartIso ||
+                  r.liveStartIso ||
+                  r.removalStartIso,
+              )
+              .map((r) => {
+                const bars: NonNullable<
+                  Parameters<typeof TimelineView>[0]["rows"][number]["bars"]
+                > = [];
+                if (r.installStartIso) {
+                  bars.push({
+                    kind: "install" as const,
+                    startIso: r.installStartIso,
+                    endIso: r.installEndIso,
+                    label: r.installEndIso
+                      ? `Install · ${formatShortDate(r.installStartIso)} to ${formatShortDate(r.installEndIso)}`
+                      : `Install · ${formatShortDate(r.installStartIso)}`,
+                  });
+                }
+                if (r.liveStartIso) {
+                  bars.push({
+                    kind: "live" as const,
+                    startIso: r.liveStartIso,
+                    endIso: r.liveEndIso,
+                    label: r.liveEndIso
+                      ? `Live · ${formatShortDate(r.liveStartIso)} to ${formatShortDate(r.liveEndIso)}`
+                      : `Live · ${formatShortDate(r.liveStartIso)}`,
+                  });
+                }
+                if (r.removalStartIso) {
+                  bars.push({
+                    kind: "removal" as const,
+                    startIso: r.removalStartIso,
+                    endIso: r.removalEndIso,
+                    label: r.removalEndIso
+                      ? `Removal · ${formatShortDate(r.removalStartIso)} to ${formatShortDate(r.removalEndIso)}`
+                      : `Removal · ${formatShortDate(r.removalStartIso)}`,
+                  });
+                }
+                return {
+                  id: r.id,
+                  token: projectStatusToken(r.status),
+                  name: r.clientName ? `${r.clientName} · ${r.name}` : r.name,
+                  subText: `${r.jobNumber ? `#${r.jobNumber} · ` : ""}${r.city ?? ""}`.trim(),
+                  bars,
+                };
+              })}
             onBarClick={(id) => navigate(`/projects/${id}`)}
           />
         </>

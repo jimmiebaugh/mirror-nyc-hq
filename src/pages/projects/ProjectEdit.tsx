@@ -42,8 +42,12 @@ type FormState = {
   city: string;
   budget: string;
   tags: string;
+  installDatesStart: string;
+  installDatesEnd: string;
   liveDatesStart: string;
   liveDatesEnd: string;
+  removalDatesStart: string;
+  removalDatesEnd: string;
   productionFolderUrl: string;
   designDecksFolderUrl: string;
   budgetSheetUrl: string;
@@ -61,8 +65,12 @@ const EMPTY: FormState = {
   city: "",
   budget: "",
   tags: "",
+  installDatesStart: "",
+  installDatesEnd: "",
   liveDatesStart: "",
   liveDatesEnd: "",
+  removalDatesStart: "",
+  removalDatesEnd: "",
   productionFolderUrl: "",
   designDecksFolderUrl: "",
   budgetSheetUrl: "",
@@ -98,7 +106,7 @@ export default function ProjectEdit() {
           : supabase
               .from("projects")
               .select(
-                "id, name, status, client_id, job_number, category, city, budget, tags, live_dates_start, live_dates_end, production_folder_url, design_decks_folder_url, budget_sheet_url, slack_channel_url, status_notes, client_notes",
+                "id, name, status, client_id, job_number, category, city, budget, tags, install_dates_start, install_dates_end, live_dates_start, live_dates_end, removal_dates_start, removal_dates_end, production_folder_url, design_decks_folder_url, budget_sheet_url, slack_channel_url, status_notes, client_notes",
               )
               .eq("id", id)
               .single(),
@@ -115,8 +123,12 @@ export default function ProjectEdit() {
           city: string | null;
           budget: number | null;
           tags: string[] | null;
+          install_dates_start: string | null;
+          install_dates_end: string | null;
           live_dates_start: string | null;
           live_dates_end: string | null;
+          removal_dates_start: string | null;
+          removal_dates_end: string | null;
           production_folder_url: string | null;
           design_decks_folder_url: string | null;
           budget_sheet_url: string | null;
@@ -134,8 +146,12 @@ export default function ProjectEdit() {
           city: p.city ?? "",
           budget: p.budget != null ? String(p.budget) : "",
           tags: (p.tags ?? []).join(", "),
+          installDatesStart: p.install_dates_start ?? "",
+          installDatesEnd: p.install_dates_end ?? "",
           liveDatesStart: p.live_dates_start ?? "",
           liveDatesEnd: p.live_dates_end ?? "",
+          removalDatesStart: p.removal_dates_start ?? "",
+          removalDatesEnd: p.removal_dates_end ?? "",
           productionFolderUrl: p.production_folder_url ?? "",
           designDecksFolderUrl: p.design_decks_folder_url ?? "",
           budgetSheetUrl: p.budget_sheet_url ?? "",
@@ -204,8 +220,12 @@ export default function ProjectEdit() {
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean),
+      install_dates_start: form.installDatesStart || null,
+      install_dates_end: form.installDatesEnd || null,
       live_dates_start: form.liveDatesStart || null,
       live_dates_end: form.liveDatesEnd || null,
+      removal_dates_start: form.removalDatesStart || null,
+      removal_dates_end: form.removalDatesEnd || null,
       production_folder_url: form.productionFolderUrl || null,
       design_decks_folder_url: form.designDecksFolderUrl || null,
       budget_sheet_url: form.budgetSheetUrl || null,
@@ -376,6 +396,22 @@ export default function ProjectEdit() {
             <span className="label-section">Event Info</span>
           </div>
           <div className="g2">
+            <FormField label="Install Date (start)">
+              <input
+                type="date"
+                className={`input ${form.installDatesStart ? "input--filled" : ""}`}
+                value={form.installDatesStart}
+                onChange={(e) => setForm((f) => ({ ...f, installDatesStart: e.target.value }))}
+              />
+            </FormField>
+            <FormField label="Install Date (end)">
+              <input
+                type="date"
+                className={`input ${form.installDatesEnd ? "input--filled" : ""}`}
+                value={form.installDatesEnd}
+                onChange={(e) => setForm((f) => ({ ...f, installDatesEnd: e.target.value }))}
+              />
+            </FormField>
             <FormField label="Live Date (start)">
               <input
                 type="date"
@@ -390,6 +426,22 @@ export default function ProjectEdit() {
                 className={`input ${form.liveDatesEnd ? "input--filled" : ""}`}
                 value={form.liveDatesEnd}
                 onChange={(e) => setForm((f) => ({ ...f, liveDatesEnd: e.target.value }))}
+              />
+            </FormField>
+            <FormField label="Removal Date (start)">
+              <input
+                type="date"
+                className={`input ${form.removalDatesStart ? "input--filled" : ""}`}
+                value={form.removalDatesStart}
+                onChange={(e) => setForm((f) => ({ ...f, removalDatesStart: e.target.value }))}
+              />
+            </FormField>
+            <FormField label="Removal Date (end)">
+              <input
+                type="date"
+                className={`input ${form.removalDatesEnd ? "input--filled" : ""}`}
+                value={form.removalDatesEnd}
+                onChange={(e) => setForm((f) => ({ ...f, removalDatesEnd: e.target.value }))}
               />
             </FormField>
           </div>
