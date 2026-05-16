@@ -14,6 +14,11 @@ import { Switch } from "@/components/ui/switch";
 import { IconLink, IconProjects, IconX } from "@/components/icons/HQIcons";
 import { useClients } from "@/lib/hq/useClients";
 import { useLookup } from "@/lib/hq/lookups";
+import { ClickPillCell } from "@/components/hq/ClickPillCell";
+import {
+  OUTLOOK_CONFIDENCE_VALUES,
+  outlookConfidenceToken,
+} from "@/lib/home/projectStatusToken";
 import type {
   OutlookEntry,
   OutlookConfidence,
@@ -102,6 +107,7 @@ export function OutlookEntryPanel({
   onDelete,
   onPromote,
   onUnlink,
+  onConfidenceChange,
 }: {
   mode: PanelMode;
   /** Required for "detail" + "edit"; ignored for "new". */
@@ -116,6 +122,7 @@ export function OutlookEntryPanel({
   onDelete: () => Promise<void>;
   onPromote: () => Promise<void>;
   onUnlink: () => Promise<void>;
+  onConfidenceChange: (id: string, next: OutlookConfidence) => Promise<void>;
 }) {
   const navigate = useNavigate();
   const { options: clients } = useClients();
@@ -173,12 +180,14 @@ export function OutlookEntryPanel({
         </div>
         <div className="card-pad stack-3">
           <div>
-            <span
-              className={`pill p-${confidenceToken(entry.confidence)}`}
-            >
-              <span className="dt" />
-              {entry.confidence}
-            </span>
+            <ClickPillCell
+              value={entry.confidence}
+              options={OUTLOOK_CONFIDENCE_VALUES}
+              tokenMap={outlookConfidenceToken}
+              onSave={async (next) => {
+                await onConfidenceChange(entry.id, next as OutlookConfidence);
+              }}
+            />
           </div>
 
           <dl
@@ -625,13 +634,4 @@ export function OutlookEntryPanel({
       </div>
     </aside>
   );
-}
-
-function confidenceToken(c: OutlookConfidence): string {
-  switch (c) {
-    case "On Radar":  return "warn";
-    case "Likely":    return "info";
-    case "Confirmed": return "success";
-    case "Complete":  return "muted";
-  }
 }

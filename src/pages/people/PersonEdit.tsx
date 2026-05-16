@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
+import { formatPhone } from "@/lib/hq/phone";
 
 /**
  * Person Edit (Surface 11 create + edit).
@@ -382,6 +383,7 @@ export default function PersonEdit() {
                 className={`input ${form.phone ? "input--filled" : ""}`}
                 value={form.phone}
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                onBlur={() => setForm((f) => ({ ...f, phone: formatPhone(f.phone) }))}
                 placeholder="(212) 555-0000"
               />
             </FormField>

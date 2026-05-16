@@ -22,6 +22,7 @@ import {
   loadDistinctOutlookYears,
   createOutlookEntry,
   updateOutlookEntry,
+  updateOutlookConfidence,
   deleteOutlookEntry,
   unlinkOutlookProject,
   promoteOutlookToProject,
@@ -322,6 +323,10 @@ export default function OutlookPage() {
             }}
             onUnlink={async () => {
               if (selectedEntry) await unlinkMut.mutateAsync(selectedEntry.id);
+            }}
+            onConfidenceChange={async (id, next) => {
+              await updateOutlookConfidence(id, next);
+              queryClient.invalidateQueries({ queryKey: ["outlook-entries"] });
             }}
           />
         )}

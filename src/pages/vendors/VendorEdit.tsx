@@ -3,10 +3,11 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { StarRating } from "@/components/data/StarRating";
-import { InlineAddSelect } from "@/components/data/InlineAddSelect";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { useLookup } from "@/lib/hq/lookups";
+import { formatPhone } from "@/lib/hq/phone";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,9 +77,7 @@ export default function VendorEdit() {
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
 
-  const cities = useLookup("cities");
   const categories = useLookup("vendor_categories");
-  const capabilities = useLookup("vendor_capabilities");
 
   useEffect(() => {
     if (isCreate) return;
@@ -144,28 +143,12 @@ export default function VendorEdit() {
     setConfirmLeaveOpen(true);
   };
 
-  // Resolve the City lookup row id from name for InlineAddSelect.
-  // InlineAddSelect operates on the option name; we store the name in form.city
-  // and the value flows back as the name. Same pattern as 5.2.2 OrganizationEdit.
-
-  // Category resolved by id; need to translate to name for the picker.
+  // Category is an FK; RecordCombobox lookup mode binds to the option name,
+  // so translate id <-> name at the prop boundary.
   const selectedCategoryName = useMemo(() => {
     if (!form.category_id) return null;
     return categories.options.find((o) => o.id === form.category_id)?.name ?? null;
   }, [form.category_id, categories.options]);
-
-  const onSelectCategory = async (name: string) => {
-    const opt = categories.options.find((o) => o.name === name);
-    setForm((f) => ({ ...f, category_id: opt?.id ?? "" }));
-  };
-
-  const onAddCategory = async (name: string) => {
-    const opt = await categories.addOption(name);
-    if (opt) {
-      setForm((f) => ({ ...f, category_id: opt.id }));
-    }
-    return opt;
-  };
 
   const onSave = async () => {
     if (!form.name.trim()) {
@@ -265,25 +248,22 @@ export default function VendorEdit() {
               />
             </FormField>
             <FormField label="Category">
-              <InlineAddSelect
-                options={categories.options}
+              <RecordCombobox
+                source={{ kind: "lookup", table: "vendor_categories" }}
                 value={selectedCategoryName}
-                onSelect={onSelectCategory}
-                onAdd={onAddCategory}
-                entityLabel="category"
-                exampleName="Custom Fabrication"
-                filled={Boolean(form.category_id)}
+                onChange={(name) => {
+                  const opt = categories.options.find((o) => o.name === name);
+                  setForm((f) => ({ ...f, category_id: opt?.id ?? "" }));
+                }}
+                entityLabel="Category"
               />
             </FormField>
             <FormField label="City">
-              <InlineAddSelect
-                options={cities.options}
+              <RecordCombobox
+                source={{ kind: "lookup", table: "cities" }}
                 value={form.city || null}
-                onSelect={(v) => setForm((f) => ({ ...f, city: v }))}
-                onAdd={cities.addOption}
+                onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
                 entityLabel="city"
-                exampleName="NYC"
-                filled={Boolean(form.city)}
               />
             </FormField>
             <FormField label="Website URL">
@@ -296,13 +276,14 @@ export default function VendorEdit() {
             </FormField>
           </div>
           <FormField label="Capabilities">
-            <MultiTagInput
-              options={capabilities.options}
-              values={form.capabilities}
-              onChange={(next) => setForm((f) => ({ ...f, capabilities: next }))}
-              onAdd={capabilities.addOption}
-              entityLabel="capability"
-              exampleName="Custom Fabrication"
+            <RecordCombobox
+              multi
+              source={{ kind: "lookup", table: "vendor_capabilities" }}
+              multiValue={form.capabilities}
+              onMultiChange={(next) =>
+                setForm((f) => ({ ...f, capabilities: next }))
+              }
+              entityLabel="Capability"
               placeholder="Add capability..."
             />
           </FormField>
@@ -348,6 +329,9 @@ export default function VendorEdit() {
                 className={`input ${form.contact_phone ? "input--filled" : ""}`}
                 value={form.contact_phone}
                 onChange={(e) => setForm((f) => ({ ...f, contact_phone: e.target.value }))}
+                onBlur={() =>
+                  setForm((f) => ({ ...f, contact_phone: formatPhone(f.contact_phone) }))
+                }
                 placeholder="(212) 555-0000"
               />
             </FormField>

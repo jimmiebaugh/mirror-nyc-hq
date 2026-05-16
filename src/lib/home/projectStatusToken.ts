@@ -64,6 +64,39 @@ export function deliverableStatusToken(status: string | null | undefined): Statu
   return DELIVERABLE_STATUS_TOKENS[status] ?? "muted";
 }
 
+const TASK_PRIORITY_TOKENS: Record<string, StatusToken> = {
+  Urgent: "destructive",
+  High: "warn",
+  Normal: "info",
+  Low: "muted",
+};
+
+export function taskPriorityToken(priority: string | null | undefined): StatusToken {
+  if (!priority) return "muted";
+  return TASK_PRIORITY_TOKENS[priority] ?? "muted";
+}
+
+const OUTLOOK_CONFIDENCE_TOKENS: Record<string, StatusToken> = {
+  "On Radar": "warn",
+  Likely: "info",
+  Confirmed: "success",
+  Complete: "muted",
+};
+
+export function outlookConfidenceToken(
+  confidence: string | null | undefined,
+): StatusToken {
+  if (!confidence) return "muted";
+  return OUTLOOK_CONFIDENCE_TOKENS[confidence] ?? "muted";
+}
+
+export const OUTLOOK_CONFIDENCE_VALUES = [
+  "On Radar",
+  "Likely",
+  "Confirmed",
+  "Complete",
+] as const;
+
 /**
  * Skipped deliverables and Done tasks render with strikethrough + reduced
  * opacity on the title text per locked-decisions § 4. Component code can

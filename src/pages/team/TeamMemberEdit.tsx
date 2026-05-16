@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { useLookup } from "@/lib/hq/lookups";
-import { InlineAddSelect } from "@/components/data/InlineAddSelect";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,7 +61,7 @@ export default function TeamMemberEdit() {
   const navigate = useNavigate();
   const isCreate = !id;
 
-  const { options: depts, addOption: addDept } = useLookup("departments");
+  const { options: depts } = useLookup("departments");
 
   const [initial, setInitial] = useState<FormState>(EMPTY);
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -255,23 +255,15 @@ export default function TeamMemberEdit() {
             </div>
             <div className="field">
               <label className="label-form">Department</label>
-              <InlineAddSelect
-                options={depts}
+              <RecordCombobox
+                source={{ kind: "lookup", table: "departments" }}
                 value={depts.find((d) => d.id === form.departmentId)?.name ?? null}
-                onSelect={(name) => {
+                onChange={(name) => {
                   const match = depts.find((d) => d.name === name);
                   setForm((f) => ({ ...f, departmentId: match?.id ?? null }));
                 }}
-                onAdd={async (name) => {
-                  const added = await addDept(name);
-                  if (added) {
-                    setForm((f) => ({ ...f, departmentId: added.id }));
-                  }
-                  return added;
-                }}
                 placeholder="No department"
                 entityLabel="Department"
-                exampleName="Production"
               />
             </div>
           </div>

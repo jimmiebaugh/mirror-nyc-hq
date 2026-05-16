@@ -11,6 +11,12 @@ import {
 import type { LookupOption } from "@/lib/hq/lookups";
 
 /**
+ * @deprecated Phase 5.6.1 — replaced by `RecordCombobox` (typeahead +
+ * mini-create modal). All callsites migrated; this file is kept only so a
+ * missed grep doesn't crash at runtime. Delete after a one-cycle soak.
+ *
+ * Original shape preserved verbatim below for the soak window.
+ *
  * Wireframe-canonical inline-add select. Phase 5.2.2 spec § 6.C.
  *
  * Renders a `.input` select with the existing options + a final

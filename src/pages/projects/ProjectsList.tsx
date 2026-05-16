@@ -18,6 +18,7 @@ import {
   type ProjectStatus,
 } from "@/lib/projects/queries";
 import { projectStatusToken } from "@/lib/home/projectStatusToken";
+import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
@@ -268,10 +269,19 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                 label: "Status",
                 sort: (a, b) => a.status.localeCompare(b.status),
                 render: (r) => (
-                  <span className={`pill p-${projectStatusToken(r.status)}`}>
-                    <span className="dt" />
-                    {r.status}
-                  </span>
+                  <ClickPillCell
+                    value={r.status}
+                    options={PROJECT_STATUS_VALUES}
+                    tokenMap={projectStatusToken}
+                    onSave={async (next) => {
+                      await updateProjectStatus(r.id, next as ProjectStatus);
+                      setRows((rs) =>
+                        rs.map((row) =>
+                          row.id === r.id ? { ...row, status: next as ProjectStatus } : row,
+                        ),
+                      );
+                    }}
+                  />
                 ),
               },
               {

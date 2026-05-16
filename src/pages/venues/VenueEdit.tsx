@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { InlineAddSelect } from "@/components/data/InlineAddSelect";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft, IconX } from "@/components/icons/HQIcons";
 import {
@@ -85,10 +85,6 @@ export default function VenueEdit() {
   const [logRateOpen, setLogRateOpen] = useState<"event_day" | "prod_day" | null>(null);
   const [newRateAmount, setNewRateAmount] = useState("");
   const [newRateDate, setNewRateDate] = useState(new Date().toISOString().slice(0, 10));
-  const [addTypeOpen, setAddTypeOpen] = useState(false);
-  const [newTypeName, setNewTypeName] = useState("");
-
-  const cities = useLookup("cities");
   const venueTypes = useLookup("venue_types");
 
   useEffect(() => {
@@ -303,7 +299,6 @@ export default function VenueEdit() {
 
   const eventRate = rates.find((r) => r.rate_kind === "event_day");
   const prodRate = rates.find((r) => r.rate_kind === "prod_day");
-  const availableTypes = venueTypes.options.filter((o) => !typeIds.includes(o.id));
   const availableVendors = vendorOptions.filter((v) => !vendorIds.includes(v.id));
 
   return (
@@ -358,14 +353,11 @@ export default function VenueEdit() {
               />
             </FormField>
             <FormField label="City">
-              <InlineAddSelect
-                options={cities.options}
+              <RecordCombobox
+                source={{ kind: "lookup", table: "cities" }}
                 value={form.city || null}
-                onSelect={(v) => setForm((f) => ({ ...f, city: v }))}
-                onAdd={cities.addOption}
+                onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
                 entityLabel="city"
-                exampleName="NYC"
-                filled={Boolean(form.city)}
               />
             </FormField>
             <FormField label="Capacity">
@@ -393,52 +385,23 @@ export default function VenueEdit() {
           <div className="block-lbl">
             <span className="label-section">Venue Types</span>
           </div>
-          <div className="row-c wrap" style={{ gap: 6 }}>
-            {typeIds.map((tid) => {
-              const t = venueTypes.options.find((o) => o.id === tid);
-              if (!t) return null;
-              return (
-                <span key={tid} className="tag" style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
-                  {t.name}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${t.name}`}
-                    onClick={() => setTypeIds(typeIds.filter((x) => x !== tid))}
-                    style={{
-                      background: "transparent",
-                      border: 0,
-                      cursor: "pointer",
-                      color: "inherit",
-                      padding: 0,
-                      display: "inline-flex",
-                    }}
-                  >
-                    <IconX className="ic" style={{ width: 10, height: 10 }} />
-                  </button>
-                </span>
-              );
-            })}
-            <select
-              className="input"
-              style={{ height: 32, fontSize: 12, padding: "4px 8px" }}
-              value=""
-              onChange={(e) => {
-                if (!e.target.value) return;
-                if (e.target.value === "__add_new__") {
-                  setNewTypeName("");
-                  setAddTypeOpen(true);
-                  return;
-                }
-                setTypeIds([...typeIds, e.target.value]);
-              }}
-            >
-              <option value="">Add venue type...</option>
-              {availableTypes.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-              <option value="__add_new__">+ Add new...</option>
-            </select>
-          </div>
+          <RecordCombobox
+            multi
+            source={{ kind: "lookup", table: "venue_types" }}
+            multiValue={typeIds
+              .map((id) => venueTypes.options.find((o) => o.id === id)?.name)
+              .filter((n): n is string => Boolean(n))}
+            onMultiChange={(names) => {
+              const nextIds: string[] = [];
+              for (const n of names) {
+                const match = venueTypes.options.find((o) => o.name === n);
+                if (match) nextIds.push(match.id);
+              }
+              setTypeIds(nextIds);
+            }}
+            entityLabel="Venue Type"
+            placeholder="Add venue type..."
+          />
         </div>
       </section>
 
@@ -593,37 +556,6 @@ export default function VenueEdit() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={addTypeOpen} onOpenChange={setAddTypeOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Add a new venue type</AlertDialogTitle>
-          </AlertDialogHeader>
-          <input
-            className="input"
-            autoFocus
-            placeholder="e.g. White Box"
-            value={newTypeName}
-            onChange={(e) => setNewTypeName(e.target.value)}
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                const trimmed = newTypeName.trim();
-                if (!trimmed) return;
-                const added = await venueTypes.addOption(trimmed);
-                if (added) {
-                  setTypeIds([...typeIds, added.id]);
-                  setAddTypeOpen(false);
-                  setNewTypeName("");
-                }
-              }}
-            >
-              Add
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog
         open={Boolean(logRateOpen)}
