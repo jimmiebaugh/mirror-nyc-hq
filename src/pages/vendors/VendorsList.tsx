@@ -149,6 +149,10 @@ export default function VendorsList() {
           <DataTable<VendorListRow>
             rows={filtered}
             flat
+            sort={filterState.sort ?? null}
+            onSortChange={(next) =>
+              setFilterState((prev) => ({ ...prev, sort: next }))
+            }
             onRowClick={(r) => navigate(`/vendors/${r.id}`, { state: { from: fromState } })}
             empty={{
               message: "No vendors match your filters.",

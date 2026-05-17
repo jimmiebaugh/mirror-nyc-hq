@@ -333,6 +333,10 @@ export default function TasksList({ view }: { view: ViewKind }) {
         <DataTable<typeof filtered[number]>
           rows={filtered}
           flat
+          sort={filterState.sort ?? null}
+          onSortChange={(next) =>
+            setFilterState((prev) => ({ ...prev, sort: next }))
+          }
           rowBorderToken={(r) => taskStatusToken(r.status)}
           onRowClick={(r) => navigate(`/tasks/${r.id}`, { state: { from: fromState } })}
           selection={{ selectedIds: selected, onChange: setSelected }}

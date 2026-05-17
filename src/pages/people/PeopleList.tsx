@@ -245,6 +245,10 @@ export default function PeopleList() {
           <DataTable<PersonRowWithDerived>
             rows={filtered}
             flat
+            sort={filterState.sort ?? null}
+            onSortChange={(next) =>
+              setFilterState((prev) => ({ ...prev, sort: next }))
+            }
             onRowClick={(r) => navigate(`/people/${r.id}`, { state: { from: fromState } })}
             empty={{
               message: "No people match your filters.",

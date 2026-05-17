@@ -210,7 +210,7 @@ export default function TeamList() {
                         onPick={(t) => updateTier(r, t)}
                       />
                     </td>
-                    <td>{accountPill(r.permission_role)}</td>
+                    <td>{accountPill(r.last_active_at)}</td>
                     <td className="muted">{formatLastActive(r.last_active_at)}</td>
                     <td className="c" data-no-nav>
                       <button
@@ -316,8 +316,14 @@ function TierPopover({
   );
 }
 
-function accountPill(role: PermissionRole) {
-  if (role === "pending") {
+function accountPill(lastActiveAt: string | null) {
+  // "Linked" means the row is bound to a real Google account that has
+  // signed in at least once. handle_new_user stamps last_active_at on
+  // auth.users INSERT, and useAuth re-stamps on every session resolve
+  // (Phase 5.6.5.1 follow-on), so it's the authoritative signal.
+  // permission_role is unreliable as a proxy — admins pre-provision
+  // users with a non-pending tier directly in the create form.
+  if (lastActiveAt === null) {
     return (
       <span className="pill p-warn pill-sm">
         <span className="dt"></span>

@@ -18,6 +18,8 @@ import {
 import { toast } from "@/hooks/use-toast";
 import type { PermissionRole } from "@/lib/team/queries";
 import { formatLastActive } from "@/lib/team/relativeActive";
+import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/hooks/useAuth";
 
 type FormState = {
   fullName: string;
@@ -25,6 +27,7 @@ type FormState = {
   roleTitle: string;
   departmentId: string | null;
   tier: PermissionRole;
+  isOwner: boolean;
   slackHandle: string;
   slackUserId: string;
   active: boolean;
@@ -36,6 +39,7 @@ const EMPTY: FormState = {
   roleTitle: "",
   departmentId: null,
   tier: "standard",
+  isOwner: false,
   slackHandle: "",
   slackUserId: "",
   active: true,
@@ -62,6 +66,9 @@ export default function TeamMemberEdit() {
   const isCreate = !id;
 
   const { options: depts } = useLookup("departments");
+  const { isOwner: viewerIsOwner } = useUserRole();
+  const { user } = useAuth();
+  const currentUserId = user?.id ?? null;
 
   const [initial, setInitial] = useState<FormState>(EMPTY);
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -79,7 +86,7 @@ export default function TeamMemberEdit() {
       const { data, error } = await supabase
         .from("users")
         .select(
-          "id, email, full_name, role_title, department_id, permission_role, slack_handle, slack_user_id, active, last_active_at",
+          "id, email, full_name, role_title, department_id, permission_role, is_owner, slack_handle, slack_user_id, active, last_active_at",
         )
         .eq("id", id!)
         .maybeSingle();
@@ -95,6 +102,7 @@ export default function TeamMemberEdit() {
         roleTitle: data.role_title ?? "",
         departmentId: data.department_id,
         tier: (data.permission_role === "pending" ? "standard" : data.permission_role) as PermissionRole,
+        isOwner: data.is_owner === true,
         slackHandle: data.slack_handle ?? "",
         slackUserId: data.slack_user_id ?? "",
         active: data.active,
@@ -102,7 +110,12 @@ export default function TeamMemberEdit() {
       setForm(next);
       setInitial(next);
       setLastActiveAt(data.last_active_at);
-      setAccountLinked(data.permission_role !== "pending");
+      // "Linked" means the row is bound to a real Google account that
+      // has signed in at least once. handle_new_user stamps
+      // last_active_at on sign-in (Phase 5.4), so it's the authoritative
+      // signal. Don't infer from permission_role — admin pre-provisioning
+      // sets a non-pending tier directly in the create form.
+      setAccountLinked(data.last_active_at !== null);
       setLoading(false);
     })();
     return () => {
@@ -145,14 +158,19 @@ export default function TeamMemberEdit() {
       role_title: form.roleTitle.trim() || null,
       department_id: form.departmentId,
       permission_role: form.tier,
+      is_owner: form.isOwner,
       slack_handle: form.slackHandle.trim() || null,
       slack_user_id: form.slackUserId.trim() || null,
       active: form.active,
     };
     if (isCreate) {
+      // Pre-provisioning id-swap pattern (Phase 5.4): admins seed a
+      // random uuid; handle_new_user swaps it to the auth.uid on first
+      // sign-in via email match. users.id has no DB default so this
+      // value must be supplied client-side.
       const { data, error } = await supabase
         .from("users")
-        .insert(payload)
+        .insert({ ...payload, id: crypto.randomUUID() })
         .select("id")
         .single();
       setSaving(false);
@@ -295,6 +313,44 @@ export default function TeamMemberEdit() {
               </div>
             </div>
           </div>
+          {viewerIsOwner ? (
+            <div className="field">
+              <label
+                className="cap"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  color: "hsl(var(--foreground))",
+                  fontSize: 13,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={form.isOwner}
+                  disabled={
+                    form.isOwner && !isCreate && currentUserId === id
+                  }
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, isOwner: e.target.checked }))
+                  }
+                />
+                Owner
+              </label>
+              <div
+                className="cap"
+                style={{
+                  marginTop: 4,
+                  color: "hsl(var(--subtle-foreground))",
+                  fontSize: 11,
+                }}
+              >
+                {form.isOwner && !isCreate && currentUserId === id
+                  ? "Another owner must revoke yours."
+                  : "Owners can publish global default views and delegate owner status to other users."}
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 

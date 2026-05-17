@@ -154,6 +154,10 @@ export default function VenuesList() {
         <>
           <DataTable<VenueListRow>
             rows={filtered}
+            sort={filterState.sort ?? null}
+            onSortChange={(next) =>
+              setFilterState((prev) => ({ ...prev, sort: next }))
+            }
             onRowClick={(r) => navigate(`/venues/${r.id}`, { state: { from: fromState } })}
             empty={{
               message: "No venues match your filters.",
