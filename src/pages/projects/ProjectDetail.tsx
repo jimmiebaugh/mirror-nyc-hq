@@ -508,6 +508,7 @@ export default function ProjectDetail() {
                     onChange={(next) => void saveClientId(next)}
                     entityLabel="Client"
                     placeholder="No client"
+                    quickCreate
                     miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
                     onMiniCreate={async (data) => {
                       const created = await createClientInline(data);
@@ -584,6 +585,7 @@ export default function ProjectDetail() {
                       onMultiChange={(next) => void saveVenueIds(next)}
                       entityLabel="Venue"
                       placeholder="Add venue..."
+                      quickCreate
                       miniCreateFields={VENUE_MINI_CREATE_FIELDS}
                       onMiniCreate={async (data) => {
                         const created = await createVenueInline(data);
@@ -802,13 +804,6 @@ export default function ProjectDetail() {
                 </tbody>
               </table>
             )}
-          </section>
-
-          <section className="card empty" style={{ borderStyle: "dashed" }}>
-            <p>No attachments yet</p>
-            <button type="button" className="btn btn-secondary btn-sm" disabled>
-              Upload (coming in 5.4)
-            </button>
           </section>
         </div>
 

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
-import { IconArrowLeft, IconX } from "@/components/icons/HQIcons";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -165,6 +165,15 @@ export default function VenueEdit() {
     [form, initial, typeIds, initialTypeIds, vendorIds, initialVendorIds],
   );
 
+  const vendorRecordOptions: Option[] = useMemo(
+    () => vendorOptions.map((v) => ({ id: v.id, label: v.name })),
+    [vendorOptions],
+  );
+  const loadVendorOptions = useCallback(
+    () => Promise.resolve(vendorRecordOptions),
+    [vendorRecordOptions],
+  );
+
   const onCancel = () => {
     if (!dirty) {
       navigate(isCreate ? "/venues" : `/venues/${id}`);
@@ -299,7 +308,6 @@ export default function VenueEdit() {
 
   const eventRate = rates.find((r) => r.rate_kind === "event_day");
   const prodRate = rates.find((r) => r.rate_kind === "prod_day");
-  const availableVendors = vendorOptions.filter((v) => !vendorIds.includes(v.id));
 
   return (
     <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
@@ -461,46 +469,14 @@ export default function VenueEdit() {
           <div className="block-lbl">
             <span className="label-section">Exclusive Vendors</span>
           </div>
-          <div className="row-c wrap" style={{ gap: 6 }}>
-            {vendorIds.map((vid) => {
-              const v = vendorOptions.find((x) => x.id === vid);
-              if (!v) return null;
-              return (
-                <span key={vid} className="tag" style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
-                  {v.name}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${v.name}`}
-                    onClick={() => setVendorIds(vendorIds.filter((x) => x !== vid))}
-                    style={{
-                      background: "transparent",
-                      border: 0,
-                      cursor: "pointer",
-                      color: "inherit",
-                      padding: 0,
-                      display: "inline-flex",
-                    }}
-                  >
-                    <IconX className="ic" style={{ width: 10, height: 10 }} />
-                  </button>
-                </span>
-              );
-            })}
-            <select
-              className="input"
-              style={{ height: 32, fontSize: 12, padding: "4px 8px" }}
-              value=""
-              onChange={(e) => {
-                if (!e.target.value) return;
-                setVendorIds([...vendorIds, e.target.value]);
-              }}
-            >
-              <option value="">Add vendor...</option>
-              {availableVendors.map((v) => (
-                <option key={v.id} value={v.id}>{v.name}</option>
-              ))}
-            </select>
-          </div>
+          <RecordCombobox
+            multi
+            source={{ kind: "record", loadOptions: loadVendorOptions }}
+            multiValue={vendorIds}
+            onMultiChange={setVendorIds}
+            entityLabel="Vendor"
+            placeholder="Add vendor..."
+          />
         </div>
       </section>
 

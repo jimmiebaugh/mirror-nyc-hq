@@ -152,7 +152,7 @@ export function RecentActivityCard({
     };
   }, [userId, scope]);
 
-  const title = scope === "cross-team" ? "Cross-team Activity" : "Recent Activity";
+  const title = scope === "cross-team" ? "Global Activity Feed" : "Recent Activity";
 
   return (
     <div className="hq-card hq-card-pad">

@@ -5,7 +5,6 @@ import { Pencil } from "lucide-react";
 import {
   IconArrowLeft,
   IconLink,
-  IconPlus,
 } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { InlineEditText } from "@/components/hq/InlineEditText";
@@ -445,18 +444,6 @@ export default function ClientDetail() {
           </section>
 
           <InternalNotesEditor parentType="client" parentId={client.id} />
-
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Files &amp; Assets</span>
-              <button type="button" className="tlink" disabled style={{ opacity: 0.45, cursor: "not-allowed" }}>
-                <IconPlus className="ic ic-sm" /> Add
-              </button>
-            </div>
-            <div className="card-pad subtle" style={{ fontSize: 13 }}>
-              File uploads land in 5.4.
-            </div>
-          </section>
         </div>
 
         <aside className="stack-6">

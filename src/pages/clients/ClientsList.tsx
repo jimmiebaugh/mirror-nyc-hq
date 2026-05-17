@@ -108,19 +108,6 @@ export default function ClientsList() {
       </div>
 
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <SavedViewsDropdown
-            entityType="client"
-            activeName={activeViewName}
-            activeViewKind="list"
-            activeFilterState={filterState}
-            onPick={(v) => {
-              setFilterState(v.filter_state);
-              setActiveViewName(v.name);
-            }}
-            onResetToGlobal={handleResetToGlobal}
-          />
-        </div>
         <FilterBar
           state={filterState}
           onChange={(next) => {
@@ -128,6 +115,17 @@ export default function ClientsList() {
             setActiveViewName("Custom filter");
           }}
           fields={CLIENT_FILTER_FIELDS}
+        />
+        <SavedViewsDropdown
+          entityType="client"
+          activeName={activeViewName}
+          activeViewKind="list"
+          activeFilterState={filterState}
+          onPick={(v) => {
+            setFilterState(v.filter_state);
+            setActiveViewName(v.name);
+          }}
+          onResetToGlobal={handleResetToGlobal}
         />
       </div>
 

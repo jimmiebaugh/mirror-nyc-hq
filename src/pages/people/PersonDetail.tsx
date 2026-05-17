@@ -358,6 +358,7 @@ export default function PersonDetail() {
                     onChange={(next) => void saveOrgFk("client_id", next)}
                     entityLabel="Client"
                     placeholder="Pick a client..."
+                    quickCreate
                     miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
                     onMiniCreate={async (data) => {
                       const created = await createClientInline(data);
@@ -498,6 +499,7 @@ export default function PersonDetail() {
                   onMultiChange={(next) => void saveVenueIds(next)}
                   entityLabel="venue"
                   placeholder="Add venue..."
+                  quickCreate
                   miniCreateFields={VENUE_MINI_CREATE_FIELDS}
                   onMiniCreate={async (data) => {
                     const created = await createVenueInline(data);

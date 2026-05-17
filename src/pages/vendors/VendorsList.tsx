@@ -117,19 +117,6 @@ export default function VendorsList() {
       </div>
 
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <SavedViewsDropdown
-            entityType="vendor"
-            activeName={activeViewName}
-            activeViewKind="list"
-            activeFilterState={filterState}
-            onPick={(v) => {
-              setFilterState(v.filter_state);
-              setActiveViewName(v.name);
-            }}
-            onResetToGlobal={handleResetToGlobal}
-          />
-        </div>
         <FilterBar
           state={filterState}
           onChange={(next) => {
@@ -137,6 +124,17 @@ export default function VendorsList() {
             setActiveViewName("Custom filter");
           }}
           fields={VENDOR_FILTER_FIELDS}
+        />
+        <SavedViewsDropdown
+          entityType="vendor"
+          activeName={activeViewName}
+          activeViewKind="list"
+          activeFilterState={filterState}
+          onPick={(v) => {
+            setFilterState(v.filter_state);
+            setActiveViewName(v.name);
+          }}
+          onResetToGlobal={handleResetToGlobal}
         />
       </div>
 

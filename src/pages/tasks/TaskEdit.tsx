@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
+import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -143,6 +144,23 @@ export default function TaskEdit() {
     };
   }, [form.project_id, id]);
 
+  const projectOptions: Option[] = useMemo(
+    () => projects.map((p) => ({ id: p.id, label: p.name })),
+    [projects],
+  );
+  const userOptions: Option[] = useMemo(
+    () => users.map((u) => ({ id: u.id, label: u.full_name ?? u.email })),
+    [users],
+  );
+  const loadProjectOptions = useCallback(
+    () => Promise.resolve(projectOptions),
+    [projectOptions],
+  );
+  const loadUserOptions = useCallback(
+    () => Promise.resolve(userOptions),
+    [userOptions],
+  );
+
   const dirty = useMemo(
     () => JSON.stringify(form) !== JSON.stringify(initial),
     [form, initial],
@@ -249,38 +267,26 @@ export default function TaskEdit() {
           </Field>
           <div className="g2">
             <Field label="Project">
-              <select
-                className={`input ${form.project_id ? "input--filled" : ""}`}
-                value={form.project_id ?? "__none"}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    project_id: e.target.value === "__none" ? null : e.target.value,
-                  }))
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadProjectOptions }}
+                value={form.project_id}
+                onChange={(next) =>
+                  setForm((f) => ({ ...f, project_id: next }))
                 }
-              >
-                <option value="__none">Standalone</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                entityLabel="Project"
+                placeholder="Standalone"
+              />
             </Field>
             <Field label="Assignee">
-              <select
-                className={`input ${form.assignee_id ? "input--filled" : ""}`}
-                value={form.assignee_id ?? "__none"}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    assignee_id: e.target.value === "__none" ? null : e.target.value,
-                  }))
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                value={form.assignee_id}
+                onChange={(next) =>
+                  setForm((f) => ({ ...f, assignee_id: next }))
                 }
-              >
-                <option value="__none">Unassigned</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.full_name ?? u.email}</option>
-                ))}
-              </select>
+                entityLabel="user"
+                placeholder="Unassigned"
+              />
             </Field>
             <Field label="Status">
               <select

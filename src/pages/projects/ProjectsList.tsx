@@ -176,32 +176,26 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
       </div>
 
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <ViewSwitch
-            active={view}
-            available={["list", "board", "timeline", "calendar"]}
-            surface="projects"
-          />
-          <SavedViewsDropdown
-            entityType="project"
-            activeName={activeViewName}
-            activeViewKind={view}
-            activeFilterState={filterState}
-            onPick={(v) => {
-              setFilterState(v.filter_state);
-              setActiveViewName(v.name);
-            }}
-            onNavigate={(kind) => {
-              const target = viewSwitchRoute("projects", kind);
-              if (target) navigate(target);
-            }}
-            onResetToGlobal={handleResetToGlobal}
-          />
-        </div>
-        <div className="row-c">
-          <button type="button" className="btn btn-secondary btn-sm">Columns</button>
-          <button type="button" className="btn btn-secondary btn-sm">Save view</button>
-        </div>
+        <ViewSwitch
+          active={view}
+          available={["list", "board", "timeline", "calendar"]}
+          surface="projects"
+        />
+        <SavedViewsDropdown
+          entityType="project"
+          activeName={activeViewName}
+          activeViewKind={view}
+          activeFilterState={filterState}
+          onPick={(v) => {
+            setFilterState(v.filter_state);
+            setActiveViewName(v.name);
+          }}
+          onNavigate={(kind) => {
+            const target = viewSwitchRoute("projects", kind);
+            if (target) navigate(target);
+          }}
+          onResetToGlobal={handleResetToGlobal}
+        />
       </div>
 
       <FilterBar
