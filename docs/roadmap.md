@@ -191,11 +191,14 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   - **Status:** DONE 2026-05-16. Commit: `0f122c1`. Spec:
     `OUTPUTS/phase-5-5-1-signin-spec.md`.
 - **5.6 Smoke Test Pass 1.** Jimmie's first batch of end-to-end smoke
-  notes parsed into four subphases. Heaviest functional primitives land
-  first so downstream column rewrites + polish can consume them. Plan
-  doc: `OUTPUTS/phase-5-6-plan.md` (locked 2026-05-16 from a five-round
-  clarifying Q&A; spec drafter for each subphase reads the plan instead
-  of re-asking Jimmie).
+  notes parsed into six subphases (originally four; the locked carry-
+  forward from 5.6.1 became the new 5.6.3 detail-page inline edit, which
+  bumped the prior 5.6.3 / 4 / 5 down a slot). Heaviest functional
+  primitives land first so downstream column rewrites + polish can
+  consume them. Plan doc: `OUTPUTS/phase-5-6-plan.md` (locked 2026-05-16
+  from a five-round clarifying Q&A; renumbered 2026-05-16 in the 5.6.3
+  squash; spec drafter for each subphase reads the plan instead of
+  re-asking Jimmie).
   - **5.6.1 Cross-cutting interaction primitives.** New
     `<RecordCombobox />` component (Notion-style typeahead + inline-add
     with mini-create modal per entity: Person name+email, Client
@@ -209,7 +212,9 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     Phone-number normalization: `formatPhone()` utility canonicalizes
     `people.phone` + `vendors.contact_phone` + `clients.contact_phone`
     to `(XXX) XXX-XXXX` on save + a one-shot migration backfills
-    existing rows. Status: PLANNED.
+    existing rows.
+  - **Status:** DONE 2026-05-16. Commit: `f278da7`. Spec:
+    `OUTPUTS/phase-5-6-1-spec.md`.
   - **5.6.2 Table reshapes + schema.** New `vendor_subcategories`
     lookup table with `parent_category_id` (parent-scoped, optional) +
     `vendors.subcategory_id` column. New `project_vendors` join table
@@ -229,10 +234,45 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     the table AND PersonEdit Type radio. "Unaffiliated" renders as
     blank cell. Default Client filter dropped; inline radio filter
     buttons (All / Client / Vendor / Venue) added next to All People
-    dropdown, colored to match Affiliation pills. Status: PLANNED.
-  - **5.6.3 Visual polish batch.** Internal Notes editor "Append-only"
+    dropdown, colored to match Affiliation pills.
+  - **Status:** DONE 2026-05-16. Commits: `f2062cc` (main ship),
+    `00997c0` (5.6.2.1 follow-on: ProjectDetail Vendors sidebar,
+    editable VendorEdit Projects, MiniCreateModal `lookup` field type,
+    Affiliation filter button recolor, OverflowList bullet separator,
+    `useBackHref` cross-cutting), `41811b5` (5.6.2.2: PostgREST
+    constraint-named FK fix for client-name cell + PersonEdit Venue
+    picker as RecordCombobox multi). Spec: `OUTPUTS/phase-5-6-2-spec.md`.
+  - **5.6.3 Detail-page inline edit.** Click-to-edit on h1, pills,
+    lookup/record fields, and text fields across all seven HQ Core
+    detail pages (PersonDetail / ClientDetail / VendorDetail /
+    ProjectDetail / TaskDetail / DeliverableDetail / VenueDetail).
+    New primitives: `<InlineEditText>` (blur/Enter saves, Esc reverts,
+    optimistic + rollback, required-empty blocks), `<InlineTagInput>`
+    (chips + Enter-to-add; lighter than MultiTagInput, free-text only).
+    Schema: new `people.affiliation_type` column + `person_affiliation_type`
+    enum + mutex CHECK so clearing the FK doesn't change Type.
+    Architecture: `useLookup` refactored to a module-level subscriber
+    cache (`Map<key, {options, loading, subscribers}>`) so inline-add
+    auto-select handoffs work across components; `getLookupCached()`
+    sync accessor exposed for parent `onChange` closure-lag fallback.
+    RecordCombobox single-mode: re-clicking selected option deselects.
+    MiniCreateModal: new `context: { label, value }[]` prop for
+    parent-scope read-only kv rows above editable fields. ProjectDetail
+    h1 stays non-editable (Title moves to its own kv row); 70/30 grid.
+    VenueDetail Event/Prod Day Rate cells open `<AddRateModal>` for
+    append-only `venue_rate_history` inserts. ClientDetail Primary
+    Contact is a click-to-edit composite (NAME · TITLE display →
+    combobox scoped to the client's people; contact email becomes
+    read-only autofill). Edit-page `/edit` routes survive as power-
+    user fallback. Detail-page Edit button reduced to pencil-icon only.
+  - **Status:** DONE 2026-05-16. Commits: `c29c8bd` (PersonDetail
+    prototype + affiliation_type schema), `a0c28e3` (sweep across
+    remaining six detail pages + polish round: `.label-section` 13px,
+    `.tag` 12px, `.kv` row-gap 22px, `.kv dt` 12px, new `.kv--pair`
+    helper, `.fchip--btn`/`.fchip--active` toggle pair).
+  - **5.6.4 Visual polish batch.** Internal Notes editor "Append-only"
     caption removed globally. Date-picker calendar icons render in
-    coral (icon only, not field border). Rail nav text to 12px + Mirror
+    coral (icon only, not field border). Rail nav text to 13px + Mirror
     wordmark 1.5x + "Mirror HQ" text 1.5x + RailFooter scales
     proportionally. Home: My Week cards show deliverable title (not
     the literal "Deliverable"); all admin-only cards above My Week
@@ -245,7 +285,7 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     15% opacity of the matching pill color; "Likely" pill rendered
     cyan (root-cause investigated; currently renders black). Status:
     PLANNED.
-  - **5.6.4 Global default views (owner admin feature).**
+  - **5.6.5 Global default views (owner admin feature).**
     `saved_views.scope text CHECK IN ('user','global')` column +
     `users.is_owner boolean` column (Jimmie's row set true; delegable
     later via a second admin if needed). RLS widened so non-owner
@@ -258,7 +298,7 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     Deliverables, Venues, Vendors, Clients, People) AND the Calendar
     visibility panel (the `__calendar_default` saved_views row also
     supports `scope='global'`). Status: PLANNED.
-  - **5.6.5 Bulk select + bulk actions across database list views.**
+  - **5.6.6 Bulk select + bulk actions across database list views.**
     Cross-cutting interaction primitive: new leftmost checkbox column
     on every DataTable list view (Projects / Tasks / Deliverables /
     Venues / Vendors / Clients / People). Header row carries select-
