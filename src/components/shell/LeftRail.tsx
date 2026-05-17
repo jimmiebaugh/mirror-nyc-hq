@@ -118,7 +118,7 @@ export function LeftRail({
   return (
     <aside className="hq-rail">
       <div className="hq-brand">
-        <MirrorMark className="h-[22px] w-[15px] flex-none" />
+        <MirrorMark className="h-[33px] w-[23px] flex-none" />
         <span className="hq-brand-txt">
           Mirror <span className="hq-brand-hq">HQ</span>
         </span>

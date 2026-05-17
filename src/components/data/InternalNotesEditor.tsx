@@ -161,7 +161,6 @@ export function InternalNotesEditor({
     <section className="card">
       <div className="card-headbar">
         <span className="h-card">Internal Notes</span>
-        <span className="cap">Append-only</span>
       </div>
       <div
         className="card-pad"
