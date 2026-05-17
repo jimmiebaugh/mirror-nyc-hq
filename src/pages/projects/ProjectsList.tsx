@@ -240,30 +240,47 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                 key: "name",
                 label: "Project / Client",
                 sort: (a, b) => a.name.localeCompare(b.name),
-                render: (r) => (
-                  <div>
-                    {r.clientName ? (
+                render: (r) => {
+                  // Resolve the client label defensively: prefer the embed,
+                  // but if `clientName` came back null while `clientId` is set
+                  // (PostgREST cardinality quirk), render "Client" as a
+                  // placeholder so the row still shows the affiliation.
+                  const clientLabel =
+                    r.clientName ?? (r.clientId ? "View client" : null);
+                  return (
+                    <div>
+                      {clientLabel ? (
+                        r.clientId ? (
+                          <Link
+                            to={`/clients/${r.clientId}`}
+                            className="sub"
+                            style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                            state={{ from: fromState }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {clientLabel}
+                          </Link>
+                        ) : (
+                          <span
+                            className="sub"
+                            style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                          >
+                            {clientLabel}
+                          </span>
+                        )
+                      ) : null}
                       <Link
-                        to={r.clientId ? `/clients/${r.clientId}` : "#"}
-                        className="sub"
-                        style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                        to={`/projects/${r.id}`}
+                        className="lead"
+                        style={{ display: "block" }}
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {r.clientName}
+                        {r.name}
                       </Link>
-                    ) : null}
-                    <Link
-                      to={`/projects/${r.id}`}
-                      className="lead"
-                      style={{ display: "block" }}
-                      state={{ from: fromState }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {r.name}
-                    </Link>
-                  </div>
-                ),
+                    </div>
+                  );
+                },
               },
               {
                 key: "category",
