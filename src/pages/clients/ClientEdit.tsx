@@ -64,6 +64,8 @@ export default function ClientEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (isCreate) return;
@@ -177,6 +179,27 @@ export default function ClientEdit() {
     }
   };
 
+  // Phase 5.7.3 § 3.B: hard delete. Cascade posture (verified against the
+  // FK graph): clients delete sets `projects.client_id`, `people.client_id`,
+  // and `outlook_entries.client_id` to NULL. No dependent records cascade.
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("clients").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete client",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted client" });
+    navigate("/clients");
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -186,7 +209,7 @@ export default function ClientEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
+    <div className="stack-4" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/clients" : `/clients/${id}`}
         className="tlink"
@@ -312,6 +335,8 @@ export default function ClientEdit() {
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create client" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -328,6 +353,31 @@ export default function ClientEdit() {
               onClick={() => navigate(isCreate ? "/clients" : `/clients/${id}`)}
             >
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this client?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The client and its records will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1074,8 +1074,11 @@
   .between{justify-content:space-between;}
   .wrap{flex-wrap:wrap;}
   .flex1{flex:1;min-width:0;}
-  .g2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-  .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  /* `minmax(0, 1fr)` (vs `1fr`) lets grid items shrink below their
+     intrinsic content width — fixes Venue/Tags combobox overflow on the
+     Overview card at narrow viewports (Phase 5.7.3 followup-2). */
+  .g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;}
+  .g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
   .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
 
   /* Block label */
@@ -1130,6 +1133,31 @@
   .req{color:hsl(var(--primary));margin-left:3px;}
   .selectish{display:flex;align-items:center;justify-content:space-between;}
   .selectish .ic{width:15px;height:15px;color:hsl(var(--subtle-foreground));}
+
+  /* Phase 5.7.3 followup-4: RecordCombobox visual refresh per Jimmie.
+     Drops the form-input look (grey outline + surface-alt fill) for a
+     subtler inline-edit chrome: transparent outline, content-sized
+     width. Hover surfaces a faint coral wash so the affordance is still
+     clickable. Followup-5: dropped min-width (was 140; forced overflow
+     in narrow value columns) and dropped the coral left bar (per
+     followup-5 design call). The selected-value coral hyperlink + the
+     link icon now carry the "this is a record" affordance instead. */
+  .combobox-trigger{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;max-width:100%;width:auto;padding:0;border-radius:var(--radius);background:transparent;border:1px solid transparent;color:hsl(var(--foreground));font-family:var(--font-body);font-size:14px;outline:none;cursor:pointer;transition:background-color .12s ease;}
+  .combobox-trigger:hover{background:rgba(190,78,68,.06);}
+  .combobox-trigger:focus{background:rgba(190,78,68,.08);}
+  .combobox-trigger[disabled]{opacity:.5;cursor:not-allowed;}
+
+  /* Followup-5: linked-record presentation. When the selected value is
+     navigable, the label renders as a coral hyperlink (.combo-link)
+     and the chevron is replaced with a Link icon. The picker still
+     opens on click of the icon button (.combo-picker-btn). */
+  .combo-link{color:hsl(var(--primary));font-weight:500;text-decoration:none;cursor:pointer;}
+  .combo-link:hover{text-decoration:underline;}
+  .combo-picker-btn{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;padding:4px;border-radius:var(--radius);color:hsl(var(--primary));cursor:pointer;transition:background-color .12s ease;}
+  .combo-picker-btn:hover{background:rgba(190,78,68,.1);}
+  .combo-stack{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;width:100%;}
+  .combo-stack-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;}
+  .combo-stack-row .combo-link{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
   /* Tables. Wrap in .tbl-wrap. Use .tbl--flat to strip row left borders. */
   .tbl{width:100%;border-collapse:collapse;}
@@ -1248,9 +1276,23 @@
   .kv--pair{gap:10px 16px;}
   .kv--pair dt{padding-top:1px;}
 
-  /* Sticky save bar (Phase 5.2 forms) */
-  .savebar{position:sticky;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:hsl(var(--background));padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 -12px 28px rgba(0,0,0,.6);}
-  .savebar .dirty{font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--warn));}
+  /* Sticky save bar (Phase 5.2 forms; restyled Phase 5.7.3 followup-2).
+     Switched from sticky to fixed positioning so the bar reliably pins to
+     the viewport bottom (sticky inside .hq-content's overflow:auto + 32px
+     padding-bottom left a 32px dark strip below the bar). `left: 232px`
+     matches the .hq-rail fixed width. Opaque muted-coral background:
+     coral 15% layered on top of solid background so form content doesn't
+     bleed through. Bumped padding + button + dirty-text size for stronger
+     presence. */
+  .savebar{position:fixed;left:232px;right:0;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:linear-gradient(rgba(190,78,68,.18),rgba(190,78,68,.18)),hsl(var(--background));padding:18px 32px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 -12px 28px rgba(0,0,0,.6);}
+  .savebar .dirty{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--warn));}
+  .savebar .btn{font-size:13px;height:44px;}
+  .savebar .btn-tertiary{height:40px;}
+
+  /* Shared chrome for floating bottom action bars (Venue Scout stepper
+     bars). Same shell as .savebar but without the cancel/save flex
+     layout — the consumer owns the inner content layout. */
+  .actionbar{position:fixed;left:232px;right:0;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:linear-gradient(rgba(190,78,68,.18),rgba(190,78,68,.18)),hsl(var(--background));box-shadow:0 -12px 28px rgba(0,0,0,.6);}
 
   /* Board / kanban. Standard = horizontal scroll; stacked = vertical row groups. */
   .board{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding-bottom:6px;}

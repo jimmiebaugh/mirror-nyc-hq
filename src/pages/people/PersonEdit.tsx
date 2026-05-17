@@ -79,6 +79,8 @@ export default function PersonEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -262,6 +264,27 @@ export default function PersonEdit() {
     }
   };
 
+  // Phase 5.7.3 § 3.B: hard delete. Cascade posture (verified against the
+  // FK graph): people delete cascades `venue_contact_people` join rows.
+  // No standalone records cascade.
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("people").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete person",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted person" });
+    navigate("/people");
+  };
+
   // Stable loader for RecordCombobox `record` mode (uses the venues already
   // loaded above; no extra round trip).
   //
@@ -312,7 +335,7 @@ export default function PersonEdit() {
   const showVenuePicker = form.type === "Venue";
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
+    <div className="stack-4" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/people" : `/people/${id}`}
         className="tlink"
@@ -466,6 +489,8 @@ export default function PersonEdit() {
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create person" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -482,6 +507,31 @@ export default function PersonEdit() {
               onClick={() => navigate(isCreate ? "/people" : `/people/${id}`)}
             >
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this person?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The person and its records will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

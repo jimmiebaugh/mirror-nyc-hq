@@ -63,6 +63,8 @@ export default function DeliverableEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -175,6 +177,28 @@ export default function DeliverableEdit() {
     }
   };
 
+  // Phase 5.7.3 § 3.B: hard delete. No FKs reference deliverables, so the
+  // delete is clean at the schema layer. Notes_log entries scoped to this
+  // deliverable use a polymorphic (parent_type, parent_id) pair with no FK;
+  // those rows orphan and can be swept in a future cleanup pass.
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("deliverables").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete deliverable",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted deliverable" });
+    navigate("/deliverables");
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -184,7 +208,7 @@ export default function DeliverableEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 760 }}>
+    <div className="stack-4" style={{ paddingBottom: 120, maxWidth: 760 }}>
       <Link
         to={isCreate ? "/deliverables" : `/deliverables/${id}`}
         className="tlink"
@@ -299,6 +323,8 @@ export default function DeliverableEdit() {
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create deliverable" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -313,6 +339,31 @@ export default function DeliverableEdit() {
             <AlertDialogCancel>Stay</AlertDialogCancel>
             <AlertDialogAction onClick={() => navigate(isCreate ? "/deliverables" : `/deliverables/${id}`)}>
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this deliverable?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The deliverable and its records will be
+              removed permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
