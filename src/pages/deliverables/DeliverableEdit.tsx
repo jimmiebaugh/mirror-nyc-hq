@@ -28,7 +28,6 @@ type FormState = {
   due_date: string;
   project_id: string | null;
   assigned_user_ids: string[];
-  notes: string;
 };
 
 const EMPTY: FormState = {
@@ -38,7 +37,6 @@ const EMPTY: FormState = {
   due_date: "",
   project_id: null,
   assigned_user_ids: [],
-  notes: "",
 };
 
 type ProjectOption = { id: string; name: string };
@@ -76,7 +74,7 @@ export default function DeliverableEdit() {
           ? Promise.resolve({ data: null })
           : supabase
               .from("deliverables")
-              .select("id, title, type, status, due_date, project_id, assigned_user_ids, notes")
+              .select("id, title, type, status, due_date, project_id, assigned_user_ids")
               .eq("id", id)
               .single(),
       ]);
@@ -91,7 +89,6 @@ export default function DeliverableEdit() {
           due_date: string | null;
           project_id: string | null;
           assigned_user_ids: string[] | null;
-          notes: string | null;
         };
         const d = deliverableRes.data as unknown as Row;
         const next: FormState = {
@@ -101,7 +98,6 @@ export default function DeliverableEdit() {
           due_date: d.due_date ?? "",
           project_id: d.project_id,
           assigned_user_ids: d.assigned_user_ids ?? [],
-          notes: d.notes ?? "",
         };
         setForm(next);
         setInitial(next);
@@ -153,7 +149,6 @@ export default function DeliverableEdit() {
       due_date: form.due_date || null,
       project_id: form.project_id,
       assigned_user_ids: form.assigned_user_ids,
-      notes: form.notes || null,
     };
     if (isCreate) {
       const { data, error } = await supabase
@@ -294,14 +289,6 @@ export default function DeliverableEdit() {
                 );
               })}
             </div>
-          </Field>
-          <Field label="Notes">
-            <textarea
-              className={`input textarea ${form.notes ? "input--filled" : ""}`}
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              rows={5}
-            />
           </Field>
         </div>
       </section>

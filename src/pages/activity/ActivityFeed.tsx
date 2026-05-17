@@ -11,7 +11,9 @@ import {
   fetchActivityPage,
   ACTIVITY_PAGE_SIZE,
   type ActivityRow,
+  type ActivityViewerRole,
 } from "@/lib/activity/queries";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   activityRowTimestamp,
   dayBucketLabel,
@@ -135,11 +137,22 @@ export default function ActivityFeed() {
     [],
   );
 
-  // First-page load.
+  // Phase 5.7.2: scope the feed by viewer tier so admin-only entities
+  // (outlook entries today; credentials for freelance) don't surface to
+  // viewers who can't navigate to them.
+  const { role, loading: roleLoading } = useUserRole();
+  const viewerRole: ActivityViewerRole =
+    role === "admin" || role === "standard" || role === "freelance"
+      ? role
+      : null;
+
+  // First-page load. Waits for the role lookup so the filter applies on the
+  // first fetch (avoids a flash of admin-only rows for non-admin viewers).
   useEffect(() => {
+    if (roleLoading) return;
     let active = true;
     setStatus("loading");
-    fetchActivityPage()
+    fetchActivityPage({ viewerRole })
       .then((res) => {
         if (!active) return;
         setPages([res.rows]);
@@ -154,7 +167,7 @@ export default function ActivityFeed() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [roleLoading, viewerRole]);
 
   // Populate the actor lookup options once. Falls back to an empty list on
   // RLS denial so the filter bar still works (chip just won't match anything).
@@ -263,7 +276,10 @@ export default function ActivityFeed() {
     if (!last) return;
     setLoadingMore(true);
     try {
-      const res = await fetchActivityPage({ cursor: last.created_at });
+      const res = await fetchActivityPage({
+        cursor: last.created_at,
+        viewerRole,
+      });
       setPages((prev) => [...prev, res.rows]);
       setHasMore(res.hasMore);
     } catch (err) {
@@ -275,7 +291,7 @@ export default function ActivityFeed() {
 
   const handleRetry = () => {
     setStatus("loading");
-    fetchActivityPage()
+    fetchActivityPage({ viewerRole })
       .then((res) => {
         setPages([res.rows]);
         setHasMore(res.hasMore);
@@ -330,6 +346,14 @@ export default function ActivityFeed() {
                 const f = formatActivitySentence(row);
                 const isLastOverall =
                   gi === grouped.length - 1 && ri === group.rows.length - 1;
+                // Phase 5.7.2: actor name was previously linked to
+                // /users/{id} which never existed as a route. Render plain.
+                // /users (Team list) record-link targets are admin-only;
+                // demote them to bold-only for non-admin viewers.
+                const recordHrefEffective =
+                  f.recordHref === "/users" && viewerRole !== "admin"
+                    ? null
+                    : f.recordHref;
                 return (
                   <div
                     key={row.id}
@@ -345,19 +369,13 @@ export default function ActivityFeed() {
                     </span>
                     <div>
                       <div className="txt">
-                        {f.actor.id ? (
-                          <Link to={`/users/${f.actor.id}`} className="who">
-                            {f.actor.name}
-                          </Link>
-                        ) : (
-                          <span className="who">{f.actor.name}</span>
-                        )}
+                        <span className="who">{f.actor.name}</span>
                         {f.leadingText}
                         {f.recordName ? (
                           f.recordIsBoldOnly ? (
                             <span className="dlv">{f.recordName}</span>
-                          ) : f.recordHref ? (
-                            <Link to={f.recordHref}>
+                          ) : recordHrefEffective ? (
+                            <Link to={recordHrefEffective}>
                               <b>{f.recordName}</b>
                             </Link>
                           ) : (

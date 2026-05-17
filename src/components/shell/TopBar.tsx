@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { IconSearch } from "@/components/icons/HQIcons";
+import { MentionBellPanel } from "./MentionBellPanel";
 import { NotificationBellPanel } from "./NotificationBellPanel";
 
 function initialsFor(name?: string | null, email?: string | null) {
@@ -65,6 +66,7 @@ export function TopBar({
         />
       </form>
       <div className="flex-1" />
+      <MentionBellPanel />
       <NotificationBellPanel />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

@@ -21,6 +21,7 @@ import { useBackHref } from "@/lib/hq/useBackHref";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -35,7 +36,6 @@ import { toast } from "@/hooks/use-toast";
 type DbTask = {
   id: string;
   title: string;
-  description: string | null;
   status: TaskStatus;
   priority: TaskPriority;
   due_date: string | null;
@@ -65,7 +65,7 @@ export default function TaskDetail() {
         supabase
           .from("tasks")
           .select(
-            `id, title, description, status, priority, due_date, blocked_by, completed_at,
+            `id, title, status, priority, due_date, blocked_by, completed_at,
              project_id, assignee_id,
              project:projects!tasks_project_id_fkey(id, name),
              assignee:users!tasks_assignee_id_fkey(id, full_name, email)`,
@@ -313,26 +313,7 @@ export default function TaskDetail() {
               </ul>
             </section>
           ) : null}
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Notes</span>
-            </div>
-            <div className="card-pad">
-              <InlineEditText
-                value={task.description}
-                placeholder="Free-form notes for this task..."
-                multiline
-                renderRead={(v) =>
-                  v ? (
-                    <span className="muted" style={{ whiteSpace: "pre-wrap" }}>{v}</span>
-                  ) : (
-                    <span className="muted subtle">(empty)</span>
-                  )
-                }
-                onSave={(next) => saveField("description", next || null)}
-              />
-            </div>
-          </section>
+          <InternalNotesEditor parentType="task" parentId={task.id} />
         </aside>
       </div>
     </div>

@@ -14,6 +14,7 @@ import { useBackHref } from "@/lib/hq/useBackHref";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -30,7 +31,6 @@ type DbDeliverable = {
   type: string | null;
   status: DeliverableStatus;
   due_date: string | null;
-  notes: string | null;
   assigned_user_ids: string[];
   completed_at: string | null;
   project_id: string | null;
@@ -54,7 +54,7 @@ export default function DeliverableDetail() {
         supabase
           .from("deliverables")
           .select(
-            `id, title, type, status, due_date, notes, assigned_user_ids, completed_at,
+            `id, title, type, status, due_date, assigned_user_ids, completed_at,
              project_id,
              project:projects!deliverables_project_id_fkey(id, name)`,
           )
@@ -258,26 +258,7 @@ export default function DeliverableDetail() {
         </div>
       </section>
 
-      <section className="card">
-        <div className="card-headbar">
-          <span className="h-card">Notes</span>
-        </div>
-        <div className="card-pad">
-          <InlineEditText
-            value={row.notes}
-            placeholder="Free-form notes for this deliverable..."
-            multiline
-            renderRead={(v) =>
-              v ? (
-                <span className="muted" style={{ whiteSpace: "pre-wrap" }}>{v}</span>
-              ) : (
-                <span className="muted subtle">(empty)</span>
-              )
-            }
-            onSave={(next) => saveField("notes", next || null)}
-          />
-        </div>
-      </section>
+      <InternalNotesEditor parentType="deliverable" parentId={row.id} />
     </div>
   );
 }

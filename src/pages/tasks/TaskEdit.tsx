@@ -25,7 +25,6 @@ import { toast } from "@/hooks/use-toast";
 
 type FormState = {
   title: string;
-  description: string;
   status: TaskStatus;
   priority: TaskPriority;
   due_date: string;
@@ -36,7 +35,6 @@ type FormState = {
 
 const EMPTY: FormState = {
   title: "",
-  description: "",
   status: "To Do",
   priority: "Normal",
   due_date: "",
@@ -85,7 +83,7 @@ export default function TaskEdit() {
           : supabase
               .from("tasks")
               .select(
-                "id, title, description, status, priority, due_date, project_id, assignee_id, blocked_by",
+                "id, title, status, priority, due_date, project_id, assignee_id, blocked_by",
               )
               .eq("id", id)
               .single(),
@@ -96,7 +94,6 @@ export default function TaskEdit() {
       if (!isCreate && taskRes && "data" in taskRes && taskRes.data) {
         type Row = {
           title: string;
-          description: string | null;
           status: TaskStatus;
           priority: TaskPriority;
           due_date: string | null;
@@ -107,7 +104,6 @@ export default function TaskEdit() {
         const t = taskRes.data as unknown as Row;
         const next: FormState = {
           title: t.title,
-          description: t.description ?? "",
           status: t.status,
           priority: t.priority,
           due_date: t.due_date ?? "",
@@ -183,7 +179,6 @@ export default function TaskEdit() {
     setSaving(true);
     const payload = {
       title: form.title,
-      description: form.description || null,
       status: form.status,
       priority: form.priority,
       due_date: form.due_date || null,
@@ -254,15 +249,6 @@ export default function TaskEdit() {
               className={`input ${form.title ? "input--filled" : ""}`}
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            />
-          </Field>
-          <Field label="Description">
-            <textarea
-              className={`input textarea ${form.description ? "input--filled" : ""}`}
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              rows={5}
-              placeholder="What needs to happen?"
             />
           </Field>
           <div className="g2">

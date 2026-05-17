@@ -376,6 +376,48 @@ export type Database = {
           },
         ]
       }
+      note_mentions: {
+        Row: {
+          created_at: string
+          id: string
+          length: number
+          mentioned_user_id: string
+          note_id: string
+          start_offset: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          length: number
+          mentioned_user_id: string
+          note_id: string
+          start_offset: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          length?: number
+          mentioned_user_id?: string
+          note_id?: string
+          start_offset?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_mentions_mentioned_user_id_fkey"
+            columns: ["mentioned_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "note_mentions_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "notes_log"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notes_log: {
         Row: {
           author_id: string
