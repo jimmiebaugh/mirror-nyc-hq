@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { FilterBar, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { DataTable } from "@/components/data/DataTable";
@@ -40,11 +41,14 @@ const DEFAULT_FILTER_STATE: FilterState = {
 
 type AffiliationFilter = "All" | "Client" | "Vendor" | "Venue";
 
+// Colors mirror personTypeToken() so the buttons read as the same family
+// as the in-row pills (.p-primary / .p-purple / .p-info). Slightly muted
+// fill is delegated to .fchip--active in src/index.css.
 const AFFILIATION_BUTTONS: { value: AffiliationFilter; label: string; color: string }[] = [
   { value: "All", label: "All", color: "hsl(var(--muted-foreground))" },
-  { value: "Client", label: "Client", color: "hsl(var(--info))" },
-  { value: "Vendor", label: "Vendor", color: "hsl(var(--warn))" },
-  { value: "Venue", label: "Venue", color: "hsl(var(--success))" },
+  { value: "Client", label: "Client", color: "hsl(var(--primary))" },
+  { value: "Vendor", label: "Vendor", color: "#B57BF5" },
+  { value: "Venue", label: "Venue", color: "#06B6D4" },
 ];
 
 type PersonRowWithDerived = PersonListRow & {
@@ -53,8 +57,12 @@ type PersonRowWithDerived = PersonListRow & {
   organization_name: string | null;
 };
 
+const FROM_LABEL = "People";
+
 export default function PeopleList() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<PersonListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(DEFAULT_FILTER_STATE);
@@ -211,7 +219,7 @@ export default function PeopleList() {
           <DataTable<PersonRowWithDerived>
             rows={filtered}
             flat
-            onRowClick={(r) => navigate(`/people/${r.id}`)}
+            onRowClick={(r) => navigate(`/people/${r.id}`, { state: { from: fromState } })}
             empty={{
               message: "No people match your filters.",
               ctaLabel: "+ New Person",
@@ -267,6 +275,7 @@ export default function PeopleList() {
                         to={`/clients/${r.client_id}`}
                         className="tlink"
                         style={{ color: "rgba(190,78,68,.85)" }}
+                        state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {r.client_name}
@@ -279,6 +288,7 @@ export default function PeopleList() {
                         to={`/vendors/${r.vendor_id}`}
                         className="tlink"
                         style={{ color: "rgba(190,78,68,.85)" }}
+                        state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {r.vendor_name}

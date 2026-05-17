@@ -99,9 +99,6 @@ export default function ProjectEdit() {
   const [initialVendorIds, setInitialVendorIds] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
   const [vendorOptions, setVendorOptions] = useState<{ id: string; label: string }[]>([]);
-  const [vendorCategoryOptions, setVendorCategoryOptions] = useState<
-    { id: string; label: string }[]
-  >([]);
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
@@ -114,7 +111,6 @@ export default function ProjectEdit() {
         clientsRes,
         usersRes,
         vendorsRes,
-        vendorCategoriesRes,
         projectRes,
         amRes,
         dsRes,
@@ -131,10 +127,6 @@ export default function ProjectEdit() {
           .order("full_name", { ascending: true }),
         supabase
           .from("vendors")
-          .select("id, name")
-          .order("name", { ascending: true }),
-        supabase
-          .from("vendor_categories")
           .select("id, name")
           .order("name", { ascending: true }),
         isCreate
@@ -183,13 +175,6 @@ export default function ProjectEdit() {
         ((vendorsRes.data ?? []) as VendorRow[]).map((v) => ({
           id: v.id,
           label: v.name ?? "Untitled",
-        })),
-      );
-      type CategoryRow = { id: string; name: string | null };
-      setVendorCategoryOptions(
-        ((vendorCategoriesRes.data ?? []) as CategoryRow[]).map((c) => ({
-          id: c.id,
-          label: c.name ?? "Untitled",
         })),
       );
       const amIds = ((amRes.data ?? []) as { user_id: string }[]).map((r) => r.user_id);
@@ -662,10 +647,7 @@ export default function ProjectEdit() {
                 {
                   key: "category_id",
                   label: "Category",
-                  select: {
-                    options: vendorCategoryOptions,
-                    placeholder: "Select category...",
-                  },
+                  lookup: { table: "vendor_categories", entityLabel: "Category" },
                 },
               ]}
               onMiniCreate={handleCreateVendor}

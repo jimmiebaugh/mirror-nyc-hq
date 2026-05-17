@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, emptyFilterState, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
@@ -44,8 +45,12 @@ function calendarKind(status: DeliverableStatus): CalendarEventKind {
   }
 }
 
+const FROM_LABEL = "Deliverables";
+
 export default function DeliverablesList({ view }: { view: ViewKind }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<DeliverableListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
@@ -183,7 +188,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               kind: calendarKind(d.status),
               strikethrough: d.status === "Skipped",
             }))}
-          onEventClick={(ev) => navigate(`/deliverables/${ev.id}`)}
+          onEventClick={(ev) => navigate(`/deliverables/${ev.id}`, { state: { from: fromState } })}
           toolbarRight={
             <div className="callegend">
               <span><i style={{ background: "#06B6D4" }} /> In progress</span>
@@ -205,7 +210,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
           rows={filtered}
           flat
           rowBorderToken={(r) => deliverableStatusToken(r.status)}
-          onRowClick={(r) => navigate(`/deliverables/${r.id}`)}
+          onRowClick={(r) => navigate(`/deliverables/${r.id}`, { state: { from: fromState } })}
           empty={{
             message: "No deliverables yet",
             ctaLabel: "+ New Deliverable",
@@ -228,7 +233,11 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               sort: (a, b) => a.projectName.localeCompare(b.projectName),
               render: (r) =>
                 r.project ? (
-                  <Link to={`/projects/${r.project.id}`} className="tlink">
+                  <Link
+                    to={`/projects/${r.project.id}`}
+                    className="tlink"
+                    state={{ from: fromState }}
+                  >
                     {r.project.name}
                   </Link>
                 ) : (
@@ -281,7 +290,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
       ) : view === "board" ? (
         <DeliverablesByProjectBoard
           rows={filtered}
-          onClick={(r) => navigate(`/deliverables/${r.id}`)}
+          onClick={(r) => navigate(`/deliverables/${r.id}`, { state: { from: fromState } })}
         />
       ) : null}
     </div>

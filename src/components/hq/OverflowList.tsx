@@ -1,10 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { backState } from "@/lib/hq/useBackHref";
 
 /**
  * Inline hyperlink list with "+N more" overflow popover (Phase 5.6.2
@@ -31,14 +32,25 @@ export type OverflowListProps = {
   emptyPlaceholder?: ReactNode;
   /** Wrap each rendered item in a chip class instead of a plain link. */
   asChip?: boolean;
+  /**
+   * Label for the back crumb on the destination detail page (e.g. "Clients").
+   * When set, every link in the list passes location.state.from so the
+   * back crumb can route to the originating list. Phase 5.6.2.1.
+   */
+  fromLabel?: string;
 };
 
-function renderItem(item: OverflowItem, asChip: boolean) {
+function renderItem(
+  item: OverflowItem,
+  asChip: boolean,
+  fromState: ReturnType<typeof backState> | null,
+) {
   if (item.href) {
     return (
       <Link
         to={item.href}
         className={asChip ? "tag" : "tlink"}
+        state={fromState ? { from: fromState } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
         {item.label}
@@ -53,7 +65,11 @@ export function OverflowList({
   visible = 3,
   emptyPlaceholder = <span className="muted subtle">-</span>,
   asChip = false,
+  fromLabel,
 }: OverflowListProps) {
+  const location = useLocation();
+  const fromState = fromLabel ? backState(location, fromLabel) : null;
+
   if (items.length === 0) {
     return <>{emptyPlaceholder}</>;
   }
@@ -68,32 +84,63 @@ export function OverflowList({
         style={{ display: "inline-flex", gap: 6 }}
       >
         {head.map((item) => (
-          <span key={item.id}>{renderItem(item, true)}</span>
+          <span key={item.id}>{renderItem(item, true, fromState)}</span>
         ))}
-        {rest.length > 0 ? <MoreButton items={rest} asChip /> : null}
+        {rest.length > 0 ? <MoreButton items={rest} asChip fromState={fromState} /> : null}
       </span>
     );
   }
 
+  // Inline (non-chip) rendering uses a stronger bullet separator with
+  // wider whitespace so multi-record cells (ClientsList Contacts /
+  // Deliverables / Projects) don't crowd at typical viewports. Wrap-aware:
+  // each item gets its own inline-block span so the bullets break with
+  // the wrapping.
   return (
-    <span style={{ display: "inline" }}>
+    <span
+      style={{
+        display: "inline-flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        columnGap: 10,
+        rowGap: 4,
+      }}
+    >
       {head.map((item, idx) => (
-        <span key={item.id}>
-          {idx > 0 ? <span className="muted subtle">, </span> : null}
-          {renderItem(item, false)}
+        <span key={item.id} style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+          {idx > 0 ? (
+            <span
+              aria-hidden
+              className="muted"
+              style={{ opacity: 0.5, fontSize: 11 }}
+            >
+              ·
+            </span>
+          ) : null}
+          {renderItem(item, false, fromState)}
         </span>
       ))}
       {rest.length > 0 ? (
-        <>
-          <span className="muted subtle">, </span>
-          <MoreButton items={rest} />
-        </>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+          <span aria-hidden className="muted" style={{ opacity: 0.5, fontSize: 11 }}>
+            ·
+          </span>
+          <MoreButton items={rest} fromState={fromState} />
+        </span>
       ) : null}
     </span>
   );
 }
 
-function MoreButton({ items, asChip = false }: { items: OverflowItem[]; asChip?: boolean }) {
+function MoreButton({
+  items,
+  asChip = false,
+  fromState,
+}: {
+  items: OverflowItem[];
+  asChip?: boolean;
+  fromState: ReturnType<typeof backState> | null;
+}) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -122,7 +169,7 @@ function MoreButton({ items, asChip = false }: { items: OverflowItem[]; asChip?:
           style={{ listStyle: "none", padding: 0, margin: 0 }}
         >
           {items.map((item) => (
-            <li key={item.id}>{renderItem(item, asChip)}</li>
+            <li key={item.id}>{renderItem(item, asChip, fromState)}</li>
           ))}
         </ul>
       </PopoverContent>

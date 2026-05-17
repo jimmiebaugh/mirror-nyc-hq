@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { FilterBar, emptyFilterState, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { DataTable } from "@/components/data/DataTable";
@@ -29,8 +30,12 @@ const CLIENT_FILTER_FIELDS: FilterFieldDef[] = [
   { key: "industry", label: "Industry", type: "text" },
 ];
 
+const FROM_LABEL = "Clients";
+
 export default function ClientsList() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<ClientListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
@@ -109,7 +114,7 @@ export default function ClientsList() {
           <DataTable<ClientListRow>
             rows={filtered}
             flat
-            onRowClick={(r) => navigate(`/clients/${r.id}`)}
+            onRowClick={(r) => navigate(`/clients/${r.id}`, { state: { from: fromState } })}
             empty={{
               message: "No clients match your filters.",
               ctaLabel: "+ New Client",
@@ -124,6 +129,7 @@ export default function ClientsList() {
                   <Link
                     to={`/clients/${r.id}`}
                     className="lead"
+                    state={{ from: fromState }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     {r.name}
@@ -135,6 +141,7 @@ export default function ClientsList() {
                 label: "Contacts",
                 render: (r) => (
                   <OverflowList
+                    fromLabel={FROM_LABEL}
                     items={r.contacts.map<OverflowItem>((c) => ({
                       id: c.id,
                       label: c.label,
@@ -148,6 +155,7 @@ export default function ClientsList() {
                 label: "Deliverables",
                 render: (r) => (
                   <OverflowList
+                    fromLabel={FROM_LABEL}
                     items={r.upcomingDeliverables.map<OverflowItem>((d) => ({
                       id: d.id,
                       label: d.label,
@@ -161,6 +169,7 @@ export default function ClientsList() {
                 label: "Projects",
                 render: (r) => (
                   <OverflowList
+                    fromLabel={FROM_LABEL}
                     items={r.activeProjects.map<OverflowItem>((p) => ({
                       id: p.id,
                       label: p.label,

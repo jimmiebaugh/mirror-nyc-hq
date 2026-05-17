@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -8,6 +8,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { useLookup, type LookupTable } from "@/lib/hq/lookups";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -29,6 +31,13 @@ export type MiniCreateField = {
   placeholder?: string;
   /** For FK selects inside the modal (e.g. Vendor category). */
   select?: { options: { id: string; label: string }[]; placeholder: string };
+  /**
+   * Typeahead-with-add field over a lookup table (Phase 5.6.2.1). The
+   * combobox internally stores the option name, but the modal resolves
+   * name -> id at submit so the parent's `onSubmit` receives the FK id
+   * (same shape as the `select` variant).
+   */
+  lookup?: { table: LookupTable; entityLabel: string };
 };
 
 type MiniCreateModalProps = {
@@ -117,7 +126,16 @@ export function MiniCreateModal({
                 {f.label}
                 {f.required ? <span className="req">*</span> : null}
               </label>
-              {f.select ? (
+              {f.lookup ? (
+                <MiniCreateLookupField
+                  table={f.lookup.table}
+                  entityLabel={f.lookup.entityLabel}
+                  value={values[f.key] ?? ""}
+                  onChange={(next) =>
+                    setValues((v) => ({ ...v, [f.key]: next }))
+                  }
+                />
+              ) : f.select ? (
                 <select
                   className="input"
                   value={values[f.key] ?? ""}
@@ -160,5 +178,45 @@ export function MiniCreateModal({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+/**
+ * Internal wrapper that fronts a RecordCombobox in lookup mode and
+ * resolves the option name to its id at the prop boundary. Lets the
+ * parent's `onSubmit` consume an FK id alongside the other free-text
+ * fields without knowing the lookup table internals.
+ */
+function MiniCreateLookupField({
+  table,
+  entityLabel,
+  value,
+  onChange,
+}: {
+  table: LookupTable;
+  entityLabel: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const lookup = useLookup(table);
+  const selectedName = useMemo(() => {
+    if (!value) return null;
+    return lookup.options.find((o) => o.id === value)?.name ?? null;
+  }, [value, lookup.options]);
+
+  return (
+    <RecordCombobox
+      source={{ kind: "lookup", table }}
+      value={selectedName}
+      onChange={(name) => {
+        if (!name) {
+          onChange("");
+          return;
+        }
+        const opt = lookup.options.find((o) => o.name === name);
+        onChange(opt?.id ?? "");
+      }}
+      entityLabel={entityLabel}
+    />
   );
 }

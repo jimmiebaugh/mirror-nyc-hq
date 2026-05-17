@@ -20,6 +20,7 @@ import {
   relativeDay,
 } from "@/lib/hq/dates";
 import type { ProjectStatus } from "@/lib/projects/queries";
+import { useBackHref } from "@/lib/hq/useBackHref";
 
 /**
  * Surface 07 Project Detail. Wireframe-fidelity rebuild (Phase 5.2.1
@@ -77,6 +78,12 @@ type TaskRow = {
   assignee: { full_name: string | null; email: string | null } | null;
 };
 
+type VendorLink = {
+  id: string;
+  name: string;
+  category_name: string | null;
+};
+
 function formatBudget(b: number | null): string {
   if (b == null) return "-";
   return `$${b.toLocaleString("en-US")}`;
@@ -88,13 +95,15 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [vendors, setVendors] = useState<VendorLink[]>([]);
   const [loading, setLoading] = useState(true);
+  const back = useBackHref({ to: "/projects", label: "Projects" });
 
   useEffect(() => {
     if (!id) return;
     let active = true;
     (async () => {
-      const [proj, dels, tks] = await Promise.all([
+      const [proj, dels, tks, vds] = await Promise.all([
         supabase
           .from("projects")
           .select(
@@ -121,6 +130,13 @@ export default function ProjectDetail() {
           .select("id, title, status, priority, due_date, assignee:users!tasks_assignee_id_fkey(full_name, email)")
           .eq("project_id", id)
           .order("due_date", { ascending: true, nullsFirst: false }),
+        supabase
+          .from("project_vendors")
+          .select(
+            "created_at, vendor:vendors!project_vendors_vendor_id_fkey(id, name, category:vendor_categories!vendors_category_id_fkey(name))",
+          )
+          .eq("project_id", id)
+          .order("created_at", { ascending: false }),
       ]);
       if (!active) return;
       if (proj.error) {
@@ -131,6 +147,24 @@ export default function ProjectDetail() {
       setProject(proj.data as unknown as Project);
       setDeliverables((dels.data ?? []) as unknown as Deliverable[]);
       setTasks((tks.data ?? []) as unknown as TaskRow[]);
+      const vendorRows: VendorLink[] = [];
+      for (const r of vds.data ?? []) {
+        const row = r as unknown as {
+          vendor: {
+            id: string;
+            name: string | null;
+            category: { name: string | null } | null;
+          } | null;
+        };
+        if (row.vendor) {
+          vendorRows.push({
+            id: row.vendor.id,
+            name: row.vendor.name ?? "Untitled",
+            category_name: row.vendor.category?.name ?? null,
+          });
+        }
+      }
+      setVendors(vendorRows);
       setLoading(false);
     })();
     return () => {
@@ -194,9 +228,9 @@ export default function ProjectDetail() {
 
   return (
     <div className="stack-4">
-      <Link to="/projects" className="tlink">
+      <Link to={back.to} className="tlink">
         <IconArrowLeft className="ic" />
-        Back to Projects
+        Back to {back.label}
       </Link>
 
       <header
@@ -575,6 +609,41 @@ export default function ProjectDetail() {
                     </div>
                   </div>
                 ) : null,
+              )}
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Vendors</span>
+              <button
+                type="button"
+                className="tlink"
+                onClick={() => navigate(`/projects/${project.id}/edit`)}
+              >
+                Manage
+              </button>
+            </div>
+            <div className="card-pad stack-2">
+              {vendors.length === 0 ? (
+                <div className="subtle" style={{ fontSize: 13 }}>
+                  No vendors linked yet.
+                </div>
+              ) : (
+                vendors.map((v) => (
+                  <div key={v.id} className="row-c" style={{ justifyContent: "space-between" }}>
+                    <Link
+                      to={`/vendors/${v.id}`}
+                      className="tlink"
+                      style={{ fontSize: 13 }}
+                    >
+                      {v.name}
+                    </Link>
+                    {v.category_name ? (
+                      <span className="cap muted">{v.category_name}</span>
+                    ) : null}
+                  </div>
+                ))
               )}
             </div>
           </section>

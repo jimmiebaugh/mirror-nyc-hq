@@ -5,6 +5,7 @@ import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { deliverableStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
 import { formatMediumDate } from "@/lib/hq/dates";
 import type { DeliverableStatus } from "@/lib/deliverables/queries";
+import { useBackHref } from "@/lib/hq/useBackHref";
 
 type DbDeliverable = {
   id: string;
@@ -24,6 +25,7 @@ export default function DeliverableDetail() {
   const [row, setRow] = useState<DbDeliverable | null>(null);
   const [assignees, setAssignees] = useState<{ id: string; full_name: string | null; email: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const back = useBackHref({ to: "/deliverables", label: "Deliverables" });
 
   useEffect(() => {
     if (!id) return;
@@ -76,9 +78,9 @@ export default function DeliverableDetail() {
 
   return (
     <div className="stack-4" style={{ maxWidth: 760 }}>
-      <Link to="/deliverables" className="tlink">
+      <Link to={back.to} className="tlink">
         <IconArrowLeft className="ic" />
-        Back to Deliverables
+        Back to {back.label}
       </Link>
       <div className="row between" style={{ alignItems: "flex-start" }}>
         <h1 className={`h-page ${statusTextDecoration("deliverable", row.status)}`}>

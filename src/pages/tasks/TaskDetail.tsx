@@ -5,6 +5,7 @@ import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { taskStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
 import { formatMediumDate } from "@/lib/hq/dates";
 import type { TaskPriority, TaskStatus } from "@/lib/tasks/queries";
+import { useBackHref } from "@/lib/hq/useBackHref";
 
 type DbTask = {
   id: string;
@@ -36,6 +37,7 @@ export default function TaskDetail() {
   const [task, setTask] = useState<DbTask | null>(null);
   const [blockedTasks, setBlockedTasks] = useState<{ id: string; title: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const back = useBackHref({ to: "/tasks", label: "Tasks" });
 
   useEffect(() => {
     if (!id) return;
@@ -89,9 +91,9 @@ export default function TaskDetail() {
 
   return (
     <div className="stack-4" style={{ maxWidth: 760 }}>
-      <Link to="/tasks" className="tlink">
+      <Link to={back.to} className="tlink">
         <IconArrowLeft className="ic" />
-        Back to Tasks
+        Back to {back.label}
       </Link>
       <div className="row between" style={{ alignItems: "flex-start" }}>
         <h1 className={`h-page ${statusTextDecoration("task", task.status)}`}>

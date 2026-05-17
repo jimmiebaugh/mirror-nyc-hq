@@ -8,6 +8,7 @@ import {
   IconPlus,
 } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
+import { useBackHref } from "@/lib/hq/useBackHref";
 
 /**
  * Client Detail.
@@ -54,6 +55,7 @@ export default function ClientDetail() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [projects, setProjects] = useState<PastProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const back = useBackHref({ to: "/clients", label: "Clients" });
 
   useEffect(() => {
     if (!id) return;
@@ -113,8 +115,8 @@ export default function ClientDetail() {
   return (
     <div className="stack-6">
       <div className="stack-3">
-        <Link to="/clients" className="crumb">
-          <IconArrowLeft className="ic ic-sm" /> Back to Clients
+        <Link to={back.to} className="crumb">
+          <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
         <div className="row between" style={{ alignItems: "flex-start" }}>
           <div>
