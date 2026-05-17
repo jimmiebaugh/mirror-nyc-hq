@@ -102,27 +102,48 @@ function sb() {
 }
 
 function linkUrlFor(entityType: string, entityId: string, extra?: Record<string, unknown>): string {
+  // Phase 5.7.2: mention dispatch trigger pre-computes a link_url in `extra`
+  // (deliverable goes to /deliverables/:id, outlook_entry goes to /outlook, etc).
+  // Prefer it when present so the dispatch path and the trigger agree on the
+  // route without re-resolving the mapping here.
+  const overrideLink = typeof extra?.link_url === "string" ? extra.link_url : null;
+  if (overrideLink) return overrideLink;
   switch (entityType) {
-    case "project":      return `/projects/${entityId}`;
-    case "task":         return `/tasks/${entityId}`;
-    case "deliverable":  return `/deliverables/${entityId}`;
-    case "venue":        return `/venues/${entityId}`;
-    case "vendor":       return `/vendors/${entityId}`;
-    case "client":       return `/clients/${entityId}`;
-    case "person":       return `/people/${entityId}`;
+    case "project":       return `/projects/${entityId}`;
+    case "task":          return `/tasks/${entityId}`;
+    case "deliverable":   return `/deliverables/${entityId}`;
+    case "venue":         return `/venues/${entityId}`;
+    case "vendor":        return `/vendors/${entityId}`;
+    case "client":        return `/clients/${entityId}`;
+    case "person":        return `/people/${entityId}`;
+    case "outlook_entry": return `/outlook`;
     case "wiki_page": {
       const slug = (extra?.slug as string | undefined) ?? entityId;
       return `/wiki/${slug}`;
     }
-    case "user":         return `/users`;
-    default:             return `/activity`;
+    case "user":          return `/users`;
+    default:              return `/activity`;
   }
 }
+
+const ENTITY_TYPE_LABEL: Record<string, string> = {
+  project: "Project",
+  task: "Task",
+  deliverable: "Deliverable",
+  venue: "Venue",
+  vendor: "Vendor",
+  client: "Client",
+  person: "Person",
+  wiki_page: "Wiki page",
+  outlook_entry: "Outlook entry",
+  user: "User",
+};
 
 type Template = { title: string; body: string };
 
 function template(
   eventType: TriggerKey,
+  entityType: string,
   entityName: string,
   extra: Record<string, unknown> | undefined,
   actorName?: string,
@@ -161,13 +182,23 @@ function template(
           ? `Status changed to ${newStatus} on ${entityName}`
           : `Status changed on ${entityName}`,
       };
-    case "mention":
+    case "mention": {
+      // Phase 5.7.2: dispatch payload from notifications_dispatch_writer's
+      // note_mentions branch carries `snippet` (first 140 chars of the note
+      // body) and the parent entity_type so we can prefix "Task" / "Deliverable"
+      // / etc. The body trims the snippet further to keep the bell row tight.
+      const snippetRaw =
+        typeof extra?.snippet === "string" ? extra.snippet.trim() : "";
+      const snippet =
+        snippetRaw.length > 80 ? snippetRaw.slice(0, 80) + "..." : snippetRaw;
+      const label = ENTITY_TYPE_LABEL[entityType] ?? entityType;
       return {
-        title: "Mentioned you",
-        body: actorName
-          ? `${actorName} mentioned you on ${entityName}`
-          : `Someone mentioned you on ${entityName}`,
+        title: actorName ? `${actorName} mentioned you` : "Mentioned you",
+        body: snippet
+          ? `${label} ${entityName}: "${snippet}"`
+          : `${label} ${entityName}`,
       };
+    }
     case "event_date_today": {
       const kind = (extra?.kind as string | undefined) ?? "Event";
       return {
@@ -249,10 +280,20 @@ Deno.serve(async (req) => {
   const globalEmailOn = globals?.email_notifications_enabled ?? true;
 
   // Resolve recipients: drop the actor, dedupe.
+  //
+  // Phase 5.7.2: allow self-mentions through by design (locked decision).
+  // The original 5.5 self-exclusion assumed actor=recipient would always be
+  // noise (you don't need a "task assigned" notification for a task you just
+  // assigned to yourself). Mentions are different: writing `@Self` in a note
+  // is a deliberate "remind me later" pattern AND keeps the notification
+  // surface symmetric for the writer. This is the permanent behavior, not
+  // a testing hack.
+  const allowSelf = body.event_type === "mention";
   const recipients = Array.from(
     new Set(
       body.recipient_user_ids.filter(
-        (id): id is string => typeof id === "string" && id !== body.actor_id,
+        (id): id is string =>
+          typeof id === "string" && (allowSelf || id !== body.actor_id),
       ),
     ),
   );
@@ -293,7 +334,7 @@ Deno.serve(async (req) => {
     actorName = actor?.full_name?.trim() || actor?.email?.split("@")[0] || undefined;
   }
 
-  const tpl = template(body.event_type, body.entity_name, body.extra, actorName);
+  const tpl = template(body.event_type, body.entity_type, body.entity_name, body.extra, actorName);
   const link = linkUrlFor(body.entity_type, body.entity_id, body.extra);
 
   let sentInApp = 0;

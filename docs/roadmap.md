@@ -334,8 +334,23 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     migration, no spec.
   - **Status:** DONE 2026-05-17. Commit: `d36b516`.
 - **5.7 Smoke Test Pass 2.** Jimmie's second batch of smoke-test notes
-  after the full 5.6 end-to-end re-test. Subphase split TBD when notes
-  arrive; same notes-first pattern as 5.6.
+  after the full 5.6 end-to-end re-test. Subphases plus deliberate
+  new-surface work (mentions, deliverables reshape, calendar overhaul,
+  vendor files, profile + settings). Full subphase plan in
+  `OUTPUTS/phase-5-7-plan.md`.
+  - **5.7.11 Profile + Settings split surfaces.** Originally CUT in
+    plan decision #20 (2026-05-17); un-cut 2026-05-17 PM during 5.7.2
+    when the activity-feed user-link demotion surfaced that the dead-end
+    `/users` link target was hurting the experience. Two split routes:
+    `/users/:id` (read-only Profile view, accessible to every signed-in
+    tier — backfills mention spans, activity-feed actor links, and
+    mention-row record links to a real destination) + `/settings/profile`
+    (self-only Settings; collects avatar, slack_user_id, profile copy;
+    links out to the existing `/notifications/preferences`). `/users`
+    (Team list) stays admin-only. Self-mention dispatch behavior stays
+    on by design — not in scope for 5.7.11. Slot before HQ v1 checkpoint
+    so the Phase 5.7.2 link-demotions can be reverted to real links
+    inside the v1 cut. Spec TBD.
 - **HQ v1 checkpoint.** After 5.7 wraps: tag the squash commit, write
   `docs/v1-changelog.md` summarizing 5.1 through 5.7. Not a sub-phase;
   a release milestone.

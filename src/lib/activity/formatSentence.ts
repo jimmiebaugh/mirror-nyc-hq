@@ -40,6 +40,28 @@ function actorDisplay(actor: ActivityRow["actor"]): { id: string | null; name: s
   return { id, name: "Someone" };
 }
 
+/** activity_log_writer keys entity_type off TG_TABLE_NAME (plural). Every
+ *  render-side switch is keyed singular. Normalize at the renderer boundary
+ *  so existing rows render correctly without a backfill. Phase 5.7.2 sweep. */
+function singularizeEntityType(t: string): string {
+  switch (t) {
+    case "projects":        return "project";
+    case "tasks":           return "task";
+    case "deliverables":    return "deliverable";
+    case "venues":          return "venue";
+    case "vendors":         return "vendor";
+    case "clients":         return "client";
+    case "people":          return "person";
+    case "wiki_pages":      return "wiki_page";
+    case "outlook_entries": return "outlook_entry";
+    case "credentials":     return "credential";
+    case "mirror_holidays": return "mirror_holiday";
+    // Pre-5.2.3 organizations rows. Map to vendor per the 5.2.3 split lock.
+    case "organizations":   return "vendor";
+    default:                return t;
+  }
+}
+
 function recordHrefFor(
   entityType: string,
   entityId: string,
@@ -65,13 +87,11 @@ function recordHrefFor(
       const slug = (payload?.slug as string | undefined) ?? undefined;
       return slug ? `/wiki/${slug}` : `/wiki`;
     }
-    case "deliverable": {
-      // Deliverables don't have their own list/detail route; navigate to the
-      // parent project per build notes § 22 "Deliverable titles render as
-      // bold foreground (NOT linked)".
-      const projectId = payload?.project_id as string | undefined;
-      return projectId ? `/projects/${projectId}` : null;
-    }
+    // Phase 5.7.2 sweep: Deliverable detail (Surface 14) exists now, link
+    // directly. Previous "bold-only, link to parent project" was a pre-5.2.1
+    // convention before the dedicated detail route landed.
+    case "deliverable":
+      return `/deliverables/${entityId}`;
     default:
       return null;
   }
@@ -84,11 +104,16 @@ function recordName(
   if (!payload) return null;
   // The activity_log_writer pattern writes a NEW snapshot under various keys
   // depending on the trigger; try the common ones in priority order.
+  // Phase 5.7.2 sweep: people rows store the human's name under `full_name`,
+  // not `name`/`title`, so add it to the candidate list.
+  const newSnapshot = payload.new as Record<string, unknown> | undefined;
   const candidates = [
     payload.name,
     payload.title,
-    (payload.new as Record<string, unknown> | undefined)?.name,
-    (payload.new as Record<string, unknown> | undefined)?.title,
+    payload.full_name,
+    newSnapshot?.name,
+    newSnapshot?.title,
+    newSnapshot?.full_name,
     payload.entity_name,
   ];
   for (const c of candidates) {
@@ -136,9 +161,11 @@ function entityWord(entityType: string): string {
 
 export function formatActivitySentence(row: ActivityRow): FormattedActivity {
   const actor = actorDisplay(row.actor);
-  const name = recordName(row.entity_type, row.payload);
-  const href = recordHrefFor(row.entity_type, row.entity_id, row.payload);
-  const isDeliverable = row.entity_type === "deliverable";
+  // Phase 5.7.2 sweep: normalize plural entity_type from activity_log_writer
+  // (TG_TABLE_NAME) into the singular form every downstream switch expects.
+  const entityType = singularizeEntityType(row.entity_type);
+  const name = recordName(entityType, row.payload);
+  const href = recordHrefFor(entityType, row.entity_id, row.payload);
 
   // Status change: prefer the "moved X to NEW_STATUS" template.
   const statusChange = statusFromPayload(row.payload);
@@ -151,7 +178,6 @@ export function formatActivitySentence(row: ActivityRow): FormattedActivity {
       actor,
       recordName: name,
       recordHref: href,
-      recordIsBoldOnly: isDeliverable,
       leadingText: " moved ",
       trailingText: ` to ${statusChange.new_status}`,
     };
@@ -162,8 +188,7 @@ export function formatActivitySentence(row: ActivityRow): FormattedActivity {
       actor,
       recordName: name,
       recordHref: href,
-      recordIsBoldOnly: isDeliverable,
-      leadingText: ` created ${entityWord(row.entity_type)} `,
+      leadingText: ` created ${entityWord(entityType)} `,
     };
   }
 
@@ -173,7 +198,7 @@ export function formatActivitySentence(row: ActivityRow): FormattedActivity {
       recordName: name,
       recordHref: null,
       recordIsBoldOnly: true,
-      leadingText: ` deleted ${entityWord(row.entity_type)} `,
+      leadingText: ` deleted ${entityWord(entityType)} `,
     };
   }
 
@@ -182,8 +207,39 @@ export function formatActivitySentence(row: ActivityRow): FormattedActivity {
       actor,
       recordName: name,
       recordHref: href,
-      recordIsBoldOnly: isDeliverable,
       leadingText: " assigned you a task: ",
+    };
+  }
+
+  // Phase 5.7.2 mention: payload carries `mentioned_user_full_name` and (after
+  // the parent_title follow-up migration) `parent_title`. The record-link slot
+  // surfaces the parent entity so the user can click through to the task /
+  // deliverable / etc the mention lives on; the mentioned-user name renders
+  // as plain bold leading text. When the payload predates the parent_title
+  // backfill, fall back to "in this {entityWord}" with no record link.
+  if (row.action === "mentioned") {
+    const mentioned =
+      typeof row.payload?.mentioned_user_full_name === "string"
+        ? row.payload.mentioned_user_full_name
+        : "someone";
+    const parentTitle =
+      typeof row.payload?.parent_title === "string" && row.payload.parent_title
+        ? row.payload.parent_title
+        : null;
+    if (parentTitle) {
+      return {
+        actor,
+        recordName: parentTitle,
+        recordHref: href,
+        leadingText: ` mentioned ${mentioned} in `,
+      };
+    }
+    return {
+      actor,
+      recordName: mentioned,
+      recordHref: "/users",
+      leadingText: " mentioned ",
+      trailingText: ` in this ${entityWord(entityType)}`,
     };
   }
 
@@ -199,7 +255,6 @@ export function formatActivitySentence(row: ActivityRow): FormattedActivity {
       actor,
       recordName: name,
       recordHref: href,
-      recordIsBoldOnly: isDeliverable,
       leadingText: ` changed ${field} on `,
       trailingText: fromTo,
     };
@@ -210,7 +265,6 @@ export function formatActivitySentence(row: ActivityRow): FormattedActivity {
     actor,
     recordName: name,
     recordHref: href,
-    recordIsBoldOnly: isDeliverable,
     leadingText: ` ${row.action.replace(/_/g, " ")} `,
   };
 }
@@ -270,12 +324,15 @@ export type ActivityIconKey =
   | "default";
 
 export function iconKeyForEntity(entityType: string): ActivityIconKey {
+  // Phase 5.7.2 sweep: normalize plural -> singular so plural rows from the
+  // activity_log_writer (TG_TABLE_NAME) match the icon map.
+  const t = singularizeEntityType(entityType);
   const known: ActivityIconKey[] = [
     "project", "task", "deliverable", "venue", "vendor", "client",
     "person", "wiki_page", "credential", "outlook_entry", "notes_log",
   ];
-  return (known as string[]).includes(entityType)
-    ? (entityType as ActivityIconKey)
+  return (known as string[]).includes(t)
+    ? (t as ActivityIconKey)
     : "default";
 }
 

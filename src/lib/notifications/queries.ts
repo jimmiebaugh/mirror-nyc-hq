@@ -27,13 +27,17 @@ export async function fetchRecentNotifications(): Promise<NotificationRow[]> {
   return data ?? [];
 }
 
-/** Count unread in-app notifications for the bell badge. */
-export async function fetchUnreadCount(): Promise<number> {
-  const { count, error } = await supabase
+/** Count unread in-app notifications for the bell badge.
+ *  Pass `typeFilter` to scope the count to a single notification.type
+ *  (e.g. 'mention' for the Phase 5.7.2 @-bell). */
+export async function fetchUnreadCount(typeFilter?: string): Promise<number> {
+  let query = supabase
     .from("notifications")
     .select("id", { head: true, count: "exact" })
     .eq("delivered_in_app", true)
     .eq("read", false);
+  if (typeFilter) query = query.eq("type", typeFilter);
+  const { count, error } = await query;
   if (error) throw error;
   return count ?? 0;
 }
@@ -52,6 +56,31 @@ export async function markAllNotificationsRead(): Promise<void> {
   const { error } = await supabase
     .from("notifications")
     .update({ read: true, read_at: new Date().toISOString() })
+    .eq("read", false);
+  if (error) throw error;
+}
+
+/** Phase 5.7.2: fetch the most recent @-mention notifications for the
+ *  top-nav @-bell. Same shape as fetchRecentNotifications scoped to
+ *  type='mention'. */
+export async function fetchRecentMentions(): Promise<NotificationRow[]> {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("delivered_in_app", true)
+    .eq("type", "mention")
+    .order("created_at", { ascending: false })
+    .limit(BELL_PANEL_LIMIT);
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Phase 5.7.2: mark every unread mention for the current user as read. */
+export async function markAllMentionsRead(): Promise<void> {
+  const { error } = await supabase
+    .from("notifications")
+    .update({ read: true, read_at: new Date().toISOString() })
+    .eq("type", "mention")
     .eq("read", false);
   if (error) throw error;
 }
