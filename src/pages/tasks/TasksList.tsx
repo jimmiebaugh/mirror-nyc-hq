@@ -69,7 +69,6 @@ export default function TasksList({ view }: { view: ViewKind }) {
   const [activeViewName, setActiveViewName] = useState("My open tasks");
   const [quickAdd, setQuickAdd] = useState("");
   const [adding, setAdding] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [blockedTitles, setBlockedTitles] = useState<Record<string, string>>({});
   /**
    * Phase 5.6.5: tracks whether the on-mount default-view resolution
@@ -309,7 +308,6 @@ export default function TasksList({ view }: { view: ViewKind }) {
             padding: "8px 12px",
           }}
         >
-          <span className="checkbox" />
           <input
             className="input"
             style={{ height: 30, border: "none", background: "none", padding: 0 }}
@@ -339,7 +337,6 @@ export default function TasksList({ view }: { view: ViewKind }) {
           }
           rowBorderToken={(r) => taskStatusToken(r.status)}
           onRowClick={(r) => navigate(`/tasks/${r.id}`, { state: { from: fromState } })}
-          selection={{ selectedIds: selected, onChange: setSelected }}
           twoTier={{
             isTerminal: (r) => r.status === "Done",
             dividerLabel: (n) => `Done · ${n} hidden`,

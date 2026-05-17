@@ -191,14 +191,18 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   - **Status:** DONE 2026-05-16. Commit: `0f122c1`. Spec:
     `OUTPUTS/phase-5-5-1-signin-spec.md`.
 - **5.6 Smoke Test Pass 1.** Jimmie's first batch of end-to-end smoke
-  notes parsed into six subphases (originally four; the locked carry-
+  notes parsed into five subphases (originally four; the locked carry-
   forward from 5.6.1 became the new 5.6.3 detail-page inline edit, which
-  bumped the prior 5.6.3 / 4 / 5 down a slot). Heaviest functional
+  bumped the prior 5.6.3 / 4 down a slot). Heaviest functional
   primitives land first so downstream column rewrites + polish can
   consume them. Plan doc: `OUTPUTS/phase-5-6-plan.md` (locked 2026-05-16
   from a five-round clarifying Q&A; renumbered 2026-05-16 in the 5.6.3
   squash; spec drafter for each subphase reads the plan instead of
   re-asking Jimmie).
+  - **Phase 5.6 status:** WRAPPED 2026-05-17. All five subphases plus
+    two follow-on micro-phases (5.6.5.1 owner delegation + sort
+    propagation + Team page fixes; 5.6.5.2 `last_active_at` throttle)
+    shipped. Last commit on main from the 5.6 stream: `1a953f1`.
   - **5.6.1 Cross-cutting interaction primitives.** New
     `<RecordCombobox />` component (Notion-style typeahead + inline-add
     with mini-create modal per entity: Person name+email, Client
@@ -283,8 +287,10 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     project titles wrap to second line; "Shared Outlook" toggle label
     renamed to "Tentative". Outlook: entry card background tinted at
     15% opacity of the matching pill color; "Likely" pill rendered
-    cyan (root-cause investigated; currently renders black). Status:
-    PLANNED.
+    cyan (root-cause investigated; currently renders black).
+  - **Status:** DONE 2026-05-17. Commits: `4b884bc` (main ship),
+    `03d69f3` (5.6.4.1 follow-on: 16 items + 1 migration). Spec:
+    `OUTPUTS/phase-5-6-4-spec.md`.
   - **5.6.5 Global default views (owner admin feature).**
     `saved_views.scope text CHECK IN ('user','global')` column +
     `users.is_owner boolean` column (Jimmie's row set true; delegable
@@ -297,41 +303,36 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     Applies to all list/board/timeline surfaces (Projects, Tasks,
     Deliverables, Venues, Vendors, Clients, People) AND the Calendar
     visibility panel (the `__calendar_default` saved_views row also
-    supports `scope='global'`). Status: PLANNED.
-  - **5.6.6 Bulk select + bulk actions across database list views.**
-    Cross-cutting interaction primitive: new leftmost checkbox column
-    on every DataTable list view (Projects / Tasks / Deliverables /
-    Venues / Vendors / Clients / People). Header row carries select-
-    all-visible; per-row shift-click range select matches the
-    design-system § 4 CandidateTable behavior. Slide-in bulk action
-    bar at the viewport bottom (uses the existing `.bulkbar` CSS class
-    from the 5.2.1 Revision lift) appears when 1+ rows are selected.
-    Per-entity action sets: Projects (Status / Client / Account Lead /
-    Designers / Category / Tags add+remove / Archive / Duplicate /
-    Delete / Export CSV); Tasks (Status / Priority / Assignee / Due
-    Date / Project / Tags / Mark complete / Duplicate / Delete /
-    Export CSV); Deliverables (Status / Due Date / Assignees / Project
-    / Mark complete / Duplicate / Delete / Export CSV); Venues (Venue
-    Types / City / Tags / Duplicate / Delete / Export CSV); Vendors
-    (Category / Subcategory / Capabilities add+remove / Tags / Internal
-    Partner toggle / Duplicate / Delete / Export CSV); Clients
-    (Industry / Tags / Duplicate / Delete / Export CSV); People
-    (Role/Title / Duplicate / Delete / Export CSV). Bulk Job # update
-    disabled (unique per project; collision risk). Bulk Affiliation
-    skipped on People (matches click-pill exclusion). Duplicate is
-    shallow (top-level row only; auto-suffix " (Copy)" on the new
-    name; no related-record cloning). All destructive + mutating bulk
-    actions (Update fields, Archive, Delete) confirm via the
-    design-system AlertDialog with the consequence stated ("This will
-    update / archive / delete N records. Confirm?"). Delete restricted
-    to admin tier; Archive (Projects only) available to all tiers.
-    Update field actions: popover for single-value fields (Status /
-    Priority / Due Date), modal for multi-select fields (Tags /
-    Capabilities / Designers); both gate through the confirmation
-    AlertDialog before committing. Gmail-style banner offers "Select
-    all N matching" when paginated. Consumes the final 5.6.2 column
-    layouts and 5.6.1 click-pill popover patterns; lands last in the
-    5.6 sequence. Status: PLANNED.
+    supports `scope='global'`).
+  - **Status:** DONE 2026-05-17. Commit: `069895d`. Spec:
+    `OUTPUTS/phase-5-6-5-spec.md`.
+  - **5.6.5.1 Owner delegation + sort persistence propagation +
+    Team page account-link fixes.** Owner becomes delegable (trigger
+    requires caller `is_owner = true` AND blocks self-revoke;
+    TeamMemberEdit Access card grows an owner-only Owner checkbox
+    disabled on your own row). 5.6.5's sort-persistence pattern
+    propagates from Projects to the remaining six list pages
+    (Tasks / Deliverables / Venues / Vendors / Clients / People);
+    column sort now round-trips through saved views everywhere. Four
+    bug fixes folded in: user-create id NULL violation in
+    TeamMemberEdit (`crypto.randomUUID()` in insert payload); Account
+    Status "Linked" false positive on edit page (derive from
+    `last_active_at !== null`, not `permission_role !== 'pending'`);
+    `last_active_at` never updated post-signup (one-shot effect in
+    AuthProvider stamps it once per provider lifecycle); TeamList
+    accountPill same false positive (switch keying to nullability).
+  - **Status:** DONE 2026-05-17. Commit: `b51d62a`. Spec:
+    `OUTPUTS/phase-5-6-5-1-spec.md`.
+  - **5.6.5.2 `last_active_at` throttle (micro-phase).** AuthProvider
+    reads sessionStorage `last_active_stamped:${userId}` before issuing
+    the UPDATE; if the stored timestamp is within 5 minutes, the
+    effect skips entirely. Two-layer guard: the prior `useRef` (one
+    fire per provider lifecycle per user.id; covers StrictMode and
+    tab-focus re-renders) plus the new sessionStorage check (5-min
+    floor across mounts within the same tab; covers manual reloads
+    and route changes that remount the provider tree). No schema, no
+    migration, no spec.
+  - **Status:** DONE 2026-05-17. Commit: `d36b516`.
 - **5.7 Smoke Test Pass 2.** Jimmie's second batch of smoke-test notes
   after the full 5.6 end-to-end re-test. Subphase split TBD when notes
   arrive; same notes-first pattern as 5.6.

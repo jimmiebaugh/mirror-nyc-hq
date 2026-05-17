@@ -181,9 +181,11 @@ Reference: `RoleSettings.tsx`, `NewRoleScorecard.tsx`.
 
 ## 4. Tables (CandidateTable is the canonical pattern)
 
-Two-tier pattern: active rows above, rejected rows below collapsible. With status-priority sort, shift-click range select, slide-in bulk action bar, inline status dropdown per row.
+Two-tier pattern: active rows above, rejected rows below collapsible. With status-priority sort and inline status dropdown per row.
 
 Reference: `src/components/talent-scout/CandidateTable.tsx`. **Read this file before building any tabular surface in Phase 4 / 5.** Project lists, venue lists, task lists all map to this pattern with column shape adjusted.
+
+Talent Scout's CandidateTable carries its own select-row + bulk action bar (used for the round-level Re-evaluate / Reject / Promote flow). HQ Core's shared `<DataTable>` does NOT carry row selection — when extending DataTable, don't pattern-match from CandidateTable's bulk action bar.
 
 Column header rules:
 - 12px mono uppercase
@@ -194,7 +196,6 @@ Row rules:
 - Hover: `bg-muted/40`
 - Status-color left border (3px solid) per row to surface status at a glance
 - Click a row → navigate to detail
-- Shift-click + checkbox → range select for bulk actions
 
 ---
 

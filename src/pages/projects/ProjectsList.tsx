@@ -62,7 +62,6 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
   const [rows, setRows] = useState<ProjectListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [activeViewName, setActiveViewName] = useState("All projects");
 
   useEffect(() => {
@@ -214,24 +213,6 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
         fields={FILTER_FIELDS}
       />
 
-      {selected.size > 0 ? (
-        <div className="bulkbar">
-          <span className="cnt">{selected.size} SELECTED</span>
-          <button type="button" className="btn btn-tertiary btn-sm">Change status</button>
-          <button type="button" className="btn btn-tertiary btn-sm">Assign lead</button>
-          <button type="button" className="btn btn-tertiary btn-sm">Add tag</button>
-          <button type="button" className="btn btn-tertiary btn-sm">Export</button>
-          <button
-            type="button"
-            className="btn btn-tertiary btn-sm"
-            style={{ marginLeft: "auto" }}
-            onClick={() => setSelected(new Set())}
-          >
-            Close
-          </button>
-        </div>
-      ) : null}
-
       {loading ? (
         <div className="empty">
           <p>Loading...</p>
@@ -247,7 +228,6 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
             }
             rowBorderToken={(r) => projectStatusToken(r.status)}
             onRowClick={(r) => navigate(`/projects/${r.id}`, { state: { from: fromState } })}
-            selection={{ selectedIds: selected, onChange: setSelected }}
             twoTier={{
               isTerminal: (r) => TERMINAL_PROJECT_STATUSES.includes(r.status),
               dividerLabel: (n) => `Complete & Cancelled · ${n} hidden`,
