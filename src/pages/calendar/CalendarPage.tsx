@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -26,6 +26,9 @@ import {
   type CalendarSource,
 } from "@/lib/calendar/useCalendarVisibility";
 import { useUserRole } from "@/hooks/useUserRole";
+import { supabase } from "@/integrations/supabase/client";
+import { hasGlobalDefault } from "@/lib/hq/savedViews";
+import { toast } from "@/hooks/use-toast";
 
 /**
  * Surface 15 unified Calendar.
@@ -97,7 +100,7 @@ export default function CalendarPage() {
   const source: CalendarSource =
     sourceParam === "projects" || sourceParam === "tasks" ? sourceParam : null;
 
-  const { isAdmin } = useUserRole();
+  const { isAdmin, isOwner } = useUserRole();
 
   const today = new Date();
   const [activeMonth, setActiveMonth] = useState<Date>(
@@ -110,6 +113,86 @@ export default function CalendarPage() {
   const [categoryOpen, setCategoryOpen] = useState(false);
 
   const visibility = useCalendarVisibility(source);
+
+  // Phase 5.6.5: is there an owner-published global calendar default?
+  // Gates the "Reset to global default" button. Refetched after a
+  // publish or reset action so the affordance recomputes without a
+  // page reload.
+  const [hasGlobalCalendarDefault, setHasGlobalCalendarDefault] =
+    useState(false);
+  const [globalDefaultTick, setGlobalDefaultTick] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    hasGlobalDefault("calendar")
+      .then((v) => {
+        if (active) setHasGlobalCalendarDefault(v);
+      })
+      .catch(() => {
+        if (active) setHasGlobalCalendarDefault(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [globalDefaultTick]);
+
+  const handlePublishGlobalCalendarDefault = useCallback(async () => {
+    const { data: userRes } = await supabase.auth.getUser();
+    const userId = userRes.user?.id;
+    if (!userId) return;
+    // Clear any prior global default (same clear-then-set pattern as
+    // createSavedView for global rows).
+    const clearRes = await supabase
+      .from("saved_views")
+      .update({ is_default: false })
+      .eq("scope", "global")
+      .eq("entity_type", "calendar");
+    if (clearRes.error) {
+      console.error("clear prior global calendar default failed", clearRes.error);
+      toast({ title: "Save failed", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("saved_views").insert({
+      user_id: userId,
+      entity_type: "calendar",
+      name: "__calendar_default",
+      view_kind: "calendar",
+      filter_state: visibility.state as unknown as Record<string, unknown>,
+      is_default: true,
+      scope: "global",
+    } as never);
+    if (error) {
+      console.error("publish global calendar default failed", error);
+      toast({ title: "Save failed", variant: "destructive" });
+      return;
+    }
+    setGlobalDefaultTick((t) => t + 1);
+    toast({ title: "Saved as global calendar default" });
+  }, [visibility.state]);
+
+  const handleResetCalendarToGlobal = useCallback(async () => {
+    const { data: userRes } = await supabase.auth.getUser();
+    const userId = userRes.user?.id;
+    if (!userId) return;
+    // The calendar hook reads ANY per-user `__calendar_default` row by
+    // (user_id, entity_type, name); flipping is_default to false would
+    // still leave the per-user row winning over the global. Delete the
+    // per-user row so the global becomes authoritative again.
+    const { error } = await supabase
+      .from("saved_views")
+      .delete()
+      .eq("user_id", userId)
+      .eq("entity_type", "calendar")
+      .eq("name", "__calendar_default")
+      .eq("scope", "user");
+    if (error) {
+      console.error("reset calendar to global failed", error);
+      toast({ title: "Reset failed", variant: "destructive" });
+      return;
+    }
+    visibility.refresh();
+    toast({ title: "Reset to global default" });
+  }, [visibility]);
 
   // Projects: full set (no window filter; cheap given the row count).
   const projectsQuery = useQuery({
@@ -479,6 +562,12 @@ export default function CalendarPage() {
           onSetShowHolidays={visibility.setShowHolidays}
           onSetShowSharedOutlook={visibility.setShowSharedOutlook}
           onToggleProject={visibility.toggleProject}
+          canPublishGlobal={isOwner}
+          canResetToGlobal={
+            visibility.hasPerUserRow && hasGlobalCalendarDefault
+          }
+          onPublishGlobal={handlePublishGlobalCalendarDefault}
+          onResetToGlobal={handleResetCalendarToGlobal}
         />
       </div>
     </div>

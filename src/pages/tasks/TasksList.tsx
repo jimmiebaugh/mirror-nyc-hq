@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { backState } from "@/lib/hq/useBackHref";
 import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { BoardView, type BoardColumn } from "@/components/data/BoardView";
 import { IconPlus } from "@/components/icons/HQIcons";
@@ -70,6 +71,12 @@ export default function TasksList({ view }: { view: ViewKind }) {
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [blockedTitles, setBlockedTitles] = useState<Record<string, string>>({});
+  /**
+   * Phase 5.6.5: tracks whether the on-mount default-view resolution
+   * picked up a saved view. The legacy "My open tasks" baseline only
+   * applies when no per-user or global default exists.
+   */
+  const savedViewAppliedRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -78,7 +85,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
       if (active) {
         setRows(r);
         setLoading(false);
-        if (user?.id) {
+        if (user?.id && !savedViewAppliedRef.current) {
           setFilterState({
             connector: "AND",
             chips: [
@@ -108,6 +115,48 @@ export default function TasksList({ view }: { view: ViewKind }) {
       active = false;
     };
   }, [user?.id, user?.email]);
+
+  // Phase 5.6.5: resolve default saved view on mount. Per-user wins,
+  // then global. When applied, set a ref so the loadTasks completion
+  // doesn't overwrite with the "My open tasks" baseline.
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("task").then((v) => {
+      if (!active || !v) return;
+      savedViewAppliedRef.current = true;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("task");
+    if (v) {
+      savedViewAppliedRef.current = true;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      savedViewAppliedRef.current = false;
+      // Fall back to the "My open tasks" baseline when signed in;
+      // otherwise an empty filter.
+      if (user?.id) {
+        setFilterState({
+          connector: "AND",
+          chips: [
+            { field: "assigneeId", op: "is", value: "Me" },
+            { field: "status", op: "is not", value: "Done" },
+          ],
+        });
+        setActiveViewName("My open tasks");
+      } else {
+        setFilterState({ connector: "AND", chips: [] });
+        setActiveViewName("All tasks");
+      }
+    }
+  };
 
   useEffect(() => {
     const ch = supabase
@@ -224,6 +273,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             activeViewKind={view}
             activeFilterState={filterState}
             onPick={(v) => {
+              savedViewAppliedRef.current = true;
               setFilterState(v.filter_state);
               setActiveViewName(v.name);
             }}
@@ -231,6 +281,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
               const target = viewSwitchRoute("tasks", kind);
               if (target) navigate(target);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
         </div>
         <div className="row-c">

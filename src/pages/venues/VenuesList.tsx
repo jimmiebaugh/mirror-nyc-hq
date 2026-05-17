@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { backState } from "@/lib/hq/useBackHref";
 import { FilterBar, emptyFilterState, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { IconPlus } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
@@ -52,6 +53,30 @@ export default function VenuesList() {
       active = false;
     };
   }, []);
+
+  // Phase 5.6.5: resolve default saved view on mount.
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("venue").then((v) => {
+      if (!active || !v) return;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("venue");
+    if (v) {
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      setFilterState(emptyFilterState());
+      setActiveViewName("All venues");
+    }
+  };
 
   const venueFilterFields: FilterFieldDef[] = useMemo(
     () => [
@@ -108,6 +133,7 @@ export default function VenuesList() {
               setFilterState(v.filter_state);
               setActiveViewName(v.name);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
         </div>
         <FilterBar

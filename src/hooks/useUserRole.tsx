@@ -15,6 +15,12 @@ type State = {
   isStandardOrAdmin: boolean;
   /** True when the row exists and `active = false`. Phase 5.4 added. */
   isDeactivated: boolean;
+  /**
+   * True when `users.is_owner = true`. Phase 5.6.5 added. Gates the
+   * "Save as default for all users" affordance on `<SavedViewsDropdown>`
+   * and the calendar visibility panel.
+   */
+  isOwner: boolean;
 };
 
 const initial: State = {
@@ -26,6 +32,7 @@ const initial: State = {
   isPending: false,
   isStandardOrAdmin: false,
   isDeactivated: false,
+  isOwner: false,
 };
 
 /**
@@ -49,7 +56,7 @@ export function useUserRole(): State {
     setState((s) => ({ ...s, loading: true }));
     supabase
       .from("users")
-      .select("permission_role, active")
+      .select("permission_role, active, is_owner")
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -65,6 +72,7 @@ export function useUserRole(): State {
           isPending: role === "pending",
           isStandardOrAdmin: role === "admin" || role === "standard",
           isDeactivated: data != null && !isActive,
+          isOwner: data?.is_owner === true,
         });
       });
     return () => {

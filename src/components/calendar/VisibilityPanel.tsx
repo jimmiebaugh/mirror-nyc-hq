@@ -23,6 +23,10 @@ export function CalendarVisibilityPanel({
   onSetShowHolidays,
   onSetShowSharedOutlook,
   onToggleProject,
+  canPublishGlobal,
+  canResetToGlobal,
+  onPublishGlobal,
+  onResetToGlobal,
 }: {
   showDeliverables: boolean;
   showHolidays: boolean;
@@ -33,6 +37,18 @@ export function CalendarVisibilityPanel({
   onSetShowHolidays: (v: boolean) => void;
   onSetShowSharedOutlook: (v: boolean) => void;
   onToggleProject: (id: string, visible: boolean) => void;
+  /**
+   * Phase 5.6.5. Renders the owner-only "Save as global calendar
+   * default" button below the master-toggle divider.
+   */
+  canPublishGlobal?: boolean;
+  /**
+   * Phase 5.6.5. Renders the "Reset to global default" button (visible
+   * to every user with a per-user row when a global default exists).
+   */
+  canResetToGlobal?: boolean;
+  onPublishGlobal?: () => void;
+  onResetToGlobal?: () => void;
 }) {
   const hiddenSet = new Set(hiddenProjectIds);
   return (
@@ -65,6 +81,39 @@ export function CalendarVisibilityPanel({
             margin: "4px 0",
           }}
         />
+        {canPublishGlobal || canResetToGlobal ? (
+          <div className="stack-2">
+            {canPublishGlobal ? (
+              <button
+                type="button"
+                className="tlink"
+                style={{
+                  padding: "6px 8px",
+                  fontSize: 11,
+                  color: "hsl(var(--primary))",
+                  justifyContent: "flex-start",
+                }}
+                onClick={onPublishGlobal}
+              >
+                Save as global calendar default
+              </button>
+            ) : null}
+            {canResetToGlobal ? (
+              <button
+                type="button"
+                className="tlink"
+                style={{
+                  padding: "6px 8px",
+                  fontSize: 11,
+                  justifyContent: "flex-start",
+                }}
+                onClick={onResetToGlobal}
+              >
+                Reset to global default
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <div className="block-lbl">
           <span className="label-section">Projects</span>
         </div>

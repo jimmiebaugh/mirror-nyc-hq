@@ -72,6 +72,7 @@ Only things actually encountered during a task. Do not go hunting:
 
 | # | Date | File | Hash | V | R | Severity | Note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2026-05-17 | `src/integrations/supabase/types.ts:1` | `c29c8bd` | ☑ | ☑ | [med] | The committed types.ts since Phase 5.6.3 starts with a `Initialising login role...` line (stderr from the supabase CLI captured into the file by the `> types.ts` redirect when stderr wasn't suppressed). The file is unparseable so `tsc --noEmit` errors out on every line of types.ts and never reaches the rest of the codebase. Vite build still passes because Vite skips type-checking by default. Resolved during the Phase 5.6.5 regen (`supabase gen types typescript --linked 2>/dev/null > types.ts`); the resulting clean parse exposed 14 pre-existing TS errors in unrelated files (TaskDetail, VendorDetail, VenueDetail, ProjectDetail, ClientDetail, PersonDetail, DeliverableDetail, TeamMemberEdit, SettingsPage, PullDetail, ErrorState, lookups.ts, vendors/queries.ts) that the corruption was masking. Those errors are out-of-scope for 5.6.5; flagging as a follow-on cleanup pass. |
 
 ## Docs
 

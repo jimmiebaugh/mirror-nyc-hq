@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { backState } from "@/lib/hq/useBackHref";
 import { FilterBar, emptyFilterState, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { StarRating } from "@/components/data/StarRating";
 import { OverflowList, type OverflowItem } from "@/components/hq/OverflowList";
@@ -64,6 +65,30 @@ export default function VendorsList() {
     };
   }, []);
 
+  // Phase 5.6.5: resolve default saved view on mount.
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("vendor").then((v) => {
+      if (!active || !v) return;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("vendor");
+    if (v) {
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      setFilterState(emptyFilterState());
+      setActiveViewName("All vendors");
+    }
+  };
+
   const filtered = useMemo(
     () =>
       applyFilters(rows, filterState, (row, key) => {
@@ -102,6 +127,7 @@ export default function VendorsList() {
               setFilterState(v.filter_state);
               setActiveViewName(v.name);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
         </div>
         <FilterBar

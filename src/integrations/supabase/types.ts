@@ -1,4 +1,3 @@
-Initialising login role...
 export type Json =
   | string
   | number
@@ -896,6 +895,7 @@ export type Database = {
           id: string
           is_default: boolean
           name: string
+          scope: string
           updated_at: string
           user_id: string
           view_kind: string
@@ -907,6 +907,7 @@ export type Database = {
           id?: string
           is_default?: boolean
           name: string
+          scope?: string
           updated_at?: string
           user_id: string
           view_kind: string
@@ -918,6 +919,7 @@ export type Database = {
           id?: string
           is_default?: boolean
           name?: string
+          scope?: string
           updated_at?: string
           user_id?: string
           view_kind?: string
@@ -1535,6 +1537,7 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          is_owner: boolean
           last_active_at: string | null
           permission_role: Database["public"]["Enums"]["permission_role"]
           role_title: string | null
@@ -1550,6 +1553,7 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          is_owner?: boolean
           last_active_at?: string | null
           permission_role?: Database["public"]["Enums"]["permission_role"]
           role_title?: string | null
@@ -1565,6 +1569,7 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          is_owner?: boolean
           last_active_at?: string | null
           permission_role?: Database["public"]["Enums"]["permission_role"]
           role_title?: string | null
@@ -2500,6 +2505,3 @@ export const Constants = {
     },
   },
 } as const
-<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
-A new version of Supabase CLI is available: v2.98.2 (currently installed v2.98.1)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
