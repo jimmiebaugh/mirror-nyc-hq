@@ -631,57 +631,61 @@ export default function VenueDetail() {
         </div>
 
         <aside className="stack-6">
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Contacts</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Contacts</span>
             </div>
-            {contacts.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
-            ) : (
-              <div className="stack-3">
-                {contacts.map((c) => (
-                  <Link
-                    key={c.id}
-                    to={`/people/${c.id}`}
-                    className="row-c"
-                    style={{ textDecoration: "none", color: "inherit" }}
-                  >
-                    <span className="av-i">
-                      {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <div style={{ fontSize: 13 }}>{c.full_name}</div>
-                      <div className="cap">{c.role_title ?? "-"}</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {contacts.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
+              ) : (
+                <div className="stack-3">
+                  {contacts.map((c) => (
+                    <Link
+                      key={c.id}
+                      to={`/people/${c.id}`}
+                      className="row-c"
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <span className="av-i">
+                        {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: 13 }}>{c.full_name}</div>
+                        <div className="cap">{c.role_title ?? "-"}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
           <InternalNotesEditor parentType="venue" parentId={venue.id} />
 
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Past Projects</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Past Projects</span>
             </div>
-            {projects.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
-            ) : (
-              <div className="stack-2">
-                {projects.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/projects/${p.id}`}
-                    className="tlink"
-                    style={{ fontSize: 12.5 }}
-                  >
-                    {p.job_number ? `#${p.job_number} ` : ""}
-                    {p.name}
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {projects.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
+              ) : (
+                <div className="stack-2">
+                  {projects.map((p) => (
+                    <Link
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      className="tlink"
+                      style={{ fontSize: 12.5 }}
+                    >
+                      {p.job_number ? `#${p.job_number} ` : ""}
+                      {p.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         </aside>
       </div>

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Check, ChevronDown, Link2, X } from "lucide-react";
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
@@ -106,6 +108,25 @@ type CommonProps = {
    * Person → email).
    */
   quickCreate?: boolean;
+  /**
+   * Phase 5.7.3 followup-5: when set, a populated value renders as a coral
+   * hyperlink to the record's detail page. The chevron becomes a Link2 icon
+   * and the icon button (not the label) is the picker trigger. Pass `null`
+   * from the resolver to skip the link for a specific id.
+   */
+  getRecordHref?: (id: string) => string | null;
+  /**
+   * Phase 5.7.3 followup-5: multi-select display mode.
+   *   - "chips" (default): selected options render as a chip row inside the
+   *     picker trigger (existing behavior).
+   *   - "stack": selected options render as a vertical stack of coral
+   *     hyperlinks, one per row, with a single Link2 icon button at the
+   *     end of the wrapper that opens the picker. Only meaningful with
+   *     `getRecordHref` set; use for fields where the parent wants the
+   *     selection to read as a navigable list rather than an inline chip
+   *     row (e.g. ProjectDetail Venue).
+   */
+  displayAs?: "chips" | "stack";
 };
 
 export type RecordComboboxProps = CommonProps & (SingleProps | MultiProps);
@@ -282,61 +303,174 @@ function ComboboxView(props: ViewProps) {
     props.source.kind === "lookup" || Boolean(props.onMiniCreate);
 
   const filled = isMulti ? selectedLabels.length > 0 : Boolean(props.value);
+  const getRecordHref = props.getRecordHref;
+  const displayAs = props.displayAs ?? "chips";
+  // Phase 5.7.3 followup-5: when getRecordHref is supplied AND a value is
+  // selected, the label becomes a coral hyperlink and the chevron flips
+  // to a Link2 icon button that owns the picker click. When empty (or
+  // no resolver), keep the existing whole-trigger button.
+  const linkMode = Boolean(getRecordHref) && filled;
 
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            disabled={disabled}
-            className={`input ${filled ? "input--filled" : ""} selectish text-left`}
-            style={{
-              minHeight: 44,
-              height: "auto",
-              padding: isMulti && filled ? "6px 10px" : undefined,
-            }}
-          >
-            {isMulti ? (
-              filled ? (
-                <span className="flex flex-1 flex-wrap items-center gap-1.5">
-                  {selectedLabels.map((s) => (
-                    <span
-                      key={s.id}
-                      className="pill pill-sm p-muted inline-flex items-center gap-1"
-                    >
-                      {s.label}
-                      <span
-                        role="button"
-                        tabIndex={-1}
-                        aria-label={`Remove ${s.label}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          removeChip(s.id);
-                        }}
-                        className="cursor-pointer opacity-70 hover:opacity-100"
+        {linkMode ? (
+          isMulti && displayAs === "stack" ? (
+            // Per-row Link2 button opens the picker; clicking an already-
+            // selected row in the picker deselects it (no per-row X needed).
+            // PopoverAnchor wraps the stack so the picker positions next to
+            // the list regardless of which row was clicked.
+            <PopoverAnchor asChild>
+              <div className="combo-stack">
+                {selectedLabels.map((s) => {
+                  const href = getRecordHref!(s.id);
+                  return (
+                    <div key={s.id} className="combo-stack-row">
+                      {href ? (
+                        <Link to={href} className="combo-link" title={s.label}>
+                          {s.label}
+                        </Link>
+                      ) : (
+                        <span className="combo-link" style={{ cursor: "default" }}>
+                          {s.label}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setOpen(true)}
+                        className="combo-picker-btn"
+                        aria-label={`Edit ${entityLabel}`}
                       >
-                        <X className="h-3 w-3" />
+                        <Link2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </PopoverAnchor>
+          ) : (
+            <div
+              className="combobox-trigger"
+              style={{ padding: 0, cursor: "default", gap: 4 }}
+            >
+              {isMulti ? (
+                <span className="flex flex-1 flex-wrap items-center gap-1.5" style={{ minWidth: 0 }}>
+                  {selectedLabels.map((s) => {
+                    const href = getRecordHref!(s.id);
+                    return (
+                      <span
+                        key={s.id}
+                        className="pill pill-sm p-muted inline-flex items-center gap-1"
+                      >
+                        {href ? (
+                          <Link to={href} className="combo-link" style={{ fontWeight: 400 }}>
+                            {s.label}
+                          </Link>
+                        ) : (
+                          <span>{s.label}</span>
+                        )}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${s.label}`}
+                          onClick={() => removeChip(s.id)}
+                          className="opacity-70 hover:opacity-100"
+                          style={{ background: "transparent", border: 0, padding: 0, cursor: "pointer", display: "inline-flex" }}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
                       </span>
-                    </span>
-                  ))}
+                    );
+                  })}
                 </span>
               ) : (
-                <span className="flex-1 text-[hsl(var(--subtle-foreground))]">
+                (() => {
+                  const id = props.value as string;
+                  const href = getRecordHref!(id);
+                  return href ? (
+                    <Link
+                      to={href}
+                      className="combo-link"
+                      style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      title={singleLabel ?? ""}
+                    >
+                      {singleLabel}
+                    </Link>
+                  ) : (
+                    <span
+                      className="combo-link"
+                      style={{ cursor: "default", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    >
+                      {singleLabel}
+                    </span>
+                  );
+                })()
+              )}
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className="combo-picker-btn"
+                  aria-label={`Edit ${entityLabel}`}
+                >
+                  <Link2 className="h-4 w-4" />
+                </button>
+              </PopoverTrigger>
+            </div>
+          )
+        ) : (
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              disabled={disabled}
+              className="combobox-trigger selectish text-left"
+              style={{
+                minHeight: 40,
+                height: "auto",
+                padding: isMulti && filled ? "6px 10px" : undefined,
+              }}
+            >
+              {isMulti ? (
+                filled ? (
+                  <span className="flex flex-1 flex-wrap items-center gap-1.5" style={{ minWidth: 0 }}>
+                    {selectedLabels.map((s) => (
+                      <span
+                        key={s.id}
+                        className="pill pill-sm p-muted inline-flex items-center gap-1"
+                      >
+                        {s.label}
+                        <span
+                          role="button"
+                          tabIndex={-1}
+                          aria-label={`Remove ${s.label}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            removeChip(s.id);
+                          }}
+                          className="cursor-pointer opacity-70 hover:opacity-100"
+                        >
+                          <X className="h-3 w-3" />
+                        </span>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="flex-1 text-[hsl(var(--subtle-foreground))]">
+                    {placeholderText}
+                  </span>
+                )
+              ) : singleLabel ? (
+                <span className="flex-1 truncate">{singleLabel}</span>
+              ) : (
+                <span className="flex-1 truncate text-[hsl(var(--subtle-foreground))]">
                   {placeholderText}
                 </span>
-              )
-            ) : singleLabel ? (
-              <span className="flex-1 truncate">{singleLabel}</span>
-            ) : (
-              <span className="flex-1 truncate text-[hsl(var(--subtle-foreground))]">
-                {placeholderText}
-              </span>
-            )}
-            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
-          </button>
-        </PopoverTrigger>
+              )}
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-[hsl(var(--primary))]" />
+            </button>
+          </PopoverTrigger>
+        )}
         <PopoverContent className="w-[280px] p-0" align="start">
           <Command shouldFilter>
             <CommandInput

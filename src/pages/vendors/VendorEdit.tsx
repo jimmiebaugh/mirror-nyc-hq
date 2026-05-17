@@ -86,6 +86,8 @@ export default function VendorEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const categories = useLookup("vendor_categories");
   const subcategories = useLookup("vendor_subcategories", {
@@ -288,6 +290,27 @@ export default function VendorEdit() {
     }
   };
 
+  // Phase 5.7.3 § 3.B: hard delete. Cascade posture (verified against the
+  // FK graph): vendors delete cascades `project_vendors` join rows and
+  // sets `people.vendor_id` to NULL. No standalone records cascade.
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("vendors").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete vendor",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted vendor" });
+    navigate("/vendors");
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -297,7 +320,7 @@ export default function VendorEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
+    <div className="stack-4" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/vendors" : `/vendors/${id}`}
         className="tlink"
@@ -508,6 +531,8 @@ export default function VendorEdit() {
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create vendor" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -524,6 +549,31 @@ export default function VendorEdit() {
               onClick={() => navigate(isCreate ? "/vendors" : `/vendors/${id}`)}
             >
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this vendor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The vendor and its records will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

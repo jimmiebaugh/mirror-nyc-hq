@@ -82,6 +82,8 @@ export default function VenueEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [logRateOpen, setLogRateOpen] = useState<"event_day" | "prod_day" | null>(null);
   const [newRateAmount, setNewRateAmount] = useState("");
   const [newRateDate, setNewRateDate] = useState(new Date().toISOString().slice(0, 10));
@@ -298,6 +300,29 @@ export default function VenueEdit() {
     toast({ title: "Rate logged" });
   };
 
+  // Phase 5.7.3 § 3.B: hard delete. Cascade posture (verified against the
+  // FK graph): venues delete cascades `venue_venue_types`, `venue_rate_history`,
+  // `venue_contact_people`, and `project_venues` join/per-venue rows, and
+  // sets `people.venue_id` and `vs_scouts.linked_venue_id` to NULL.
+  // No standalone records cascade.
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("venues").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete venue",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted venue" });
+    navigate("/venues");
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -310,7 +335,7 @@ export default function VenueEdit() {
   const prodRate = rates.find((r) => r.rate_kind === "prod_day");
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
+    <div className="stack-4" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/venues" : `/venues/${id}`}
         className="tlink"
@@ -511,6 +536,8 @@ export default function VenueEdit() {
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create venue" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -527,6 +554,31 @@ export default function VenueEdit() {
               onClick={() => navigate(isCreate ? "/venues" : `/venues/${id}`)}
             >
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this venue?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The venue and its records will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

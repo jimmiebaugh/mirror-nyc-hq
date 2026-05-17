@@ -78,15 +78,27 @@ const PARENT_TYPES = [
   "outlook_entry",
   "task",
   "deliverable",
+  "project",
 ] as const;
 type ParentType = (typeof PARENT_TYPES)[number];
 
 export function InternalNotesEditor({
   parentType,
   parentId,
+  title = "Internal Notes",
+  maxVisibleNotes,
 }: {
   parentType: ParentType;
   parentId: string;
+  title?: string;
+  /**
+   * Phase 5.7.3 followup-14: cap the number of historical notes shown in
+   * the card. Notes beyond this count are hidden from the list but still
+   * loaded (so add/delete behavior stays correct). When omitted, all
+   * notes render. ProjectDetail's Status Notes uses `2`; every other
+   * surface keeps the default unlimited list.
+   */
+  maxVisibleNotes?: number;
 }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [mentionsByNote, setMentionsByNote] = useState<
@@ -402,7 +414,7 @@ export function InternalNotesEditor({
   return (
     <section className="card">
       <div className="card-headbar">
-        <span className="h-card">Internal Notes</span>
+        <span className="h-card">{title}</span>
       </div>
       <div
         className="card-pad"
@@ -417,7 +429,7 @@ export function InternalNotesEditor({
             No notes yet. Add the first one below.
           </p>
         ) : (
-          notes.map((n, i) => {
+          (maxVisibleNotes != null ? notes.slice(0, maxVisibleNotes) : notes).map((n, i) => {
             const canDelete = currentUserId === n.author_id || isAdmin;
             const authorName =
               n.author?.full_name ?? n.author?.email ?? "Unknown";

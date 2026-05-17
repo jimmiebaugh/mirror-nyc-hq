@@ -359,6 +359,7 @@ export default function PersonDetail() {
                     entityLabel="Client"
                     placeholder="Pick a client..."
                     quickCreate
+                    getRecordHref={(id) => `/clients/${id}`}
                     miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
                     onMiniCreate={async (data) => {
                       const created = await createClientInline(data);
@@ -379,6 +380,7 @@ export default function PersonDetail() {
                     onChange={(next) => void saveOrgFk("vendor_id", next)}
                     entityLabel="Vendor"
                     placeholder="Pick a vendor..."
+                    getRecordHref={(id) => `/vendors/${id}`}
                   />
                 ) : t === "Venue" ? (
                   venues.length > 0 ? (
@@ -520,29 +522,31 @@ export default function PersonDetail() {
 
         <aside className="stack-6">
           {person.client_id ? (
-            <section className="card card-pad">
-              <div className="block-lbl">
-                <span className="label-section">Projects</span>
+            <section className="card">
+              <div className="card-headbar">
+                <span className="h-card">Projects</span>
               </div>
-              {projects.length === 0 ? (
-                <p className="subtle" style={{ fontSize: 13 }}>
-                  No projects yet.
-                </p>
-              ) : (
-                <div className="stack-2">
-                  {projects.map((p) => (
-                    <Link
-                      key={p.id}
-                      to={`/projects/${p.id}`}
-                      className="tlink"
-                      style={{ fontSize: 12.5 }}
-                    >
-                      {p.job_number ? `#${p.job_number} ` : ""}
-                      {p.name}
-                    </Link>
-                  ))}
-                </div>
-              )}
+              <div className="card-pad">
+                {projects.length === 0 ? (
+                  <p className="subtle" style={{ fontSize: 13 }}>
+                    No projects yet.
+                  </p>
+                ) : (
+                  <div className="stack-2">
+                    {projects.map((p) => (
+                      <Link
+                        key={p.id}
+                        to={`/projects/${p.id}`}
+                        className="tlink"
+                        style={{ fontSize: 12.5 }}
+                      >
+                        {p.job_number ? `#${p.job_number} ` : ""}
+                        {p.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             </section>
           ) : null}
 

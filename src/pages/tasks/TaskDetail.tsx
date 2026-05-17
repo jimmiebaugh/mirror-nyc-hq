@@ -203,13 +203,7 @@ export default function TaskDetail() {
       </Link>
       <div className="row between" style={{ alignItems: "flex-start" }}>
         <h1 className={`h-page ${statusTextDecoration("task", task.status)}`}>
-          <InlineEditText
-            value={task.title}
-            required
-            placeholder="Task title"
-            renderRead={(v) => v ?? "(untitled)"}
-            onSave={(next) => saveField("title", next)}
-          />
+          {task.title || "(untitled)"}
         </h1>
         <button
           type="button"
@@ -223,99 +217,107 @@ export default function TaskDetail() {
         </button>
       </div>
 
-      <div className="g2">
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Details</span>
+        </div>
+        <div className="card-pad">
+          <dl className="kv">
+            <dt>Status</dt>
+            <dd>
+              <ClickPillCell
+                value={task.status}
+                options={TASK_STATUS_VALUES}
+                tokenMap={taskStatusToken}
+                onSave={async (next) => {
+                  await updateTaskStatus(task.id, next as TaskStatus);
+                  setTask({ ...task, status: next as TaskStatus });
+                }}
+              />
+            </dd>
+            <dt>Priority</dt>
+            <dd>
+              <ClickPillCell
+                value={task.priority}
+                options={TASK_PRIORITY_VALUES}
+                tokenMap={taskPriorityToken}
+                onSave={async (next) => {
+                  await updateTaskPriority(task.id, next as TaskPriority);
+                  setTask({ ...task, priority: next as TaskPriority });
+                }}
+              />
+            </dd>
+            <dt>Task</dt>
+            <dd>
+              <InlineEditText
+                value={task.title}
+                required
+                placeholder="Task title"
+                renderRead={(v) => v ?? "(untitled)"}
+                onSave={(next) => saveField("title", next)}
+              />
+            </dd>
+            <dt>Due</dt>
+            <dd>
+              <InlineEditText
+                value={task.due_date}
+                placeholder="YYYY-MM-DD"
+                inputType="date"
+                renderRead={(v) =>
+                  v ? formatMediumDate(v) : <span className="muted subtle">-</span>
+                }
+                onSave={(next) => saveField("due_date", next || null)}
+              />
+            </dd>
+            <dt>Project</dt>
+            <dd>
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadProjectOptions }}
+                value={task.project_id}
+                onChange={(next) => void saveProjectId(next)}
+                entityLabel="Project"
+                placeholder="No project"
+                getRecordHref={(id) => `/projects/${id}`}
+              />
+            </dd>
+            <dt>Assignee</dt>
+            <dd>
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                value={task.assignee_id}
+                onChange={(next) => void saveAssigneeId(next)}
+                entityLabel="user"
+                placeholder="Unassigned"
+              />
+            </dd>
+            {task.completed_at ? (
+              <>
+                <dt>Completed</dt>
+                <dd>{formatMediumDate(task.completed_at.slice(0, 10))}</dd>
+              </>
+            ) : null}
+          </dl>
+        </div>
+      </section>
+
+      {blockedTasks.length > 0 ? (
         <section className="card">
           <div className="card-headbar">
-            <span className="h-card">Details</span>
+            <span className="h-card">Blocked by</span>
           </div>
-          <div className="card-pad">
-            <dl className="kv">
-              <dt>Status</dt>
-              <dd>
-                <ClickPillCell
-                  value={task.status}
-                  options={TASK_STATUS_VALUES}
-                  tokenMap={taskStatusToken}
-                  onSave={async (next) => {
-                    await updateTaskStatus(task.id, next as TaskStatus);
-                    setTask({ ...task, status: next as TaskStatus });
-                  }}
-                />
-              </dd>
-              <dt>Priority</dt>
-              <dd>
-                <ClickPillCell
-                  value={task.priority}
-                  options={TASK_PRIORITY_VALUES}
-                  tokenMap={taskPriorityToken}
-                  onSave={async (next) => {
-                    await updateTaskPriority(task.id, next as TaskPriority);
-                    setTask({ ...task, priority: next as TaskPriority });
-                  }}
-                />
-              </dd>
-              <dt>Due</dt>
-              <dd>
-                <InlineEditText
-                  value={task.due_date}
-                  placeholder="YYYY-MM-DD"
-                  inputType="date"
-                  renderRead={(v) =>
-                    v ? formatMediumDate(v) : <span className="muted subtle">-</span>
-                  }
-                  onSave={(next) => saveField("due_date", next || null)}
-                />
-              </dd>
-              <dt>Project</dt>
-              <dd>
-                <RecordCombobox
-                  source={{ kind: "record", loadOptions: loadProjectOptions }}
-                  value={task.project_id}
-                  onChange={(next) => void saveProjectId(next)}
-                  entityLabel="Project"
-                  placeholder="No project"
-                />
-              </dd>
-              <dt>Assignee</dt>
-              <dd>
-                <RecordCombobox
-                  source={{ kind: "record", loadOptions: loadUserOptions }}
-                  value={task.assignee_id}
-                  onChange={(next) => void saveAssigneeId(next)}
-                  entityLabel="user"
-                  placeholder="Unassigned"
-                />
-              </dd>
-              {task.completed_at ? (
-                <>
-                  <dt>Completed</dt>
-                  <dd>{formatMediumDate(task.completed_at.slice(0, 10))}</dd>
-                </>
-              ) : null}
-            </dl>
-          </div>
+          <ul className="card-pad stack-2">
+            {blockedTasks.map((b) => (
+              <li key={b.id}>
+                <Link to={`/tasks/${b.id}`} className="tlink">
+                  {b.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
+      ) : null}
 
-        <aside className="stack-4">
-          {blockedTasks.length > 0 ? (
-            <section className="card">
-              <div className="card-headbar">
-                <span className="h-card">Blocked by</span>
-              </div>
-              <ul className="card-pad stack-2">
-                {blockedTasks.map((b) => (
-                  <li key={b.id}>
-                    <Link to={`/tasks/${b.id}`} className="tlink">
-                      {b.title}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-          <InternalNotesEditor parentType="task" parentId={task.id} />
-        </aside>
-      </div>
+      <InternalNotesEditor parentType="task" parentId={task.id} title="Notes" />
     </div>
   );
 }

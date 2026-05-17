@@ -112,3 +112,58 @@ export async function fetchActivityPage({
   }
   return { rows: all, hasMore: false };
 }
+
+/**
+ * Phase 5.7.3 § 3.F: small loader for the ProjectDetail "Project Activity"
+ * card. Returns the most-recent `activity_log` rows whose entity matches
+ * the given project (singular + plural variants). Child-entity rollup
+ * (tasks / deliverables / mentions on this project) is out of scope for
+ * 5.7.3; future enhancement can subquery or denormalize a project_id.
+ *
+ * The `viewerRole` exclusion mirrors `fetchActivityPage` for consistency.
+ * In practice it's a no-op for project rows today (project isn't in any
+ * admin-only / freelance-blocked list), but keeping the filter call means
+ * the global feed and the per-project card never diverge if the exclusion
+ * lists change.
+ */
+export async function loadActivityByProject({
+  projectId,
+  limit = 5,
+  viewerRole = null,
+}: {
+  projectId: string;
+  limit?: number;
+  viewerRole?: ActivityViewerRole;
+}): Promise<ActivityRow[]> {
+  let query = supabase
+    .from("activity_log")
+    .select(
+      "id, entity_type, entity_id, action, payload, created_at, actor:users(id, full_name, email)",
+    )
+    .in("entity_type", ["project", "projects"])
+    .eq("entity_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  const excluded = excludedTypesFor(viewerRole);
+  if (excluded.length > 0) {
+    query = query.not(
+      "entity_type",
+      "in",
+      `(${excluded.map((t) => `"${t}"`).join(",")})`,
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return ((data ?? []) as unknown as DbActivityRow[]).map<ActivityRow>((r) => ({
+    id: r.id,
+    entity_type: r.entity_type,
+    entity_id: r.entity_id,
+    action: r.action,
+    payload: r.payload,
+    created_at: r.created_at,
+    actor: r.actor,
+  }));
+}

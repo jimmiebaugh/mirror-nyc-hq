@@ -103,6 +103,8 @@ export default function ProjectEdit() {
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
   const [confirmStatusOpen, setConfirmStatusOpen] = useState<{ next: ProjectStatus } | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -284,6 +286,31 @@ export default function ProjectEdit() {
       return;
     }
     setConfirmLeaveOpen(true);
+  };
+
+  // Phase 5.7.3 § 3.B: hard delete. Cascade posture (verified against the
+  // FK graph): projects delete CASCADES to deliverables, tasks, and all
+  // join rows (project_account_managers, project_designers, project_venues,
+  // project_vendors). It SETs NULL on outlook_entries.linked_project_id,
+  // ts_candidates.project_id, and vs_scouts.project_id. The confirm copy
+  // calls out the dependents wipe explicitly (decided 2026-05-17 with
+  // Jimmie; deviation from spec § 6.B which predicted SET NULL on tasks).
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("projects").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete project",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted project" });
+    navigate("/projects");
   };
 
   // Client list cached on the page; RecordCombobox loadOptions returns the
@@ -494,7 +521,7 @@ export default function ProjectEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 24 }}>
+    <div className="stack-4" style={{ paddingBottom: 120 }}>
       <Link
         to={isCreate ? "/projects" : `/projects/${id}`}
         className="tlink"
@@ -781,6 +808,8 @@ export default function ProjectEdit() {
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create project" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -813,6 +842,31 @@ export default function ProjectEdit() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmStatus}>Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The project will be removed permanently,
+              along with every deliverable and task attached to it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

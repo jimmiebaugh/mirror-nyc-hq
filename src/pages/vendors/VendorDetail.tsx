@@ -561,6 +561,7 @@ export default function VendorDetail() {
                     onChange={(next) => void savePrimaryContact(next)}
                     entityLabel="contact"
                     placeholder="Pick or add a contact..."
+                    getRecordHref={(id) => `/people/${id}`}
                     miniCreateFields={[
                       { key: "full_name", label: "Full name", required: true },
                       { key: "email", label: "Email" },
@@ -620,87 +621,93 @@ export default function VendorDetail() {
         </div>
 
         <aside className="stack-6">
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Contacts</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Contacts</span>
             </div>
-            {contacts.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
-            ) : (
-              <div className="stack-3">
-                {contacts.map((c) => (
-                  <Link
-                    key={c.id}
-                    to={`/people/${c.id}`}
-                    className="row-c"
-                    style={{ textDecoration: "none", color: "inherit" }}
-                  >
-                    <span className="av-i">
-                      {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <div style={{ fontSize: 13 }}>{c.full_name}</div>
-                      <div className="cap">{c.role_title ?? "-"}</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {contacts.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
+              ) : (
+                <div className="stack-3">
+                  {contacts.map((c) => (
+                    <Link
+                      key={c.id}
+                      to={`/people/${c.id}`}
+                      className="row-c"
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <span className="av-i">
+                        {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: 13 }}>{c.full_name}</div>
+                        <div className="cap">{c.role_title ?? "-"}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Internal Rating</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Internal Rating</span>
             </div>
-            <div className="row-c" style={{ gap: 8 }}>
-              <StarRating
-                value={vendor.internal_rating}
-                editable
-                size="lg"
-                onChange={(next) => {
-                  void saveField("internal_rating", next).catch((err) => {
-                    toast({
-                      title: "Could not save rating",
-                      description: err instanceof Error ? err.message : "Save failed",
-                      variant: "destructive",
+            <div className="card-pad">
+              <div className="row-c" style={{ gap: 8 }}>
+                <StarRating
+                  value={vendor.internal_rating}
+                  editable
+                  size="lg"
+                  onChange={(next) => {
+                    void saveField("internal_rating", next).catch((err) => {
+                      toast({
+                        title: "Could not save rating",
+                        description: err instanceof Error ? err.message : "Save failed",
+                        variant: "destructive",
+                      });
                     });
-                  });
-                }}
-              />
-              <span className="cap">
-                {vendor.internal_rating != null
-                  ? `${vendor.internal_rating} of 5`
-                  : "Not rated"}
-              </span>
+                  }}
+                />
+                <span className="cap">
+                  {vendor.internal_rating != null
+                    ? `${vendor.internal_rating} of 5`
+                    : "Not rated"}
+                </span>
+              </div>
+              <p className="cap" style={{ marginTop: 10, lineHeight: 1.5 }}>
+                Visible to all Standard users.
+              </p>
             </div>
-            <p className="cap" style={{ marginTop: 10, lineHeight: 1.5 }}>
-              Visible to all Standard users.
-            </p>
           </section>
 
           <InternalNotesEditor parentType="vendor" parentId={vendor.id} />
 
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Projects</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Projects</span>
             </div>
-            {projects.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
-            ) : (
-              <div className="stack-2">
-                {projects.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/projects/${p.id}`}
-                    className="tlink"
-                    style={{ fontSize: 12.5 }}
-                  >
-                    {p.job_number ? `#${p.job_number} ` : ""}
-                    {p.name}
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {projects.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
+              ) : (
+                <div className="stack-2">
+                  {projects.map((p) => (
+                    <Link
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      className="tlink"
+                      style={{ fontSize: 12.5 }}
+                    >
+                      {p.job_number ? `#${p.job_number} ` : ""}
+                      {p.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         </aside>
       </div>
