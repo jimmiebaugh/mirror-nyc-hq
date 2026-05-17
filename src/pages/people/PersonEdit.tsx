@@ -88,7 +88,7 @@ export default function PersonEdit() {
           : supabase
               .from("people")
               .select(
-                "full_name, client_id, vendor_id, role_title, email, phone, linkedin_url, tags",
+                "full_name, affiliation_type, client_id, vendor_id, role_title, email, phone, linkedin_url, tags",
               )
               .eq("id", id)
               .single(),
@@ -110,6 +110,7 @@ export default function PersonEdit() {
       if (!isCreate && "data" in personRes && personRes.data) {
         const row = personRes.data as unknown as {
           full_name: string;
+          affiliation_type: PersonType | null;
           client_id: string | null;
           vendor_id: string | null;
           role_title: string | null;
@@ -118,10 +119,15 @@ export default function PersonEdit() {
           linkedin_url: string | null;
           tags: string[] | null;
         };
-        let resolvedType: PersonType = "Unaffiliated";
-        if (row.client_id) resolvedType = "Client";
-        else if (row.vendor_id) resolvedType = "Vendor";
-        else if (ids.length > 0) resolvedType = "Venue";
+        // Phase 5.6.3: prefer the stored column; fall back to FK
+        // derivation for safety if a row was written outside the new
+        // migration window.
+        let resolvedType: PersonType = row.affiliation_type ?? "Unaffiliated";
+        if (!row.affiliation_type) {
+          if (row.client_id) resolvedType = "Client";
+          else if (row.vendor_id) resolvedType = "Vendor";
+          else if (ids.length > 0) resolvedType = "Venue";
+        }
         const next: FormState = {
           full_name: row.full_name,
           type: resolvedType,
@@ -180,6 +186,7 @@ export default function PersonEdit() {
 
     const payload = {
       full_name: form.full_name.trim(),
+      affiliation_type: form.type,
       client_id: form.type === "Client" ? form.client_id : null,
       vendor_id: form.type === "Vendor" ? form.vendor_id : null,
       role_title: form.role_title || null,
@@ -251,6 +258,19 @@ export default function PersonEdit() {
     }
   };
 
+  // Stable loader for RecordCombobox `record` mode (uses the venues already
+  // loaded above; no extra round trip).
+  //
+  // Hooks must run above any early return per design-system § 12.2 — the
+  // venueOptions / loadVenueOptions pair was previously below the loading
+  // gate, which caused the "Rendered more hooks than during the previous
+  // render" black-screen when loading flipped false. Moved above.
+  const venueOptions = useMemo(
+    () => venues.map((v) => ({ id: v.id, label: v.name })),
+    [venues],
+  );
+  const loadVenueOptions = useCallback(async () => venueOptions, [venueOptions]);
+
   if (loading) {
     return (
       <div className="empty">
@@ -262,14 +282,6 @@ export default function PersonEdit() {
   const showClientPicker = form.type === "Client";
   const showVendorPicker = form.type === "Vendor";
   const showVenuePicker = form.type === "Venue";
-
-  // Stable loader for RecordCombobox `record` mode (uses the venues already
-  // loaded above; no extra round trip).
-  const venueOptions = useMemo(
-    () => venues.map((v) => ({ id: v.id, label: v.name })),
-    [venues],
-  );
-  const loadVenueOptions = useCallback(async () => venueOptions, [venueOptions]);
 
   return (
     <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
@@ -419,7 +431,7 @@ export default function PersonEdit() {
         <section className="card">
           <div className="card-pad stack-4">
             <div className="block-lbl">
-              <span className="label-section">Venues this person contacts</span>
+              <span className="label-section">Venues Managed</span>
             </div>
             <RecordCombobox
               multi

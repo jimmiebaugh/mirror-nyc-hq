@@ -1174,6 +1174,39 @@
   .fchip--btn.fchip--active span{color:currentColor;font-weight:700;}
   .andor{font-family:var(--font-mono);font-size:10px;font-weight:700;color:hsl(var(--primary));letter-spacing:.06em;padding:0 2px;cursor:pointer;}
 
+  /* Inline-edit primitive (Phase 5.6.3 detail-page inline edit). Read mode
+     wrapper: subtle hover affordance + click cursor. Edit mode input:
+     full-width, coral focus ring per design-system. */
+  .inline-edit-read{
+    cursor:text;
+    border-radius:var(--radius);
+    padding:1px 4px;
+    margin:-1px -4px;
+    transition:background-color .12s ease;
+    display:inline-block;
+    max-width:100%;
+  }
+  .inline-edit-read:hover{
+    background:hsl(var(--surface-alt));
+    box-shadow:inset 0 -1px 0 hsl(var(--border-strong));
+  }
+  .inline-edit-read:focus-visible{
+    outline:none;
+    background:hsl(var(--surface-alt));
+    box-shadow:inset 0 -2px 0 hsl(var(--primary));
+  }
+  .inline-edit-input{
+    width:100%;
+    padding:2px 6px;
+    font:inherit;
+    color:inherit;
+    background:hsl(var(--surface-alt));
+    border:1px solid hsl(var(--primary));
+    border-radius:var(--radius);
+    box-shadow:0 0 0 2px color-mix(in srgb, hsl(var(--primary)) 25%, transparent);
+  }
+  .inline-edit-input:focus{outline:none;}
+
   /* Saved views dropdown trigger */
   .savedviews{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border:1px solid hsl(var(--border-strong));border-radius:var(--radius);background:hsl(var(--surface-alt));font-family:var(--font-mono);font-size:11px;font-weight:700;color:hsl(var(--muted-foreground));cursor:pointer;}
 
