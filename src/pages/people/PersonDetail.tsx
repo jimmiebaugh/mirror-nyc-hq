@@ -10,6 +10,12 @@ import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { personType, personTypeToken, type PersonType } from "@/lib/people/queries";
 import { useBackHref } from "@/lib/hq/useBackHref";
 import { formatPhone } from "@/lib/hq/phone";
+import {
+  createClientInline,
+  createVenueInline,
+  CLIENT_MINI_CREATE_FIELDS,
+  VENUE_MINI_CREATE_FIELDS,
+} from "@/lib/hq/inlineCreate";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -352,6 +358,18 @@ export default function PersonDetail() {
                     onChange={(next) => void saveOrgFk("client_id", next)}
                     entityLabel="Client"
                     placeholder="Pick a client..."
+                    miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
+                    onMiniCreate={async (data) => {
+                      const created = await createClientInline(data);
+                      if (created) {
+                        setClientOptions((prev) =>
+                          [...prev, created].sort((a, b) =>
+                            a.label.localeCompare(b.label),
+                          ),
+                        );
+                      }
+                      return created;
+                    }}
                   />
                 ) : t === "Vendor" ? (
                   <RecordCombobox
@@ -480,6 +498,18 @@ export default function PersonDetail() {
                   onMultiChange={(next) => void saveVenueIds(next)}
                   entityLabel="venue"
                   placeholder="Add venue..."
+                  miniCreateFields={VENUE_MINI_CREATE_FIELDS}
+                  onMiniCreate={async (data) => {
+                    const created = await createVenueInline(data);
+                    if (created) {
+                      setVenueOptions((prev) =>
+                        [...prev, created].sort((a, b) =>
+                          a.label.localeCompare(b.label),
+                        ),
+                      );
+                    }
+                    return created;
+                  }}
                 />
               </div>
             ) : null}

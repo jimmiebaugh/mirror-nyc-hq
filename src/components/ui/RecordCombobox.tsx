@@ -265,6 +265,14 @@ function ComboboxView(props: ViewProps) {
     return [{ key: "name", label: "Name", required: true }];
   }, [miniCreateFields]);
 
+  // "+ Add" is offered when there's a working insert path. Lookup sources
+  // always have one (lookup.addOption). Record sources only have one when
+  // the parent wired up `onMiniCreate` — without it, insertOption silently
+  // returns null and MiniCreateModal shows a misleading "Create failed"
+  // toast. Hide the affordance entirely in that case.
+  const canCreate =
+    props.source.kind === "lookup" || Boolean(props.onMiniCreate);
+
   const filled = isMulti ? selectedLabels.length > 0 : Boolean(props.value);
 
   return (
@@ -358,24 +366,28 @@ function ComboboxView(props: ViewProps) {
                   })}
                 </CommandGroup>
               ) : null}
-              <CommandSeparator />
-              <CommandGroup forceMount>
-                <CommandItem
-                  forceMount
-                  // Cmdk filters on `value`; a literal sentinel keeps the Add
-                  // item visible regardless of typed input.
-                  value="__add_new__"
-                  onSelect={() => {
-                    setMiniOpen(true);
-                    setOpen(false);
-                  }}
-                  className="cursor-pointer text-primary font-mono text-xs uppercase"
-                >
-                  {inputValue.trim()
-                    ? `+ Add "${inputValue.trim()}"`
-                    : "+ Add new..."}
-                </CommandItem>
-              </CommandGroup>
+              {canCreate ? (
+                <>
+                  <CommandSeparator />
+                  <CommandGroup forceMount>
+                    <CommandItem
+                      forceMount
+                      // Cmdk filters on `value`; a literal sentinel keeps the
+                      // Add item visible regardless of typed input.
+                      value="__add_new__"
+                      onSelect={() => {
+                        setMiniOpen(true);
+                        setOpen(false);
+                      }}
+                      className="cursor-pointer text-primary font-mono text-xs uppercase"
+                    >
+                      {inputValue.trim()
+                        ? `+ Add "${inputValue.trim()}"`
+                        : "+ Add new..."}
+                    </CommandItem>
+                  </CommandGroup>
+                </>
+              ) : null}
             </CommandList>
           </Command>
         </PopoverContent>

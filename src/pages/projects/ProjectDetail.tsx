@@ -30,6 +30,12 @@ import { InlineEditText } from "@/components/hq/InlineEditText";
 import { InlineTagInput } from "@/components/hq/InlineTagInput";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import {
+  createClientInline,
+  createVenueInline,
+  CLIENT_MINI_CREATE_FIELDS,
+  VENUE_MINI_CREATE_FIELDS,
+} from "@/lib/hq/inlineCreate";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -502,6 +508,18 @@ export default function ProjectDetail() {
                     onChange={(next) => void saveClientId(next)}
                     entityLabel="Client"
                     placeholder="No client"
+                    miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
+                    onMiniCreate={async (data) => {
+                      const created = await createClientInline(data);
+                      if (created) {
+                        setClientOptions((prev) =>
+                          [...prev, created].sort((a, b) =>
+                            a.label.localeCompare(b.label),
+                          ),
+                        );
+                      }
+                      return created;
+                    }}
                   />
                 </dd>
                 <dt>Title</dt>
@@ -566,6 +584,18 @@ export default function ProjectDetail() {
                       onMultiChange={(next) => void saveVenueIds(next)}
                       entityLabel="Venue"
                       placeholder="Add venue..."
+                      miniCreateFields={VENUE_MINI_CREATE_FIELDS}
+                      onMiniCreate={async (data) => {
+                        const created = await createVenueInline(data);
+                        if (created) {
+                          setVenueOptions((prev) =>
+                            [...prev, created].sort((a, b) =>
+                              a.label.localeCompare(b.label),
+                            ),
+                          );
+                        }
+                        return created;
+                      }}
                     />
                   </dd>
                 </dl>

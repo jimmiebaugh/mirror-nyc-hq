@@ -68,7 +68,8 @@ export function InlineEditText({
     if (!editing) setDraft(value ?? "");
   }, [value, editing]);
 
-  // Focus + select on enter-edit.
+  // Focus + select on enter-edit. For native date / time / datetime inputs,
+  // also pop the browser picker so the user doesn't need a second click.
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
@@ -80,8 +81,26 @@ export function InlineEditText({
           // setSelectionRange throws on some input types (email, url); safe to ignore.
         }
       }
+      if (
+        inputType === "date" ||
+        inputType === "time" ||
+        inputType === "datetime-local" ||
+        inputType === "month" ||
+        inputType === "week"
+      ) {
+        const el = inputRef.current as HTMLInputElement;
+        if (typeof el.showPicker === "function") {
+          try {
+            el.showPicker();
+          } catch {
+            // Some browsers throw if showPicker is called without a user
+            // gesture; the click that flipped editing→true counts, but
+            // strictness varies. Safe to ignore — the input still has focus.
+          }
+        }
+      }
     }
-  }, [editing]);
+  }, [editing, inputType]);
 
   const commit = async () => {
     const formatted = onBlurFormat ? onBlurFormat(draft) : draft;
