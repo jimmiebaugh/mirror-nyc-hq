@@ -123,19 +123,6 @@ export default function VenuesList() {
       </div>
 
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <SavedViewsDropdown
-            entityType="venue"
-            activeName={activeViewName}
-            activeViewKind="list"
-            activeFilterState={filterState}
-            onPick={(v) => {
-              setFilterState(v.filter_state);
-              setActiveViewName(v.name);
-            }}
-            onResetToGlobal={handleResetToGlobal}
-          />
-        </div>
         <FilterBar
           state={filterState}
           onChange={(next) => {
@@ -143,6 +130,17 @@ export default function VenuesList() {
             setActiveViewName("Custom filter");
           }}
           fields={venueFilterFields}
+        />
+        <SavedViewsDropdown
+          entityType="venue"
+          activeName={activeViewName}
+          activeViewKind="list"
+          activeFilterState={filterState}
+          onPick={(v) => {
+            setFilterState(v.filter_state);
+            setActiveViewName(v.name);
+          }}
+          onResetToGlobal={handleResetToGlobal}
         />
       </div>
 

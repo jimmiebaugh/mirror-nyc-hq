@@ -198,16 +198,13 @@ export default function PeopleList() {
 
       <div className="row between wrap" style={{ alignItems: "center" }}>
         <div className="row-c">
-          <SavedViewsDropdown
-            entityType="person"
-            activeName={activeViewName}
-            activeViewKind="list"
-            activeFilterState={filterState}
-            onPick={(v) => {
-              setFilterState(v.filter_state);
-              setActiveViewName(v.name);
+          <FilterBar
+            state={filterState}
+            onChange={(next) => {
+              setFilterState(next);
+              setActiveViewName("Custom filter");
             }}
-            onResetToGlobal={handleResetToGlobal}
+            fields={peopleFilterFields}
           />
           <div className="row-c" style={{ gap: 6 }}>
             {AFFILIATION_BUTTONS.map((b) => {
@@ -226,13 +223,16 @@ export default function PeopleList() {
             })}
           </div>
         </div>
-        <FilterBar
-          state={filterState}
-          onChange={(next) => {
-            setFilterState(next);
-            setActiveViewName("Custom filter");
+        <SavedViewsDropdown
+          entityType="person"
+          activeName={activeViewName}
+          activeViewKind="list"
+          activeFilterState={filterState}
+          onPick={(v) => {
+            setFilterState(v.filter_state);
+            setActiveViewName(v.name);
           }}
-          fields={peopleFilterFields}
+          onResetToGlobal={handleResetToGlobal}
         />
       </div>
 

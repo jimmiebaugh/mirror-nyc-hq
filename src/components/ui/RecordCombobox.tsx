@@ -98,6 +98,14 @@ type CommonProps = {
   onMiniCreate?: (
     data: Record<string, string>,
   ) => Promise<Option | null>;
+  /**
+   * Phase 5.7.1: when true, "+ Add" inserts the row using the typed input as
+   * the only field (key `name`) instead of opening MiniCreateModal. Use for
+   * record-mode pickers whose insert helper only needs the name (Client,
+   * Venue). Leave false for pickers that need more fields (Vendor → Category,
+   * Person → email).
+   */
+  quickCreate?: boolean;
 };
 
 export type RecordComboboxProps = CommonProps & (SingleProps | MultiProps);
@@ -375,7 +383,23 @@ function ComboboxView(props: ViewProps) {
                       // Cmdk filters on `value`; a literal sentinel keeps the
                       // Add item visible regardless of typed input.
                       value="__add_new__"
-                      onSelect={() => {
+                      onSelect={async () => {
+                        const typed = inputValue.trim();
+                        if (props.quickCreate && typed) {
+                          const created = await insertOption({ name: typed });
+                          if (created) {
+                            if (isMulti) {
+                              const current = new Set(props.multiValue ?? []);
+                              current.add(created.id);
+                              props.onMultiChange(Array.from(current));
+                            } else {
+                              props.onChange(created.id);
+                              setOpen(false);
+                            }
+                            setInputValue("");
+                          }
+                          return;
+                        }
                         setMiniOpen(true);
                         setOpen(false);
                       }}

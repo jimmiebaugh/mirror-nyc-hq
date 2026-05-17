@@ -44,6 +44,7 @@ export default function AppShell() {
   const fullName = ((user?.user_metadata ?? {}) as Record<string, string>).full_name
     ?? ((user?.user_metadata ?? {}) as Record<string, string>).name
     ?? null;
+  const avatarUrl = ((user?.user_metadata ?? {}) as Record<string, string>).avatar_url ?? null;
 
   const tier: "Admin" | "Standard" | "Freelance" = isAdmin
     ? "Admin"
@@ -59,9 +60,10 @@ export default function AppShell() {
         fullName={fullName}
         email={email}
         tier={tier}
+        avatarUrl={avatarUrl}
       />
       <div className="flex flex-col flex-1 min-w-0">
-        <TopBar fullName={fullName} email={email} />
+        <TopBar fullName={fullName} email={email} avatarUrl={avatarUrl} />
         <main className="hq-content">
           <Outlet />
         </main>

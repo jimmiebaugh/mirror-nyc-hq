@@ -545,6 +545,7 @@ export default function ProjectEdit() {
                 onChange={(next) => setForm((f) => ({ ...f, clientId: next }))}
                 entityLabel="Client"
                 placeholder="No client"
+                quickCreate
                 miniCreateFields={[
                   { key: "name", label: "Name", required: true, placeholder: "Olipop" },
                   { key: "industry", label: "Industry", placeholder: "Beverage" },

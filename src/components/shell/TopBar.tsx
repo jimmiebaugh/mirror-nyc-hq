@@ -4,7 +4,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,9 +20,11 @@ function initialsFor(name?: string | null, email?: string | null) {
 export function TopBar({
   fullName,
   email,
+  avatarUrl,
 }: {
   fullName?: string | null;
   email: string;
+  avatarUrl?: string | null;
 }) {
   const navigate = useNavigate();
   const { signOut } = useAuth();
@@ -67,13 +68,15 @@ export function TopBar({
       <NotificationBellPanel />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className="hq-avatar">
-            {initials}
+          <button type="button" className="hq-avatar" aria-label={initials}>
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={initials} referrerPolicy="no-referrer" />
+            ) : (
+              initials
+            )}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem disabled>Profile (5.4)</DropdownMenuItem>
-          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={signOut}>Sign out</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

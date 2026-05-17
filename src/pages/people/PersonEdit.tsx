@@ -3,6 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import {
+  CLIENT_MINI_CREATE_FIELDS,
+  createClientInline,
+} from "@/lib/hq/inlineCreate";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
@@ -270,6 +274,30 @@ export default function PersonEdit() {
     [venues],
   );
   const loadVenueOptions = useCallback(async () => venueOptions, [venueOptions]);
+  const clientOptions = useMemo(
+    () => clients.map((c) => ({ id: c.id, label: c.name })),
+    [clients],
+  );
+  const loadClientOptions = useCallback(async () => clientOptions, [clientOptions]);
+  const vendorOptions = useMemo(
+    () => vendors.map((v) => ({ id: v.id, label: v.name })),
+    [vendors],
+  );
+  const loadVendorOptions = useCallback(async () => vendorOptions, [vendorOptions]);
+  const handleCreateClient = useCallback(
+    async (data: Record<string, string>) => {
+      const created = await createClientInline(data);
+      if (created) {
+        setClients((prev) =>
+          [...prev, { id: created.id, name: created.label }].sort((a, b) =>
+            a.name.localeCompare(b.name),
+          ),
+        );
+      }
+      return created;
+    },
+    [],
+  );
 
   if (loading) {
     return (
@@ -342,41 +370,28 @@ export default function PersonEdit() {
 
           {showClientPicker ? (
             <FormField label="Client">
-              <select
-                className={`input ${form.client_id ? "input--filled" : ""}`}
-                value={form.client_id ?? ""}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    client_id: e.target.value || null,
-                  }))
-                }
-              >
-                <option value="">No client</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadClientOptions }}
+                value={form.client_id}
+                onChange={(next) => setForm((f) => ({ ...f, client_id: next }))}
+                entityLabel="Client"
+                placeholder="No client"
+                quickCreate
+                miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
+                onMiniCreate={handleCreateClient}
+              />
             </FormField>
           ) : null}
 
           {showVendorPicker ? (
             <FormField label="Vendor">
-              <select
-                className={`input ${form.vendor_id ? "input--filled" : ""}`}
-                value={form.vendor_id ?? ""}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    vendor_id: e.target.value || null,
-                  }))
-                }
-              >
-                <option value="">No vendor</option>
-                {vendors.map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadVendorOptions }}
+                value={form.vendor_id}
+                onChange={(next) => setForm((f) => ({ ...f, vendor_id: next }))}
+                entityLabel="Vendor"
+                placeholder="No vendor"
+              />
             </FormField>
           ) : null}
 

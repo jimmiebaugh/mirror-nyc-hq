@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
+import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -111,6 +112,15 @@ export default function DeliverableEdit() {
       active = false;
     };
   }, [id, isCreate]);
+
+  const projectOptions: Option[] = useMemo(
+    () => projects.map((p) => ({ id: p.id, label: p.name })),
+    [projects],
+  );
+  const loadProjectOptions = useCallback(
+    () => Promise.resolve(projectOptions),
+    [projectOptions],
+  );
 
   const dirty = useMemo(
     () => JSON.stringify(form) !== JSON.stringify(initial),
@@ -239,16 +249,13 @@ export default function DeliverableEdit() {
               />
             </Field>
             <Field label="Project" required>
-              <select
-                className={`input ${form.project_id ? "input--filled" : ""}`}
-                value={form.project_id ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value || null }))}
-              >
-                <option value="">Choose a project</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadProjectOptions }}
+                value={form.project_id}
+                onChange={(next) => setForm((f) => ({ ...f, project_id: next }))}
+                entityLabel="Project"
+                placeholder="Choose a project"
+              />
             </Field>
           </div>
           <Field label="Assignees">
