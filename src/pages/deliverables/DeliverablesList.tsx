@@ -235,6 +235,10 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
         <DataTable<typeof filtered[number]>
           rows={filtered}
           flat
+          sort={filterState.sort ?? null}
+          onSortChange={(next) =>
+            setFilterState((prev) => ({ ...prev, sort: next }))
+          }
           rowBorderToken={(r) => deliverableStatusToken(r.status)}
           onRowClick={(r) => navigate(`/deliverables/${r.id}`, { state: { from: fromState } })}
           empty={{

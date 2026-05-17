@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { isAllowedEmail } from "@/lib/auth";
@@ -17,6 +17,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const stampedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Phase 3.6.15: manual hash-fallback. Kept as defense-in-depth after
@@ -78,6 +79,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Stamp users.last_active_at once per AuthProvider lifecycle when a
+  // user resolves. handle_new_user only stamps on auth.users INSERT
+  // (Phase 5.4), so without this effect users.last_active_at would be
+  // a "first signup" timestamp at best (and NULL for users whose
+  // auth.users row predates the column add). Fires once per page load
+  // per user.id; cheap enough that throttling isn't worth the
+  // complexity at HQ's user count.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid || stampedUserIdRef.current === uid) return;
+    stampedUserIdRef.current = uid;
+    supabase
+      .from("users")
+      .update({ last_active_at: new Date().toISOString() })
+      .eq("id", uid)
+      .then(({ error }) => {
+        if (error) console.warn("last_active_at stamp failed", error);
+      });
+  }, [session?.user?.id]);
 
   const signInWithGoogle = async () => {
     // Force HTTPS on the production origin in case the user landed via

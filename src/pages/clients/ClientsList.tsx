@@ -140,6 +140,10 @@ export default function ClientsList() {
           <DataTable<ClientListRow>
             rows={filtered}
             flat
+            sort={filterState.sort ?? null}
+            onSortChange={(next) =>
+              setFilterState((prev) => ({ ...prev, sort: next }))
+            }
             onRowClick={(r) => navigate(`/clients/${r.id}`, { state: { from: fromState } })}
             empty={{
               message: "No clients match your filters.",
