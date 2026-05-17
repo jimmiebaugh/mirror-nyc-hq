@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { IconArrowLeft, IconX } from "@/components/icons/HQIcons";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
+import { formatPhone } from "@/lib/hq/phone";
 
 /**
  * Person Edit (Surface 11 create + edit).
@@ -29,7 +31,7 @@ import { toast } from "@/hooks/use-toast";
  * this person contacts; save logic syncs venue_contact_people rows.
  */
 
-type PersonType = "Client" | "Vendor" | "Venue contact" | "Unaffiliated";
+type PersonType = "Client" | "Vendor" | "Venue" | "Unaffiliated";
 
 type FormState = {
   full_name: string;
@@ -86,7 +88,7 @@ export default function PersonEdit() {
           : supabase
               .from("people")
               .select(
-                "full_name, client_id, vendor_id, role_title, email, phone, linkedin_url, tags",
+                "full_name, affiliation_type, client_id, vendor_id, role_title, email, phone, linkedin_url, tags",
               )
               .eq("id", id)
               .single(),
@@ -108,6 +110,7 @@ export default function PersonEdit() {
       if (!isCreate && "data" in personRes && personRes.data) {
         const row = personRes.data as unknown as {
           full_name: string;
+          affiliation_type: PersonType | null;
           client_id: string | null;
           vendor_id: string | null;
           role_title: string | null;
@@ -116,10 +119,15 @@ export default function PersonEdit() {
           linkedin_url: string | null;
           tags: string[] | null;
         };
-        let resolvedType: PersonType = "Unaffiliated";
-        if (row.client_id) resolvedType = "Client";
-        else if (row.vendor_id) resolvedType = "Vendor";
-        else if (ids.length > 0) resolvedType = "Venue contact";
+        // Phase 5.6.3: prefer the stored column; fall back to FK
+        // derivation for safety if a row was written outside the new
+        // migration window.
+        let resolvedType: PersonType = row.affiliation_type ?? "Unaffiliated";
+        if (!row.affiliation_type) {
+          if (row.client_id) resolvedType = "Client";
+          else if (row.vendor_id) resolvedType = "Vendor";
+          else if (ids.length > 0) resolvedType = "Venue";
+        }
         const next: FormState = {
           full_name: row.full_name,
           type: resolvedType,
@@ -156,7 +164,7 @@ export default function PersonEdit() {
       client_id: t === "Client" ? f.client_id : null,
       vendor_id: t === "Vendor" ? f.vendor_id : null,
     }));
-    if (t !== "Venue contact") {
+    if (t !== "Venue") {
       setVenueIds([]);
     }
   };
@@ -178,6 +186,7 @@ export default function PersonEdit() {
 
     const payload = {
       full_name: form.full_name.trim(),
+      affiliation_type: form.type,
       client_id: form.type === "Client" ? form.client_id : null,
       vendor_id: form.type === "Vendor" ? form.vendor_id : null,
       role_title: form.role_title || null,
@@ -221,7 +230,7 @@ export default function PersonEdit() {
 
     // Sync venue_contact_people rows when Type=Venue contact; otherwise clear all.
     if (personId) {
-      const effectiveVenueIds = form.type === "Venue contact" ? venueIds : [];
+      const effectiveVenueIds = form.type === "Venue" ? venueIds : [];
       const toAdd = effectiveVenueIds.filter((v) => !initialVenueIds.includes(v));
       const toRemove = initialVenueIds.filter((v) => !effectiveVenueIds.includes(v));
       for (const venueId of toAdd) {
@@ -240,7 +249,7 @@ export default function PersonEdit() {
 
     setSaving(false);
     setInitial(form);
-    setInitialVenueIds(form.type === "Venue contact" ? venueIds : []);
+    setInitialVenueIds(form.type === "Venue" ? venueIds : []);
     if (isCreate && personId) {
       toast({ title: "Person created" });
       navigate(`/people/${personId}`);
@@ -248,6 +257,19 @@ export default function PersonEdit() {
       toast({ title: "Saved" });
     }
   };
+
+  // Stable loader for RecordCombobox `record` mode (uses the venues already
+  // loaded above; no extra round trip).
+  //
+  // Hooks must run above any early return per design-system § 12.2 — the
+  // venueOptions / loadVenueOptions pair was previously below the loading
+  // gate, which caused the "Rendered more hooks than during the previous
+  // render" black-screen when loading flipped false. Moved above.
+  const venueOptions = useMemo(
+    () => venues.map((v) => ({ id: v.id, label: v.name })),
+    [venues],
+  );
+  const loadVenueOptions = useCallback(async () => venueOptions, [venueOptions]);
 
   if (loading) {
     return (
@@ -259,8 +281,7 @@ export default function PersonEdit() {
 
   const showClientPicker = form.type === "Client";
   const showVendorPicker = form.type === "Vendor";
-  const showVenuePicker = form.type === "Venue contact";
-  const availableVenues = venues.filter((v) => !venueIds.includes(v.id));
+  const showVenuePicker = form.type === "Venue";
 
   return (
     <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
@@ -299,7 +320,7 @@ export default function PersonEdit() {
 
           <FormField label="Type">
             <div className="row-c wrap" style={{ gap: 12 }}>
-              {(["Client", "Vendor", "Venue contact", "Unaffiliated"] as PersonType[]).map(
+              {(["Client", "Vendor", "Venue", "Unaffiliated"] as PersonType[]).map(
                 (t) => (
                   <label
                     key={t}
@@ -382,6 +403,7 @@ export default function PersonEdit() {
                 className={`input ${form.phone ? "input--filled" : ""}`}
                 value={form.phone}
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                onBlur={() => setForm((f) => ({ ...f, phone: formatPhone(f.phone) }))}
                 placeholder="(212) 555-0000"
               />
             </FormField>
@@ -409,48 +431,16 @@ export default function PersonEdit() {
         <section className="card">
           <div className="card-pad stack-4">
             <div className="block-lbl">
-              <span className="label-section">Venues this person contacts</span>
+              <span className="label-section">Venues Managed</span>
             </div>
-            <div className="row-c wrap" style={{ gap: 6 }}>
-              {venueIds.map((vid) => {
-                const v = venues.find((x) => x.id === vid);
-                if (!v) return null;
-                return (
-                  <span key={vid} className="tag" style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
-                    {v.name}
-                    <button
-                      type="button"
-                      aria-label={`Remove ${v.name}`}
-                      onClick={() => setVenueIds(venueIds.filter((x) => x !== vid))}
-                      style={{
-                        background: "transparent",
-                        border: 0,
-                        cursor: "pointer",
-                        color: "inherit",
-                        padding: 0,
-                        display: "inline-flex",
-                      }}
-                    >
-                      <IconX className="ic" style={{ width: 10, height: 10 }} />
-                    </button>
-                  </span>
-                );
-              })}
-              <select
-                className="input"
-                style={{ height: 32, fontSize: 12, padding: "4px 8px" }}
-                value=""
-                onChange={(e) => {
-                  if (!e.target.value) return;
-                  setVenueIds([...venueIds, e.target.value]);
-                }}
-              >
-                <option value="">Add venue...</option>
-                {availableVenues.map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
-            </div>
+            <RecordCombobox
+              multi
+              source={{ kind: "record", loadOptions: loadVenueOptions }}
+              multiValue={venueIds}
+              onMultiChange={setVenueIds}
+              entityLabel="venue"
+              placeholder="Add venue..."
+            />
           </div>
         </section>
       ) : null}

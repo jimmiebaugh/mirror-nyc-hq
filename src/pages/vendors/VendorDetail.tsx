@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Pencil } from "lucide-react";
@@ -10,25 +10,23 @@ import {
 import { StarRating } from "@/components/data/StarRating";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { isInternalPartner } from "@/lib/vendors/queries";
+import { InlineEditText } from "@/components/hq/InlineEditText";
+import { InlineTagInput } from "@/components/hq/InlineTagInput";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { useBackHref } from "@/lib/hq/useBackHref";
+import { useLookup, getLookupCached } from "@/lib/hq/lookups";
+import { formatPhone } from "@/lib/hq/phone";
 import { toast } from "@/hooks/use-toast";
 
 /**
  * Vendor Detail.
  *
- * Wireframe binding (DEVIATION): adapted from Surface 10
- * (OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 1856-1969) which
- * was drawn as a unified Organization Detail. Per the 2026-05-16
- * locked decisions split (spec § 0c Q3), Organizations breaks into
- * Clients + Vendors. This is the Vendors half. Internal Rating shown
- * always (every detail is a Vendor); Internal Partner badge appears
- * when the 'Internal Partner' tag is present (locked Q1); Category
- * surfaces in Details kv from the new vendor_categories lookup.
- * Wireframe-v2 redraw deferred to a future polish pass; see
- * design-system § 11.
+ * Phase 5.6.3.1: detail-page inline-edit pattern. Every field saves
+ * itself optimistically; Pencil button (icon-only) on the header still
+ * routes to `/vendors/:id/edit` as the power-edit fallback.
  *
- * 5.2 cleanup: Primary Address row added to the Details kv (matches
- * ClientDetail shape; backed by the new `vendors.primary_address`
- * column added in the cleanup migration).
+ * Wireframe binding (DEVIATION carried over from 5.2): adapted from
+ * Surface 10. Wireframe-v2 redraw deferred to a polish pass.
  */
 
 type Vendor = {
@@ -36,24 +34,28 @@ type Vendor = {
   name: string;
   category_id: string | null;
   category_name: string | null;
+  subcategory_id: string | null;
+  subcategory_name: string | null;
   city: string | null;
-  capabilities: string[] | null;
+  capabilities: string[];
   website_url: string | null;
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
   primary_address: string | null;
-  tags: string[] | null;
+  tags: string[];
   internal_rating: number | null;
 };
 
 type Contact = {
   id: string;
   full_name: string;
+  email: string | null;
+  phone: string | null;
   role_title: string | null;
 };
 
-type ProjectTouched = {
+type ProjectLink = {
   id: string;
   name: string;
   job_number: string | null;
@@ -64,32 +66,41 @@ export default function VendorDetail() {
   const navigate = useNavigate();
   const [vendor, setVendor] = useState<Vendor | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [projectsTouched, setProjectsTouched] = useState<ProjectTouched[]>([]);
+  const [projects, setProjects] = useState<ProjectLink[]>([]);
+  const [primaryContactPersonId, setPrimaryContactPersonId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [ratingSaving, setRatingSaving] = useState(false);
+  const back = useBackHref({ to: "/vendors", label: "Vendors" });
+  const categories = useLookup("vendor_categories");
+  const subcategories = useLookup("vendor_subcategories", {
+    parentScopeId: vendor?.category_id || null,
+  });
 
   useEffect(() => {
     if (!id) return;
     let active = true;
     (async () => {
-      const [vendorRes, contactsRes, venuesRes] = await Promise.all([
+      const [vendorRes, contactsRes, projectsRes] = await Promise.all([
         supabase
           .from("vendors")
           .select(
-            "id, name, category_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating, " +
-              "category:vendor_categories!vendors_category_id_fkey(id, name)",
+            "id, name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating, " +
+              "category:vendor_categories!vendors_category_id_fkey(id, name), " +
+              "subcategory:vendor_subcategories!vendors_subcategory_id_fkey(id, name)",
           )
           .eq("id", id)
           .single(),
         supabase
           .from("people")
-          .select("id, full_name, role_title")
+          .select("id, full_name, email, phone, role_title")
           .eq("vendor_id", id)
-          .order("full_name", { ascending: true })
-          .limit(5),
+          .order("full_name", { ascending: true }),
         supabase
-          .from("venues")
-          .select("id, exclusive_vendor_ids"),
+          .from("project_vendors")
+          .select(
+            "created_at, project:projects!project_vendors_project_id_fkey(id, name, job_number)",
+          )
+          .eq("vendor_id", id)
+          .order("created_at", { ascending: false }),
       ]);
       if (!active) return;
       if (vendorRes.error || !vendorRes.data) {
@@ -97,50 +108,48 @@ export default function VendorDetail() {
         setLoading(false);
         return;
       }
-      const v = vendorRes.data as unknown as Omit<Vendor, "category_name"> & {
+      const v = vendorRes.data as unknown as Omit<Vendor, "category_name" | "subcategory_name" | "capabilities" | "tags"> & {
         category: { id: string; name: string | null } | null;
+        subcategory: { id: string; name: string | null } | null;
+        capabilities: string[] | null;
+        tags: string[] | null;
       };
       setVendor({
         ...v,
         category_name: v.category?.name ?? null,
+        subcategory_name: v.subcategory?.name ?? null,
+        capabilities: v.capabilities ?? [],
+        tags: v.tags ?? [],
       });
-      setContacts((contactsRes.data ?? []) as unknown as Contact[]);
+      const contactRows = (contactsRes.data ?? []) as unknown as Contact[];
+      setContacts(contactRows);
+      // Best-effort resolve which person is the Primary Contact: match by
+      // email first (most reliable), then by full_name. The vendor schema
+      // doesn't carry a primary_contact_id FK today, so this is a derived
+      // pointer; on pick, savePrimaryContact writes name/email/phone back
+      // into the existing vendor.contact_* text columns.
+      const byEmail = v.contact_email
+        ? contactRows.find((c) => c.email && c.email === v.contact_email)
+        : undefined;
+      const byName = v.contact_name
+        ? contactRows.find((c) => c.full_name === v.contact_name)
+        : undefined;
+      setPrimaryContactPersonId((byEmail ?? byName)?.id ?? null);
 
-      // Projects touched: collect venue ids whose exclusive_vendor_ids include this vendor,
-      // then pull projects from project_venues joining those venues.
-      const venueIds: string[] = [];
-      for (const r of venuesRes.data ?? []) {
-        const row = r as { id: string; exclusive_vendor_ids: string[] | null };
-        if ((row.exclusive_vendor_ids ?? []).includes(id)) {
-          venueIds.push(row.id);
+      const projs: ProjectLink[] = [];
+      for (const r of projectsRes.data ?? []) {
+        const pr = r as unknown as {
+          project: { id: string; name: string | null; job_number: string | null } | null;
+        };
+        if (pr.project) {
+          projs.push({
+            id: pr.project.id,
+            name: pr.project.name ?? "Untitled",
+            job_number: pr.project.job_number,
+          });
         }
       }
-      if (venueIds.length > 0) {
-        const { data: pvData } = await supabase
-          .from("project_venues")
-          .select("project_id, project:projects!project_venues_project_id_fkey(id, name, job_number)")
-          .in("venue_id", venueIds);
-        if (active) {
-          const seen = new Set<string>();
-          const projs: ProjectTouched[] = [];
-          for (const r of pvData ?? []) {
-            const row = r as unknown as {
-              project: { id: string; name: string | null; job_number: string | null } | null;
-            };
-            if (row.project && !seen.has(row.project.id)) {
-              seen.add(row.project.id);
-              projs.push({
-                id: row.project.id,
-                name: row.project.name ?? "Untitled",
-                job_number: row.project.job_number,
-              });
-            }
-          }
-          setProjectsTouched(projs);
-        }
-      } else if (active) {
-        setProjectsTouched([]);
-      }
+      setProjects(projs);
       setLoading(false);
     })();
     return () => {
@@ -148,24 +157,199 @@ export default function VendorDetail() {
     };
   }, [id]);
 
-  const onRatingChange = async (next: number) => {
+  const saveField = async <K extends keyof Vendor>(
+    field: K,
+    nextValue: Vendor[K],
+  ): Promise<void> => {
     if (!vendor) return;
-    setRatingSaving(true);
-    const prev = vendor.internal_rating;
-    setVendor({ ...vendor, internal_rating: next });
+    const prev = vendor[field];
+    setVendor({ ...vendor, [field]: nextValue });
     const { error } = await supabase
       .from("vendors")
-      .update({ internal_rating: next })
+      .update({ [field as string]: nextValue })
       .eq("id", vendor.id);
-    setRatingSaving(false);
     if (error) {
-      setVendor({ ...vendor, internal_rating: prev });
-      toast({
-        title: "Could not save rating",
-        description: error.message,
-        variant: "destructive",
-      });
+      setVendor({ ...vendor, [field]: prev });
+      throw error;
     }
+  };
+
+  // Category change clears Subcategory (the prior pick may not belong to
+  // the new parent). Mirrors the VendorEdit form pattern.
+  const saveCategoryId = async (nextId: string | null) => {
+    if (!vendor) return;
+    const prev = {
+      category_id: vendor.category_id,
+      category_name: vendor.category_name,
+      subcategory_id: vendor.subcategory_id,
+      subcategory_name: vendor.subcategory_name,
+    };
+    const nextCategory = nextId
+      ? categories.options.find((o) => o.id === nextId) ?? null
+      : null;
+    setVendor({
+      ...vendor,
+      category_id: nextId,
+      category_name: nextCategory?.name ?? null,
+      subcategory_id: null,
+      subcategory_name: null,
+    });
+    const { error } = await supabase
+      .from("vendors")
+      .update({ category_id: nextId, subcategory_id: null })
+      .eq("id", vendor.id);
+    if (error) {
+      setVendor({ ...vendor, ...prev });
+      toast({ title: "Category save failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const saveSubcategoryId = async (nextId: string | null) => {
+    if (!vendor) return;
+    const prev = {
+      subcategory_id: vendor.subcategory_id,
+      subcategory_name: vendor.subcategory_name,
+    };
+    const nextSub = nextId
+      ? subcategories.options.find((o) => o.id === nextId) ?? null
+      : null;
+    setVendor({
+      ...vendor,
+      subcategory_id: nextId,
+      subcategory_name: nextSub?.name ?? null,
+    });
+    const { error } = await supabase
+      .from("vendors")
+      .update({ subcategory_id: nextId })
+      .eq("id", vendor.id);
+    if (error) {
+      setVendor({ ...vendor, ...prev });
+      toast({ title: "Subcategory save failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  // Category / Subcategory use RecordCombobox's `lookup` mode (binds option
+  // names; the hook's addOption handles inline "+ Add"). We translate
+  // id ↔ name at the prop boundary so saveCategoryId / saveSubcategoryId
+  // can write the FK. Previously these were wired in `record` mode without
+  // an onMiniCreate handler, which produced the "Create failed Please try
+  // again." toast on inline-add.
+  const selectedCategoryName = useMemo(() => {
+    if (!vendor?.category_id) return null;
+    return categories.options.find((o) => o.id === vendor.category_id)?.name ?? null;
+  }, [vendor?.category_id, categories.options]);
+  const selectedSubcategoryName = useMemo(() => {
+    if (!vendor?.subcategory_id) return null;
+    return subcategories.options.find((o) => o.id === vendor.subcategory_id)?.name ?? null;
+  }, [vendor?.subcategory_id, subcategories.options]);
+  // Capabilities live on a lookup table — surface as a multi typeahead
+  // that binds option names directly (matches the existing
+  // RecordCombobox lookup-mode contract).
+  const capabilitiesLookup = useLookup("vendor_capabilities");
+  const capabilitiesNames = useMemo(
+    () => capabilitiesLookup.options.map((o) => o.name),
+    [capabilitiesLookup.options],
+  );
+
+  // Primary Contact picker options: people already affiliated with THIS
+  // vendor (Phase 5.6.3.1 — Jimmie's relation-field request). Inline
+  // "+ Add" opens MiniCreateModal with name + email + role_title; the
+  // new row is inserted with vendor_id = this vendor's id, then
+  // pre-selected via the modal's onCreated path.
+  const loadVendorContactOptions = useCallback(
+    async () =>
+      contacts.map((c) => ({
+        id: c.id,
+        label: c.full_name + (c.role_title ? ` · ${c.role_title}` : ""),
+      })),
+    [contacts],
+  );
+
+  const createVendorContact = useCallback(
+    async (data: Record<string, string>) => {
+      if (!vendor) return null;
+      const { data: userRes } = await supabase.auth.getUser();
+      const created_by = userRes.user?.id;
+      if (!created_by) {
+        toast({ title: "Not signed in", variant: "destructive" });
+        return null;
+      }
+      const { data: row, error } = await supabase
+        .from("people")
+        .insert({
+          full_name: data.full_name,
+          email: data.email || null,
+          role_title: data.role_title || null,
+          vendor_id: vendor.id,
+          affiliation_type: "Vendor",
+          created_by,
+        })
+        .select("id, full_name, email, phone, role_title")
+        .single();
+      if (error || !row) {
+        toast({ title: "Create failed", description: error?.message, variant: "destructive" });
+        return null;
+      }
+      const created = row as Contact;
+      setContacts((prev) => [...prev, created].sort((a, b) => a.full_name.localeCompare(b.full_name)));
+      // Auto-write the new contact's identity back into the vendor record
+      // so the picker's onChange (which doesn't fire on mini-create) doesn't
+      // miss the denormalize step.
+      await applyPrimaryContact(created);
+      return {
+        id: created.id,
+        label: created.full_name + (created.role_title ? ` · ${created.role_title}` : ""),
+      };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vendor],
+  );
+
+  // Shared writer: takes a Contact and writes name/email/phone back into
+  // the vendor's existing text columns (denormalized — no schema column
+  // for primary_contact_id today). Called by savePrimaryContact and by
+  // createVendorContact's auto-select step.
+  const applyPrimaryContact = async (person: Contact | null) => {
+    if (!vendor) return;
+    const prev = {
+      contact_name: vendor.contact_name,
+      contact_email: vendor.contact_email,
+      contact_phone: vendor.contact_phone,
+    };
+    const next = person
+      ? {
+          contact_name: person.full_name,
+          contact_email: person.email,
+          contact_phone: person.phone,
+        }
+      : { contact_name: null, contact_email: null, contact_phone: null };
+    setVendor({ ...vendor, ...next });
+    setPrimaryContactPersonId(person?.id ?? null);
+    const { error } = await supabase
+      .from("vendors")
+      .update(next)
+      .eq("id", vendor.id);
+    if (error) {
+      setVendor({ ...vendor, ...prev });
+      toast({ title: "Primary Contact save failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const savePrimaryContact = async (nextId: string | null) => {
+    if (nextId === null) {
+      // Explicit deselect → clear the denormalized fields.
+      await applyPrimaryContact(null);
+      return;
+    }
+    const person = contacts.find((c) => c.id === nextId);
+    if (!person) {
+      // Lookup miss → the row was just created via mini-create and the
+      // createVendorContact handler already wrote the new contact into the
+      // vendor + bumped local state. The ComboboxView re-fires onChange
+      // with the new id after; no-op so we don't clobber.
+      return;
+    }
+    await applyPrimaryContact(person);
   };
 
   if (loading) {
@@ -188,13 +372,21 @@ export default function VendorDetail() {
   return (
     <div className="stack-6">
       <div className="stack-3">
-        <Link to="/vendors" className="crumb">
-          <IconArrowLeft className="ic ic-sm" /> Back to Vendors
+        <Link to={back.to} className="crumb">
+          <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
         <div className="row between" style={{ alignItems: "flex-start" }}>
           <div>
             <div className="eyebrow">Vendor</div>
-            <h1 className="h-page" style={{ marginTop: 5 }}>{vendor.name}</h1>
+            <h1 className="h-page" style={{ marginTop: 5 }}>
+              <InlineEditText
+                value={vendor.name}
+                required
+                placeholder="Vendor name"
+                renderRead={(v) => v ?? "(unnamed)"}
+                onSave={(next) => saveField("name", next)}
+              />
+            </h1>
             <div className="row-c" style={{ marginTop: 10 }}>
               {internalPartner ? (
                 <span className="pill pill-lg p-info">Internal Partner</span>
@@ -208,10 +400,12 @@ export default function VendorDetail() {
           <button
             type="button"
             className="btn btn-secondary"
+            aria-label="Edit Vendor"
+            title="Edit Vendor"
             onClick={() => navigate(`/vendors/${vendor.id}/edit`)}
+            style={{ padding: "0 10px" }}
           >
             <Pencil className="ic" style={{ width: 14, height: 14 }} />
-            Edit Vendor
           </button>
         </div>
       </div>
@@ -229,93 +423,188 @@ export default function VendorDetail() {
               <dl className="kv">
                 <dt>Category</dt>
                 <dd>
-                  {vendor.category_name ? (
-                    <span>{vendor.category_name}</span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <RecordCombobox
+                    source={{ kind: "lookup", table: "vendor_categories" }}
+                    value={selectedCategoryName}
+                    onChange={(name) => {
+                      if (name === null) {
+                        void saveCategoryId(null);
+                        return;
+                      }
+                      // Closure-captured `categories.options` is stale
+                      // right after inline-add (setState hasn't propagated
+                      // yet). Fall back to the synchronous cache reader
+                      // which sees the row addOption just inserted.
+                      const opt =
+                        categories.options.find((o) => o.name === name) ??
+                        getLookupCached("vendor_categories").find((o) => o.name === name);
+                      if (!opt) return;
+                      void saveCategoryId(opt.id);
+                    }}
+                    entityLabel="Category"
+                    placeholder="No category"
+                  />
+                </dd>
+                <dt>Subcategory</dt>
+                <dd>
+                  <RecordCombobox
+                    source={{
+                      kind: "lookup",
+                      table: "vendor_subcategories",
+                      parentScopeId: vendor.category_id || null,
+                      parentScopeLabel:
+                        categories.options.find(
+                          (o) => o.id === vendor.category_id,
+                        )?.name ?? null,
+                      parentScopeLabelKey: "Category",
+                    }}
+                    value={selectedSubcategoryName}
+                    onChange={(name) => {
+                      if (name === null) {
+                        void saveSubcategoryId(null);
+                        return;
+                      }
+                      const opt =
+                        subcategories.options.find((o) => o.name === name) ??
+                        getLookupCached(
+                          "vendor_subcategories",
+                          vendor.category_id || null,
+                        ).find((o) => o.name === name);
+                      if (!opt) return;
+                      void saveSubcategoryId(opt.id);
+                    }}
+                    entityLabel="Subcategory"
+                    placeholder={vendor.category_id ? "No subcategory" : "Pick Category first"}
+                    disabled={!vendor.category_id}
+                  />
                 </dd>
                 <dt>Capabilities</dt>
                 <dd>
-                  {vendor.capabilities && vendor.capabilities.length > 0 ? (
-                    <span className="row-c wrap" style={{ display: "inline-flex", gap: 6 }}>
-                      {vendor.capabilities.map((c) => (
-                        <span key={c} className="tag">{c}</span>
-                      ))}
-                    </span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <RecordCombobox
+                    multi
+                    source={{ kind: "lookup", table: "vendor_capabilities" }}
+                    multiValue={vendor.capabilities.filter((c) =>
+                      capabilitiesNames.includes(c),
+                    )}
+                    onMultiChange={(next) => void saveField("capabilities", next)}
+                    entityLabel="Capability"
+                    placeholder="Add capability..."
+                  />
                 </dd>
                 <dt>Website</dt>
                 <dd>
-                  {vendor.website_url ? (
-                    <a
-                      className="tlink"
-                      href={vendor.website_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <IconLink className="ic ic-sm" /> {prettyHost(vendor.website_url)}
-                    </a>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <InlineEditText
+                    value={vendor.website_url}
+                    placeholder="https://example.com"
+                    inputType="url"
+                    renderRead={(v) =>
+                      v ? (
+                        <a
+                          className="tlink"
+                          href={v}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <IconLink className="ic ic-sm" /> {prettyHost(v)}
+                        </a>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("website_url", next || null)}
+                  />
+                </dd>
+                <dt>Email</dt>
+                <dd>
+                  <InlineEditText
+                    value={vendor.contact_email}
+                    placeholder="contact@example.com"
+                    inputType="email"
+                    renderRead={(v) =>
+                      v ? (
+                        <a
+                          className="tlink inline-block max-w-full truncate align-bottom"
+                          href={`mailto:${v}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {v}
+                        </a>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("contact_email", next || null)}
+                  />
+                </dd>
+                <dt>Phone</dt>
+                <dd>
+                  <InlineEditText
+                    value={vendor.contact_phone}
+                    placeholder="(212) 555-0000"
+                    onBlurFormat={formatPhone}
+                    renderRead={(v) =>
+                      v ? (
+                        <span className="mono" style={{ fontSize: 13 }}>{v}</span>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("contact_phone", next || null)}
+                  />
                 </dd>
                 <dt>Primary Contact</dt>
                 <dd>
-                  {vendor.contact_name ? (
-                    vendor.contact_email ? (
-                      <a
-                        className="tlink inline-block max-w-full truncate align-bottom"
-                        href={`mailto:${vendor.contact_email}`}
-                      >
-                        {vendor.contact_name}
-                      </a>
-                    ) : (
-                      vendor.contact_name
-                    )
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <RecordCombobox
+                    source={{ kind: "record", loadOptions: loadVendorContactOptions }}
+                    value={primaryContactPersonId}
+                    onChange={(next) => void savePrimaryContact(next)}
+                    entityLabel="contact"
+                    placeholder="Pick or add a contact..."
+                    miniCreateFields={[
+                      { key: "full_name", label: "Full name", required: true },
+                      { key: "email", label: "Email" },
+                      { key: "role_title", label: "Role / title" },
+                    ]}
+                    onMiniCreate={createVendorContact}
+                  />
                 </dd>
-                <dt>Phone</dt>
-                <dd className="mono" style={{ fontSize: 13 }}>
-                  {vendor.contact_phone ?? <span className="muted subtle">-</span>}
-                </dd>
-                <dt>Primary Address</dt>
+                <dt>Address</dt>
                 <dd>
-                  {vendor.primary_address ? (
-                    <span style={{ whiteSpace: "pre-wrap" }}>{vendor.primary_address}</span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <InlineEditText
+                    value={vendor.primary_address}
+                    placeholder="50 W 34th St, New York NY 10001"
+                    multiline
+                    renderRead={(v) =>
+                      v ? (
+                        <span style={{ whiteSpace: "pre-wrap" }}>{v}</span>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("primary_address", next || null)}
+                  />
                 </dd>
                 <dt>City</dt>
                 <dd>
-                  {vendor.city ? (
-                    <span className="tag">{vendor.city}</span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <RecordCombobox
+                    source={{ kind: "lookup", table: "cities" }}
+                    value={vendor.city || null}
+                    onChange={(next) => void saveField("city", next || null)}
+                    entityLabel="city"
+                    placeholder="Select"
+                  />
                 </dd>
                 <dt>Tags</dt>
                 <dd>
-                  {vendor.tags && vendor.tags.length > 0 ? (
-                    <span className="row-c wrap" style={{ display: "inline-flex", gap: 6 }}>
-                      {vendor.tags.map((t) => (
-                        <span key={t} className="tag">{t}</span>
-                      ))}
-                    </span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <InlineTagInput
+                    values={vendor.tags}
+                    onChange={(next) => void saveField("tags", next)}
+                  />
                 </dd>
               </dl>
             </div>
           </section>
-
-          <InternalNotesEditor parentType="vendor" parentId={vendor.id} />
 
           <section className="card">
             <div className="card-headbar">
@@ -368,13 +657,20 @@ export default function VendorDetail() {
                 value={vendor.internal_rating}
                 editable
                 size="lg"
-                onChange={onRatingChange}
+                onChange={(next) => {
+                  void saveField("internal_rating", next).catch((err) => {
+                    toast({
+                      title: "Could not save rating",
+                      description: err instanceof Error ? err.message : "Save failed",
+                      variant: "destructive",
+                    });
+                  });
+                }}
               />
               <span className="cap">
                 {vendor.internal_rating != null
                   ? `${vendor.internal_rating} of 5`
                   : "Not rated"}
-                {ratingSaving ? " . saving" : ""}
               </span>
             </div>
             <p className="cap" style={{ marginTop: 10, lineHeight: 1.5 }}>
@@ -382,22 +678,24 @@ export default function VendorDetail() {
             </p>
           </section>
 
+          <InternalNotesEditor parentType="vendor" parentId={vendor.id} />
+
           <section className="card card-pad">
             <div className="block-lbl">
-              <span className="label-section">Projects Touched</span>
+              <span className="label-section">Projects</span>
             </div>
-            {projectsTouched.length === 0 ? (
+            {projects.length === 0 ? (
               <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
             ) : (
               <div className="stack-2">
-                {projectsTouched.map((p) => (
+                {projects.map((p) => (
                   <Link
                     key={p.id}
                     to={`/projects/${p.id}`}
                     className="tlink"
                     style={{ fontSize: 12.5 }}
                   >
-                    {p.job_number ? `#${p.job_number} . ` : ""}
+                    {p.job_number ? `#${p.job_number} ` : ""}
                     {p.name}
                   </Link>
                 ))}

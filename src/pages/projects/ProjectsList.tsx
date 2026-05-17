@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, emptyFilterState, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { BoardView, type BoardRow } from "@/components/data/BoardView";
 import { TimelineView } from "@/components/data/TimelineView";
@@ -18,6 +20,7 @@ import {
   type ProjectStatus,
 } from "@/lib/projects/queries";
 import { projectStatusToken } from "@/lib/home/projectStatusToken";
+import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
@@ -50,13 +53,15 @@ const BOARD_ROWS: { label: string; statuses: ProjectStatus[] }[] = [
   { label: "Inactive", statuses: ["On Hold", "Complete", "Cancelled"] },
 ];
 
+const FROM_LABEL = "Projects";
+
 export default function ProjectsList({ view }: { view: ViewKind }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<ProjectListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [activeViewName, setActiveViewName] = useState("All projects");
 
   useEffect(() => {
@@ -72,6 +77,31 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
       active = false;
     };
   }, []);
+
+  // Phase 5.6.5: resolve the default saved view on mount (per-user wins,
+  // then global, then leave the empty state alone).
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("project").then((v) => {
+      if (!active || !v) return;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("project");
+    if (v) {
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      setFilterState(emptyFilterState());
+      setActiveViewName("All projects");
+    }
+  };
 
   useEffect(() => {
     const ch = supabase
@@ -165,6 +195,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               const target = viewSwitchRoute("projects", kind);
               if (target) navigate(target);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
         </div>
         <div className="row-c">
@@ -182,24 +213,6 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
         fields={FILTER_FIELDS}
       />
 
-      {selected.size > 0 ? (
-        <div className="bulkbar">
-          <span className="cnt">{selected.size} SELECTED</span>
-          <button type="button" className="btn btn-tertiary btn-sm">Change status</button>
-          <button type="button" className="btn btn-tertiary btn-sm">Assign lead</button>
-          <button type="button" className="btn btn-tertiary btn-sm">Add tag</button>
-          <button type="button" className="btn btn-tertiary btn-sm">Export</button>
-          <button
-            type="button"
-            className="btn btn-tertiary btn-sm"
-            style={{ marginLeft: "auto" }}
-            onClick={() => setSelected(new Set())}
-          >
-            Close
-          </button>
-        </div>
-      ) : null}
-
       {loading ? (
         <div className="empty">
           <p>Loading...</p>
@@ -209,9 +222,12 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
           <DataTable<ProjectListRow>
             rows={filtered}
             flat
+            sort={filterState.sort ?? null}
+            onSortChange={(next) =>
+              setFilterState((prev) => ({ ...prev, sort: next }))
+            }
             rowBorderToken={(r) => projectStatusToken(r.status)}
-            onRowClick={(r) => navigate(`/projects/${r.id}`)}
-            selection={{ selectedIds: selected, onChange: setSelected }}
+            onRowClick={(r) => navigate(`/projects/${r.id}`, { state: { from: fromState } })}
             twoTier={{
               isTerminal: (r) => TERMINAL_PROJECT_STATUSES.includes(r.status),
               dividerLabel: (n) => `Complete & Cancelled · ${n} hidden`,
@@ -235,21 +251,47 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                 key: "name",
                 label: "Project / Client",
                 sort: (a, b) => a.name.localeCompare(b.name),
-                render: (r) => (
-                  <div>
-                    <div className="lead">{r.name}</div>
-                    {r.clientName ? (
+                render: (r) => {
+                  // Resolve the client label defensively: prefer the embed,
+                  // but if `clientName` came back null while `clientId` is set
+                  // (PostgREST cardinality quirk), render "Client" as a
+                  // placeholder so the row still shows the affiliation.
+                  const clientLabel =
+                    r.clientName ?? (r.clientId ? "View client" : null);
+                  return (
+                    <div>
+                      {clientLabel ? (
+                        r.clientId ? (
+                          <Link
+                            to={`/clients/${r.clientId}`}
+                            className="sub"
+                            style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                            state={{ from: fromState }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {clientLabel}
+                          </Link>
+                        ) : (
+                          <span
+                            className="sub"
+                            style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                          >
+                            {clientLabel}
+                          </span>
+                        )
+                      ) : null}
                       <Link
-                        to={r.clientId ? `/clients/${r.clientId}` : "#"}
-                        className="sub"
-                        style={{ color: "rgba(190,78,68,0.85)" }}
+                        to={`/projects/${r.id}`}
+                        className="lead"
+                        style={{ display: "block" }}
+                        state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {r.clientName}
+                        {r.name}
                       </Link>
-                    ) : null}
-                  </div>
-                ),
+                    </div>
+                  );
+                },
               },
               {
                 key: "category",
@@ -266,12 +308,22 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "status",
                 label: "Status",
+                width: 96,
                 sort: (a, b) => a.status.localeCompare(b.status),
                 render: (r) => (
-                  <span className={`pill p-${projectStatusToken(r.status)}`}>
-                    <span className="dt" />
-                    {r.status}
-                  </span>
+                  <ClickPillCell
+                    value={r.status}
+                    options={PROJECT_STATUS_VALUES}
+                    tokenMap={projectStatusToken}
+                    onSave={async (next) => {
+                      await updateProjectStatus(r.id, next as ProjectStatus);
+                      setRows((rs) =>
+                        rs.map((row) =>
+                          row.id === r.id ? { ...row, status: next as ProjectStatus } : row,
+                        ),
+                      );
+                    }}
+                  />
                 ),
               },
               {
@@ -306,12 +358,14 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "leadName",
                 label: "Lead",
+                width: 140,
                 sort: (a, b) => (a.leadName ?? "").localeCompare(b.leadName ?? ""),
                 render: (r) => r.leadName ?? "-",
               },
               {
                 key: "designerName",
                 label: "Design",
+                width: 140,
                 sort: (a, b) => (a.designerName ?? "").localeCompare(b.designerName ?? ""),
                 render: (r) => r.designerName ?? "-",
               },
@@ -337,7 +391,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
             }))
           }
           onCardMove={handleBoardMove}
-          onCardClick={(r) => navigate(`/projects/${r.id}`)}
+          onCardClick={(r) => navigate(`/projects/${r.id}`, { state: { from: fromState } })}
           renderCard={(r) => (
             <>
               <div className="nm">
@@ -421,7 +475,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                   bars,
                 };
               })}
-            onBarClick={(id) => navigate(`/projects/${id}`)}
+            onBarClick={(id) => navigate(`/projects/${id}`, { state: { from: fromState } })}
           />
         </>
       ) : null}

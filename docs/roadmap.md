@@ -190,6 +190,183 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   the OAuth round trip without additional gate code).
   - **Status:** DONE 2026-05-16. Commit: `0f122c1`. Spec:
     `OUTPUTS/phase-5-5-1-signin-spec.md`.
+- **5.6 Smoke Test Pass 1.** Jimmie's first batch of end-to-end smoke
+  notes parsed into five subphases (originally four; the locked carry-
+  forward from 5.6.1 became the new 5.6.3 detail-page inline edit, which
+  bumped the prior 5.6.3 / 4 down a slot). Heaviest functional
+  primitives land first so downstream column rewrites + polish can
+  consume them. Plan doc: `OUTPUTS/phase-5-6-plan.md` (locked 2026-05-16
+  from a five-round clarifying Q&A; renumbered 2026-05-16 in the 5.6.3
+  squash; spec drafter for each subphase reads the plan instead of
+  re-asking Jimmie).
+  - **Phase 5.6 status:** WRAPPED 2026-05-17. All five subphases plus
+    two follow-on micro-phases (5.6.5.1 owner delegation + sort
+    propagation + Team page fixes; 5.6.5.2 `last_active_at` throttle)
+    shipped. Last commit on main from the 5.6 stream: `1a953f1`.
+  - **5.6.1 Cross-cutting interaction primitives.** New
+    `<RecordCombobox />` component (Notion-style typeahead + inline-add
+    with mini-create modal per entity: Person name+email, Client
+    name+industry, Vendor name+category, Venue
+    name+neighborhood+type+address). Unifies lookup-table and FK-record
+    pickers into one component. Click-pill-to-change on tables:
+    Project Status / Task Status / Task Priority / Deliverable Status /
+    Outlook Confidence pills are interactive in DataTable cells with
+    optimistic + Realtime rollback, instant save (no confirm dialog).
+    People Affiliation and Vendor Internal Partner stay form-only.
+    Phone-number normalization: `formatPhone()` utility canonicalizes
+    `people.phone` + `vendors.contact_phone` + `clients.contact_phone`
+    to `(XXX) XXX-XXXX` on save + a one-shot migration backfills
+    existing rows.
+  - **Status:** DONE 2026-05-16. Commit: `f278da7`. Spec:
+    `OUTPUTS/phase-5-6-1-spec.md`.
+  - **5.6.2 Table reshapes + schema.** New `vendor_subcategories`
+    lookup table with `parent_category_id` (parent-scoped, optional) +
+    `vendors.subcategory_id` column. New `project_vendors` join table
+    (PK + audit cols; editable from both ProjectEdit and VendorDetail).
+    Projects + Tasks tables: client name (muted, hyperlinked to
+    `/clients/{id}`) stacked above project title; shrink Status column;
+    expand Account + Designers columns. Clients table column order:
+    Client (no stacked city) / Contacts (hyperlinked person list) /
+    Deliverables (hyperlinked future-due list) / Projects (active-only
+    hyperlinked names + overflow count). Vendors table column order:
+    Vendor (with inline Internal pill replacing the column) / Category /
+    Subcategory / City / Capabilities (first 3 tags + "+N more") /
+    Rating (5-star) / Projects (recent 3 hyperlinked + overflow).
+    People table column order: Name / Affiliation (renamed from Type) /
+    Organization (muted-coral link) / Role-Title / Email (mailto) /
+    Phone (normalized). "Venue Contact" pill renamed to "Venue" through
+    the table AND PersonEdit Type radio. "Unaffiliated" renders as
+    blank cell. Default Client filter dropped; inline radio filter
+    buttons (All / Client / Vendor / Venue) added next to All People
+    dropdown, colored to match Affiliation pills.
+  - **Status:** DONE 2026-05-16. Commits: `f2062cc` (main ship),
+    `00997c0` (5.6.2.1 follow-on: ProjectDetail Vendors sidebar,
+    editable VendorEdit Projects, MiniCreateModal `lookup` field type,
+    Affiliation filter button recolor, OverflowList bullet separator,
+    `useBackHref` cross-cutting), `41811b5` (5.6.2.2: PostgREST
+    constraint-named FK fix for client-name cell + PersonEdit Venue
+    picker as RecordCombobox multi). Spec: `OUTPUTS/phase-5-6-2-spec.md`.
+  - **5.6.3 Detail-page inline edit.** Click-to-edit on h1, pills,
+    lookup/record fields, and text fields across all seven HQ Core
+    detail pages (PersonDetail / ClientDetail / VendorDetail /
+    ProjectDetail / TaskDetail / DeliverableDetail / VenueDetail).
+    New primitives: `<InlineEditText>` (blur/Enter saves, Esc reverts,
+    optimistic + rollback, required-empty blocks), `<InlineTagInput>`
+    (chips + Enter-to-add; lighter than MultiTagInput, free-text only).
+    Schema: new `people.affiliation_type` column + `person_affiliation_type`
+    enum + mutex CHECK so clearing the FK doesn't change Type.
+    Architecture: `useLookup` refactored to a module-level subscriber
+    cache (`Map<key, {options, loading, subscribers}>`) so inline-add
+    auto-select handoffs work across components; `getLookupCached()`
+    sync accessor exposed for parent `onChange` closure-lag fallback.
+    RecordCombobox single-mode: re-clicking selected option deselects.
+    MiniCreateModal: new `context: { label, value }[]` prop for
+    parent-scope read-only kv rows above editable fields. ProjectDetail
+    h1 stays non-editable (Title moves to its own kv row); 70/30 grid.
+    VenueDetail Event/Prod Day Rate cells open `<AddRateModal>` for
+    append-only `venue_rate_history` inserts. ClientDetail Primary
+    Contact is a click-to-edit composite (NAME · TITLE display →
+    combobox scoped to the client's people; contact email becomes
+    read-only autofill). Edit-page `/edit` routes survive as power-
+    user fallback. Detail-page Edit button reduced to pencil-icon only.
+  - **Status:** DONE 2026-05-16. Commits: `c29c8bd` (PersonDetail
+    prototype + affiliation_type schema), `a0c28e3` (sweep across
+    remaining six detail pages + polish round: `.label-section` 13px,
+    `.tag` 12px, `.kv` row-gap 22px, `.kv dt` 12px, new `.kv--pair`
+    helper, `.fchip--btn`/`.fchip--active` toggle pair).
+  - **5.6.4 Visual polish batch.** Internal Notes editor "Append-only"
+    caption removed globally. Date-picker calendar icons render in
+    coral (icon only, not field border). Rail nav text to 13px + Mirror
+    wordmark 1.5x + "Mirror HQ" text 1.5x + RailFooter scales
+    proportionally. Home: My Week cards show deliverable title (not
+    the literal "Deliverable"); all admin-only cards above My Week
+    hidden behind a `HOME_ADMIN_STATS_ENABLED` feature flag for easy
+    restoration. Project edit: "Lead" label renamed to "Account"; if
+    only start date entered, only start renders + saves (all three
+    date pairs: Install / Live / Removal). Calendar visibility panel:
+    project titles wrap to second line; "Shared Outlook" toggle label
+    renamed to "Tentative". Outlook: entry card background tinted at
+    15% opacity of the matching pill color; "Likely" pill rendered
+    cyan (root-cause investigated; currently renders black).
+  - **Status:** DONE 2026-05-17. Commits: `4b884bc` (main ship),
+    `03d69f3` (5.6.4.1 follow-on: 16 items + 1 migration). Spec:
+    `OUTPUTS/phase-5-6-4-spec.md`.
+  - **5.6.5 Global default views (owner admin feature).**
+    `saved_views.scope text CHECK IN ('user','global')` column +
+    `users.is_owner boolean` column (Jimmie's row set true; delegable
+    later via a second admin if needed). RLS widened so non-owner
+    users can READ global rows; writes to `scope='global'` require
+    `is_owner = true`. SavedViewsDropdown gains "Save as default for
+    all users" option visible only to owners + "Reset to global"
+    option visible to every user with a divergent per-user default.
+    Default-view resolution per entity: per-user → global → unfiltered.
+    Applies to all list/board/timeline surfaces (Projects, Tasks,
+    Deliverables, Venues, Vendors, Clients, People) AND the Calendar
+    visibility panel (the `__calendar_default` saved_views row also
+    supports `scope='global'`).
+  - **Status:** DONE 2026-05-17. Commit: `069895d`. Spec:
+    `OUTPUTS/phase-5-6-5-spec.md`.
+  - **5.6.5.1 Owner delegation + sort persistence propagation +
+    Team page account-link fixes.** Owner becomes delegable (trigger
+    requires caller `is_owner = true` AND blocks self-revoke;
+    TeamMemberEdit Access card grows an owner-only Owner checkbox
+    disabled on your own row). 5.6.5's sort-persistence pattern
+    propagates from Projects to the remaining six list pages
+    (Tasks / Deliverables / Venues / Vendors / Clients / People);
+    column sort now round-trips through saved views everywhere. Four
+    bug fixes folded in: user-create id NULL violation in
+    TeamMemberEdit (`crypto.randomUUID()` in insert payload); Account
+    Status "Linked" false positive on edit page (derive from
+    `last_active_at !== null`, not `permission_role !== 'pending'`);
+    `last_active_at` never updated post-signup (one-shot effect in
+    AuthProvider stamps it once per provider lifecycle); TeamList
+    accountPill same false positive (switch keying to nullability).
+  - **Status:** DONE 2026-05-17. Commit: `b51d62a`. Spec:
+    `OUTPUTS/phase-5-6-5-1-spec.md`.
+  - **5.6.5.2 `last_active_at` throttle (micro-phase).** AuthProvider
+    reads sessionStorage `last_active_stamped:${userId}` before issuing
+    the UPDATE; if the stored timestamp is within 5 minutes, the
+    effect skips entirely. Two-layer guard: the prior `useRef` (one
+    fire per provider lifecycle per user.id; covers StrictMode and
+    tab-focus re-renders) plus the new sessionStorage check (5-min
+    floor across mounts within the same tab; covers manual reloads
+    and route changes that remount the provider tree). No schema, no
+    migration, no spec.
+  - **Status:** DONE 2026-05-17. Commit: `d36b516`.
+- **5.7 Smoke Test Pass 2.** Jimmie's second batch of smoke-test notes
+  after the full 5.6 end-to-end re-test. Subphase split TBD when notes
+  arrive; same notes-first pattern as 5.6.
+- **HQ v1 checkpoint.** After 5.7 wraps: tag the squash commit, write
+  `docs/v1-changelog.md` summarizing 5.1 through 5.7. Not a sub-phase;
+  a release milestone.
+- **5.8 Audit and Review (Full Codebase).** Three-pass audit cycle
+  before the sub-app reviews kick off.
+  - **5.8.0 Clear `code-observations.md` backlog.** Fix every
+    unresolved entry from the existing observations log before any
+    new audit work. Marks rows as ✓ Verified / ✓ Resolved with commit
+    hash references.
+  - **5.8.1 Audit + triage.** Read-only blind pass across `src/` +
+    `supabase/functions/` + `docs/` for new findings beyond the
+    cleared log. Parses the Supabase security advisor report + any
+    other references Jimmie brings in. Produces a prioritized
+    findings doc (MUST FIX / SHOULD FIX / CONSIDER) without applying
+    any fixes.
+  - **5.8.2 Audit fixes.** Applies MUST FIX + SHOULD FIX items from
+    triage. CONSIDER items log to a fresh `code-observations.md`.
+- **5.9 Talent Scout review.** Jimmie's notes + active bug hunting
+  drive the split. Verifies TS still works correctly after the HQ
+  Core schema reshape (5.2.x users-table rewrite, vendors split,
+  clients table rebuild). Notes-first pattern: subphase split locked
+  when batch arrives.
+- **5.10 Venue Scout review.** Jimmie's notes + active bug hunting +
+  HQ data-flow audit. Verifies `vs_candidate_venues_shortlist_sync`
+  trigger still produces correct rows in the new HQ schema. Verifies
+  deck generation + brief parsing + research pipeline post-HQ
+  changes. Notes-first pattern: subphase split locked when batch
+  arrives.
+- **5.11 Mobile styling pass.** Cross-cutting responsive sweep
+  across every HQ surface. Scope locked when phase opens.
+- **Post-5.11.** TBD.
 
 **Convention:** every 5.x sub-phase ship updates `docs/roadmap.md` with
 its **Status:** DONE line in the same commit. Pair with the existing

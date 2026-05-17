@@ -22,6 +22,7 @@ import {
   loadDistinctOutlookYears,
   createOutlookEntry,
   updateOutlookEntry,
+  updateOutlookConfidence,
   deleteOutlookEntry,
   unlinkOutlookProject,
   promoteOutlookToProject,
@@ -129,6 +130,22 @@ export default function OutlookPage() {
       setSelectedEntryId(entry.id);
       setPanelMode("detail");
       toast({ title: "Saved" });
+    },
+    onError: (err) =>
+      toast({
+        title: "Save failed",
+        description: (err as Error).message,
+        variant: "destructive",
+      }),
+  });
+
+  // Per-field patch for inline-edit in detail mode. Stays silent on success
+  // (the user already sees the field render the new value); toasts on error.
+  const patchMut = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<OutlookEntryInput> }) =>
+      updateOutlookEntry(id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["outlook-entries"] });
     },
     onError: (err) =>
       toast({
@@ -249,7 +266,7 @@ export default function OutlookPage() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: panelMode === "none" ? "1fr" : "1fr 277px",
+          gridTemplateColumns: panelMode === "none" ? "1fr" : "1fr 360px",
           gap: 16,
           alignItems: "start",
         }}
@@ -295,7 +312,6 @@ export default function OutlookPage() {
               setPanelMode("none");
               setSelectedEntryId(null);
             }}
-            onBeginEdit={() => setPanelMode("edit")}
             onCancelEdit={() => {
               if (panelMode === "new") {
                 setPanelMode("none");
@@ -314,6 +330,9 @@ export default function OutlookPage() {
                 });
               }
             }}
+            onPatch={async (id, patch) => {
+              await patchMut.mutateAsync({ id, patch });
+            }}
             onDelete={async () => {
               if (selectedEntry) await deleteMut.mutateAsync(selectedEntry.id);
             }}
@@ -322,6 +341,10 @@ export default function OutlookPage() {
             }}
             onUnlink={async () => {
               if (selectedEntry) await unlinkMut.mutateAsync(selectedEntry.id);
+            }}
+            onConfidenceChange={async (id, next) => {
+              await updateOutlookConfidence(id, next);
+              queryClient.invalidateQueries({ queryKey: ["outlook-entries"] });
             }}
           />
         )}

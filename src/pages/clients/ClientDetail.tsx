@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Pencil } from "lucide-react";
@@ -8,18 +8,20 @@ import {
   IconPlus,
 } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
+import { InlineEditText } from "@/components/hq/InlineEditText";
+import { InlineTagInput } from "@/components/hq/InlineTagInput";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { useBackHref } from "@/lib/hq/useBackHref";
+import { formatPhone } from "@/lib/hq/phone";
+import { toast } from "@/hooks/use-toast";
 
 /**
  * Client Detail.
  *
- * Wireframe binding (DEVIATION): no wireframe exists for this surface.
- * Surface 10 (OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 1856-1969)
- * was drawn as a unified Organization Detail. Per the 2026-05-16 locked
- * decisions split (spec § 0c Q3), Organizations breaks into Clients +
- * Vendors. This is the Clients half; slim shape: Details kv + Internal
- * Notes + Contacts + Past Projects. No Capabilities, no Internal Rating
- * (vendor concepts). Wireframe-v2 redraw deferred to a future polish
- * pass; see design-system § 11.
+ * Phase 5.6.3.1: detail-page inline-edit pattern (PersonDetail prototype
+ * locked in 5.6.3). Every field saves itself optimistically. Pencil
+ * button (icon-only) on the header still routes to `/clients/:id/edit`
+ * as the power-edit / bulk fallback.
  */
 
 type Client = {
@@ -32,12 +34,14 @@ type Client = {
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
-  tags: string[] | null;
+  tags: string[];
 };
 
 type Contact = {
   id: string;
   full_name: string;
+  email: string | null;
+  phone: string | null;
   role_title: string | null;
 };
 
@@ -53,7 +57,10 @@ export default function ClientDetail() {
   const [client, setClient] = useState<Client | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [projects, setProjects] = useState<PastProject[]>([]);
+  const [primaryContactPersonId, setPrimaryContactPersonId] = useState<string | null>(null);
+  const [primaryContactEditing, setPrimaryContactEditing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const back = useBackHref({ to: "/clients", label: "Clients" });
 
   useEffect(() => {
     if (!id) return;
@@ -69,10 +76,9 @@ export default function ClientDetail() {
           .single(),
         supabase
           .from("people")
-          .select("id, full_name, role_title")
+          .select("id, full_name, email, phone, role_title")
           .eq("client_id", id)
-          .order("full_name", { ascending: true })
-          .limit(5),
+          .order("full_name", { ascending: true }),
         supabase
           .from("projects")
           .select("id, name, job_number")
@@ -85,8 +91,21 @@ export default function ClientDetail() {
         setLoading(false);
         return;
       }
-      setClient(clientRes.data as unknown as Client);
-      setContacts((contactsRes.data ?? []) as unknown as Contact[]);
+      const row = clientRes.data as unknown as Omit<Client, "tags"> & { tags: string[] | null };
+      setClient({ ...row, tags: row.tags ?? [] });
+      const contactRows = (contactsRes.data ?? []) as unknown as Contact[];
+      setContacts(contactRows);
+      // Resolve which person is the Primary Contact: match by email (most
+      // reliable) then full_name. Denormalized — no client.primary_contact_id
+      // FK today; on pick, savePrimaryContact writes name/email/phone back
+      // into the existing client.contact_* text columns.
+      const byEmail = row.contact_email
+        ? contactRows.find((c) => c.email && c.email === row.contact_email)
+        : undefined;
+      const byName = row.contact_name
+        ? contactRows.find((c) => c.full_name === row.contact_name)
+        : undefined;
+      setPrimaryContactPersonId((byEmail ?? byName)?.id ?? null);
       setProjects((projectsRes.data ?? []) as unknown as PastProject[]);
       setLoading(false);
     })();
@@ -94,6 +113,114 @@ export default function ClientDetail() {
       active = false;
     };
   }, [id]);
+
+  const saveField = async <K extends keyof Client>(
+    field: K,
+    nextValue: Client[K],
+  ): Promise<void> => {
+    if (!client) return;
+    const prev = client[field];
+    setClient({ ...client, [field]: nextValue });
+    const { error } = await supabase
+      .from("clients")
+      .update({ [field as string]: nextValue })
+      .eq("id", client.id);
+    if (error) {
+      setClient({ ...client, [field]: prev });
+      throw error;
+    }
+  };
+
+  // Primary Contact relation (Phase 5.6.3.1 — Jimmie's request). Loads
+  // people scoped to this client; "+ Add" inserts a new person row with
+  // client_id = this.client.id. On pick, writes the person's name/email/
+  // phone back into the denormalized client.contact_* text columns.
+  // contact_email becomes derived (the inline-edit field below shows
+  // the autofilled email read-only).
+  const loadClientContactOptions = useCallback(
+    async () =>
+      contacts.map((c) => ({
+        id: c.id,
+        label: c.full_name + (c.role_title ? ` · ${c.role_title}` : ""),
+      })),
+    [contacts],
+  );
+
+  const applyPrimaryContact = async (person: Contact | null) => {
+    if (!client) return;
+    const prev = {
+      contact_name: client.contact_name,
+      contact_email: client.contact_email,
+      contact_phone: client.contact_phone,
+    };
+    const next = person
+      ? {
+          contact_name: person.full_name,
+          contact_email: person.email,
+          contact_phone: person.phone,
+        }
+      : { contact_name: null, contact_email: null, contact_phone: null };
+    setClient({ ...client, ...next });
+    setPrimaryContactPersonId(person?.id ?? null);
+    const { error } = await supabase.from("clients").update(next).eq("id", client.id);
+    if (error) {
+      setClient({ ...client, ...prev });
+      toast({ title: "Primary Contact save failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const savePrimaryContact = async (nextId: string | null) => {
+    if (nextId === null) {
+      await applyPrimaryContact(null);
+      return;
+    }
+    const person = contacts.find((c) => c.id === nextId);
+    if (!person) {
+      // Lookup miss → createClientContact already wrote the new contact;
+      // no-op to avoid clobbering with null.
+      return;
+    }
+    await applyPrimaryContact(person);
+  };
+
+  const createClientContact = useCallback(
+    async (data: Record<string, string>) => {
+      if (!client) return null;
+      const { data: userRes } = await supabase.auth.getUser();
+      const created_by = userRes.user?.id;
+      if (!created_by) {
+        toast({ title: "Not signed in", variant: "destructive" });
+        return null;
+      }
+      const { data: row, error } = await supabase
+        .from("people")
+        .insert({
+          full_name: data.full_name,
+          email: data.email || null,
+          role_title: data.role_title || null,
+          client_id: client.id,
+          affiliation_type: "Client",
+          created_by,
+        })
+        .select("id, full_name, email, phone, role_title")
+        .single();
+      if (error || !row) {
+        toast({ title: "Create failed", description: error?.message, variant: "destructive" });
+        return null;
+      }
+      const created = row as Contact;
+      setContacts((prev) =>
+        [...prev, created].sort((a, b) => a.full_name.localeCompare(b.full_name)),
+      );
+      await applyPrimaryContact(created);
+      return {
+        id: created.id,
+        label: created.full_name + (created.role_title ? ` · ${created.role_title}` : ""),
+      };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [client],
+  );
 
   if (loading) {
     return (
@@ -113,13 +240,21 @@ export default function ClientDetail() {
   return (
     <div className="stack-6">
       <div className="stack-3">
-        <Link to="/clients" className="crumb">
-          <IconArrowLeft className="ic ic-sm" /> Back to Clients
+        <Link to={back.to} className="crumb">
+          <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
         <div className="row between" style={{ alignItems: "flex-start" }}>
           <div>
             <div className="eyebrow">Client</div>
-            <h1 className="h-page" style={{ marginTop: 5 }}>{client.name}</h1>
+            <h1 className="h-page" style={{ marginTop: 5 }}>
+              <InlineEditText
+                value={client.name}
+                required
+                placeholder="Client name"
+                renderRead={(v) => v ?? "(unnamed)"}
+                onSave={(next) => saveField("name", next)}
+              />
+            </h1>
             <div className="row-c" style={{ marginTop: 10 }}>
               {client.industry ? <span className="cap">{client.industry}</span> : null}
               {client.city ? <span className="cap">{client.city}</span> : null}
@@ -128,10 +263,12 @@ export default function ClientDetail() {
           <button
             type="button"
             className="btn btn-secondary"
+            aria-label="Edit Client"
+            title="Edit Client"
             onClick={() => navigate(`/clients/${client.id}/edit`)}
+            style={{ padding: "0 10px" }}
           >
             <Pencil className="ic" style={{ width: 14, height: 14 }} />
-            Edit Client
           </button>
         </div>
       </div>
@@ -149,71 +286,159 @@ export default function ClientDetail() {
               <dl className="kv">
                 <dt>Industry</dt>
                 <dd>
-                  {client.industry ? (
-                    <span>{client.industry}</span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <InlineEditText
+                    value={client.industry}
+                    placeholder="Industry"
+                    renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
+                    onSave={(next) => saveField("industry", next || null)}
+                  />
                 </dd>
                 <dt>Website</dt>
                 <dd>
-                  {client.website_url ? (
-                    <a
-                      className="tlink"
-                      href={client.website_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <IconLink className="ic ic-sm" /> {prettyHost(client.website_url)}
-                    </a>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <InlineEditText
+                    value={client.website_url}
+                    placeholder="https://example.com"
+                    inputType="url"
+                    renderRead={(v) =>
+                      v ? (
+                        <a
+                          className="tlink"
+                          href={v}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <IconLink className="ic ic-sm" /> {prettyHost(v)}
+                        </a>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("website_url", next || null)}
+                  />
                 </dd>
                 <dt>Primary Contact</dt>
                 <dd>
-                  {client.contact_name ? (
-                    client.contact_email ? (
-                      <a
-                        className="tlink inline-block max-w-full truncate align-bottom"
-                        href={`mailto:${client.contact_email}`}
-                      >
-                        {client.contact_name}
-                      </a>
-                    ) : (
-                      client.contact_name
-                    )
+                  {primaryContactEditing ? (
+                    <RecordCombobox
+                      source={{ kind: "record", loadOptions: loadClientContactOptions }}
+                      value={primaryContactPersonId}
+                      onChange={(next) => {
+                        void savePrimaryContact(next);
+                        setPrimaryContactEditing(false);
+                      }}
+                      entityLabel="contact"
+                      placeholder="Pick or add a contact..."
+                      miniCreateFields={[
+                        { key: "full_name", label: "Full name", required: true },
+                        { key: "email", label: "Email" },
+                        { key: "role_title", label: "Role / title" },
+                      ]}
+                      onMiniCreate={async (data) => {
+                        const result = await createClientContact(data);
+                        if (result) setPrimaryContactEditing(false);
+                        return result;
+                      }}
+                    />
                   ) : (
-                    <span className="muted subtle">-</span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="inline-edit-read"
+                      title="Click to edit"
+                      onClick={() => setPrimaryContactEditing(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setPrimaryContactEditing(true);
+                        }
+                      }}
+                    >
+                      {(() => {
+                        const p = primaryContactPersonId
+                          ? contacts.find((c) => c.id === primaryContactPersonId)
+                          : null;
+                        if (!p) return <span className="muted subtle">-</span>;
+                        return (
+                          <>
+                            {p.full_name}
+                            {p.role_title ? (
+                              <>
+                                <span className="muted" style={{ margin: "0 6px" }}>·</span>
+                                <span className="cap">{p.role_title}</span>
+                              </>
+                            ) : null}
+                          </>
+                        );
+                      })()}
+                    </span>
+                  )}
+                </dd>
+                <dt>Email</dt>
+                <dd>
+                  {client.contact_email ? (
+                    <a
+                      className="tlink inline-block max-w-full truncate align-bottom"
+                      href={`mailto:${client.contact_email}`}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Auto-filled from Primary Contact"
+                    >
+                      {client.contact_email}
+                    </a>
+                  ) : (
+                    <span className="muted subtle" title="Auto-fills from Primary Contact">
+                      - (set Primary Contact above)
+                    </span>
                   )}
                 </dd>
                 <dt>Phone</dt>
-                <dd className="mono" style={{ fontSize: 13 }}>
-                  {client.contact_phone ?? <span className="muted subtle">-</span>}
+                <dd>
+                  <InlineEditText
+                    value={client.contact_phone}
+                    placeholder="(212) 555-0000"
+                    onBlurFormat={formatPhone}
+                    renderRead={(v) =>
+                      v ? (
+                        <span className="mono" style={{ fontSize: 13 }}>{v}</span>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("contact_phone", next || null)}
+                  />
                 </dd>
                 <dt>Primary Address</dt>
                 <dd>
-                  {client.primary_address ?? <span className="muted subtle">-</span>}
+                  <InlineEditText
+                    value={client.primary_address}
+                    placeholder="50 W 34th St, New York NY 10001"
+                    multiline
+                    renderRead={(v) =>
+                      v ? (
+                        <span style={{ whiteSpace: "pre-wrap" }}>{v}</span>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("primary_address", next || null)}
+                  />
                 </dd>
                 <dt>City</dt>
                 <dd>
-                  {client.city ? (
-                    <span className="tag">{client.city}</span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <RecordCombobox
+                    source={{ kind: "lookup", table: "cities" }}
+                    value={client.city || null}
+                    onChange={(next) => void saveField("city", next || null)}
+                    entityLabel="city"
+                    placeholder="Select"
+                  />
                 </dd>
                 <dt>Tags</dt>
                 <dd>
-                  {client.tags && client.tags.length > 0 ? (
-                    <span className="row-c wrap" style={{ display: "inline-flex", gap: 6 }}>
-                      {client.tags.map((t) => (
-                        <span key={t} className="tag">{t}</span>
-                      ))}
-                    </span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  )}
+                  <InlineTagInput
+                    values={client.tags}
+                    onChange={(next) => void saveField("tags", next)}
+                  />
                 </dd>
               </dl>
             </div>
@@ -278,7 +503,7 @@ export default function ClientDetail() {
                     className="tlink"
                     style={{ fontSize: 12.5 }}
                   >
-                    {p.job_number ? `#${p.job_number} . ` : ""}
+                    {p.job_number ? `#${p.job_number} ` : ""}
                     {p.name}
                   </Link>
                 ))}

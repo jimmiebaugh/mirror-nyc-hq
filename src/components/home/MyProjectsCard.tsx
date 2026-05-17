@@ -23,7 +23,6 @@ type Row = {
   clientName: string | null;
   liveStartIso: string | null;
   liveEndIso: string | null;
-  role: "Account Lead" | "Designer" | "Co-Lead";
 };
 
 function formatLiveRange(start: string | null, end: string | null): string {
@@ -63,21 +62,15 @@ async function loadMyProjects(userId: string): Promise<Row[]> {
     .is("archived_at", null)
     .order("live_dates_start", { ascending: true });
 
-  return (projects ?? []).map((p) => {
-    const isAm = amIds.has(p.id);
-    const isD = dIds.has(p.id);
-    const role: Row["role"] = isAm && isD ? "Co-Lead" : isAm ? "Account Lead" : "Designer";
-    return {
-      id: p.id,
-      jobNumber: p.job_number ?? null,
-      name: p.name,
-      status: (p.status as string | null) ?? "",
-      clientName: (p.client as { name?: string } | null)?.name ?? null,
-      liveStartIso: p.live_dates_start,
-      liveEndIso: p.live_dates_end,
-      role,
-    };
-  });
+  return (projects ?? []).map((p) => ({
+    id: p.id,
+    jobNumber: p.job_number ?? null,
+    name: p.name,
+    status: (p.status as string | null) ?? "",
+    clientName: (p.client as { name?: string } | null)?.name ?? null,
+    liveStartIso: p.live_dates_start,
+    liveEndIso: p.live_dates_end,
+  }));
 }
 
 export function MyProjectsCard({
@@ -116,14 +109,13 @@ export function MyProjectsCard({
             <th>Project / Client</th>
             <th>Status</th>
             <th>Next Deliverable</th>
-            <th>My role</th>
             <th className="r">Live</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={fullWidth ? 6 : 5} className="text-center text-[hsl(var(--subtle-foreground))] py-6">
+              <td colSpan={fullWidth ? 5 : 4} className="text-center text-[hsl(var(--subtle-foreground))] py-6">
                 No projects assigned yet.
               </td>
             </tr>
@@ -156,7 +148,6 @@ export function MyProjectsCard({
                 <td className="text-[hsl(var(--muted-foreground))]">
                   <span className="text-[hsl(var(--subtle-foreground))]">None scheduled</span>
                 </td>
-                <td className="text-[hsl(var(--muted-foreground))]">{r.role}</td>
                 <td className="r text-[hsl(var(--muted-foreground))]">
                   {formatLiveRange(r.liveStartIso, r.liveEndIso)}
                 </td>

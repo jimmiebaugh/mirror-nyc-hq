@@ -1,10 +1,28 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { deliverableStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
 import { formatMediumDate } from "@/lib/hq/dates";
-import type { DeliverableStatus } from "@/lib/deliverables/queries";
+import {
+  DELIVERABLE_STATUS_VALUES,
+  updateDeliverableStatus,
+  type DeliverableStatus,
+} from "@/lib/deliverables/queries";
+import { useBackHref } from "@/lib/hq/useBackHref";
+import { InlineEditText } from "@/components/hq/InlineEditText";
+import { ClickPillCell } from "@/components/hq/ClickPillCell";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { toast } from "@/hooks/use-toast";
+
+/**
+ * Deliverable Detail (Surface 14).
+ *
+ * Phase 5.6.3.1: detail-page inline-edit pattern. Each field saves
+ * itself optimistically; Pencil button (icon-only) on the header still
+ * routes to `/deliverables/:id/edit` as a power-edit fallback.
+ */
 
 type DbDeliverable = {
   id: string;
@@ -15,6 +33,7 @@ type DbDeliverable = {
   notes: string | null;
   assigned_user_ids: string[];
   completed_at: string | null;
+  project_id: string | null;
   project: { id: string; name: string } | null;
 };
 
@@ -22,40 +41,112 @@ export default function DeliverableDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [row, setRow] = useState<DbDeliverable | null>(null);
-  const [assignees, setAssignees] = useState<{ id: string; full_name: string | null; email: string }[]>([]);
+  const [projectOptions, setProjectOptions] = useState<{ id: string; label: string }[]>([]);
+  const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const back = useBackHref({ to: "/deliverables", label: "Deliverables" });
 
   useEffect(() => {
     if (!id) return;
     let active = true;
     (async () => {
-      const { data, error } = await supabase
-        .from("deliverables")
-        .select(
-          `id, title, type, status, due_date, notes, assigned_user_ids, completed_at,
-           project:projects(id, name)`,
-        )
-        .eq("id", id)
-        .single();
+      const [delRes, projectsRes, usersRes] = await Promise.all([
+        supabase
+          .from("deliverables")
+          .select(
+            `id, title, type, status, due_date, notes, assigned_user_ids, completed_at,
+             project_id,
+             project:projects!deliverables_project_id_fkey(id, name)`,
+          )
+          .eq("id", id)
+          .single(),
+        supabase
+          .from("projects")
+          .select("id, name")
+          .is("archived_at", null)
+          .order("name", { ascending: true }),
+        supabase
+          .from("users")
+          .select("id, full_name, email")
+          .eq("active", true)
+          .order("full_name", { ascending: true }),
+      ]);
       if (!active) return;
-      if (error || !data) {
+      if (delRes.error || !delRes.data) {
         setLoading(false);
         return;
       }
-      setRow(data as unknown as DbDeliverable);
-      if ((data.assigned_user_ids ?? []).length > 0) {
-        const { data: us } = await supabase
-          .from("users")
-          .select("id, full_name, email")
-          .in("id", data.assigned_user_ids);
-        if (active) setAssignees((us ?? []) as { id: string; full_name: string | null; email: string }[]);
-      }
+      setRow(delRes.data as unknown as DbDeliverable);
+      setProjectOptions(
+        ((projectsRes.data ?? []) as { id: string; name: string | null }[]).map((p) => ({
+          id: p.id,
+          label: p.name ?? "Untitled",
+        })),
+      );
+      setUserOptions(
+        ((usersRes.data ?? []) as { id: string; full_name: string | null; email: string }[]).map(
+          (u) => ({ id: u.id, label: u.full_name?.trim() || u.email }),
+        ),
+      );
       setLoading(false);
     })();
     return () => {
       active = false;
     };
   }, [id]);
+
+  const loadProjectOptions = useCallback(async () => projectOptions, [projectOptions]);
+  const loadUserOptions = useCallback(async () => userOptions, [userOptions]);
+
+  const saveField = async <K extends keyof DbDeliverable>(
+    field: K,
+    nextValue: DbDeliverable[K],
+  ): Promise<void> => {
+    if (!row) return;
+    const prev = row[field];
+    setRow({ ...row, [field]: nextValue });
+    const { error } = await supabase
+      .from("deliverables")
+      .update({ [field as string]: nextValue })
+      .eq("id", row.id);
+    if (error) {
+      setRow({ ...row, [field]: prev });
+      throw error;
+    }
+  };
+
+  const saveProjectId = async (nextId: string | null) => {
+    if (!row) return;
+    const prev = { project_id: row.project_id, project: row.project };
+    const nextProject = nextId ? projectOptions.find((p) => p.id === nextId) ?? null : null;
+    setRow({
+      ...row,
+      project_id: nextId,
+      project: nextProject ? { id: nextProject.id, name: nextProject.label } : null,
+    });
+    const { error } = await supabase
+      .from("deliverables")
+      .update({ project_id: nextId })
+      .eq("id", row.id);
+    if (error) {
+      setRow({ ...row, ...prev });
+      toast({ title: "Project save failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const saveAssigneeIds = async (nextIds: string[]) => {
+    if (!row) return;
+    const prev = row.assigned_user_ids;
+    setRow({ ...row, assigned_user_ids: nextIds });
+    const { error } = await supabase
+      .from("deliverables")
+      .update({ assigned_user_ids: nextIds })
+      .eq("id", row.id);
+    if (error) {
+      setRow({ ...row, assigned_user_ids: prev });
+      toast({ title: "Assignees save failed", description: error.message, variant: "destructive" });
+    }
+  };
 
   if (loading) {
     return (
@@ -72,24 +163,31 @@ export default function DeliverableDetail() {
     );
   }
 
-  const token = deliverableStatusToken(row.status);
-
   return (
     <div className="stack-4" style={{ maxWidth: 760 }}>
-      <Link to="/deliverables" className="tlink">
+      <Link to={back.to} className="tlink">
         <IconArrowLeft className="ic" />
-        Back to Deliverables
+        Back to {back.label}
       </Link>
       <div className="row between" style={{ alignItems: "flex-start" }}>
         <h1 className={`h-page ${statusTextDecoration("deliverable", row.status)}`}>
-          {row.title}
+          <InlineEditText
+            value={row.title}
+            required
+            placeholder="Deliverable title"
+            renderRead={(v) => v ?? "(untitled)"}
+            onSave={(next) => saveField("title", next)}
+          />
         </h1>
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn-secondary"
+          aria-label="Edit Deliverable"
+          title="Edit Deliverable"
           onClick={() => navigate(`/deliverables/${row.id}/edit`)}
+          style={{ padding: "0 10px" }}
         >
-          Edit Deliverable
+          <Pencil className="ic" style={{ width: 14, height: 14 }} />
         </button>
       </div>
 
@@ -98,30 +196,57 @@ export default function DeliverableDetail() {
           <dl className="kv">
             <dt>Status</dt>
             <dd>
-              <span className={`pill p-${token}`}>
-                <span className="dt" />
-                {row.status}
-              </span>
+              <ClickPillCell
+                value={row.status}
+                options={DELIVERABLE_STATUS_VALUES}
+                tokenMap={deliverableStatusToken}
+                onSave={async (next) => {
+                  await updateDeliverableStatus(row.id, next as DeliverableStatus);
+                  setRow({ ...row, status: next as DeliverableStatus });
+                }}
+              />
             </dd>
             <dt>Type</dt>
-            <dd>{row.type ?? "-"}</dd>
+            <dd>
+              <InlineEditText
+                value={row.type}
+                placeholder="Kickoff / Venue Recon / Design Round / ..."
+                renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
+                onSave={(next) => saveField("type", next || null)}
+              />
+            </dd>
             <dt>Due</dt>
-            <dd>{row.due_date ? formatMediumDate(row.due_date) : "-"}</dd>
+            <dd>
+              <InlineEditText
+                value={row.due_date}
+                placeholder="YYYY-MM-DD"
+                inputType="date"
+                renderRead={(v) =>
+                  v ? formatMediumDate(v) : <span className="muted subtle">-</span>
+                }
+                onSave={(next) => saveField("due_date", next || null)}
+              />
+            </dd>
             <dt>Project</dt>
             <dd>
-              {row.project ? (
-                <Link to={`/projects/${row.project.id}`} className="tlink">
-                  {row.project.name}
-                </Link>
-              ) : (
-                "-"
-              )}
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadProjectOptions }}
+                value={row.project_id}
+                onChange={(next) => void saveProjectId(next)}
+                entityLabel="Project"
+                placeholder="No project"
+              />
             </dd>
             <dt>Assignees</dt>
             <dd>
-              {assignees.length === 0
-                ? "Unassigned"
-                : assignees.map((a) => a.full_name ?? a.email).join(", ")}
+              <RecordCombobox
+                multi
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                multiValue={row.assigned_user_ids}
+                onMultiChange={(next) => void saveAssigneeIds(next)}
+                entityLabel="user"
+                placeholder="Unassigned"
+              />
             </dd>
             {row.completed_at ? (
               <>
@@ -137,8 +262,20 @@ export default function DeliverableDetail() {
         <div className="card-headbar">
           <span className="h-card">Notes</span>
         </div>
-        <div className="card-pad muted" style={{ whiteSpace: "pre-wrap" }}>
-          {row.notes || "(empty)"}
+        <div className="card-pad">
+          <InlineEditText
+            value={row.notes}
+            placeholder="Free-form notes for this deliverable..."
+            multiline
+            renderRead={(v) =>
+              v ? (
+                <span className="muted" style={{ whiteSpace: "pre-wrap" }}>{v}</span>
+              ) : (
+                <span className="muted subtle">(empty)</span>
+              )
+            }
+            onSave={(next) => saveField("notes", next || null)}
+          />
         </div>
       </section>
     </div>

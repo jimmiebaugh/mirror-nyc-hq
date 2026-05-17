@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { isAllowedEmail } from "@/lib/auth";
@@ -17,6 +17,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const stampedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Phase 3.6.15: manual hash-fallback. Kept as defense-in-depth after
@@ -78,6 +79,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Stamp users.last_active_at on session resolve. handle_new_user only
+  // stamps on auth.users INSERT (Phase 5.4), so without this effect
+  // users.last_active_at would be a "first signup" timestamp at best
+  // (and NULL for users whose auth.users row predates the column add).
+  //
+  // Two-layer guard so we don't write on every soft remount:
+  //   1. useRef -> fires at most once per AuthProvider lifecycle per
+  //      user.id (covers React StrictMode double-mount, tab focus
+  //      re-renders, etc.).
+  //   2. sessionStorage -> persists across mounts within the same tab;
+  //      5-min floor means the UPDATE skips when the user has been
+  //      stamped within the last 5 minutes (covers manual reloads,
+  //      route changes that remount the provider tree).
+  // Private-mode browsers throw on sessionStorage access; the try/catch
+  // falls back to the existing one-shot-per-lifecycle behavior.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid || stampedUserIdRef.current === uid) return;
+    stampedUserIdRef.current = uid;
+    const STAMP_FLOOR_MS = 5 * 60 * 1000;
+    const storageKey = `last_active_stamped:${uid}`;
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = parseInt(stored, 10);
+        if (Number.isFinite(parsed) && Date.now() - parsed < STAMP_FLOOR_MS) {
+          return;
+        }
+      }
+    } catch {
+      /* private-mode browsers; proceed with the UPDATE */
+    }
+    supabase
+      .from("users")
+      .update({ last_active_at: new Date().toISOString() })
+      .eq("id", uid)
+      .then(({ error }) => {
+        if (error) {
+          console.warn("last_active_at stamp failed", error);
+          return;
+        }
+        try {
+          sessionStorage.setItem(storageKey, String(Date.now()));
+        } catch {
+          /* private-mode; the useRef guard still prevents re-fire */
+        }
+      });
+  }, [session?.user?.id]);
 
   const signInWithGoogle = async () => {
     // Force HTTPS on the production origin in case the user landed via

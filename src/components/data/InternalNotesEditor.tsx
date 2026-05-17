@@ -41,7 +41,13 @@ type Note = {
   author: Author | null;
 };
 
-const PARENT_TYPES = ["client", "vendor", "person", "venue"] as const;
+const PARENT_TYPES = [
+  "client",
+  "vendor",
+  "person",
+  "venue",
+  "outlook_entry",
+] as const;
 type ParentType = (typeof PARENT_TYPES)[number];
 
 export function InternalNotesEditor({
@@ -161,7 +167,6 @@ export function InternalNotesEditor({
     <section className="card">
       <div className="card-headbar">
         <span className="h-card">Internal Notes</span>
-        <span className="cap">Append-only</span>
       </div>
       <div
         className="card-pad"

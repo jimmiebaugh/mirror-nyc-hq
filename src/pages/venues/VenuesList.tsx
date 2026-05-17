@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { FilterBar, emptyFilterState, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { IconPlus } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
@@ -26,8 +28,12 @@ import {
  * approximations only.
  */
 
+const FROM_LABEL = "Venues";
+
 export default function VenuesList() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<VenueListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
@@ -47,6 +53,30 @@ export default function VenuesList() {
       active = false;
     };
   }, []);
+
+  // Phase 5.6.5: resolve default saved view on mount.
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("venue").then((v) => {
+      if (!active || !v) return;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("venue");
+    if (v) {
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      setFilterState(emptyFilterState());
+      setActiveViewName("All venues");
+    }
+  };
 
   const venueFilterFields: FilterFieldDef[] = useMemo(
     () => [
@@ -103,6 +133,7 @@ export default function VenuesList() {
               setFilterState(v.filter_state);
               setActiveViewName(v.name);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
         </div>
         <FilterBar
@@ -123,7 +154,11 @@ export default function VenuesList() {
         <>
           <DataTable<VenueListRow>
             rows={filtered}
-            onRowClick={(r) => navigate(`/venues/${r.id}`)}
+            sort={filterState.sort ?? null}
+            onSortChange={(next) =>
+              setFilterState((prev) => ({ ...prev, sort: next }))
+            }
+            onRowClick={(r) => navigate(`/venues/${r.id}`, { state: { from: fromState } })}
             empty={{
               message: "No venues match your filters.",
               ctaLabel: "+ New Venue",

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, emptyFilterState, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { BoardView, type BoardColumn } from "@/components/data/BoardView";
 import { CalendarMonthView, type CalendarEventKind } from "@/components/data/CalendarMonthView";
@@ -11,11 +13,13 @@ import { applyFilters } from "@/lib/hq/filterStateApply";
 import { supabase } from "@/integrations/supabase/client";
 import {
   loadDeliverables,
+  updateDeliverableStatus,
   DELIVERABLE_STATUS_VALUES,
   type DeliverableListRow,
   type DeliverableStatus,
 } from "@/lib/deliverables/queries";
 import { deliverableStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
+import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { formatShortDate } from "@/lib/hq/dates";
 
 /**
@@ -42,8 +46,12 @@ function calendarKind(status: DeliverableStatus): CalendarEventKind {
   }
 }
 
+const FROM_LABEL = "Deliverables";
+
 export default function DeliverablesList({ view }: { view: ViewKind }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<DeliverableListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
@@ -62,6 +70,30 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
       active = false;
     };
   }, []);
+
+  // Phase 5.6.5: resolve default saved view on mount.
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("deliverable").then((v) => {
+      if (!active || !v) return;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("deliverable");
+    if (v) {
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      setFilterState(emptyFilterState());
+      setActiveViewName("All deliverables");
+    }
+  };
 
   useEffect(() => {
     const ch = supabase
@@ -148,6 +180,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               const target = viewSwitchRoute("deliverables", kind);
               if (target) navigate(target);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
         </div>
         <div className="row-c">
@@ -181,7 +214,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               kind: calendarKind(d.status),
               strikethrough: d.status === "Skipped",
             }))}
-          onEventClick={(ev) => navigate(`/deliverables/${ev.id}`)}
+          onEventClick={(ev) => navigate(`/deliverables/${ev.id}`, { state: { from: fromState } })}
           toolbarRight={
             <div className="callegend">
               <span><i style={{ background: "#06B6D4" }} /> In progress</span>
@@ -202,8 +235,12 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
         <DataTable<typeof filtered[number]>
           rows={filtered}
           flat
+          sort={filterState.sort ?? null}
+          onSortChange={(next) =>
+            setFilterState((prev) => ({ ...prev, sort: next }))
+          }
           rowBorderToken={(r) => deliverableStatusToken(r.status)}
-          onRowClick={(r) => navigate(`/deliverables/${r.id}`)}
+          onRowClick={(r) => navigate(`/deliverables/${r.id}`, { state: { from: fromState } })}
           empty={{
             message: "No deliverables yet",
             ctaLabel: "+ New Deliverable",
@@ -226,7 +263,11 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               sort: (a, b) => a.projectName.localeCompare(b.projectName),
               render: (r) =>
                 r.project ? (
-                  <Link to={`/projects/${r.project.id}`} className="tlink">
+                  <Link
+                    to={`/projects/${r.project.id}`}
+                    className="tlink"
+                    state={{ from: fromState }}
+                  >
                     {r.project.name}
                   </Link>
                 ) : (
@@ -244,10 +285,19 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               label: "Status",
               sort: (a, b) => a.status.localeCompare(b.status),
               render: (r) => (
-                <span className={`pill p-${deliverableStatusToken(r.status)}`}>
-                  <span className="dt" />
-                  {r.status}
-                </span>
+                <ClickPillCell
+                  value={r.status}
+                  options={DELIVERABLE_STATUS_VALUES}
+                  tokenMap={deliverableStatusToken}
+                  onSave={async (next) => {
+                    await updateDeliverableStatus(r.id, next as DeliverableStatus);
+                    setRows((rs) =>
+                      rs.map((row) =>
+                        row.id === r.id ? { ...row, status: next as DeliverableStatus } : row,
+                      ),
+                    );
+                  }}
+                />
               ),
             },
             {
@@ -270,7 +320,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
       ) : view === "board" ? (
         <DeliverablesByProjectBoard
           rows={filtered}
-          onClick={(r) => navigate(`/deliverables/${r.id}`)}
+          onClick={(r) => navigate(`/deliverables/${r.id}`, { state: { from: fromState } })}
         />
       ) : null}
     </div>

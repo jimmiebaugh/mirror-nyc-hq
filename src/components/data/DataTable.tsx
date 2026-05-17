@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  IconCheck,
   IconChevronDown,
   IconChevronRight,
 } from "@/components/icons/HQIcons";
@@ -35,29 +34,43 @@ export function DataTable<T extends { id: string }>({
   columns,
   rowBorderToken,
   onRowClick,
-  selection,
   twoTier,
   flat = false,
   empty,
+  sort: controlledSort,
+  onSortChange,
 }: {
   rows: T[];
   columns: Column<T>[];
   rowBorderToken?: (row: T) => StatusToken;
   onRowClick?: (row: T) => void;
-  selection?: {
-    selectedIds: Set<string>;
-    onChange: (next: Set<string>) => void;
-  };
   twoTier?: {
     isTerminal: (row: T) => boolean;
     dividerLabel: (n: number) => string;
   };
   flat?: boolean;
   empty?: { message: string; ctaLabel?: string; onCta?: () => void };
+  /**
+   * Phase 5.6.5 (Projects-first carry-forward): when both props are
+   * provided, sort becomes controlled — the parent owns the SortState
+   * (typically inside `filterState.sort` so saved views round-trip it).
+   * Omit both to keep the legacy internal-state behavior.
+   */
+  sort?: SortState;
+  onSortChange?: (next: SortState) => void;
 }) {
-  const [sort, setSort] = useState<SortState>(null);
+  const isControlledSort = onSortChange !== undefined;
+  const [internalSort, setInternalSort] = useState<SortState>(null);
+  const sort = isControlledSort ? controlledSort ?? null : internalSort;
+  const setSort = (next: SortState | ((prev: SortState) => SortState)) => {
+    if (isControlledSort) {
+      const value = typeof next === "function" ? next(sort) : next;
+      onSortChange?.(value);
+    } else {
+      setInternalSort(next);
+    }
+  };
   const [collapsed, setCollapsed] = useState<boolean>(true);
-  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   const sortedRows = useMemo(() => {
     if (!sort) return rows;
@@ -86,30 +99,8 @@ export function DataTable<T extends { id: string }>({
     });
   };
 
-  const toggleRowSelection = (row: T, shift: boolean) => {
-    if (!selection) return;
-    const next = new Set(selection.selectedIds);
-    if (shift && lastSelectedId) {
-      const ids = sortedRows.map((r) => r.id);
-      const a = ids.indexOf(lastSelectedId);
-      const b = ids.indexOf(row.id);
-      if (a >= 0 && b >= 0) {
-        const [lo, hi] = a < b ? [a, b] : [b, a];
-        for (let i = lo; i <= hi; i++) next.add(ids[i]);
-      } else {
-        next.add(row.id);
-      }
-    } else {
-      if (next.has(row.id)) next.delete(row.id);
-      else next.add(row.id);
-    }
-    selection.onChange(next);
-    setLastSelectedId(row.id);
-  };
-
   const renderRow = (row: T, terminalRow: boolean) => {
     const token = rowBorderToken?.(row);
-    const checked = selection?.selectedIds.has(row.id) ?? false;
     return (
       <tr
         key={row.id}
@@ -118,30 +109,8 @@ export function DataTable<T extends { id: string }>({
           cursor: onRowClick ? "pointer" : undefined,
           opacity: terminalRow ? 0.6 : undefined,
         }}
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest("[data-row-checkbox]")) return;
-          onRowClick?.(row);
-        }}
+        onClick={() => onRowClick?.(row)}
       >
-        {selection ? (
-          <td
-            className="c"
-            style={{ width: 38 }}
-            data-row-checkbox
-            onClick={(e) => e.stopPropagation()}
-          >
-            <span
-              className={`checkbox ${checked ? "checkbox--on" : ""}`}
-              role="checkbox"
-              aria-checked={checked}
-              onClick={(e) =>
-                toggleRowSelection(row, (e as React.MouseEvent).shiftKey)
-              }
-            >
-              {checked ? <IconCheck className="ic" /> : null}
-            </span>
-          </td>
-        ) : null}
         {columns.map((c) => (
           <td
             key={c.key}
@@ -172,14 +141,13 @@ export function DataTable<T extends { id: string }>({
     );
   }
 
-  const totalCols = columns.length + (selection ? 1 : 0);
+  const totalCols = columns.length;
 
   return (
     <div className="tbl-wrap">
       <table className={`tbl ${flat ? "tbl--flat" : ""}`}>
         <thead>
           <tr>
-            {selection ? <th style={{ width: 38 }}><span className="checkbox" /></th> : null}
             {columns.map((c) => {
               const isSorted = sort?.key === c.key;
               return (

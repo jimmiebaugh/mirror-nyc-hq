@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { BoardView, type BoardColumn } from "@/components/data/BoardView";
 import { IconPlus } from "@/components/icons/HQIcons";
@@ -11,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   loadTasks,
+  updateTaskPriority,
   updateTaskStatus,
   TASK_PRIORITY_VALUES,
   TASK_STATUS_VALUES,
@@ -18,7 +21,12 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/lib/tasks/queries";
-import { taskStatusToken, statusTextDecoration } from "@/lib/home/projectStatusToken";
+import {
+  statusTextDecoration,
+  taskPriorityToken,
+  taskStatusToken,
+} from "@/lib/home/projectStatusToken";
+import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { formatShortDate } from "@/lib/hq/dates";
 import { toast } from "@/hooks/use-toast";
 
@@ -42,20 +50,15 @@ const FILTER_FIELDS = [
 ];
 
 function priorityTokenClass(p: TaskPriority): string {
-  switch (p) {
-    case "Urgent":
-      return "pill pill-sm p-destructive";
-    case "High":
-      return "pill pill-sm p-warn";
-    case "Low":
-    case "Normal":
-    default:
-      return "pill pill-sm p-muted";
-  }
+  return `pill pill-sm p-${taskPriorityToken(p)}`;
 }
+
+const FROM_LABEL = "Tasks";
 
 export default function TasksList({ view }: { view: ViewKind }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const { user } = useAuth();
   const [rows, setRows] = useState<TaskListRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,8 +69,13 @@ export default function TasksList({ view }: { view: ViewKind }) {
   const [activeViewName, setActiveViewName] = useState("My open tasks");
   const [quickAdd, setQuickAdd] = useState("");
   const [adding, setAdding] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [blockedTitles, setBlockedTitles] = useState<Record<string, string>>({});
+  /**
+   * Phase 5.6.5: tracks whether the on-mount default-view resolution
+   * picked up a saved view. The legacy "My open tasks" baseline only
+   * applies when no per-user or global default exists.
+   */
+  const savedViewAppliedRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -76,7 +84,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
       if (active) {
         setRows(r);
         setLoading(false);
-        if (user?.id) {
+        if (user?.id && !savedViewAppliedRef.current) {
           setFilterState({
             connector: "AND",
             chips: [
@@ -106,6 +114,48 @@ export default function TasksList({ view }: { view: ViewKind }) {
       active = false;
     };
   }, [user?.id, user?.email]);
+
+  // Phase 5.6.5: resolve default saved view on mount. Per-user wins,
+  // then global. When applied, set a ref so the loadTasks completion
+  // doesn't overwrite with the "My open tasks" baseline.
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("task").then((v) => {
+      if (!active || !v) return;
+      savedViewAppliedRef.current = true;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("task");
+    if (v) {
+      savedViewAppliedRef.current = true;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      savedViewAppliedRef.current = false;
+      // Fall back to the "My open tasks" baseline when signed in;
+      // otherwise an empty filter.
+      if (user?.id) {
+        setFilterState({
+          connector: "AND",
+          chips: [
+            { field: "assigneeId", op: "is", value: "Me" },
+            { field: "status", op: "is not", value: "Done" },
+          ],
+        });
+        setActiveViewName("My open tasks");
+      } else {
+        setFilterState({ connector: "AND", chips: [] });
+        setActiveViewName("All tasks");
+      }
+    }
+  };
 
   useEffect(() => {
     const ch = supabase
@@ -168,7 +218,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
       })
       .select(
         `id, title, description, status, priority, due_date, blocked_by,
-         project:projects(id, name, client:clients(id, name)),
+         project:projects!tasks_project_id_fkey(id, name, client:clients!projects_client_id_fkey(id, name)),
          assignee:users!tasks_assignee_id_fkey(id, full_name, email)`,
       )
       .single();
@@ -222,6 +272,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             activeViewKind={view}
             activeFilterState={filterState}
             onPick={(v) => {
+              savedViewAppliedRef.current = true;
               setFilterState(v.filter_state);
               setActiveViewName(v.name);
             }}
@@ -229,6 +280,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
               const target = viewSwitchRoute("tasks", kind);
               if (target) navigate(target);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
         </div>
         <div className="row-c">
@@ -256,7 +308,6 @@ export default function TasksList({ view }: { view: ViewKind }) {
             padding: "8px 12px",
           }}
         >
-          <span className="checkbox" />
           <input
             className="input"
             style={{ height: 30, border: "none", background: "none", padding: 0 }}
@@ -280,9 +331,12 @@ export default function TasksList({ view }: { view: ViewKind }) {
         <DataTable<typeof filtered[number]>
           rows={filtered}
           flat
+          sort={filterState.sort ?? null}
+          onSortChange={(next) =>
+            setFilterState((prev) => ({ ...prev, sort: next }))
+          }
           rowBorderToken={(r) => taskStatusToken(r.status)}
-          onRowClick={(r) => navigate(`/tasks/${r.id}`)}
-          selection={{ selectedIds: selected, onChange: setSelected }}
+          onRowClick={(r) => navigate(`/tasks/${r.id}`, { state: { from: fromState } })}
           twoTier={{
             isTerminal: (r) => r.status === "Done",
             dividerLabel: (n) => `Done · ${n} hidden`,
@@ -310,18 +364,26 @@ export default function TasksList({ view }: { view: ViewKind }) {
               render: (r) =>
                 r.project ? (
                   <div>
-                    <Link to={`/projects/${r.project.id}`} className="lead">
-                      {r.project.name}
-                    </Link>
                     {r.project.client ? (
                       <Link
                         to={`/clients/${r.project.client.id}`}
                         className="sub"
                         style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                        state={{ from: fromState }}
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        {r.project.client.name}
+                        {r.project.client.name ?? "View client"}
                       </Link>
                     ) : null}
+                    <Link
+                      to={`/projects/${r.project.id}`}
+                      className="lead"
+                      style={{ display: "block" }}
+                      state={{ from: fromState }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {r.project.name}
+                    </Link>
                   </div>
                 ) : (
                   <span className="subtle">-</span>
@@ -338,10 +400,19 @@ export default function TasksList({ view }: { view: ViewKind }) {
               label: "Status",
               sort: (a, b) => a.status.localeCompare(b.status),
               render: (r) => (
-                <span className={`pill p-${taskStatusToken(r.status)}`}>
-                  <span className="dt" />
-                  {r.status}
-                </span>
+                <ClickPillCell
+                  value={r.status}
+                  options={TASK_STATUS_VALUES}
+                  tokenMap={taskStatusToken}
+                  onSave={async (next) => {
+                    await updateTaskStatus(r.id, next as TaskStatus);
+                    setRows((rs) =>
+                      rs.map((row) =>
+                        row.id === r.id ? { ...row, status: next as TaskStatus } : row,
+                      ),
+                    );
+                  }}
+                />
               ),
             },
             {
@@ -349,7 +420,19 @@ export default function TasksList({ view }: { view: ViewKind }) {
               label: "Priority",
               sort: (a, b) => a.priority.localeCompare(b.priority),
               render: (r) => (
-                <span className={priorityTokenClass(r.priority)}>{r.priority}</span>
+                <ClickPillCell
+                  value={r.priority}
+                  options={TASK_PRIORITY_VALUES}
+                  tokenMap={taskPriorityToken}
+                  onSave={async (next) => {
+                    await updateTaskPriority(r.id, next as TaskPriority);
+                    setRows((rs) =>
+                      rs.map((row) =>
+                        row.id === r.id ? { ...row, priority: next as TaskPriority } : row,
+                      ),
+                    );
+                  }}
+                />
               ),
             },
             {
@@ -414,7 +497,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             },
           ]}
           onCardMove={handleBoardMove}
-          onCardClick={(r) => navigate(`/tasks/${r.id}`)}
+          onCardClick={(r) => navigate(`/tasks/${r.id}`, { state: { from: fromState } })}
           renderCard={(r) => (
             <>
               <div className="row between" style={{ alignItems: "flex-start", gap: 8 }}>

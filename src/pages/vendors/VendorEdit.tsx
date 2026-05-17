@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { StarRating } from "@/components/data/StarRating";
-import { InlineAddSelect } from "@/components/data/InlineAddSelect";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { useLookup } from "@/lib/hq/lookups";
+import { formatPhone } from "@/lib/hq/phone";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +42,7 @@ import { toast } from "@/hooks/use-toast";
 type FormState = {
   name: string;
   category_id: string;
+  subcategory_id: string;
   city: string;
   capabilities: string[];
   website_url: string;
@@ -55,6 +57,7 @@ type FormState = {
 const EMPTY: FormState = {
   name: "",
   category_id: "",
+  subcategory_id: "",
   city: "",
   capabilities: [],
   website_url: "",
@@ -66,39 +69,79 @@ const EMPTY: FormState = {
   internal_rating: null,
 };
 
+type ProjectOption = {
+  id: string;
+  label: string;
+};
+
 export default function VendorEdit() {
   const { id } = useParams<{ id?: string }>();
   const isCreate = !id;
   const navigate = useNavigate();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [initial, setInitial] = useState<FormState>(EMPTY);
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
+  const [projectIds, setProjectIds] = useState<string[]>([]);
+  const [initialProjectIds, setInitialProjectIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
 
-  const cities = useLookup("cities");
   const categories = useLookup("vendor_categories");
-  const capabilities = useLookup("vendor_capabilities");
+  const subcategories = useLookup("vendor_subcategories", {
+    parentScopeId: form.category_id || null,
+  });
 
   useEffect(() => {
-    if (isCreate) return;
     let active = true;
     (async () => {
-      const { data, error } = await supabase
-        .from("vendors")
-        .select(
-          "name, category_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating",
-        )
-        .eq("id", id)
-        .single();
+      // Project picker options load on both create + edit so a freshly
+      // created vendor can be linked to projects immediately after save.
+      // (Edit mode also pulls the existing project_vendors join rows.)
+      const [vendorRes, projectsAllRes, joinRes] = await Promise.all([
+        isCreate
+          ? Promise.resolve({ data: null, error: null })
+          : supabase
+              .from("vendors")
+              .select(
+                "name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating",
+              )
+              .eq("id", id)
+              .single(),
+        supabase
+          .from("projects")
+          .select("id, name, job_number")
+          .is("archived_at", null)
+          .order("name", { ascending: true }),
+        isCreate
+          ? Promise.resolve({ data: [] as { project_id: string }[] })
+          : supabase
+              .from("project_vendors")
+              .select("project_id")
+              .eq("vendor_id", id),
+      ]);
       if (!active) return;
-      if (error || !data) {
+      type ProjectRow = { id: string; name: string | null; job_number: string | null };
+      setProjectOptions(
+        ((projectsAllRes.data ?? []) as ProjectRow[]).map((p) => ({
+          id: p.id,
+          label: p.job_number ? `#${p.job_number} ${p.name ?? "Untitled"}` : p.name ?? "Untitled",
+        })),
+      );
+      const linkedIds = ((joinRes.data ?? []) as { project_id: string }[]).map(
+        (r) => r.project_id,
+      );
+      setProjectIds(linkedIds);
+      setInitialProjectIds(linkedIds);
+
+      if (isCreate || !vendorRes || vendorRes.error || !vendorRes.data) {
         setLoading(false);
         return;
       }
-      const row = data as unknown as {
+      const row = vendorRes.data as unknown as {
         name: string;
         category_id: string | null;
+        subcategory_id: string | null;
         city: string | null;
         capabilities: string[] | null;
         website_url: string | null;
@@ -112,6 +155,7 @@ export default function VendorEdit() {
       const next: FormState = {
         name: row.name,
         category_id: row.category_id ?? "",
+        subcategory_id: row.subcategory_id ?? "",
         city: row.city ?? "",
         capabilities: row.capabilities ?? [],
         website_url: row.website_url ?? "",
@@ -132,9 +176,14 @@ export default function VendorEdit() {
   }, [id, isCreate]);
 
   const dirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(initial),
-    [form, initial],
+    () =>
+      JSON.stringify(form) !== JSON.stringify(initial) ||
+      JSON.stringify([...projectIds].sort()) !==
+        JSON.stringify([...initialProjectIds].sort()),
+    [form, initial, projectIds, initialProjectIds],
   );
+
+  const loadProjectOptions = useCallback(async () => projectOptions, [projectOptions]);
 
   const onCancel = () => {
     if (!dirty) {
@@ -144,28 +193,19 @@ export default function VendorEdit() {
     setConfirmLeaveOpen(true);
   };
 
-  // Resolve the City lookup row id from name for InlineAddSelect.
-  // InlineAddSelect operates on the option name; we store the name in form.city
-  // and the value flows back as the name. Same pattern as 5.2.2 OrganizationEdit.
-
-  // Category resolved by id; need to translate to name for the picker.
+  // Category is an FK; RecordCombobox lookup mode binds to the option name,
+  // so translate id <-> name at the prop boundary.
   const selectedCategoryName = useMemo(() => {
     if (!form.category_id) return null;
     return categories.options.find((o) => o.id === form.category_id)?.name ?? null;
   }, [form.category_id, categories.options]);
 
-  const onSelectCategory = async (name: string) => {
-    const opt = categories.options.find((o) => o.name === name);
-    setForm((f) => ({ ...f, category_id: opt?.id ?? "" }));
-  };
-
-  const onAddCategory = async (name: string) => {
-    const opt = await categories.addOption(name);
-    if (opt) {
-      setForm((f) => ({ ...f, category_id: opt.id }));
-    }
-    return opt;
-  };
+  const selectedSubcategoryName = useMemo(() => {
+    if (!form.subcategory_id) return null;
+    return (
+      subcategories.options.find((o) => o.id === form.subcategory_id)?.name ?? null
+    );
+  }, [form.subcategory_id, subcategories.options]);
 
   const onSave = async () => {
     if (!form.name.trim()) {
@@ -176,6 +216,7 @@ export default function VendorEdit() {
     const payload = {
       name: form.name.trim(),
       category_id: form.category_id || null,
+      subcategory_id: form.subcategory_id || null,
       city: form.city || null,
       capabilities: form.capabilities,
       website_url: form.website_url || null,
@@ -186,6 +227,7 @@ export default function VendorEdit() {
       tags: form.tags,
       internal_rating: form.internal_rating,
     };
+    let vendorId = id ?? null;
     if (isCreate) {
       const { data: userRes } = await supabase.auth.getUser();
       const created_by = userRes.user?.id;
@@ -199,24 +241,49 @@ export default function VendorEdit() {
         .insert({ ...payload, created_by })
         .select("id")
         .single();
-      setSaving(false);
-      if (error) {
-        toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      if (error || !data) {
+        setSaving(false);
+        toast({ title: "Save failed", description: error?.message, variant: "destructive" });
         return;
       }
-      toast({ title: "Vendor created" });
-      navigate(`/vendors/${data.id}`);
+      vendorId = data.id;
     } else {
       const { error } = await supabase
         .from("vendors")
         .update(payload)
         .eq("id", id);
-      setSaving(false);
       if (error) {
+        setSaving(false);
         toast({ title: "Save failed", description: error.message, variant: "destructive" });
         return;
       }
+    }
+
+    // Diff project_vendors join. Insert added pairs, delete removed pairs.
+    if (vendorId) {
+      const pvAdd = projectIds.filter((p) => !initialProjectIds.includes(p));
+      const pvRemove = initialProjectIds.filter((p) => !projectIds.includes(p));
+      for (const projectId of pvAdd) {
+        await supabase
+          .from("project_vendors")
+          .insert({ project_id: projectId, vendor_id: vendorId });
+      }
+      for (const projectId of pvRemove) {
+        await supabase
+          .from("project_vendors")
+          .delete()
+          .eq("project_id", projectId)
+          .eq("vendor_id", vendorId);
+      }
+    }
+
+    setSaving(false);
+    if (isCreate && vendorId) {
+      toast({ title: "Vendor created" });
+      navigate(`/vendors/${vendorId}`);
+    } else {
       setInitial(form);
+      setInitialProjectIds(projectIds);
       toast({ title: "Saved" });
     }
   };
@@ -265,25 +332,48 @@ export default function VendorEdit() {
               />
             </FormField>
             <FormField label="Category">
-              <InlineAddSelect
-                options={categories.options}
+              <RecordCombobox
+                source={{ kind: "lookup", table: "vendor_categories" }}
                 value={selectedCategoryName}
-                onSelect={onSelectCategory}
-                onAdd={onAddCategory}
-                entityLabel="category"
-                exampleName="Custom Fabrication"
-                filled={Boolean(form.category_id)}
+                onChange={(name) => {
+                  const opt = categories.options.find((o) => o.name === name);
+                  // Changing category clears subcategory (prior pick may not
+                  // belong to the new parent).
+                  setForm((f) => ({
+                    ...f,
+                    category_id: opt?.id ?? "",
+                    subcategory_id: "",
+                  }));
+                }}
+                entityLabel="Category"
+              />
+            </FormField>
+            <FormField label="Subcategory">
+              <RecordCombobox
+                source={{
+                  kind: "lookup",
+                  table: "vendor_subcategories",
+                  parentScopeId: form.category_id || null,
+                  parentScopeLabel:
+                    categories.options.find((o) => o.id === form.category_id)
+                      ?.name ?? null,
+                  parentScopeLabelKey: "Category",
+                }}
+                value={selectedSubcategoryName}
+                onChange={(name) => {
+                  const opt = subcategories.options.find((o) => o.name === name);
+                  setForm((f) => ({ ...f, subcategory_id: opt?.id ?? "" }));
+                }}
+                entityLabel="Subcategory"
+                disabled={!form.category_id}
               />
             </FormField>
             <FormField label="City">
-              <InlineAddSelect
-                options={cities.options}
+              <RecordCombobox
+                source={{ kind: "lookup", table: "cities" }}
                 value={form.city || null}
-                onSelect={(v) => setForm((f) => ({ ...f, city: v }))}
-                onAdd={cities.addOption}
+                onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
                 entityLabel="city"
-                exampleName="NYC"
-                filled={Boolean(form.city)}
               />
             </FormField>
             <FormField label="Website URL">
@@ -296,13 +386,14 @@ export default function VendorEdit() {
             </FormField>
           </div>
           <FormField label="Capabilities">
-            <MultiTagInput
-              options={capabilities.options}
-              values={form.capabilities}
-              onChange={(next) => setForm((f) => ({ ...f, capabilities: next }))}
-              onAdd={capabilities.addOption}
-              entityLabel="capability"
-              exampleName="Custom Fabrication"
+            <RecordCombobox
+              multi
+              source={{ kind: "lookup", table: "vendor_capabilities" }}
+              multiValue={form.capabilities}
+              onMultiChange={(next) =>
+                setForm((f) => ({ ...f, capabilities: next }))
+              }
+              entityLabel="Capability"
               placeholder="Add capability..."
             />
           </FormField>
@@ -348,6 +439,9 @@ export default function VendorEdit() {
                 className={`input ${form.contact_phone ? "input--filled" : ""}`}
                 value={form.contact_phone}
                 onChange={(e) => setForm((f) => ({ ...f, contact_phone: e.target.value }))}
+                onBlur={() =>
+                  setForm((f) => ({ ...f, contact_phone: formatPhone(f.contact_phone) }))
+                }
                 placeholder="(212) 555-0000"
               />
             </FormField>
@@ -383,6 +477,28 @@ export default function VendorEdit() {
           <p className="cap" style={{ lineHeight: 1.5 }}>
             Visible to all Standard users on the Detail view.
           </p>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-pad stack-4">
+          <div className="block-lbl">
+            <span className="label-section">Projects</span>
+          </div>
+          <p className="cap" style={{ lineHeight: 1.5 }}>
+            Projects this vendor has worked on. Add or remove links here, or
+            from the project's edit page.
+          </p>
+          <FormField label="Linked Projects">
+            <RecordCombobox
+              multi
+              source={{ kind: "record", loadOptions: loadProjectOptions }}
+              multiValue={projectIds}
+              onMultiChange={setProjectIds}
+              entityLabel="Project"
+              placeholder="Add project..."
+            />
+          </FormField>
         </div>
       </section>
 

@@ -18,6 +18,7 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `slack_user_id` (text, nullable). Added Phase 5.4. Slack workspace user id (e.g. `U01234ABCD`) for DM addressing.
 - `last_active_at` (timestamptz, nullable). Added Phase 5.4. Stamped by `handle_new_user` on sign-in.
 - `active` (bool, default true; soft-delete column). `ProtectedRoute` checks this on every authed nav: a row with `active = false` triggers an immediate sign-out + "Account deactivated" screen (Phase 5.4).
+- `is_owner` (bool, NOT NULL, default false). Added Phase 5.6.5. Gates the owner-only "Save as default for all users" affordance in `<SavedViewsDropdown>` + the calendar visibility panel, and powers the inline-subquery RLS check that lets owners write `scope='global'` rows on `saved_views`. Backfilled to `true` for `email = 'jimmie@mirrornyc.com'`; every other row is `false`.
 - `created_at`, `updated_at`
 
 ### departments (Phase 5.4 lookup)
@@ -52,10 +53,12 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 **Doc drift note:** The section below describes the 5.2.2-era unified `organizations` table. Phase 5.2.3 (migrations `20260516130000` through `20260516130004`) split this into `vendors` (renamed from organizations) + `clients` (new table). Phase 5.2 cleanup adds `vendors.primary_address` (text, nullable) and fixes the `vendor_capabilities` GRANT DELETE for the authenticated role. A full rewrite of this section reflecting the split shape is carried forward as a doc-debt item; canonical column lists live in the migration files and in `src/integrations/supabase/types.ts` until then.
 
 5.2.3 + cleanup deltas (minimum coverage for the migrations applied here):
-- `vendors`: renamed from `organizations`. Dropped `type` enum + `org_type` type. Added `category_id` (uuid, FK to `vendor_categories`, nullable, ON DELETE SET NULL). Added `primary_address` (text, nullable) in Phase 5.2 cleanup. All other columns from the organizations shape carry through.
+- `vendors`: renamed from `organizations`. Dropped `type` enum + `org_type` type. Added `category_id` (uuid, FK to `vendor_categories`, nullable, ON DELETE SET NULL). Added `primary_address` (text, nullable) in Phase 5.2 cleanup. Added `subcategory_id` (uuid, FK to `vendor_subcategories`, nullable, ON DELETE SET NULL) in Phase 5.6.2 (`20260518100000_phase_5_6_2_vendor_subcategories_project_vendors.sql`); partial btree index `vendors_subcategory_idx WHERE subcategory_id IS NOT NULL`. App-side rule: when `category_id` changes, the UI clears `subcategory_id` since the prior pick may not belong to the new parent. All other columns from the organizations shape carry through.
 - `clients`: new slim table created fresh in 5.2.3.A; columns: id, name, industry, contact_name, contact_email, contact_phone, primary_address, city, website_url, tags[], created_by, created_at, updated_at. Open-auth RLS (SELECT/INSERT/UPDATE) + admin-only DELETE. Existing organizations rows of type=Client migrated preserving UUIDs.
 - `vendor_capabilities`: renamed from `org_capabilities` in 5.2.3.A. GRANT to authenticated extended to include DELETE in Phase 5.2 cleanup so the admin-only DELETE RLS policy is reachable.
 - `vendor_categories`: new lookup table (same shape as `cities`) added in 5.2.3.A.
+- `vendor_subcategories`: new lookup table added in Phase 5.6.2. Columns: id, name, `parent_category_id` (uuid, FK to `vendor_categories` ON DELETE CASCADE), created_by (FK to users, ON DELETE SET NULL), created_at. UNIQUE `(parent_category_id, name)`. Index `vendor_subcategories_parent_idx (parent_category_id)`. RLS: open SELECT/INSERT/UPDATE for authenticated; admin-only DELETE via `is_admin()`. Matches `vendor_capabilities` posture. Inline-add from VendorEdit Subcategory typeahead writes here with `parent_category_id` set to the current Category selection.
+- `project_vendors`: new join table added in Phase 5.6.2 (Phase 5.6.2 deck). Columns: project_id (FK to projects ON DELETE CASCADE), vendor_id (FK to vendors ON DELETE CASCADE), created_by (FK to users, ON DELETE SET NULL), created_at. PRIMARY KEY `(project_id, vendor_id)`. Index `project_vendors_vendor_idx (vendor_id)`. RLS: open SELECT/INSERT/UPDATE/DELETE for authenticated. Matches `project_venues` / `venue_contact_people` posture. No activity-log trigger (project-team roster join tables stay out of the activity feed; matches `project_account_managers` / `project_designers`). Surfaced read paths: VendorsList Projects column, VendorDetail Projects section, VendorEdit Projects section; write path: ProjectEdit Vendors picker (diff-on-save: insert added, delete removed pairs).
 - `projects.organization_id` renamed to `client_id` (FK -> clients).
 - `people.organization_id` split into `client_id` + `vendor_id` (mutex CHECK); `affiliations` enum array dropped.
 - `notes_log.parent_type` CHECK widened to `('client', 'vendor', 'person', 'venue')`.
@@ -84,7 +87,7 @@ The legacy `organizations` entry below is preserved for historical reference; tr
 ### projects
 - `id` (uuid, PK)
 - `name` (text, not null)
-- `organization_id` (uuid, FK to organizations, nullable). Renamed from `client_id` in Phase 5.2.2 alongside the clients -> organizations rename. The btree `idx_projects_client_id` renamed to `idx_projects_organization_id`.
+- `client_id` (uuid, FK to clients, nullable). Originally `client_id`, renamed to `organization_id` in Phase 5.2.2 alongside the clients -> organizations rename, then renamed back to `client_id` in Phase 5.2.3.B when organizations split into clients + vendors. The btree index follows the column name. `types.ts` is authoritative.
 - `status` (enum `project_status`, 14 values, default `Queued`): `Approved`, `In Production`, `In Progress`, `Location Scouting`, `Install`, `Removal`, `Billing`, `Queued`, `Quoting`, `Quote Sent`, `Awaiting Feedback`, `On Hold`, `Complete`, `Cancelled`. Reshaped in Phase 5.2.1 (`20260515130000_phase_5_2_1_project_task_enum_reshape.sql`) from the 14-value shipped enum to the locked 14-value list per `OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 4. Backfill mapping: `Awaiting FB` -> `Awaiting Feedback`, `Awaiting Files` -> `In Progress` (catch-all), `Awaiting Approval` -> `Awaiting Feedback`, `Event Live` -> `In Production`, `Proof Out` -> `In Production` (catch-all), `In Review` -> `In Progress` (catch-all); other 8 values map to themselves.
 - `job_number` (text, nullable). Surface 07 detail coral `#2604` job number. Added Phase 5.2.2 (`20260515140003_phase_5_2_2_project_extensions.sql`). Partial btree index `projects_job_number_idx WHERE job_number IS NOT NULL`.
 - `category` (text, nullable). "Pop-Up" / "Window Install" / "Trade Show" etc. Added Phase 5.2.2.
@@ -161,7 +164,8 @@ External humans (Client / Vendor / Internal partners / Venue contacts). Internal
 
 - `id` (uuid, PK, default `gen_random_uuid()`)
 - `full_name` (text, not null)
-- `affiliations` (enum array `person_affiliation[]`, default `{}`): `Client`, `Vendor`, `Internal`, `Venue`. Multi-affiliation per build notes Surface 11 (e.g. "Dana Whitfield" can carry Client + Venue tags). GIN-indexed for the Affiliation filter chip.
+- `affiliations` (enum array `person_affiliation[]`, default `{}`): `Client`, `Vendor`, `Internal`, `Venue`. Multi-affiliation per build notes Surface 11 (e.g. "Dana Whitfield" can carry Client + Venue tags). GIN-indexed for the Affiliation filter chip. **DROPPED in Phase 5.2.3.C** alongside the `person_affiliation` enum (locked Q4: at most one org type per person; FK presence resolves type).
+- `affiliation_type` (enum `person_affiliation_type`, NOT NULL, default `'Unaffiliated'`): `Client`, `Vendor`, `Venue`, `Unaffiliated`. **Added in Phase 5.6.3** (`20260518110000_phase_5_6_3_people_affiliation_type.sql`) so inline edit on PersonDetail can clear an Organization FK without flipping the displayed type. Backfilled from FK presence + `venue_contact_people` rows. Mutex CHECK `people_affiliation_type_mutex_check`: Client→vendor_id null, Vendor→client_id null, Venue/Unaffiliated→both FKs null. `personType()` helper in `src/lib/people/queries.ts` reads this column (with FK-derivation fallback for safety). PersonEdit writes `affiliation_type` explicitly on save.
 - `organization_id` (uuid, FK to organizations, nullable, ON DELETE SET NULL). Not every person ties to an org (Venue contacts may not).
 - `venue_id` (uuid, FK to venues, nullable, ON DELETE SET NULL). Nullable per spec Q8 recommendation. Surface 09 Contacts card pulls `WHERE 'Venue' = ANY(affiliations) AND venue_id = ?`. Added in the 5.2.2.C migration alongside the venues extensions so it can reference venues after the table exists.
 - `role_title` (text), `email` (text), `phone` (text), `linkedin_url` (text)
@@ -404,14 +408,15 @@ Per-user named filter / sort / view-kind snapshots for the HQ Core database list
 
 - `id` (uuid, PK, default `gen_random_uuid()`)
 - `user_id` (uuid, NOT NULL, FK to `users.id` ON DELETE CASCADE)
-- `entity_type` (text, NOT NULL, CHECK in `project / task / deliverable / organization / person / venue / calendar`). `calendar` added in Phase 5.3 (`20260516150002_phase_5_3_saved_views_calendar_check.sql`) so the unified Calendar page can persist per-user visibility toggles via a single implicit row (`name='__calendar_default'`, `view_kind='calendar'`).
+- `entity_type` (text, NOT NULL, CHECK in `project / task / deliverable / organization / vendor / client / person / venue / calendar`). `calendar` added in Phase 5.3 (`20260516150002_phase_5_3_saved_views_calendar_check.sql`) so the unified Calendar page can persist per-user visibility toggles via a single implicit row (`name='__calendar_default'`, `view_kind='calendar'`). `vendor` + `client` added in Phase 5.6.5 (`20260520100000_phase_5_6_5_saved_views_global_scope_users_is_owner.sql`) to match the values list pages have been passing since the 5.2.3 organizations split; `organization` stays in the CHECK as a legacy value (no rows of it in production; will be removed in a future cleanup pass).
 - `name` (text, NOT NULL)
 - `view_kind` (text, NOT NULL, CHECK in `list / board / timeline / calendar`)
-- `filter_state` (jsonb, NOT NULL, default `'{}'::jsonb`). Shape: `{ connector: 'AND'|'OR', chips: [{field, op, value}], sort?: {field, dir}, columns?: [string] }`.
-- `is_default` (bool, NOT NULL, default false). One per `(user_id, entity_type)` enforced in app via a transactional "clear then set" upsert; the DB does not carry a unique partial index for it.
+- `filter_state` (jsonb, NOT NULL, default `'{}'::jsonb`). Shape: `{ connector: 'AND'|'OR', chips: [{field, op, value}], sort?: {field, dir}, columns?: [string] }`. For `entity_type='calendar'` the shape is `{ showDeliverables, showHolidays, showSharedOutlook, hiddenProjectIds[] }` instead.
+- `is_default` (bool, NOT NULL, default false). One per `(user_id, entity_type)` enforced in app via a transactional "clear then set" upsert; the DB does not carry a unique partial index for it. After 5.6.5 the same clear-then-set pattern applies to global rows (one default per `(scope='global', entity_type)`), enforced in `createSavedView` when `scope='global'`.
+- `scope` (text, NOT NULL, default `'user'`, CHECK in `user / global`). Added Phase 5.6.5. `user`-scoped rows belong to the row's `user_id`; `global`-scoped rows are visible to every authenticated user and writeable only by owners (`users.is_owner = true`). The new on-mount default-view resolution in HQ Core list pages resolves per-user default first, then falls back to the global default.
 - `created_at`, `updated_at` (timestamptz)
-- RLS: per-user (`USING user_id = auth.uid()`) on SELECT/INSERT/UPDATE/DELETE. Unlike every other HQ Core table this is personal preference data; no cross-user reads.
-- Index: `(user_id, entity_type)` btree.
+- RLS: SELECT allowed when `user_id = auth.uid() OR scope = 'global'`. INSERT/UPDATE/DELETE branched on scope: `scope='user'` requires `user_id = auth.uid()` (unchanged); `scope='global'` requires `(SELECT is_owner FROM public.users WHERE id = auth.uid()) = true`. Rewritten in Phase 5.6.5 from the pre-5.6.5 per-user-only posture.
+- Indexes: `(user_id, entity_type)` btree; `saved_views_scope_default_idx` partial btree on `(scope, entity_type) WHERE scope = 'global' AND is_default = true` (Phase 5.6.5; speeds up the global-default lookup that fires on every list-page mount).
 
 ### outlook_entries (Phase 5.3)
 Admin-only planning surface for speculative engagements that haven't yet converted into a Project. Drives Surface 16 (Outlook) and the admin Home condensed card. Shared entries (`shared_with_team = true`) surface as gray banners on the unified Calendar for all tiers.
@@ -436,11 +441,11 @@ Admin-only planning surface for speculative engagements that haven't yet convert
 - RLS: admin full CRUD; standard + freelance SELECT only on rows with `shared_with_team = true`. Pending users blocked at the route gate (`/outlook` is `<AdminRoute>`).
 - Realtime: NOT in the `supabase_realtime` publication in 5.3. Single-admin edit pattern; the side panel doesn't need multi-admin live-merge. Add later if multi-admin concurrent editing surfaces as a need.
 
-### notes_log (Phase 5.1; widened Phase 5.2.2)
-Polymorphic Internal Notes log shared by Organizations, People, and Venues. The CHECK constraint was widened in Phase 5.2.2 (`20260515140002_phase_5_2_2_venues_extensions.sql`) so the shared `<InternalNotesEditor />` component can serve Venue detail too.
+### notes_log (Phase 5.1; widened Phase 5.2.2 / 5.2.3 / 5.6.4.1)
+Polymorphic Internal Notes log shared by Clients, Vendors, People, Venues, and Outlook Entries. The CHECK constraint was widened in Phase 5.2.2 (`20260515140002_phase_5_2_2_venues_extensions.sql` — adds `'venue'`), Phase 5.2.3.D (`20260516130003_phase_5_2_3_notes_log_check.sql` — splits `'organization'` into `'client'` + `'vendor'`), and Phase 5.6.4.1 (`20260519100000_phase_5_6_4_1_notes_log_outlook_entry.sql` — adds `'outlook_entry'`) so the shared `<InternalNotesEditor />` component can serve Outlook entry detail too.
 
 - `id` (uuid, PK, default `gen_random_uuid()`)
-- `parent_type` (text, NOT NULL, CHECK `IN ('organization', 'person', 'venue')`)
+- `parent_type` (text, NOT NULL, CHECK `IN ('client', 'vendor', 'person', 'venue', 'outlook_entry')`)
 - `parent_id` (uuid, NOT NULL): logical FK to the parent record. Not a real FK because the parent table varies. Tightening to per-type split tables can land later if it ever matters.
 - `body` (text, NOT NULL)
 - `author_id` (uuid, NOT NULL, FK to `users.id`)

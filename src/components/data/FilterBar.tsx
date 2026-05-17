@@ -22,9 +22,20 @@ export type FilterChip = {
   value: string | string[];
 };
 
+/**
+ * Persisted sort state. Optional and orthogonal to chips: the DataTable
+ * may own its own sort internally, but list pages that want sort to
+ * round-trip through saved views (Phase 5.6.5 carry-forward starting
+ * with Projects) read + write here and pass it through DataTable's
+ * controlled props.
+ */
+export type FilterSort = { key: string; dir: "asc" | "desc" };
+
 export type FilterState = {
   connector: "AND" | "OR";
   chips: FilterChip[];
+  /** Optional. Pages that wire DataTable controlled-sort persist here. */
+  sort?: FilterSort | null;
 };
 
 export type FilterLookupOption = {
