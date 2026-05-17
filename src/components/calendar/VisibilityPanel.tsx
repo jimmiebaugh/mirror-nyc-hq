@@ -53,7 +53,7 @@ export function CalendarVisibilityPanel({
             onChange={onSetShowHolidays}
           />
           <ToggleRow
-            label="Shared Outlook"
+            label="Tentative"
             pressed={showSharedOutlook}
             onChange={onSetShowSharedOutlook}
           />
@@ -116,9 +116,8 @@ function ToggleRow({
           color: dim
             ? "hsl(var(--subtle-foreground))"
             : "hsl(var(--foreground))",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          lineHeight: 1.3,
+          wordBreak: "break-word",
         }}
         title={label}
       >

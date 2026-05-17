@@ -42,6 +42,7 @@
     --destructive-foreground: 0 0% 100%;
     --success: 142 76% 64%;               /* #4ade80 — Tier 3, Latest, Final */
     --warn: 38 92% 50%;                   /* #f59e0b — Running, Stalled */
+    --info: 187 71% 43%;                  /* #06B6D4 — Likely (Outlook), Deliverable (My Week) */
 
     --border: 0 0% 16%;                   /* #2a2a2a hairlines */
     --border-strong: 0 0% 23%;            /* #3a3a3a inputs / dividers */
@@ -100,6 +101,7 @@
     --destructive-foreground: 0 0% 100%;
     --success: 142 76% 64%;
     --warn: 38 92% 50%;
+    --info: 187 71% 43%;
 
     --border: 0 0% 16%;
     --border-strong: 0 0% 23%;
@@ -361,13 +363,13 @@
     @apply flex flex-col;
   }
   .hq-brand {
-    height: 56px;
-    @apply flex items-center gap-[10px] px-[18px];
+    height: 64px;
+    @apply flex items-center gap-[14px] px-[18px];
     border-bottom: 1px solid hsl(var(--border));
   }
   .hq-brand-txt {
     font-family: var(--font-display);
-    @apply text-[14px] font-extrabold uppercase tracking-[-0.01em];
+    @apply text-[21px] font-extrabold uppercase tracking-[-0.01em];
   }
   .hq-brand-hq { color: hsl(var(--primary)); }
   .hq-rail-nav {
@@ -385,7 +387,7 @@
     @apply flex items-center gap-[11px];
     padding: 8px 18px;
     font-family: var(--font-mono);
-    @apply text-[11.5px] font-bold;
+    @apply text-[12px] font-bold;
     letter-spacing: 0.04em;
     color: hsl(var(--muted-foreground));
     border-left: 3px solid transparent;
@@ -412,17 +414,17 @@
     @apply flex items-center gap-[9px];
   }
   .hq-rail-av {
-    width: 26px;
-    height: 26px;
+    width: 39px;
+    height: 39px;
     @apply rounded-full flex items-center justify-center;
     background: hsl(var(--surface-raised));
     border: 1px solid hsl(var(--border-strong));
     font-family: var(--font-mono);
-    @apply text-[10px] font-bold;
+    @apply text-[15px] font-bold;
   }
   .hq-rail-who {
     font-family: var(--font-mono);
-    @apply text-[10.5px];
+    @apply text-[16px];
     line-height: 1.35;
   }
   .hq-rail-who b {
@@ -643,6 +645,17 @@
   .hq-pill--destructive { background: rgba(239,68,68,0.10);   border-color: rgba(239,68,68,0.30);   color: hsl(var(--destructive)); }
   .hq-pill--info        { background: rgba(6,182,212,0.12);   border-color: rgba(6,182,212,0.32);   color: #06B6D4; }
   .hq-pill--muted       { background: rgba(255,255,255,0.05); border-color: hsl(var(--border-strong)); color: hsl(var(--muted-foreground)); }
+
+  /* Date-picker calendar icon (native <input type="date">): flip the
+     default white WebKit indicator to Mirror coral (#BE4E44). Targets the
+     icon button only — input border / focus ring stay on their tokens.
+     Firefox doesn't expose a pseudo-element for this, so the icon there
+     stays browser default. Filter chain computed for #BE4E44; tune if it
+     drifts visually. Phase 5.6.4 spec § 6.B. */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(45%) sepia(72%) saturate(485%) hue-rotate(326deg) brightness(91%) contrast(86%);
+    cursor: pointer;
+  }
 
   /* Activity row */
   .hq-activity-row {
@@ -1325,10 +1338,10 @@
   .ol-ev .en{font-weight:600;color:hsl(var(--foreground));display:block;}
   .ol-ev .em{font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--subtle-foreground));margin-top:2px;display:block;}
   /* Confidence colors per LOCKED DECISIONS § 4 (overrides wireframe CSS). */
-  .ol-rad{background:rgba(245,158,11,.10);border-color:hsl(var(--warn));}
-  .ol-like{background:rgba(6,182,212,.10);border-color:hsl(var(--info));}
-  .ol-conf{background:rgba(74,222,128,.10);border-color:hsl(var(--success));}
-  .ol-comp{background:rgba(255,255,255,.04);border-color:hsl(var(--border-strong));}
+  .ol-rad{background:rgba(245,158,11,.15);border-color:hsl(var(--warn));}
+  .ol-like{background:rgba(6,182,212,.15);border-color:hsl(var(--info));}
+  .ol-conf{background:rgba(74,222,128,.15);border-color:hsl(var(--success));}
+  .ol-comp{background:rgba(255,255,255,.06);border-color:hsl(var(--border-strong));}
   .ol-legend{display:flex;gap:16px;flex-wrap:wrap;}
   .ol-legend span{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--muted-foreground));}
   .ol-legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}

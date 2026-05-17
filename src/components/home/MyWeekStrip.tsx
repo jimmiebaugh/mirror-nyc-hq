@@ -21,6 +21,7 @@ type WeekEntry = {
   projectName: string;
   clientName: string | null;
   milestone: "Live" | "Removal" | "Deliverable";
+  displayLabel: string;
 };
 
 type Token = "success" | "warn" | "info" | "muted";
@@ -84,6 +85,7 @@ async function loadEntries(userId: string, mondayIso: string, sundayIso: string)
         projectName: p.name,
         clientName,
         milestone: "Live",
+        displayLabel: "Live",
       });
     }
     if (p.live_dates_end && p.live_dates_end >= mondayIso && p.live_dates_end <= sundayIso) {
@@ -93,6 +95,7 @@ async function loadEntries(userId: string, mondayIso: string, sundayIso: string)
         projectName: p.name,
         clientName,
         milestone: "Removal",
+        displayLabel: "Removal",
       });
     }
   }
@@ -109,6 +112,7 @@ async function loadEntries(userId: string, mondayIso: string, sundayIso: string)
       projectName: d.project?.name ?? d.title,
       clientName: d.project?.client?.name ?? null,
       milestone: "Deliverable",
+      displayLabel: d.title,
     });
   }
   out.sort((a, b) => a.dateIso.localeCompare(b.dateIso));
@@ -157,7 +161,7 @@ export function MyWeekStrip({ userId }: { userId: string | undefined }) {
               <div className="hq-weekcard-nm">
                 {e.clientName ? `${e.clientName} · ${e.projectName}` : e.projectName}
               </div>
-              <div className="hq-weekcard-mt">{e.milestone}</div>
+              <div className="hq-weekcard-mt">{e.displayLabel}</div>
             </div>
           );
         })}
