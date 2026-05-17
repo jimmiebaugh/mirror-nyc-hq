@@ -23,6 +23,7 @@ const TOKEN_COLOR: Record<StatusToken, string> = {
   warn: "hsl(var(--warn))",
   destructive: "hsl(var(--destructive))",
   muted: "hsl(var(--border-strong))",
+  purple: "#B57BF5",
 };
 
 export type BoardColumn<T extends { id: string }> = {

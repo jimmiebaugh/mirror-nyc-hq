@@ -47,7 +47,6 @@ const SURFACE_ROUTES: Record<Surface, Partial<Record<ViewKind, string>>> = {
   tasks: {
     list: "/tasks",
     board: "/tasks/board",
-    calendar: "/calendar?source=tasks",
   },
   deliverables: {
     list: "/deliverables/list",

@@ -40,7 +40,7 @@ const FILTER_FIELDS = [
   { key: "category", label: "Category", type: "text" as const },
   { key: "city", label: "City", type: "text" as const },
   { key: "clientName", label: "Client", type: "text" as const },
-  { key: "leadName", label: "Lead", type: "text" as const },
+  { key: "leadName", label: "Account", type: "text" as const },
 ];
 
 const BOARD_ROWS: { label: string; statuses: ProjectStatus[] }[] = [
@@ -235,7 +235,9 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "jobNumber",
                 label: "Job #",
-                width: 76,
+                width: 55,
+                noRightDivider: true,
+                headerStyle: { paddingLeft: 14, paddingRight: 2 },
                 sort: (a, b) => (a.jobNumber ?? "").localeCompare(b.jobNumber ?? ""),
                 render: (r) => (
                   <span className="mono muted">{r.jobNumber ?? "-"}</span>
@@ -259,7 +261,11 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                           <Link
                             to={`/clients/${r.clientId}`}
                             className="sub"
-                            style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                            style={{
+                              color: "rgba(190,78,68,0.85)",
+                              display: "block",
+                              fontSize: 12,
+                            }}
                             state={{ from: fromState }}
                             onClick={(e) => e.stopPropagation()}
                           >
@@ -268,7 +274,11 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                         ) : (
                           <span
                             className="sub"
-                            style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                            style={{
+                              color: "rgba(190,78,68,0.85)",
+                              display: "block",
+                              fontSize: 12,
+                            }}
                           >
                             {clientLabel}
                           </span>
@@ -277,7 +287,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                       <Link
                         to={`/projects/${r.id}`}
                         className="lead"
-                        style={{ display: "block" }}
+                        style={{ display: "block", fontSize: 13.5 }}
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -290,18 +300,22 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "category",
                 label: "Category",
+                width: 120,
+                align: "c",
                 sort: (a, b) => (a.category ?? "").localeCompare(b.category ?? ""),
                 render: (r) => r.category ?? "-",
               },
               {
                 key: "city",
                 label: "City",
+                align: "c",
                 sort: (a, b) => (a.city ?? "").localeCompare(b.city ?? ""),
                 render: (r) => r.city ?? "-",
               },
               {
                 key: "status",
                 label: "Status",
+                align: "c",
                 width: 96,
                 sort: (a, b) => a.status.localeCompare(b.status),
                 render: (r) => (
@@ -350,18 +364,36 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                   ),
               },
               {
-                key: "leadName",
-                label: "Lead",
-                width: 140,
-                sort: (a, b) => (a.leadName ?? "").localeCompare(b.leadName ?? ""),
-                render: (r) => r.leadName ?? "-",
-              },
-              {
-                key: "designerName",
-                label: "Design",
-                width: 140,
-                sort: (a, b) => (a.designerName ?? "").localeCompare(b.designerName ?? ""),
-                render: (r) => r.designerName ?? "-",
+                key: "leadDesignerNames",
+                label: "Account / Design Leads",
+                width: 150,
+                sort: (a, b) =>
+                  (a.leadNames[0] ?? "").localeCompare(b.leadNames[0] ?? ""),
+                render: (r) => {
+                  // 5.7.4 smoke round 2: show first names only; both rows
+                  // share the same text style; hairline divider is 60% of
+                  // cell width with the left edge flush at the cell start.
+                  const firstNamesOf = (names: string[]) =>
+                    names
+                      .map((n) => n.trim().split(/\s+/)[0])
+                      .filter(Boolean);
+                  const leads = firstNamesOf(r.leadNames);
+                  const designers = firstNamesOf(r.designerNames);
+                  return (
+                    <div style={{ fontSize: 12, lineHeight: 1.35 }}>
+                      <div>{leads.length ? leads.join(" · ") : "-"}</div>
+                      <div
+                        style={{
+                          height: 1,
+                          width: "75%",
+                          background: "hsl(var(--border))",
+                          margin: "4px 0",
+                        }}
+                      />
+                      <div>{designers.length ? designers.join(" · ") : "-"}</div>
+                    </div>
+                  );
+                },
               },
             ]}
           />

@@ -651,6 +651,7 @@
   .hq-pill--destructive { background: rgba(239,68,68,0.10);   border-color: rgba(239,68,68,0.30);   color: hsl(var(--destructive)); }
   .hq-pill--info        { background: rgba(6,182,212,0.12);   border-color: rgba(6,182,212,0.32);   color: #06B6D4; }
   .hq-pill--muted       { background: rgba(255,255,255,0.05); border-color: hsl(var(--border-strong)); color: hsl(var(--muted-foreground)); }
+  .hq-pill--purple      { background: rgba(168,85,247,0.13);  border-color: rgba(168,85,247,0.36);  color: #B57BF5; }
 
   /* Date-picker calendar icon (native <input type="date">): flip the
      default white WebKit indicator to Mirror coral (#BE4E44). Targets the
@@ -1164,6 +1165,10 @@
   .tbl thead th{font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--subtle-foreground));text-align:left;padding:10px 14px;background:hsl(var(--surface-alt));border-bottom:1px solid hsl(var(--border));}
   .tbl thead th.r{text-align:right;}
   .tbl thead th.c{text-align:center;}
+  /* Phase 5.7.4 follow-up: vertical cell dividers at 75% row height (Jimmie smoke round 2 — was 90%/border). Pseudo-element keeps it independent of border-collapse + lets it center inside the cell without spanning the row's top/bottom borders. Cell can opt out via `.tbl-cell-nodivider`. */
+  .tbl thead th, .tbl tbody td{position:relative;}
+  .tbl thead th:not(:last-child)::after, .tbl tbody td:not(:last-child)::after{content:"";position:absolute;right:0;top:12.5%;height:75%;width:1px;background:rgba(255,255,255,0.12);}
+  .tbl thead th.tbl-cell-nodivider::after, .tbl tbody td.tbl-cell-nodivider::after{display:none;}
   .tbl tbody td{padding:12px 14px;border-bottom:1px solid hsl(var(--border));font-size:13px;vertical-align:middle;}
   .tbl tbody tr{border-left:3px solid transparent;}
   .tbl tbody tr:hover{background:rgba(255,255,255,.025);}
@@ -1177,11 +1182,13 @@
   .rb-info{border-left-color:#06B6D4!important;}
   .rb-destructive{border-left-color:hsl(var(--destructive))!important;}
   .rb-muted{border-left-color:hsl(var(--border-strong))!important;}
+  .rb-purple{border-left-color:#B57BF5!important;}
   .tbl--flat tbody tr{border-left-color:transparent!important;}
   .checkbox{width:15px;height:15px;border:1px solid hsl(var(--border-strong));border-radius:3px;background:hsl(var(--surface-alt));display:inline-flex;align-items:center;justify-content:center;color:#000;cursor:pointer;}
   .checkbox--on{background:hsl(var(--primary));border-color:hsl(var(--primary));}
   .checkbox .ic{width:11px;height:11px;stroke-width:3;}
-  .tbl-divider td{background:hsl(var(--surface));padding:7px 14px;font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:hsl(var(--subtle-foreground));border-bottom:1px solid hsl(var(--border));}
+  /* Phase 5.7.4 smoke round 2: divider row mirrors thead chrome (surface-alt fill + 11px / 10px padding) so the two-tier "Done · N hidden" footer reads as a structural section header, not floating mid-table. */
+  .tbl-divider td{background:hsl(var(--surface-alt));padding:10px 14px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:hsl(var(--subtle-foreground));border-top:1px solid hsl(var(--border));border-bottom:1px solid hsl(var(--border));}
 
   /* View switcher (icon-segmented). Active = .on. */
   .viewswitch{display:inline-flex;border:1px solid hsl(var(--border-strong));border-radius:var(--radius);overflow:hidden;}
@@ -1208,6 +1215,11 @@
   .fchip--btn span{padding:0 12px;color:hsl(var(--muted-foreground));}
   .fchip--btn.fchip--active{border-color:currentColor;background:color-mix(in srgb, currentColor 12%, transparent);}
   .fchip--btn.fchip--active span{color:currentColor;font-weight:700;}
+  /* Phase 5.7.4 smoke round 2: +10% size modifier for the PeopleList
+     Affiliation radio row. Bumps height 30->33 and span horizontal
+     padding 12->13 / font 11->12. */
+  .fchip--lg{height:33px;}
+  .fchip--lg span{padding:0 13px;font-size:12px;}
   .andor{font-family:var(--font-mono);font-size:10px;font-weight:700;color:hsl(var(--primary));letter-spacing:.06em;padding:0 2px;cursor:pointer;}
 
   /* Inline-edit primitive (Phase 5.6.3 detail-page inline edit). Read mode

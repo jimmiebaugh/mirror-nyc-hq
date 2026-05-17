@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Shared loaders + types for People (Phase 5.2.2 § 5.B; reshaped in
- * Phase 5.2.3 § 4.C; venue_names added in Phase 5.2 cleanup § 4.A.4).
+ * Phase 5.2.3 § 4.C; venues added in Phase 5.7.4 § 4.C).
  *
  * 5.2.3 changes:
  *   - `affiliations` enum array dropped (locked Q4: at most one org
@@ -14,10 +14,11 @@ import { supabase } from "@/integrations/supabase/client";
  *     `venue_contact_people` so the List can resolve "Venue"
  *     type without an extra round trip.
  *
- * 5.2 cleanup change:
- *   - `venue_names: string[]` added so PeopleList's Organization cell
- *     can show the single venue name (or "{N} venues") for
- *     venue-contact people who have no client_id / vendor_id.
+ * 5.7.4 change:
+ *   - `venues: { id, name }[]` (replaces `venue_names: string[]`) so the
+ *     Organization cell can hyperlink the single venue to its detail
+ *     page. Order is by encounter; "{N} venues" cell render still
+ *     applies when length > 1.
  *
  * Embed uses constraint-named FKs per the 5.2.2 PGRST201 lesson; without
  * them PostgREST throws when more than one FK points at the same target
@@ -42,7 +43,7 @@ export type PersonListRow = {
   vendor_id: string | null;
   vendor_name: string | null;
   is_venue_contact: boolean;
-  venue_names: string[];
+  venues: { id: string; name: string }[];
   role_title: string | null;
   email: string | null;
   phone: string | null;
@@ -71,19 +72,19 @@ export async function loadPeople(): Promise<PersonListRow[]> {
     return [];
   }
 
-  // Build person_id -> venue names map (ordered by encounter; the source
+  // Build person_id -> venues map (ordered by encounter; the source
   // venue_contact_people join order is non-deterministic but stable enough
   // for the "{N} venues" cell). is_venue_contact derives from the same map.
-  const venueNamesByPerson = new Map<string, string[]>();
+  const venuesByPerson = new Map<string, { id: string; name: string }[]>();
   for (const r of venueContactsRes.data ?? []) {
     const row = r as unknown as {
       person_id: string | null;
       venue: { id: string; name: string | null } | null;
     };
-    if (!row.person_id) continue;
-    const list = venueNamesByPerson.get(row.person_id) ?? [];
-    if (row.venue?.name) list.push(row.venue.name);
-    venueNamesByPerson.set(row.person_id, list);
+    if (!row.person_id || !row.venue?.id || !row.venue?.name) continue;
+    const list = venuesByPerson.get(row.person_id) ?? [];
+    list.push({ id: row.venue.id, name: row.venue.name });
+    venuesByPerson.set(row.person_id, list);
   }
 
   return (peopleRes.data ?? []).map((p) => {
@@ -100,7 +101,7 @@ export async function loadPeople(): Promise<PersonListRow[]> {
       client: { id: string; name: string | null } | null;
       vendor: { id: string; name: string | null } | null;
     };
-    const venueNames = venueNamesByPerson.get(row.id) ?? [];
+    const venues = venuesByPerson.get(row.id) ?? [];
     return {
       id: row.id,
       full_name: row.full_name,
@@ -109,8 +110,8 @@ export async function loadPeople(): Promise<PersonListRow[]> {
       client_name: row.client?.name ?? null,
       vendor_id: row.vendor_id,
       vendor_name: row.vendor?.name ?? null,
-      is_venue_contact: venueNames.length > 0,
-      venue_names: venueNames,
+      is_venue_contact: venues.length > 0,
+      venues,
       role_title: row.role_title,
       email: row.email,
       phone: row.phone,

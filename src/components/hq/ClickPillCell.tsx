@@ -42,6 +42,8 @@ function tokenColor(token: StatusToken): string {
       return "hsl(var(--warn))";
     case "destructive":
       return "hsl(var(--destructive))";
+    case "purple":
+      return "#B57BF5";
     case "muted":
     default:
       return "hsl(var(--muted-foreground))";

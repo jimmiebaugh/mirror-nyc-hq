@@ -55,6 +55,15 @@ export type ProjectListRow = {
   nextDeliverableDueIso: string | null;
   leadName: string | null;
   designerName: string | null;
+  /**
+   * Phase 5.7.4 smoke followup: full-name arrays of every Account Lead +
+   * Design Lead on the project. Powers the new combined
+   * "Account / Design Leads" column on the list. `leadName` /
+   * `designerName` (single first-name) kept for filter + sort + board
+   * card compatibility.
+   */
+  leadNames: string[];
+  designerNames: string[];
 };
 
 function firstName(name: string | null | undefined, email: string | null | undefined): string | null {
@@ -135,6 +144,12 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
       nextDeliverableDueIso: nextDeliverable?.due_date ?? null,
       leadName: am[0] ? firstName(am[0]?.full_name, am[0]?.email) : null,
       designerName: ds[0] ? firstName(ds[0]?.full_name, ds[0]?.email) : null,
+      leadNames: am
+        .map((u) => u?.full_name?.trim() || u?.email?.split("@")[0] || "")
+        .filter(Boolean),
+      designerNames: ds
+        .map((u) => u?.full_name?.trim() || u?.email?.split("@")[0] || "")
+        .filter(Boolean),
     };
   });
 }

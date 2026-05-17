@@ -159,16 +159,11 @@ export default function TeamList() {
         </div>
       </div>
 
-      <div className="row-c wrap" style={{ alignItems: "center" }}>
-        <div className="viewswitch">
-          <button type="button" className="on" disabled>List</button>
-        </div>
-        <FilterBar
-          state={filterState}
-          onChange={setFilterState}
-          fields={TIER_FILTER_FIELDS(departments)}
-        />
-      </div>
+      <FilterBar
+        state={filterState}
+        onChange={setFilterState}
+        fields={TIER_FILTER_FIELDS(departments)}
+      />
 
       {loading ? (
         <div className="empty"><p>Loading team...</p></div>

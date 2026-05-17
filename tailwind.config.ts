@@ -15,7 +15,7 @@ export default {
     // Pills (Phase 5.2 wireframe-canonical + Phase 5.1 hq- prefix variants)
     "pill", "pill-sm", "pill-lg",
     "p-warn", "p-success", "p-info", "p-destructive", "p-primary", "p-muted", "p-purple",
-    "hq-pill", "hq-pill--warn", "hq-pill--success", "hq-pill--info", "hq-pill--destructive", "hq-pill--muted",
+    "hq-pill", "hq-pill--warn", "hq-pill--success", "hq-pill--info", "hq-pill--destructive", "hq-pill--muted", "hq-pill--purple",
     // Calendar event banner kind classes (selectors are `.cal-ev.<kind>`)
     "cal-ev", "in", "live", "rem", "del",
     // Phase 5.3 Calendar additions: shared Outlook + Mirror Holiday banners
@@ -24,7 +24,7 @@ export default {
     // (selectors are `.ol-ev.<kind>` and `ol-${kind}` via confidenceClass())
     "ol-ev", "ol-rad", "ol-like", "ol-conf", "ol-comp",
     // Row-border tokens (`.tbl tr[.rb-<token>]`, `.bcard[.rb-<token>]`)
-    "rb-warn", "rb-success", "rb-info", "rb-destructive", "rb-muted",
+    "rb-warn", "rb-success", "rb-info", "rb-destructive", "rb-muted", "rb-purple",
     // Board + timeline elements referenced through dynamic JSX
     "bcard", "bcol", "tl-bar", "tl-name",
     // Phase 5.4 wiki + credentials + toggle classes (constructed dynamically

@@ -71,6 +71,8 @@ export default function TaskEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -209,6 +211,27 @@ export default function TaskEdit() {
       setInitial(form);
       toast({ title: "Saved" });
     }
+  };
+
+  // Phase 5.7.4 § 4.F: hard delete. No FKs reference tasks; `blocked_by`
+  // is a uuid[] on sibling tasks with no FK, so deleted ids orphan
+  // cosmetically. Notes_log rows are polymorphic and survive the delete.
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("tasks").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete task",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted task" });
+    navigate("/tasks");
   };
 
   if (loading) {
@@ -353,6 +376,8 @@ export default function TaskEdit() {
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create task" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -367,6 +392,31 @@ export default function TaskEdit() {
             <AlertDialogCancel>Stay</AlertDialogCancel>
             <AlertDialogAction onClick={() => navigate(isCreate ? "/tasks" : `/tasks/${id}`)}>
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The task and its notes will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

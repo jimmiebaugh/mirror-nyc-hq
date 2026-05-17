@@ -12,7 +12,7 @@
  * `hqPillClass(status)` for the pill wrapper.
  */
 
-export type StatusToken = "info" | "success" | "warn" | "destructive" | "muted";
+export type StatusToken = "info" | "success" | "warn" | "destructive" | "muted" | "purple";
 
 const PROJECT_STATUS_TOKENS: Record<string, StatusToken> = {
   Approved: "success",
@@ -41,8 +41,8 @@ export function hqPillClass(status: string | null | undefined) {
 }
 
 const TASK_STATUS_TOKENS: Record<string, StatusToken> = {
-  "To Do": "muted",
-  Doing: "info",
+  "To Do": "warn",
+  Doing: "purple",
   Blocked: "destructive",
   Done: "success",
 };

@@ -264,7 +264,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
       </div>
 
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <ViewSwitch active={view} available={["list", "board", "calendar"]} surface="tasks" />
+        <ViewSwitch active={view} available={["list", "board"]} surface="tasks" />
         <SavedViewsDropdown
           entityType="task"
           activeName={activeViewName}
@@ -386,12 +386,18 @@ export default function TasksList({ view }: { view: ViewKind }) {
             {
               key: "assigneeName",
               label: "Assignee",
-              sort: (a, b) => a.assigneeName.localeCompare(b.assigneeName),
-              render: (r) => r.assigneeName || "-",
+              // 5.7.4 smoke followup: sort by displayed first name so sort
+              // order matches what the user sees in the cell.
+              sort: (a, b) =>
+                (a.assigneeName.split(" ")[0] ?? "").localeCompare(
+                  b.assigneeName.split(" ")[0] ?? "",
+                ),
+              render: (r) => (r.assigneeName ? r.assigneeName.split(" ")[0] : "-"),
             },
             {
               key: "status",
               label: "Status",
+              align: "c",
               sort: (a, b) => a.status.localeCompare(b.status),
               render: (r) => (
                 <ClickPillCell
@@ -412,6 +418,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             {
               key: "priority",
               label: "Priority",
+              align: "c",
               sort: (a, b) => a.priority.localeCompare(b.priority),
               render: (r) => (
                 <ClickPillCell

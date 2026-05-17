@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
   IconChevronDown,
   IconChevronRight,
@@ -25,6 +25,19 @@ export type Column<T> = {
   width?: string | number;
   /** Sort comparator (negative = a before b). Required to enable sort. */
   sort?: (a: T, b: T) => number;
+  /**
+   * Phase 5.7.4 smoke round 2: suppress the vertical divider on this
+   * cell's right edge. Used by PeopleList Affiliation so the pill cell
+   * sits flush against Name without a separator line.
+   */
+  noRightDivider?: boolean;
+  /**
+   * Phase 5.7.4 smoke round 5: optional inline style applied to the
+   * <th> only (not the body cells). Used by ProjectsList "Job #" to
+   * reduce the header padding so the label fits on one line without
+   * touching cell padding.
+   */
+  headerStyle?: CSSProperties;
 };
 
 export type SortState = { key: string; dir: "asc" | "desc" } | null;
@@ -111,15 +124,20 @@ export function DataTable<T extends { id: string }>({
         }}
         onClick={() => onRowClick?.(row)}
       >
-        {columns.map((c) => (
-          <td
-            key={c.key}
-            className={c.align === "r" ? "r" : c.align === "c" ? "c" : ""}
-            style={c.width ? { width: c.width } : undefined}
-          >
-            {c.render(row)}
-          </td>
-        ))}
+        {columns.map((c) => {
+          const alignCls = c.align === "r" ? "r" : c.align === "c" ? "c" : "";
+          const dividerCls = c.noRightDivider ? "tbl-cell-nodivider" : "";
+          const className = [alignCls, dividerCls].filter(Boolean).join(" ") || undefined;
+          return (
+            <td
+              key={c.key}
+              className={className}
+              style={c.width ? { width: c.width } : undefined}
+            >
+              {c.render(row)}
+            </td>
+          );
+        })}
       </tr>
     );
   };
@@ -150,14 +168,18 @@ export function DataTable<T extends { id: string }>({
           <tr>
             {columns.map((c) => {
               const isSorted = sort?.key === c.key;
+              const alignCls = c.align === "r" ? "r" : c.align === "c" ? "c" : "";
+              const dividerCls = c.noRightDivider ? "tbl-cell-nodivider" : "";
+              const className = [alignCls, dividerCls].filter(Boolean).join(" ") || undefined;
               return (
                 <th
                   key={c.key}
-                  className={c.align === "r" ? "r" : c.align === "c" ? "c" : ""}
+                  className={className}
                   style={{
                     width: c.width,
                     cursor: c.sort ? "pointer" : undefined,
                     color: isSorted ? "hsl(var(--foreground))" : undefined,
+                    ...c.headerStyle,
                   }}
                   onClick={() => c.sort && toggleHeaderSort(c.key)}
                 >
@@ -200,9 +222,9 @@ export function DataTable<T extends { id: string }>({
                     onClick={() => setCollapsed((v) => !v)}
                   >
                     {collapsed ? (
-                      <IconChevronRight className="ic" style={{ width: 10, height: 10 }} />
+                      <IconChevronRight className="ic" style={{ width: 16, height: 16 }} />
                     ) : (
-                      <IconChevronDown className="ic" style={{ width: 10, height: 10 }} />
+                      <IconChevronDown className="ic" style={{ width: 16, height: 16 }} />
                     )}
                     {twoTier.dividerLabel(terminal.length)}
                   </button>
