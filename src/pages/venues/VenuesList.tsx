@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { FilterBar, emptyFilterState, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { DataTable } from "@/components/data/DataTable";
@@ -26,8 +27,12 @@ import {
  * approximations only.
  */
 
+const FROM_LABEL = "Venues";
+
 export default function VenuesList() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<VenueListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
@@ -123,7 +128,7 @@ export default function VenuesList() {
         <>
           <DataTable<VenueListRow>
             rows={filtered}
-            onRowClick={(r) => navigate(`/venues/${r.id}`)}
+            onRowClick={(r) => navigate(`/venues/${r.id}`, { state: { from: fromState } })}
             empty={{
               message: "No venues match your filters.",
               ctaLabel: "+ New Venue",

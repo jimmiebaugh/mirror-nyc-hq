@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
@@ -51,8 +52,12 @@ function priorityTokenClass(p: TaskPriority): string {
   return `pill pill-sm p-${taskPriorityToken(p)}`;
 }
 
+const FROM_LABEL = "Tasks";
+
 export default function TasksList({ view }: { view: ViewKind }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const { user } = useAuth();
   const [rows, setRows] = useState<TaskListRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -278,7 +283,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
           rows={filtered}
           flat
           rowBorderToken={(r) => taskStatusToken(r.status)}
-          onRowClick={(r) => navigate(`/tasks/${r.id}`)}
+          onRowClick={(r) => navigate(`/tasks/${r.id}`, { state: { from: fromState } })}
           selection={{ selectedIds: selected, onChange: setSelected }}
           twoTier={{
             isTerminal: (r) => r.status === "Done",
@@ -312,6 +317,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
                         to={`/clients/${r.project.client.id}`}
                         className="sub"
                         style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                        state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {r.project.client.name}
@@ -321,6 +327,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
                       to={`/projects/${r.project.id}`}
                       className="lead"
                       style={{ display: "block" }}
+                      state={{ from: fromState }}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {r.project.name}
@@ -438,7 +445,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             },
           ]}
           onCardMove={handleBoardMove}
-          onCardClick={(r) => navigate(`/tasks/${r.id}`)}
+          onCardClick={(r) => navigate(`/tasks/${r.id}`, { state: { from: fromState } })}
           renderCard={(r) => (
             <>
               <div className="row between" style={{ alignItems: "flex-start", gap: 8 }}>

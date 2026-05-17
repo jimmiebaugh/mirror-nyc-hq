@@ -11,6 +11,7 @@ import { StarRating } from "@/components/data/StarRating";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { isInternalPartner } from "@/lib/vendors/queries";
 import { OverflowList, type OverflowItem } from "@/components/hq/OverflowList";
+import { useBackHref } from "@/lib/hq/useBackHref";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -68,6 +69,7 @@ export default function VendorDetail() {
   const [projects, setProjects] = useState<ProjectLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [ratingSaving, setRatingSaving] = useState(false);
+  const back = useBackHref({ to: "/vendors", label: "Vendors" });
 
   useEffect(() => {
     if (!id) return;
@@ -172,8 +174,8 @@ export default function VendorDetail() {
   return (
     <div className="stack-6">
       <div className="stack-3">
-        <Link to="/vendors" className="crumb">
-          <IconArrowLeft className="ic ic-sm" /> Back to Vendors
+        <Link to={back.to} className="crumb">
+          <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
         <div className="row between" style={{ alignItems: "flex-start" }}>
           <div>

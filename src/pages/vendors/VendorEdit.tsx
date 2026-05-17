@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
@@ -69,10 +69,9 @@ const EMPTY: FormState = {
   internal_rating: null,
 };
 
-type VendorProject = {
+type ProjectOption = {
   id: string;
-  name: string;
-  job_number: string | null;
+  label: string;
 };
 
 export default function VendorEdit() {
@@ -81,7 +80,9 @@ export default function VendorEdit() {
   const navigate = useNavigate();
   const [form, setForm] = useState<FormState>(EMPTY);
   const [initial, setInitial] = useState<FormState>(EMPTY);
-  const [projects, setProjects] = useState<VendorProject[]>([]);
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
+  const [projectIds, setProjectIds] = useState<string[]>([]);
+  const [initialProjectIds, setInitialProjectIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
@@ -92,27 +93,48 @@ export default function VendorEdit() {
   });
 
   useEffect(() => {
-    if (isCreate) return;
     let active = true;
     (async () => {
-      const [vendorRes, projectsRes] = await Promise.all([
+      // Project picker options load on both create + edit so a freshly
+      // created vendor can be linked to projects immediately after save.
+      // (Edit mode also pulls the existing project_vendors join rows.)
+      const [vendorRes, projectsAllRes, joinRes] = await Promise.all([
+        isCreate
+          ? Promise.resolve({ data: null, error: null })
+          : supabase
+              .from("vendors")
+              .select(
+                "name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating",
+              )
+              .eq("id", id)
+              .single(),
         supabase
-          .from("vendors")
-          .select(
-            "name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating",
-          )
-          .eq("id", id)
-          .single(),
-        supabase
-          .from("project_vendors")
-          .select(
-            "created_at, project:projects!project_vendors_project_id_fkey(id, name, job_number)",
-          )
-          .eq("vendor_id", id)
-          .order("created_at", { ascending: false }),
+          .from("projects")
+          .select("id, name, job_number")
+          .is("archived_at", null)
+          .order("name", { ascending: true }),
+        isCreate
+          ? Promise.resolve({ data: [] as { project_id: string }[] })
+          : supabase
+              .from("project_vendors")
+              .select("project_id")
+              .eq("vendor_id", id),
       ]);
       if (!active) return;
-      if (vendorRes.error || !vendorRes.data) {
+      type ProjectRow = { id: string; name: string | null; job_number: string | null };
+      setProjectOptions(
+        ((projectsAllRes.data ?? []) as ProjectRow[]).map((p) => ({
+          id: p.id,
+          label: p.job_number ? `#${p.job_number} ${p.name ?? "Untitled"}` : p.name ?? "Untitled",
+        })),
+      );
+      const linkedIds = ((joinRes.data ?? []) as { project_id: string }[]).map(
+        (r) => r.project_id,
+      );
+      setProjectIds(linkedIds);
+      setInitialProjectIds(linkedIds);
+
+      if (isCreate || !vendorRes || vendorRes.error || !vendorRes.data) {
         setLoading(false);
         return;
       }
@@ -146,20 +168,6 @@ export default function VendorEdit() {
       };
       setForm(next);
       setInitial(next);
-      const projs: VendorProject[] = [];
-      for (const r of projectsRes.data ?? []) {
-        const pr = r as unknown as {
-          project: { id: string; name: string | null; job_number: string | null } | null;
-        };
-        if (pr.project) {
-          projs.push({
-            id: pr.project.id,
-            name: pr.project.name ?? "Untitled",
-            job_number: pr.project.job_number,
-          });
-        }
-      }
-      setProjects(projs);
       setLoading(false);
     })();
     return () => {
@@ -168,9 +176,14 @@ export default function VendorEdit() {
   }, [id, isCreate]);
 
   const dirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(initial),
-    [form, initial],
+    () =>
+      JSON.stringify(form) !== JSON.stringify(initial) ||
+      JSON.stringify([...projectIds].sort()) !==
+        JSON.stringify([...initialProjectIds].sort()),
+    [form, initial, projectIds, initialProjectIds],
   );
+
+  const loadProjectOptions = useCallback(async () => projectOptions, [projectOptions]);
 
   const onCancel = () => {
     if (!dirty) {
@@ -214,6 +227,7 @@ export default function VendorEdit() {
       tags: form.tags,
       internal_rating: form.internal_rating,
     };
+    let vendorId = id ?? null;
     if (isCreate) {
       const { data: userRes } = await supabase.auth.getUser();
       const created_by = userRes.user?.id;
@@ -227,24 +241,49 @@ export default function VendorEdit() {
         .insert({ ...payload, created_by })
         .select("id")
         .single();
-      setSaving(false);
-      if (error) {
-        toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      if (error || !data) {
+        setSaving(false);
+        toast({ title: "Save failed", description: error?.message, variant: "destructive" });
         return;
       }
-      toast({ title: "Vendor created" });
-      navigate(`/vendors/${data.id}`);
+      vendorId = data.id;
     } else {
       const { error } = await supabase
         .from("vendors")
         .update(payload)
         .eq("id", id);
-      setSaving(false);
       if (error) {
+        setSaving(false);
         toast({ title: "Save failed", description: error.message, variant: "destructive" });
         return;
       }
+    }
+
+    // Diff project_vendors join. Insert added pairs, delete removed pairs.
+    if (vendorId) {
+      const pvAdd = projectIds.filter((p) => !initialProjectIds.includes(p));
+      const pvRemove = initialProjectIds.filter((p) => !projectIds.includes(p));
+      for (const projectId of pvAdd) {
+        await supabase
+          .from("project_vendors")
+          .insert({ project_id: projectId, vendor_id: vendorId });
+      }
+      for (const projectId of pvRemove) {
+        await supabase
+          .from("project_vendors")
+          .delete()
+          .eq("project_id", projectId)
+          .eq("vendor_id", vendorId);
+      }
+    }
+
+    setSaving(false);
+    if (isCreate && vendorId) {
+      toast({ title: "Vendor created" });
+      navigate(`/vendors/${vendorId}`);
+    } else {
       setInitial(form);
+      setInitialProjectIds(projectIds);
       toast({ title: "Saved" });
     }
   };
@@ -437,41 +476,27 @@ export default function VendorEdit() {
         </div>
       </section>
 
-      {!isCreate ? (
-        <section className="card">
-          <div className="card-pad stack-4">
-            <div className="block-lbl">
-              <span className="label-section">Projects</span>
-            </div>
-            <p className="cap" style={{ lineHeight: 1.5 }}>
-              Projects this vendor has worked on.
-            </p>
-            {projects.length === 0 ? (
-              <div className="empty">
-                <p>
-                  No projects linked yet. Vendors get linked from a project's
-                  edit screen.
-                </p>
-              </div>
-            ) : (
-              <ul className="stack-2" style={{ listStyle: "none", padding: 0 }}>
-                {projects.map((p) => (
-                  <li key={p.id}>
-                    <Link to={`/projects/${p.id}`} className="tlink">
-                      {p.job_number ? (
-                        <span className="mono muted" style={{ marginRight: 8 }}>
-                          #{p.job_number}
-                        </span>
-                      ) : null}
-                      {p.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+      <section className="card">
+        <div className="card-pad stack-4">
+          <div className="block-lbl">
+            <span className="label-section">Projects</span>
           </div>
-        </section>
-      ) : null}
+          <p className="cap" style={{ lineHeight: 1.5 }}>
+            Projects this vendor has worked on. Add or remove links here, or
+            from the project's edit page.
+          </p>
+          <FormField label="Linked Projects">
+            <RecordCombobox
+              multi
+              source={{ kind: "record", loadOptions: loadProjectOptions }}
+              multiValue={projectIds}
+              onMultiChange={setProjectIds}
+              entityLabel="Project"
+              placeholder="Add project..."
+            />
+          </FormField>
+        </div>
+      </section>
 
       <StickySaveBar
         dirty={dirty}

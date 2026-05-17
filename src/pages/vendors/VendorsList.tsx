@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { FilterBar, emptyFilterState, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { DataTable } from "@/components/data/DataTable";
@@ -38,8 +39,12 @@ const VENDOR_FILTER_FIELDS: FilterFieldDef[] = [
   { key: "tags", label: "Tags", type: "text" },
 ];
 
+const FROM_LABEL = "Vendors";
+
 export default function VendorsList() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<VendorListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
@@ -118,7 +123,7 @@ export default function VendorsList() {
           <DataTable<VendorListRow>
             rows={filtered}
             flat
-            onRowClick={(r) => navigate(`/vendors/${r.id}`)}
+            onRowClick={(r) => navigate(`/vendors/${r.id}`, { state: { from: fromState } })}
             empty={{
               message: "No vendors match your filters.",
               ctaLabel: "+ New Vendor",
@@ -186,6 +191,7 @@ export default function VendorsList() {
                   />
                 ),
               },
+              // (Rating column below)
               {
                 key: "internal_rating",
                 label: "Rating",
@@ -203,6 +209,7 @@ export default function VendorsList() {
                 label: "Projects",
                 render: (r) => (
                   <OverflowList
+                    fromLabel={FROM_LABEL}
                     items={r.recentProjects.map<OverflowItem>((p) => ({
                       id: p.id,
                       label: p.name,

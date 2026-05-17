@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { backState } from "@/lib/hq/useBackHref";
 import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, emptyFilterState, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
@@ -51,9 +52,12 @@ const BOARD_ROWS: { label: string; statuses: ProjectStatus[] }[] = [
   { label: "Inactive", statuses: ["On Hold", "Complete", "Cancelled"] },
 ];
 
+const FROM_LABEL = "Projects";
+
 export default function ProjectsList({ view }: { view: ViewKind }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<ProjectListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
@@ -211,7 +215,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
             rows={filtered}
             flat
             rowBorderToken={(r) => projectStatusToken(r.status)}
-            onRowClick={(r) => navigate(`/projects/${r.id}`)}
+            onRowClick={(r) => navigate(`/projects/${r.id}`, { state: { from: fromState } })}
             selection={{ selectedIds: selected, onChange: setSelected }}
             twoTier={{
               isTerminal: (r) => TERMINAL_PROJECT_STATUSES.includes(r.status),
@@ -243,6 +247,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                         to={r.clientId ? `/clients/${r.clientId}` : "#"}
                         className="sub"
                         style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                        state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {r.clientName}
@@ -252,6 +257,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                       to={`/projects/${r.id}`}
                       className="lead"
                       style={{ display: "block" }}
+                      state={{ from: fromState }}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {r.name}
@@ -357,7 +363,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
             }))
           }
           onCardMove={handleBoardMove}
-          onCardClick={(r) => navigate(`/projects/${r.id}`)}
+          onCardClick={(r) => navigate(`/projects/${r.id}`, { state: { from: fromState } })}
           renderCard={(r) => (
             <>
               <div className="nm">
@@ -441,7 +447,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                   bars,
                 };
               })}
-            onBarClick={(id) => navigate(`/projects/${id}`)}
+            onBarClick={(id) => navigate(`/projects/${id}`, { state: { from: fromState } })}
           />
         </>
       ) : null}

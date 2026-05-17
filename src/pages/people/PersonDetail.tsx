@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { IconArrowLeft, IconLink } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { personType, personTypeToken } from "@/lib/people/queries";
+import { useBackHref } from "@/lib/hq/useBackHref";
 
 /**
  * Person Detail (Surface 11).
@@ -57,6 +58,7 @@ export default function PersonDetail() {
   const [venues, setVenues] = useState<VenueLink[]>([]);
   const [isVenueContact, setIsVenueContact] = useState(false);
   const [loading, setLoading] = useState(true);
+  const back = useBackHref({ to: "/people", label: "People" });
 
   useEffect(() => {
     if (!id) return;
@@ -154,8 +156,8 @@ export default function PersonDetail() {
   return (
     <div className="stack-6">
       <div className="stack-3">
-        <Link to="/people" className="crumb">
-          <IconArrowLeft className="ic ic-sm" /> Back to People
+        <Link to={back.to} className="crumb">
+          <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
         <div className="row between" style={{ alignItems: "flex-start" }}>
           <div className="row-c">

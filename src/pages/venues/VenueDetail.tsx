@@ -6,6 +6,7 @@ import { IconArrowLeft, IconLink, IconSlides } from "@/components/icons/HQIcons"
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { formatShortDate } from "@/lib/hq/dates";
 import { loadLatestVenueRates, type VenueRate } from "@/lib/venues/queries";
+import { useBackHref } from "@/lib/hq/useBackHref";
 import {
   TYPE_STYLES,
   TYPE_FALLBACK_STYLE,
@@ -56,6 +57,7 @@ export default function VenueDetail() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [rates, setRates] = useState<VenueRate[]>([]);
   const [loading, setLoading] = useState(true);
+  const back = useBackHref({ to: "/venues", label: "Venues" });
 
   useEffect(() => {
     if (!id) return;
@@ -144,8 +146,8 @@ export default function VenueDetail() {
   return (
     <div className="stack-6">
       <div className="stack-3">
-        <Link to="/venues" className="crumb">
-          <IconArrowLeft className="ic ic-sm" /> Back to Venues
+        <Link to={back.to} className="crumb">
+          <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
         <div className="row between" style={{ alignItems: "flex-start", gap: 24 }}>
           <div>
