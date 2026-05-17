@@ -170,7 +170,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
       })
       .select(
         `id, title, description, status, priority, due_date, blocked_by,
-         project:projects(id, name, client:clients(id, name)),
+         project:projects!tasks_project_id_fkey(id, name, client:clients!projects_client_id_fkey(id, name)),
          assignee:users!tasks_assignee_id_fkey(id, full_name, email)`,
       )
       .single();
@@ -320,7 +320,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {r.project.client.name}
+                        {r.project.client.name ?? "View client"}
                       </Link>
                     ) : null}
                     <Link

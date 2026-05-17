@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { IconArrowLeft, IconX } from "@/components/icons/HQIcons";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -261,7 +262,14 @@ export default function PersonEdit() {
   const showClientPicker = form.type === "Client";
   const showVendorPicker = form.type === "Vendor";
   const showVenuePicker = form.type === "Venue";
-  const availableVenues = venues.filter((v) => !venueIds.includes(v.id));
+
+  // Stable loader for RecordCombobox `record` mode (uses the venues already
+  // loaded above; no extra round trip).
+  const venueOptions = useMemo(
+    () => venues.map((v) => ({ id: v.id, label: v.name })),
+    [venues],
+  );
+  const loadVenueOptions = useCallback(async () => venueOptions, [venueOptions]);
 
   return (
     <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
@@ -413,46 +421,14 @@ export default function PersonEdit() {
             <div className="block-lbl">
               <span className="label-section">Venues this person contacts</span>
             </div>
-            <div className="row-c wrap" style={{ gap: 6 }}>
-              {venueIds.map((vid) => {
-                const v = venues.find((x) => x.id === vid);
-                if (!v) return null;
-                return (
-                  <span key={vid} className="tag" style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
-                    {v.name}
-                    <button
-                      type="button"
-                      aria-label={`Remove ${v.name}`}
-                      onClick={() => setVenueIds(venueIds.filter((x) => x !== vid))}
-                      style={{
-                        background: "transparent",
-                        border: 0,
-                        cursor: "pointer",
-                        color: "inherit",
-                        padding: 0,
-                        display: "inline-flex",
-                      }}
-                    >
-                      <IconX className="ic" style={{ width: 10, height: 10 }} />
-                    </button>
-                  </span>
-                );
-              })}
-              <select
-                className="input"
-                style={{ height: 32, fontSize: 12, padding: "4px 8px" }}
-                value=""
-                onChange={(e) => {
-                  if (!e.target.value) return;
-                  setVenueIds([...venueIds, e.target.value]);
-                }}
-              >
-                <option value="">Add venue...</option>
-                {availableVenues.map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
-            </div>
+            <RecordCombobox
+              multi
+              source={{ kind: "record", loadOptions: loadVenueOptions }}
+              multiValue={venueIds}
+              onMultiChange={setVenueIds}
+              entityLabel="venue"
+              placeholder="Add venue..."
+            />
           </div>
         </section>
       ) : null}

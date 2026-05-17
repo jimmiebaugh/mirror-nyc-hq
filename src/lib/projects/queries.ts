@@ -71,7 +71,7 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
        install_dates_start, install_dates_end,
        live_dates_start, live_dates_end,
        removal_dates_start, removal_dates_end, client_id,
-       client:clients(id, name),
+       client:clients!projects_client_id_fkey(id, name),
        account_managers:project_account_managers(user:users(full_name, email)),
        designers:project_designers(user:users(full_name, email)),
        deliverables(id, title, due_date, status)`,
@@ -96,7 +96,10 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
     removal_dates_start: string | null;
     removal_dates_end: string | null;
     client_id: string | null;
-    client: { id: string; name: string | null } | null;
+    client:
+      | { id: string; name: string | null }
+      | { id: string; name: string | null }[]
+      | null;
     account_managers: { user: { full_name: string | null; email: string | null } | null }[] | null;
     designers: { user: { full_name: string | null; email: string | null } | null }[] | null;
     deliverables: { id: string; title: string; due_date: string | null; status: string }[] | null;
@@ -116,7 +119,12 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
       city: p.city,
       tags: p.tags ?? [],
       clientId: p.client_id,
-      clientName: p.client?.name ?? null,
+      // PostgREST sometimes returns the embed as an array even when the FK
+      // is one-to-many parent-side (project -> client is single-parent).
+      // Handle both shapes defensively.
+      clientName: Array.isArray(p.client)
+        ? (p.client[0]?.name ?? null)
+        : (p.client?.name ?? null),
       installStartIso: p.install_dates_start,
       installEndIso: p.install_dates_end,
       liveStartIso: p.live_dates_start,
