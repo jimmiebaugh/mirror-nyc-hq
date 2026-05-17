@@ -41,7 +41,13 @@ type Note = {
   author: Author | null;
 };
 
-const PARENT_TYPES = ["client", "vendor", "person", "venue"] as const;
+const PARENT_TYPES = [
+  "client",
+  "vendor",
+  "person",
+  "venue",
+  "outlook_entry",
+] as const;
 type ParentType = (typeof PARENT_TYPES)[number];
 
 export function InternalNotesEditor({

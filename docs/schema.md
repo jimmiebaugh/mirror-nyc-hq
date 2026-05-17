@@ -439,11 +439,11 @@ Admin-only planning surface for speculative engagements that haven't yet convert
 - RLS: admin full CRUD; standard + freelance SELECT only on rows with `shared_with_team = true`. Pending users blocked at the route gate (`/outlook` is `<AdminRoute>`).
 - Realtime: NOT in the `supabase_realtime` publication in 5.3. Single-admin edit pattern; the side panel doesn't need multi-admin live-merge. Add later if multi-admin concurrent editing surfaces as a need.
 
-### notes_log (Phase 5.1; widened Phase 5.2.2)
-Polymorphic Internal Notes log shared by Organizations, People, and Venues. The CHECK constraint was widened in Phase 5.2.2 (`20260515140002_phase_5_2_2_venues_extensions.sql`) so the shared `<InternalNotesEditor />` component can serve Venue detail too.
+### notes_log (Phase 5.1; widened Phase 5.2.2 / 5.2.3 / 5.6.4.1)
+Polymorphic Internal Notes log shared by Clients, Vendors, People, Venues, and Outlook Entries. The CHECK constraint was widened in Phase 5.2.2 (`20260515140002_phase_5_2_2_venues_extensions.sql` — adds `'venue'`), Phase 5.2.3.D (`20260516130003_phase_5_2_3_notes_log_check.sql` — splits `'organization'` into `'client'` + `'vendor'`), and Phase 5.6.4.1 (`20260519100000_phase_5_6_4_1_notes_log_outlook_entry.sql` — adds `'outlook_entry'`) so the shared `<InternalNotesEditor />` component can serve Outlook entry detail too.
 
 - `id` (uuid, PK, default `gen_random_uuid()`)
-- `parent_type` (text, NOT NULL, CHECK `IN ('organization', 'person', 'venue')`)
+- `parent_type` (text, NOT NULL, CHECK `IN ('client', 'vendor', 'person', 'venue', 'outlook_entry')`)
 - `parent_id` (uuid, NOT NULL): logical FK to the parent record. Not a real FK because the parent table varies. Tightening to per-type split tables can land later if it ever matters.
 - `body` (text, NOT NULL)
 - `author_id` (uuid, NOT NULL, FK to `users.id`)

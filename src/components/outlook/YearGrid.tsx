@@ -28,6 +28,15 @@ function confidenceClass(c: OutlookConfidence): string {
 
 function formatBudget(b: number | null): string {
   if (b == null) return "TBD";
+  if (b >= 1_000_000) {
+    const m = b / 1_000_000;
+    // 10M+ rounds to whole number; below that keeps up to two decimals and
+    // strips trailing zeros (+ the dot when both decimals strip), so
+    // $1,000,000 → $1M, $1,250,000 → $1.25M, $1,500,000 → $1.5M.
+    const formatted =
+      m >= 10 ? m.toFixed(0) : m.toFixed(2).replace(/\.?0+$/, "");
+    return `$${formatted}M`;
+  }
   if (b >= 1000) return `$${Math.round(b / 1000)}k`;
   return `$${b}`;
 }

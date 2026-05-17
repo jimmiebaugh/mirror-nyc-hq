@@ -76,11 +76,11 @@ export function CalendarVisibilityPanel({
           ) : (
             projects.map((p) => {
               const visible = !hiddenSet.has(p.id);
-              const label = p.clientName ? `${p.clientName} · ${p.name}` : p.name;
               return (
                 <ToggleRow
                   key={p.id}
-                  label={label}
+                  clientName={p.clientName}
+                  label={p.name}
                   pressed={visible}
                   dim={!visible}
                   onChange={(v) => onToggleProject(p.id, v)}
@@ -96,33 +96,51 @@ export function CalendarVisibilityPanel({
 
 function ToggleRow({
   label,
+  clientName,
   pressed,
   dim,
   onChange,
 }: {
   label: string;
+  clientName?: string | null;
   pressed: boolean;
   dim?: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const titleAttr = clientName ? `${clientName} · ${label}` : label;
   return (
     <div
       className="row between"
       style={{ alignItems: "center", gap: 8, minHeight: 28 }}
     >
-      <span
-        style={{
-          fontSize: 12.5,
-          color: dim
-            ? "hsl(var(--subtle-foreground))"
-            : "hsl(var(--foreground))",
-          lineHeight: 1.3,
-          wordBreak: "break-word",
-        }}
-        title={label}
-      >
-        {label}
-      </span>
+      <div style={{ minWidth: 0, flex: 1 }} title={titleAttr}>
+        {clientName ? (
+          <div
+            style={{
+              fontSize: 11,
+              color: dim
+                ? "hsl(var(--subtle-foreground))"
+                : "hsl(var(--primary))",
+              lineHeight: 1.25,
+              wordBreak: "break-word",
+            }}
+          >
+            {clientName}
+          </div>
+        ) : null}
+        <div
+          style={{
+            fontSize: 12.5,
+            color: dim
+              ? "hsl(var(--subtle-foreground))"
+              : "hsl(var(--foreground))",
+            lineHeight: 1.3,
+            wordBreak: "break-word",
+          }}
+        >
+          {label}
+        </div>
+      </div>
       <Switch checked={pressed} onCheckedChange={onChange} />
     </div>
   );

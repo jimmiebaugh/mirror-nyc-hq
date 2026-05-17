@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertDialog,
@@ -13,8 +13,15 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { IconLink, IconProjects, IconX } from "@/components/icons/HQIcons";
 import { useClients } from "@/lib/hq/useClients";
-import { useLookup } from "@/lib/hq/lookups";
+import {
+  createClientInline,
+  CLIENT_MINI_CREATE_FIELDS,
+  type CreatedOption,
+} from "@/lib/hq/inlineCreate";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
+import { InlineEditText } from "@/components/hq/InlineEditText";
+import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import {
   OUTLOOK_CONFIDENCE_VALUES,
   outlookConfidenceToken,
@@ -34,8 +41,10 @@ import type {
  *   - "new":    editable form with empty defaults
  *
  * Inline Save / Cancel at the bottom (spec § 4b locked option 1; sticky
- * save bar pattern reserved for full-width edit pages). 277px width
- * matches the wireframe.
+ * save bar pattern reserved for full-width edit pages). Card width is
+ * 360px (Phase 5.6.4.1 fixup; bumped from the 277px wireframe baseline
+ * after smoke-test feedback that short client names were truncating).
+ * The grid-template-columns lives in OutlookPage.
  */
 
 const MONTHS = [
@@ -101,9 +110,9 @@ export function OutlookEntryPanel({
   newDefaults,
   saving,
   onClose,
-  onBeginEdit,
   onCancelEdit,
   onSave,
+  onPatch,
   onDelete,
   onPromote,
   onUnlink,
@@ -116,9 +125,10 @@ export function OutlookEntryPanel({
   newDefaults: NewEntryDefaults | null;
   saving: boolean;
   onClose: () => void;
-  onBeginEdit: () => void;
   onCancelEdit: () => void;
   onSave: (input: OutlookEntryInput) => Promise<void>;
+  /** Single-field inline-edit patch (detail mode). */
+  onPatch: (id: string, patch: Partial<OutlookEntryInput>) => Promise<void>;
   onDelete: () => Promise<void>;
   onPromote: () => Promise<void>;
   onUnlink: () => Promise<void>;
@@ -126,7 +136,25 @@ export function OutlookEntryPanel({
 }) {
   const navigate = useNavigate();
   const { options: clients } = useClients();
-  const { options: cityOptions } = useLookup("cities");
+
+  // Inline-created clients are kept in local state so they're available to
+  // the picker after creation. `useClients` doesn't refetch on insert and
+  // the EntryPanel persists across entry switches without remounting, so
+  // without this merge the freshly-added option would only show in the
+  // RecordCombobox that created it and not on the next entry's picker.
+  const [extraClients, setExtraClients] = useState<CreatedOption[]>([]);
+
+  const clientOptions = useMemo(
+    () => [
+      ...clients.map((c) => ({ id: c.id, label: c.name })),
+      ...extraClients,
+    ],
+    [clients, extraClients],
+  );
+  const loadClientOptions = useCallback(
+    async () => clientOptions,
+    [clientOptions],
+  );
 
   // Form state for edit / new modes.
   const [form, setForm] = useState<OutlookEntryInput | null>(null);
@@ -163,11 +191,21 @@ export function OutlookEntryPanel({
   };
 
   if (mode === "detail" && entry) {
+    const patch = (p: Partial<OutlookEntryInput>) => onPatch(entry.id, p);
+
     return (
       <aside className="card">
         <div className="card-headbar">
-          <span className="h-card" style={{ fontSize: 16 }}>
-            {entry.name}
+          <span className="h-card" style={{ fontSize: 16, flex: 1, minWidth: 0 }}>
+            <InlineEditText
+              value={entry.name}
+              required
+              placeholder="Entry name"
+              renderRead={(v) => v || "(unnamed)"}
+              onSave={async (v) => {
+                await patch({ name: v });
+              }}
+            />
           </span>
           <button
             type="button"
@@ -179,7 +217,10 @@ export function OutlookEntryPanel({
           </button>
         </div>
         <div className="card-pad stack-3">
-          <div>
+          {/* Pill is left-aligned to the kv value column (104px label col +
+              12px column-gap) so its left edge tracks the Month / Week /
+              City / Client editable controls below. */}
+          <div style={{ paddingLeft: 116 }}>
             <ClickPillCell
               value={entry.confidence}
               options={OUTLOOK_CONFIDENCE_VALUES}
@@ -199,46 +240,116 @@ export function OutlookEntryPanel({
             }}
           >
             <dt>Year</dt>
-            <dd>{entry.year}</dd>
+            <dd>
+              <InlineEditText
+                value={String(entry.year)}
+                inputType="number"
+                renderRead={(v) => v ?? "-"}
+                onSave={async (v) => {
+                  const n = Number(v);
+                  if (!Number.isFinite(n) || n < 2024 || n > 2099) {
+                    throw new Error("Year must be between 2024 and 2099.");
+                  }
+                  await patch({ year: n });
+                }}
+              />
+            </dd>
             <dt>Month</dt>
-            <dd>{MONTHS[entry.month - 1]}</dd>
+            <dd>
+              <select
+                className="input input--filled"
+                style={{ height: 28, fontSize: 13, padding: "0 8px" }}
+                value={entry.month}
+                onChange={async (e) => {
+                  await patch({ month: Number(e.target.value) });
+                }}
+              >
+                {MONTHS.map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
+                ))}
+              </select>
+            </dd>
             <dt>Week</dt>
-            <dd>{`Week ${entry.week}`}</dd>
+            <dd>
+              <select
+                className="input input--filled"
+                style={{ height: 28, fontSize: 13, padding: "0 8px" }}
+                value={entry.week}
+                onChange={async (e) => {
+                  await patch({ week: Number(e.target.value) });
+                }}
+              >
+                {[1, 2, 3, 4].map((w) => (
+                  <option key={w} value={w}>Week {w}</option>
+                ))}
+              </select>
+            </dd>
             <dt>City</dt>
             <dd>
-              {entry.city ? (
-                <span className="tag">{entry.city}</span>
-              ) : (
-                <span className="muted subtle">None</span>
-              )}
+              <RecordCombobox
+                source={{ kind: "lookup", table: "cities" }}
+                value={entry.city}
+                onChange={async (v) => {
+                  await patch({ city: v });
+                }}
+                entityLabel="City"
+                placeholder="No city"
+              />
             </dd>
             <dt>Date</dt>
             <dd>
-              {entry.dateText || (
-                <span className="muted subtle">Not set</span>
-              )}
+              <InlineEditText
+                value={entry.dateText ?? ""}
+                placeholder="Early June / Jun 5 - 6"
+                renderRead={(v) =>
+                  v ? v : <span className="muted subtle">Not set</span>
+                }
+                onSave={async (v) => {
+                  await patch({ dateText: v || null });
+                }}
+              />
             </dd>
             <dt>Budget</dt>
             <dd>
-              {entry.budget != null ? (
-                formatBudget(entry.budget)
-              ) : (
-                <span className="muted subtle">TBD</span>
-              )}
+              <InlineEditText
+                value={entry.budget != null ? String(entry.budget) : ""}
+                inputType="number"
+                placeholder="TBD"
+                renderRead={(v) =>
+                  v ? formatBudget(Number(v)) : (
+                    <span className="muted subtle">TBD</span>
+                  )
+                }
+                onSave={async (v) => {
+                  if (v === "") {
+                    await patch({ budget: null });
+                    return;
+                  }
+                  const n = Number(v);
+                  if (!Number.isFinite(n)) {
+                    throw new Error("Budget must be a number.");
+                  }
+                  await patch({ budget: n });
+                }}
+              />
             </dd>
             <dt>Client</dt>
             <dd>
-              {entry.clientId ? (
-                <a
-                  className="tlink"
-                  onClick={() => navigate(`/clients/${entry.clientId}`)}
-                  style={{ cursor: "pointer" }}
-                >
-                  {entry.clientName ?? "View client"}
-                </a>
-              ) : (
-                <span className="muted subtle">None</span>
-              )}
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadClientOptions }}
+                value={entry.clientId}
+                onChange={async (v) => {
+                  await patch({ clientId: v });
+                }}
+                entityLabel="Client"
+                placeholder="No client"
+                miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
+                onMiniCreate={async (data) => {
+                  const created = await createClientInline(data);
+                  if (created) setExtraClients((prev) => [...prev, created]);
+                  return created;
+                }}
+              />
             </dd>
             <dt>Linked Project</dt>
             <dd>
@@ -258,18 +369,35 @@ export function OutlookEntryPanel({
             </dd>
             <dt>Shared w/ Team</dt>
             <dd>
-              {entry.sharedWithTeam ? "Yes" : "No"}
+              <Switch
+                checked={entry.sharedWithTeam}
+                onCheckedChange={async (v) => {
+                  await patch({ sharedWithTeam: v });
+                }}
+              />
             </dd>
           </dl>
 
+          <InternalNotesEditor
+            parentType="outlook_entry"
+            parentId={entry.id}
+          />
+
+          {/* Legacy single-text Notes column from Phase 5.3 (pre-5.6.4.1
+              Internal Notes migration). Shown only when present so any
+              historic content stays visible; new content goes into the
+              append-only editor above. */}
           {entry.notes ? (
             <div className="stack-2">
-              <span className="label-section">Notes</span>
+              <span className="label-section" style={{ display: "block" }}>
+                Legacy notes
+              </span>
               <p
                 style={{
                   fontSize: 13,
                   lineHeight: 1.45,
                   whiteSpace: "pre-wrap",
+                  color: "hsl(var(--muted-foreground))",
                 }}
               >
                 {entry.notes}
@@ -303,14 +431,6 @@ export function OutlookEntryPanel({
                 <IconLink className="ic" /> Unlink Project
               </button>
             )}
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ width: "100%" }}
-              onClick={onBeginEdit}
-            >
-              Edit Entry
-            </button>
             <button
               type="button"
               className="btn btn-tertiary btn-sm"
@@ -496,16 +616,13 @@ export function OutlookEntryPanel({
 
           <div className="field">
             <label className="label-form">City</label>
-            <select
-              className={`input ${form.city ? "input--filled" : ""}`}
-              value={form.city ?? ""}
-              onChange={(e) => set("city", e.target.value || null)}
-            >
-              <option value="">None</option>
-              {cityOptions.map((c) => (
-                <option key={c.id} value={c.name}>{c.name}</option>
-              ))}
-            </select>
+            <RecordCombobox
+              source={{ kind: "lookup", table: "cities" }}
+              value={form.city}
+              onChange={(v) => set("city", v)}
+              entityLabel="City"
+              placeholder="No city"
+            />
           </div>
 
           <div className="field">

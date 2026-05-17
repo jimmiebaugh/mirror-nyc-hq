@@ -150,11 +150,7 @@ export function MyWeekStrip({ userId }: { userId: string | undefined }) {
           const token = TOKEN_FOR[e.milestone];
           const color = tokenColor(token);
           return (
-            <div
-              key={e.key}
-              className="hq-weekcard"
-              style={{ borderLeftColor: color }}
-            >
+            <div key={e.key} className="hq-weekcard">
               <div className="hq-weekcard-typ" style={{ color }}>
                 {formatWeekcardDate(e.dateIso)}
               </div>
