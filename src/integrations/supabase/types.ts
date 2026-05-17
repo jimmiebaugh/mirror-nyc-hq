@@ -546,6 +546,7 @@ export type Database = {
       }
       people: {
         Row: {
+          affiliation_type: Database["public"]["Enums"]["person_affiliation_type"]
           client_id: string | null
           created_at: string
           created_by: string
@@ -561,6 +562,7 @@ export type Database = {
           venue_id: string | null
         }
         Insert: {
+          affiliation_type?: Database["public"]["Enums"]["person_affiliation_type"]
           client_id?: string | null
           created_at?: string
           created_by: string
@@ -576,6 +578,7 @@ export type Database = {
           venue_id?: string | null
         }
         Update: {
+          affiliation_type?: Database["public"]["Enums"]["person_affiliation_type"]
           client_id?: string | null
           created_at?: string
           created_by?: string
@@ -2284,6 +2287,7 @@ export type Database = {
       deliverable_status: "Upcoming" | "In Progress" | "Complete" | "Skipped"
       outlook_confidence: "On Radar" | "Likely" | "Confirmed" | "Complete"
       permission_role: "admin" | "standard" | "freelance" | "pending"
+      person_affiliation_type: "Client" | "Vendor" | "Venue" | "Unaffiliated"
       project_status:
         | "Approved"
         | "In Production"
@@ -2453,6 +2457,7 @@ export const Constants = {
       deliverable_status: ["Upcoming", "In Progress", "Complete", "Skipped"],
       outlook_confidence: ["On Radar", "Likely", "Confirmed", "Complete"],
       permission_role: ["admin", "standard", "freelance", "pending"],
+      person_affiliation_type: ["Client", "Vendor", "Venue", "Unaffiliated"],
       project_status: [
         "Approved",
         "In Production",

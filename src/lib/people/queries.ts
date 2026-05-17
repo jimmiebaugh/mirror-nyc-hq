@@ -36,6 +36,7 @@ export const PERSON_TYPES: PersonType[] = [
 export type PersonListRow = {
   id: string;
   full_name: string;
+  affiliation_type: PersonType;
   client_id: string | null;
   client_name: string | null;
   vendor_id: string | null;
@@ -53,7 +54,7 @@ export async function loadPeople(): Promise<PersonListRow[]> {
     supabase
       .from("people")
       .select(
-        "id, full_name, client_id, vendor_id, role_title, email, phone, tags, " +
+        "id, full_name, affiliation_type, client_id, vendor_id, role_title, email, phone, tags, " +
           "client:clients!people_client_id_fkey(id, name), " +
           "vendor:vendors!people_vendor_id_fkey(id, name)",
       )
@@ -89,6 +90,7 @@ export async function loadPeople(): Promise<PersonListRow[]> {
     const row = p as unknown as {
       id: string;
       full_name: string;
+      affiliation_type: PersonType;
       client_id: string | null;
       vendor_id: string | null;
       role_title: string | null;
@@ -102,6 +104,7 @@ export async function loadPeople(): Promise<PersonListRow[]> {
     return {
       id: row.id,
       full_name: row.full_name,
+      affiliation_type: row.affiliation_type,
       client_id: row.client_id,
       client_name: row.client?.name ?? null,
       vendor_id: row.vendor_id,
@@ -116,11 +119,23 @@ export async function loadPeople(): Promise<PersonListRow[]> {
   });
 }
 
+/**
+ * Phase 5.6.3: reads the authoritative `affiliation_type` column.
+ * Previously derived from FK presence; that broke when inline edit on
+ * the detail page made FK clears trivial (clearing the org would flip
+ * the derived type to Unaffiliated).
+ *
+ * Callers may pass a bare row that doesn't include `affiliation_type`
+ * (legacy code paths) — falls back to the old FK-derivation in that
+ * case for backward compatibility.
+ */
 export function personType(p: {
+  affiliation_type?: PersonType | null;
   client_id: string | null;
   vendor_id: string | null;
   is_venue_contact: boolean;
 }): PersonType {
+  if (p.affiliation_type) return p.affiliation_type;
   if (p.client_id) return "Client";
   if (p.vendor_id) return "Vendor";
   if (p.is_venue_contact) return "Venue";

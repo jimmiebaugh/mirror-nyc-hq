@@ -227,7 +227,11 @@ function ComboboxView(props: ViewProps) {
       props.onMultiChange(Array.from(current));
       setInputValue("");
     } else {
-      props.onChange(option.id);
+      // Re-click on the currently selected option toggles it off (sets the
+      // field to null). Phase 5.6.3: matches the multi-select behavior and
+      // gives users a way to deselect without an explicit clear button.
+      const next = props.value === option.id ? null : option.id;
+      props.onChange(next);
       setInputValue("");
       setOpen(false);
     }
