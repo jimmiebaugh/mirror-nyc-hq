@@ -1032,7 +1032,7 @@
      ================================================================== */
 
   /* Type utilities (extends 5.1's .h-card / .h-page; adds what 5.2 needs) */
-  .label-section{font-family:var(--font-mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:hsl(var(--muted-foreground));font-weight:400;}
+  .label-section{font-family:var(--font-mono);font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:hsl(var(--muted-foreground));font-weight:400;}
   .label-form{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--primary));}
   .cap{font-family:var(--font-mono);font-size:11px;color:hsl(var(--subtle-foreground));}
   .mono{font-family:var(--font-mono);}
@@ -1216,7 +1216,7 @@
   .empty .btn{margin-top:16px;}
 
   /* Tag */
-  .tag{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:10.5px;background:hsl(var(--surface-raised));border:1px solid hsl(var(--border-strong));color:hsl(var(--muted-foreground));border-radius:var(--radius);padding:2px 8px;}
+  .tag{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:12px;background:hsl(var(--surface-raised));border:1px solid hsl(var(--border-strong));color:hsl(var(--muted-foreground));border-radius:var(--radius);padding:2px 8px;}
 
   /* Avatar inline */
   .av-i{width:22px;height:22px;border-radius:999px;background:hsl(var(--surface-raised));border:1px solid hsl(var(--border-strong));display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:9px;font-weight:700;flex:none;}
@@ -1224,10 +1224,21 @@
   .av-stack .av-i + .av-i{margin-left:-7px;}
 
   /* KV table */
-  .kv{display:grid;grid-template-columns:152px 1fr;gap:11px 16px;font-size:13px;}
-  .kv dt{font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:hsl(var(--subtle-foreground));padding-top:1px;}
-  .kv dd{color:hsl(var(--foreground));}
+  /* Phase 5.6.3.1: bumped row gap on .kv from 11px to 22px so inline-edit
+     fields breathe (otherwise hover affordances + input borders overlap). */
+  .kv{display:grid;grid-template-columns:152px 1fr;gap:22px 16px;font-size:13px;}
+  .kv dt{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:hsl(var(--subtle-foreground));padding-top:6px;}
+  /* Phase 5.6.3.1 round N: `min-width:0` lets the 1fr value column shrink
+     below its intrinsic content width (default grid item min-width is
+     content-based, which made multi-select chip rows overflow the card on
+     narrow viewports). */
+  .kv dd{color:hsl(var(--foreground));min-width:0;}
   .kv dd .tlink{font-size:12px;}
+  /* Tight pair-grouping helper: used on related field pairs like Install
+     start / Install end where the visual relation matters. Renders the
+     pair as its own .kv block with the tighter pre-5.6.3.1 gap. */
+  .kv--pair{gap:10px 16px;}
+  .kv--pair dt{padding-top:1px;}
 
   /* Sticky save bar (Phase 5.2 forms) */
   .savebar{position:sticky;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:hsl(var(--background));padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 -12px 28px rgba(0,0,0,.6);}

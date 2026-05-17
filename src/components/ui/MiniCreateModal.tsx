@@ -47,6 +47,13 @@ type MiniCreateModalProps = {
   fields: MiniCreateField[];
   /** Pre-fills the first (name) field from the typeahead text. */
   initialName?: string;
+  /**
+   * Read-only context rows rendered above the editable fields. Used by
+   * scoped lookups (e.g. subcategory create-modal showing the parent
+   * Category) so the user can verify they're nesting under the right
+   * record. Not editable from the modal.
+   */
+  context?: { label: string; value: string }[];
   onSubmit: (
     data: Record<string, string>,
   ) => Promise<{ id: string; label: string } | null>;
@@ -67,6 +74,7 @@ export function MiniCreateModal({
   entityLabel,
   fields,
   initialName,
+  context,
   onSubmit,
   onCreated,
 }: MiniCreateModalProps) {
@@ -120,6 +128,20 @@ export function MiniCreateModal({
           <AlertDialogTitle>New {entityLabel}</AlertDialogTitle>
         </AlertDialogHeader>
         <div className="space-y-4">
+          {context && context.length > 0 ? (
+            <div className="space-y-1.5 rounded border border-[hsl(var(--border))] bg-[hsl(var(--surface-alt))] px-3 py-2.5">
+              {context.map((c) => (
+                <div key={c.label} className="flex items-baseline gap-2">
+                  <span className="label-form" style={{ minWidth: 88 }}>
+                    {c.label}
+                  </span>
+                  <span className="text-sm text-[hsl(var(--foreground))]">
+                    {c.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {fields.map((f) => (
             <div key={f.key} className="space-y-2">
               <label className="label-form">
