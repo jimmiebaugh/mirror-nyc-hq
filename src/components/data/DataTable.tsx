@@ -39,6 +39,8 @@ export function DataTable<T extends { id: string }>({
   twoTier,
   flat = false,
   empty,
+  sort: controlledSort,
+  onSortChange,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -54,8 +56,26 @@ export function DataTable<T extends { id: string }>({
   };
   flat?: boolean;
   empty?: { message: string; ctaLabel?: string; onCta?: () => void };
+  /**
+   * Phase 5.6.5 (Projects-first carry-forward): when both props are
+   * provided, sort becomes controlled — the parent owns the SortState
+   * (typically inside `filterState.sort` so saved views round-trip it).
+   * Omit both to keep the legacy internal-state behavior.
+   */
+  sort?: SortState;
+  onSortChange?: (next: SortState) => void;
 }) {
-  const [sort, setSort] = useState<SortState>(null);
+  const isControlledSort = onSortChange !== undefined;
+  const [internalSort, setInternalSort] = useState<SortState>(null);
+  const sort = isControlledSort ? controlledSort ?? null : internalSort;
+  const setSort = (next: SortState | ((prev: SortState) => SortState)) => {
+    if (isControlledSort) {
+      const value = typeof next === "function" ? next(sort) : next;
+      onSortChange?.(value);
+    } else {
+      setInternalSort(next);
+    }
+  };
   const [collapsed, setCollapsed] = useState<boolean>(true);
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 

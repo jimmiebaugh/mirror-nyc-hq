@@ -4,6 +4,7 @@ import { backState } from "@/lib/hq/useBackHref";
 import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, emptyFilterState, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { BoardView, type BoardRow } from "@/components/data/BoardView";
 import { TimelineView } from "@/components/data/TimelineView";
@@ -77,6 +78,31 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
       active = false;
     };
   }, []);
+
+  // Phase 5.6.5: resolve the default saved view on mount (per-user wins,
+  // then global, then leave the empty state alone).
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("project").then((v) => {
+      if (!active || !v) return;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("project");
+    if (v) {
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      setFilterState(emptyFilterState());
+      setActiveViewName("All projects");
+    }
+  };
 
   useEffect(() => {
     const ch = supabase
@@ -170,6 +196,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               const target = viewSwitchRoute("projects", kind);
               if (target) navigate(target);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
         </div>
         <div className="row-c">
@@ -214,6 +241,10 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
           <DataTable<ProjectListRow>
             rows={filtered}
             flat
+            sort={filterState.sort ?? null}
+            onSortChange={(next) =>
+              setFilterState((prev) => ({ ...prev, sort: next }))
+            }
             rowBorderToken={(r) => projectStatusToken(r.status)}
             onRowClick={(r) => navigate(`/projects/${r.id}`, { state: { from: fromState } })}
             selection={{ selectedIds: selected, onChange: setSelected }}

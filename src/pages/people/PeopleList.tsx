@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { backState } from "@/lib/hq/useBackHref";
 import { FilterBar, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { IconPlus } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
@@ -82,6 +83,30 @@ export default function PeopleList() {
       active = false;
     };
   }, []);
+
+  // Phase 5.6.5: resolve default saved view on mount.
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("person").then((v) => {
+      if (!active || !v) return;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("person");
+    if (v) {
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      setFilterState(DEFAULT_FILTER_STATE);
+      setActiveViewName("All people");
+    }
+  };
 
   // Field defs depend on the loaded clients+vendors lookup so the
   // Organization chip picker can render the merged option list. Mutex
@@ -182,6 +207,7 @@ export default function PeopleList() {
               setFilterState(v.filter_state);
               setActiveViewName(v.name);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
           <div className="row-c" style={{ gap: 6 }}>
             {AFFILIATION_BUTTONS.map((b) => {

@@ -4,6 +4,7 @@ import { backState } from "@/lib/hq/useBackHref";
 import { ViewSwitch, viewSwitchRoute, type ViewKind } from "@/components/data/ViewSwitch";
 import { FilterBar, emptyFilterState, type FilterState } from "@/components/data/FilterBar";
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
+import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { BoardView, type BoardColumn } from "@/components/data/BoardView";
 import { CalendarMonthView, type CalendarEventKind } from "@/components/data/CalendarMonthView";
@@ -69,6 +70,30 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
       active = false;
     };
   }, []);
+
+  // Phase 5.6.5: resolve default saved view on mount.
+  useEffect(() => {
+    let active = true;
+    getDefaultSavedView("deliverable").then((v) => {
+      if (!active || !v) return;
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleResetToGlobal = async () => {
+    const v = await getDefaultSavedView("deliverable");
+    if (v) {
+      setFilterState(v.filter_state);
+      setActiveViewName(v.name);
+    } else {
+      setFilterState(emptyFilterState());
+      setActiveViewName("All deliverables");
+    }
+  };
 
   useEffect(() => {
     const ch = supabase
@@ -155,6 +180,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
               const target = viewSwitchRoute("deliverables", kind);
               if (target) navigate(target);
             }}
+            onResetToGlobal={handleResetToGlobal}
           />
         </div>
         <div className="row-c">

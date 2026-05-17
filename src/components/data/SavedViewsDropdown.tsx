@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { IconChevronDown } from "@/components/icons/HQIcons";
+import { useUserRole } from "@/hooks/useUserRole";
+import { toast } from "@/hooks/use-toast";
 import {
   createSavedView,
   deleteSavedView,
+  hasGlobalDefault,
   listSavedViews,
+  resetUserDefault,
   type EntityType,
   type SavedView,
   type ViewKind,
@@ -24,6 +28,17 @@ import {
  * (Phase 5.2.1 Revision); renders the `.savedviews` chip from line 993
  * of OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html.
  *
+ * Phase 5.6.5 additions:
+ *   - Save dialog: owner-only "Save as default for all users" checkbox.
+ *     When ticked, writes a `scope='global', is_default=true` row visible
+ *     to every authenticated user. Mutually exclusive with the per-user
+ *     default checkbox (the per-user option hides while the global option
+ *     is ticked).
+ *   - Dropdown: "Reset to global default" item, visible when the user
+ *     has a per-user default for this entity AND a global default
+ *     exists. Calls `resetUserDefault` then fires the new
+ *     `onResetToGlobal` callback so the parent re-resolves.
+ *
  * Carry-forward fix (code-reviewer C1 from original 5.2.1): when the user
  * picks a saved view, the component fires `onPick` AND `onNavigate` so the
  * page lands on the saved view's variant (was: filter applied, view kind
@@ -37,6 +52,7 @@ export function SavedViewsDropdown({
   activeFilterState,
   onPick,
   onNavigate,
+  onResetToGlobal,
 }: {
   entityType: EntityType;
   activeName: string;
@@ -45,12 +61,21 @@ export function SavedViewsDropdown({
   onPick: (view: SavedView) => void;
   /** Optional: route to the picked view's `view_kind`. Wires SavedViews to the URL. */
   onNavigate?: (viewKind: ViewKind) => void;
+  /**
+   * Phase 5.6.5. Fires after a successful `resetUserDefault` so the
+   * parent can re-run its default-view resolution and apply the global
+   * default (or fall back to the empty state) without a page reload.
+   */
+  onResetToGlobal?: () => void;
 }) {
+  const { isOwner } = useUserRole();
   const [open, setOpen] = useState(false);
   const [views, setViews] = useState<SavedView[]>([]);
   const [saveOpen, setSaveOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftDefault, setDraftDefault] = useState(false);
+  const [draftGlobal, setDraftGlobal] = useState(false);
+  const [showResetToGlobal, setShowResetToGlobal] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -76,15 +101,43 @@ export function SavedViewsDropdown({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
 
+  // Resolve "Reset to global default" visibility when the dropdown opens.
+  // Two checks: does the user have a per-user default AND does a global
+  // default exist for this entity_type. Both must be true to render.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    Promise.all([
+      listSavedViews(entityType).then((vs) =>
+        vs.some((v) => v.scope === "user" && v.is_default),
+      ),
+      hasGlobalDefault(entityType),
+    ])
+      .then(([hasUserDefault, hasGlobal]) => {
+        if (active) setShowResetToGlobal(hasUserDefault && hasGlobal);
+      })
+      .catch(() => {
+        if (active) setShowResetToGlobal(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, entityType]);
+
   const handleSave = async () => {
     if (!draftName.trim()) return;
     try {
+      // `draftGlobal` overrides the per-user default checkbox (the two
+      // are mutually exclusive in the UI). A global view that's not the
+      // global default is meaningless, so force is_default true.
+      const useGlobal = draftGlobal && isOwner;
       const v = await createSavedView({
         entityType,
         name: draftName.trim(),
         viewKind: activeViewKind,
         filterState: activeFilterState,
-        isDefault: draftDefault,
+        isDefault: useGlobal ? true : draftDefault,
+        scope: useGlobal ? "global" : "user",
       });
       setViews((vs) =>
         [...vs, v].sort((a, b) => a.name.localeCompare(b.name)),
@@ -92,8 +145,13 @@ export function SavedViewsDropdown({
       setSaveOpen(false);
       setDraftName("");
       setDraftDefault(false);
+      setDraftGlobal(false);
+      toast({
+        title: useGlobal ? "Saved global default" : "Saved view",
+      });
     } catch (err) {
       console.error("saved view create failed", err);
+      toast({ title: "Save failed", variant: "destructive" });
     }
   };
 
@@ -103,6 +161,22 @@ export function SavedViewsDropdown({
       setViews((vs) => vs.filter((v) => v.id !== id));
     } catch (err) {
       console.error("saved view delete failed", err);
+    }
+  };
+
+  const handleResetToGlobal = async () => {
+    try {
+      await resetUserDefault(entityType);
+      setOpen(false);
+      setShowResetToGlobal(false);
+      // Re-fetch the row list so the cleared per-user default reflects
+      // in the dropdown the next time it opens.
+      listSavedViews(entityType).then((rows) => setViews(rows)).catch(() => {});
+      toast({ title: "Reset to global default" });
+      onResetToGlobal?.();
+    } catch (err) {
+      console.error("reset to global failed", err);
+      toast({ title: "Reset failed", variant: "destructive" });
     }
   };
 
@@ -174,7 +248,7 @@ export function SavedViewsDropdown({
                         color: "hsl(var(--primary))",
                       }}
                     >
-                      default
+                      {v.scope === "global" ? "global default" : "default"}
                     </span>
                   ) : null}
                 </button>
@@ -212,6 +286,24 @@ export function SavedViewsDropdown({
               + Save current view
             </button>
           </div>
+          {showResetToGlobal ? (
+            <div
+              style={{
+                borderTop: "1px solid hsl(var(--border))",
+                marginTop: 4,
+                paddingTop: 4,
+              }}
+            >
+              <button
+                type="button"
+                className="tlink"
+                style={{ padding: "6px 8px", fontSize: 11 }}
+                onClick={handleResetToGlobal}
+              >
+                Reset to global default
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -238,26 +330,55 @@ export function SavedViewsDropdown({
                 autoFocus
               />
             </div>
-            <label
-              className="cap"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                color: "hsl(var(--foreground))",
-                fontSize: 13,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={draftDefault}
-                onChange={(e) => setDraftDefault(e.target.checked)}
-              />
-              Make this my default view
-            </label>
+            {!draftGlobal ? (
+              <label
+                className="cap"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  color: "hsl(var(--foreground))",
+                  fontSize: 13,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={draftDefault}
+                  onChange={(e) => setDraftDefault(e.target.checked)}
+                />
+                Make this my default view
+              </label>
+            ) : null}
+            {isOwner ? (
+              <label
+                className="cap"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  color: "hsl(var(--foreground))",
+                  fontSize: 13,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={draftGlobal}
+                  onChange={(e) => setDraftGlobal(e.target.checked)}
+                />
+                Save as default for all users
+              </label>
+            ) : null}
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel
+              onClick={() => {
+                setDraftName("");
+                setDraftDefault(false);
+                setDraftGlobal(false);
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleSave}
               disabled={!draftName.trim()}

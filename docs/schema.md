@@ -18,6 +18,7 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `slack_user_id` (text, nullable). Added Phase 5.4. Slack workspace user id (e.g. `U01234ABCD`) for DM addressing.
 - `last_active_at` (timestamptz, nullable). Added Phase 5.4. Stamped by `handle_new_user` on sign-in.
 - `active` (bool, default true; soft-delete column). `ProtectedRoute` checks this on every authed nav: a row with `active = false` triggers an immediate sign-out + "Account deactivated" screen (Phase 5.4).
+- `is_owner` (bool, NOT NULL, default false). Added Phase 5.6.5. Gates the owner-only "Save as default for all users" affordance in `<SavedViewsDropdown>` + the calendar visibility panel, and powers the inline-subquery RLS check that lets owners write `scope='global'` rows on `saved_views`. Backfilled to `true` for `email = 'jimmie@mirrornyc.com'`; every other row is `false`.
 - `created_at`, `updated_at`
 
 ### departments (Phase 5.4 lookup)
@@ -407,14 +408,15 @@ Per-user named filter / sort / view-kind snapshots for the HQ Core database list
 
 - `id` (uuid, PK, default `gen_random_uuid()`)
 - `user_id` (uuid, NOT NULL, FK to `users.id` ON DELETE CASCADE)
-- `entity_type` (text, NOT NULL, CHECK in `project / task / deliverable / organization / person / venue / calendar`). `calendar` added in Phase 5.3 (`20260516150002_phase_5_3_saved_views_calendar_check.sql`) so the unified Calendar page can persist per-user visibility toggles via a single implicit row (`name='__calendar_default'`, `view_kind='calendar'`).
+- `entity_type` (text, NOT NULL, CHECK in `project / task / deliverable / organization / vendor / client / person / venue / calendar`). `calendar` added in Phase 5.3 (`20260516150002_phase_5_3_saved_views_calendar_check.sql`) so the unified Calendar page can persist per-user visibility toggles via a single implicit row (`name='__calendar_default'`, `view_kind='calendar'`). `vendor` + `client` added in Phase 5.6.5 (`20260520100000_phase_5_6_5_saved_views_global_scope_users_is_owner.sql`) to match the values list pages have been passing since the 5.2.3 organizations split; `organization` stays in the CHECK as a legacy value (no rows of it in production; will be removed in a future cleanup pass).
 - `name` (text, NOT NULL)
 - `view_kind` (text, NOT NULL, CHECK in `list / board / timeline / calendar`)
-- `filter_state` (jsonb, NOT NULL, default `'{}'::jsonb`). Shape: `{ connector: 'AND'|'OR', chips: [{field, op, value}], sort?: {field, dir}, columns?: [string] }`.
-- `is_default` (bool, NOT NULL, default false). One per `(user_id, entity_type)` enforced in app via a transactional "clear then set" upsert; the DB does not carry a unique partial index for it.
+- `filter_state` (jsonb, NOT NULL, default `'{}'::jsonb`). Shape: `{ connector: 'AND'|'OR', chips: [{field, op, value}], sort?: {field, dir}, columns?: [string] }`. For `entity_type='calendar'` the shape is `{ showDeliverables, showHolidays, showSharedOutlook, hiddenProjectIds[] }` instead.
+- `is_default` (bool, NOT NULL, default false). One per `(user_id, entity_type)` enforced in app via a transactional "clear then set" upsert; the DB does not carry a unique partial index for it. After 5.6.5 the same clear-then-set pattern applies to global rows (one default per `(scope='global', entity_type)`), enforced in `createSavedView` when `scope='global'`.
+- `scope` (text, NOT NULL, default `'user'`, CHECK in `user / global`). Added Phase 5.6.5. `user`-scoped rows belong to the row's `user_id`; `global`-scoped rows are visible to every authenticated user and writeable only by owners (`users.is_owner = true`). The new on-mount default-view resolution in HQ Core list pages resolves per-user default first, then falls back to the global default.
 - `created_at`, `updated_at` (timestamptz)
-- RLS: per-user (`USING user_id = auth.uid()`) on SELECT/INSERT/UPDATE/DELETE. Unlike every other HQ Core table this is personal preference data; no cross-user reads.
-- Index: `(user_id, entity_type)` btree.
+- RLS: SELECT allowed when `user_id = auth.uid() OR scope = 'global'`. INSERT/UPDATE/DELETE branched on scope: `scope='user'` requires `user_id = auth.uid()` (unchanged); `scope='global'` requires `(SELECT is_owner FROM public.users WHERE id = auth.uid()) = true`. Rewritten in Phase 5.6.5 from the pre-5.6.5 per-user-only posture.
+- Indexes: `(user_id, entity_type)` btree; `saved_views_scope_default_idx` partial btree on `(scope, entity_type) WHERE scope = 'global' AND is_default = true` (Phase 5.6.5; speeds up the global-default lookup that fires on every list-page mount).
 
 ### outlook_entries (Phase 5.3)
 Admin-only planning surface for speculative engagements that haven't yet converted into a Project. Drives Surface 16 (Outlook) and the admin Home condensed card. Shared entries (`shared_with_team = true`) surface as gray banners on the unified Calendar for all tiers.
