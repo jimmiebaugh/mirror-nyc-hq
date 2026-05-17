@@ -1012,13 +1012,6 @@
     @apply flex items-center justify-between gap-3 flex-wrap;
   }
 
-  /* Bulk action bar (slides above the table when rows are selected). */
-  .hq-bulkbar {
-    @apply flex items-center gap-3 rounded-md border px-4 py-2 text-[12px];
-    background: hsl(var(--primary) / 0.12);
-    border-color: hsl(var(--primary) / 0.4);
-  }
-
   /* Pill sizes for the locked-decisions large pill in detail-page headers. */
   .hq-pill-lg {
     @apply inline-flex items-center justify-center gap-2 h-10 px-4 text-[14px] font-mono;
@@ -1153,10 +1146,6 @@
   .checkbox--on{background:hsl(var(--primary));border-color:hsl(var(--primary));}
   .checkbox .ic{width:11px;height:11px;stroke-width:3;}
   .tbl-divider td{background:hsl(var(--surface));padding:7px 14px;font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:hsl(var(--subtle-foreground));border-bottom:1px solid hsl(var(--border));}
-
-  /* Bulk action bar */
-  .bulkbar{display:flex;align-items:center;gap:14px;background:hsl(var(--surface-raised));border:1px solid hsl(var(--border-strong));border-radius:var(--radius);padding:9px 14px;}
-  .bulkbar .cnt{font-family:var(--font-mono);font-size:11px;font-weight:700;color:hsl(var(--primary));letter-spacing:.05em;}
 
   /* View switcher (icon-segmented). Active = .on. */
   .viewswitch{display:inline-flex;border:1px solid hsl(var(--border-strong));border-radius:var(--radius);overflow:hidden;}
