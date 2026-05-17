@@ -505,7 +505,7 @@ export default function PersonDetail() {
                       className="tlink"
                       style={{ fontSize: 12.5 }}
                     >
-                      {p.job_number ? `#${p.job_number} . ` : ""}
+                      {p.job_number ? `#${p.job_number} ` : ""}
                       {p.name}
                     </Link>
                   ))}

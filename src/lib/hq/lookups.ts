@@ -7,14 +7,19 @@ import { supabase } from "@/integrations/supabase/client";
  * inserts a row, refreshes local state, and resolves to the new id so the
  * caller can immediately select it.
  *
+ * Phase 5.6.3.1 — shared module-level cache. Previously, every call site
+ * of `useLookup("vendor_categories")` got its own React state. When
+ * RecordCombobox's inline-add ran addOption inside its own useLookup
+ * instance, the parent page's instance never saw the new option until a
+ * page refresh. Now all instances of useLookup for the same `(table,
+ * parentScopeId)` key share a cache + subscriber set; addOption updates
+ * the cache once and every mounted instance re-renders.
+ *
  * The shipped lookups: `cities`, `project_categories`,
- * `vendor_capabilities` (renamed from `org_capabilities` in 5.2.3),
- * `vendor_categories` (new in 5.2.3), `venue_types`. All share the same
- * shape (id uuid, name text, created_by uuid, created_at) and the same
- * open-authenticated SELECT/INSERT RLS posture. `venue_types` predates
- * the 5.2.2 lookups but fits the same hook signature; consuming it
- * through `useLookup` keeps the Venue Edit's Venue-Type inline-add
- * consistent with the others.
+ * `vendor_capabilities`, `vendor_categories`, `vendor_subcategories`,
+ * `venue_types`, `departments`. All share the same shape (id uuid, name
+ * text, created_by uuid, created_at) and the same open-authenticated
+ * SELECT/INSERT RLS posture.
  *
  * Names are unique case-insensitively at the DB level (`LOWER(name)`
  * unique index); the hook surfaces the unique-violation error so the
@@ -32,6 +37,67 @@ export type LookupTable =
 
 export type LookupOption = { id: string; name: string };
 
+type CacheEntry = {
+  options: LookupOption[] | null;
+  loading: boolean;
+  loadPromise: Promise<void> | null;
+  subscribers: Set<(options: LookupOption[], loading: boolean) => void>;
+};
+
+const cache = new Map<string, CacheEntry>();
+
+function cacheKey(table: LookupTable, parentScopeId: string | null): string {
+  return `${table}:${parentScopeId ?? ""}`;
+}
+
+function getEntry(key: string): CacheEntry {
+  let entry = cache.get(key);
+  if (!entry) {
+    entry = { options: null, loading: false, loadPromise: null, subscribers: new Set() };
+    cache.set(key, entry);
+  }
+  return entry;
+}
+
+function notify(key: string) {
+  const entry = cache.get(key);
+  if (!entry) return;
+  for (const sub of entry.subscribers) {
+    sub(entry.options ?? [], entry.loading);
+  }
+}
+
+async function ensureLoaded(
+  table: LookupTable,
+  parentScopeId: string | null,
+  key: string,
+) {
+  const entry = getEntry(key);
+  if (entry.options !== null || entry.loadPromise) return entry.loadPromise ?? Promise.resolve();
+  entry.loading = true;
+  notify(key);
+  entry.loadPromise = (async () => {
+    let q = supabase
+      .from(table)
+      .select("id, name")
+      .order("name", { ascending: true });
+    if (parentScopeId) {
+      q = q.eq("parent_category_id", parentScopeId);
+    }
+    const { data, error } = await q;
+    if (error) {
+      console.warn(`${table} load failed`, error);
+      entry.options = [];
+    } else {
+      entry.options = (data ?? []) as LookupOption[];
+    }
+    entry.loading = false;
+    entry.loadPromise = null;
+    notify(key);
+  })();
+  return entry.loadPromise;
+}
+
 /**
  * `parentScopeId` (Phase 5.6.2): when set, the hook filters options by
  * `parent_category_id = parentScopeId` and includes `parent_category_id`
@@ -39,39 +105,55 @@ export type LookupOption = { id: string; name: string };
  * column today; passing `parentScopeId` against other tables is a no-op
  * load but will fail at insert time (no such column).
  */
+/**
+ * Sync accessor over the shared cache (Phase 5.6.3.1 round 3). Use when
+ * a parent's `useLookup(...)` snapshot is stale because the React state
+ * update hasn't propagated yet — typically inside an `onChange` callback
+ * that fires immediately after `addOption` runs (inline-add). The cache
+ * is mutated synchronously inside `addOption` before the subscriber
+ * notify fires, so reading it directly resolves the new id by name in
+ * the same tick.
+ *
+ * Returns the latest known options (may be `[]` if no instance has
+ * loaded the table yet).
+ */
+export function getLookupCached(
+  table: LookupTable,
+  parentScopeId: string | null = null,
+): LookupOption[] {
+  return cache.get(cacheKey(table, parentScopeId))?.options ?? [];
+}
+
 export function useLookup(
   table: LookupTable,
   opts?: { parentScopeId?: string | null },
 ) {
   const parentScopeId = opts?.parentScopeId ?? null;
-  const [options, setOptions] = useState<LookupOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const key = cacheKey(table, parentScopeId);
+  const [snapshot, setSnapshot] = useState<{ options: LookupOption[]; loading: boolean }>(
+    () => {
+      const entry = cache.get(key);
+      return {
+        options: entry?.options ?? [],
+        loading: entry?.options === null,
+      };
+    },
+  );
 
   useEffect(() => {
-    let active = true;
-    setLoading(true);
-    (async () => {
-      let q = supabase
-        .from(table)
-        .select("id, name")
-        .order("name", { ascending: true });
-      if (parentScopeId) {
-        q = q.eq("parent_category_id", parentScopeId);
-      }
-      const { data, error } = await q;
-      if (!active) return;
-      setLoading(false);
-      if (error) {
-        console.warn(`${table} load failed`, error);
-        setOptions([]);
-        return;
-      }
-      setOptions((data ?? []) as LookupOption[]);
-    })();
-    return () => {
-      active = false;
+    const entry = getEntry(key);
+    // Re-sync local snapshot to whatever the cache has right now (covers
+    // remounts where the cache is already populated).
+    setSnapshot({ options: entry.options ?? [], loading: entry.options === null });
+    const sub = (options: LookupOption[], loading: boolean) => {
+      setSnapshot({ options, loading });
     };
-  }, [table, parentScopeId]);
+    entry.subscribers.add(sub);
+    void ensureLoaded(table, parentScopeId, key);
+    return () => {
+      entry.subscribers.delete(sub);
+    };
+  }, [table, parentScopeId, key]);
 
   const addOption = useCallback(
     async (name: string): Promise<LookupOption | null> => {
@@ -100,13 +182,19 @@ export function useLookup(
         return null;
       }
       const next = data as LookupOption;
-      setOptions((prev) =>
-        [...prev, next].sort((a, b) => a.name.localeCompare(b.name)),
+      // Mutate the shared cache + notify every subscriber so any parent
+      // component using useLookup(table) sees the new option immediately
+      // (no page-refresh needed to resolve the new id by name).
+      const entry = getEntry(key);
+      const merged = [...(entry.options ?? []), next].sort((a, b) =>
+        a.name.localeCompare(b.name),
       );
+      entry.options = merged;
+      notify(key);
       return next;
     },
-    [table, parentScopeId],
+    [table, parentScopeId, key],
   );
 
-  return { options, loading, addOption };
+  return { options: snapshot.options, loading: snapshot.loading, addOption };
 }

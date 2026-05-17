@@ -354,6 +354,10 @@ export default function VendorEdit() {
                   kind: "lookup",
                   table: "vendor_subcategories",
                   parentScopeId: form.category_id || null,
+                  parentScopeLabel:
+                    categories.options.find((o) => o.id === form.category_id)
+                      ?.name ?? null,
+                  parentScopeLabelKey: "Category",
                 }}
                 value={selectedSubcategoryName}
                 onChange={(name) => {

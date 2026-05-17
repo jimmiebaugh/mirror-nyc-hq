@@ -57,6 +57,14 @@ type LookupSource = {
    * passes it through to the SELECT filter and the INSERT payload.
    */
   parentScopeId?: string | null;
+  /**
+   * Optional human label for `parentScopeId`. When provided, mini-create
+   * renders it as a read-only `<parentScopeLabelKey>: <parentScopeLabel>`
+   * row so users see which record the new option will be nested under.
+   */
+  parentScopeLabel?: string | null;
+  /** Field label for the parent scope row (e.g. "Category"). */
+  parentScopeLabelKey?: string;
 };
 type RecordSource = {
   kind: "record";
@@ -121,12 +129,20 @@ function LookupCombobox(
     return { id: added.name, label: added.name };
   };
 
+  const miniCreateContext = useMemo(() => {
+    const label = props.source.parentScopeLabel;
+    const key = props.source.parentScopeLabelKey;
+    if (!label || !key) return undefined;
+    return [{ label: key, value: label }];
+  }, [props.source.parentScopeLabel, props.source.parentScopeLabelKey]);
+
   return (
     <ComboboxView
       {...props}
       options={options}
       loading={lookup.loading}
       insertOption={insert}
+      miniCreateContext={miniCreateContext}
     />
   );
 }
@@ -177,6 +193,7 @@ type ViewProps = RecordComboboxProps & {
   options: Option[];
   loading: boolean;
   insertOption: (data: Record<string, string>) => Promise<Option | null>;
+  miniCreateContext?: { label: string; value: string }[];
 };
 
 function ComboboxView(props: ViewProps) {
@@ -188,6 +205,7 @@ function ComboboxView(props: ViewProps) {
     entityLabel,
     disabled,
     miniCreateFields,
+    miniCreateContext,
   } = props;
 
   const isMulti = props.multi === true;
@@ -369,6 +387,7 @@ function ComboboxView(props: ViewProps) {
         entityLabel={entityLabel}
         fields={resolvedMiniFields}
         initialName={inputValue.trim() || undefined}
+        context={miniCreateContext}
         onSubmit={insertOption}
         onCreated={(created) => {
           if (isMulti) {
