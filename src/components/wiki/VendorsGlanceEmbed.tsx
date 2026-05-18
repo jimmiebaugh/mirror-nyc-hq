@@ -5,8 +5,8 @@ import { useUserRole } from "@/hooks/useUserRole";
 import {
   IconCheck,
   IconPencil,
-  IconStar,
 } from "@/components/icons/HQIcons";
+import { StarRating } from "@/components/data/StarRating";
 import {
   isInternalPartner,
   loadVendors,
@@ -144,7 +144,14 @@ export function VendorsGlanceEmbed() {
                       </td>
                       <td className="muted">{v.city ?? "-"}</td>
                       <td className="r">
-                        <Stars rating={v.internal_rating ?? 0} />
+                        {v.teamCount > 0 ? (
+                          <StarRating
+                            value={Math.round((v.teamAverage ?? 0) * 2) / 2}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="muted subtle">-</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -356,24 +363,3 @@ function ManagePreferredDialog({
   );
 }
 
-function Stars({ rating }: { rating: number }) {
-  const filled = Math.max(0, Math.min(5, Math.round(rating)));
-  return (
-    <span className="stars" style={{ display: "inline-flex", gap: 1 }}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <IconStar
-          key={n}
-          className={`ic ic-sm ${n > filled ? "star-off" : ""}`}
-          style={{
-            color:
-              n > filled
-                ? "hsl(var(--subtle-foreground))"
-                : "hsl(var(--warn))",
-            fill: n > filled ? "none" : "hsl(var(--warn))",
-            opacity: n > filled ? 0.35 : 1,
-          }}
-        />
-      ))}
-    </span>
-  );
-}

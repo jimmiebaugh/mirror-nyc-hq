@@ -6,9 +6,14 @@ import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { OverflowList, type OverflowItem } from "@/components/hq/OverflowList";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { IconPlus } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
-import { loadClients, type ClientListRow } from "@/lib/clients/queries";
+import { loadClients, type ClientListRow, type ClientRollupRef } from "@/lib/clients/queries";
 
 /**
  * Clients List.
@@ -91,6 +96,22 @@ export default function ClientsList() {
     [rows, filterState],
   );
 
+  // Phase 5.7.6: distinct values per text/enum filter field.
+  const distinctValuesByField = useMemo(() => {
+    const pick = (key: string) =>
+      Array.from(
+        new Set(
+          rows
+            .map((r) => (r as unknown as Record<string, unknown>)[key])
+            .filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort();
+    return {
+      city: pick("city"),
+      industry: pick("industry"),
+    };
+  }, [rows]);
+
   return (
     <div className="stack-4">
       <div className="pagehead">
@@ -108,19 +129,6 @@ export default function ClientsList() {
       </div>
 
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <SavedViewsDropdown
-            entityType="client"
-            activeName={activeViewName}
-            activeViewKind="list"
-            activeFilterState={filterState}
-            onPick={(v) => {
-              setFilterState(v.filter_state);
-              setActiveViewName(v.name);
-            }}
-            onResetToGlobal={handleResetToGlobal}
-          />
-        </div>
         <FilterBar
           state={filterState}
           onChange={(next) => {
@@ -128,6 +136,18 @@ export default function ClientsList() {
             setActiveViewName("Custom filter");
           }}
           fields={CLIENT_FILTER_FIELDS}
+          distinctValuesByField={distinctValuesByField}
+        />
+        <SavedViewsDropdown
+          entityType="client"
+          activeName={activeViewName}
+          activeViewKind="list"
+          activeFilterState={filterState}
+          onPick={(v) => {
+            setFilterState(v.filter_state);
+            setActiveViewName(v.name);
+          }}
+          onResetToGlobal={handleResetToGlobal}
         />
       </div>
 
@@ -167,34 +187,6 @@ export default function ClientsList() {
                 ),
               },
               {
-                key: "contacts",
-                label: "Contacts",
-                render: (r) => (
-                  <OverflowList
-                    fromLabel={FROM_LABEL}
-                    items={r.contacts.map<OverflowItem>((c) => ({
-                      id: c.id,
-                      label: c.label,
-                      href: `/people/${c.id}`,
-                    }))}
-                  />
-                ),
-              },
-              {
-                key: "deliverables",
-                label: "Deliverables",
-                render: (r) => (
-                  <OverflowList
-                    fromLabel={FROM_LABEL}
-                    items={r.upcomingDeliverables.map<OverflowItem>((d) => ({
-                      id: d.id,
-                      label: d.label,
-                      href: `/deliverables/${d.id}`,
-                    }))}
-                  />
-                ),
-              },
-              {
                 key: "projects",
                 label: "Projects",
                 render: (r) => (
@@ -208,6 +200,34 @@ export default function ClientsList() {
                   />
                 ),
               },
+              {
+                key: "deliverables",
+                label: "Deliverables",
+                // 5.7.4 smoke followup: stacked render — Deliverable title
+                // on top (coral hyperlink), Project title beneath (muted).
+                // "in X days" suffix on the deliverable title lands in a
+                // later Deliverables refactor sub-phase. Caps at 3 visible
+                // entries with the same "+N more" popover treatment as
+                // OverflowList.
+                render: (r) => (
+                  <DeliverablesStack
+                    items={r.upcomingDeliverables}
+                    fromLabel={FROM_LABEL}
+                  />
+                ),
+              },
+              {
+                key: "primary_contact",
+                label: "Primary Contact",
+                sort: (a, b) =>
+                  (a.contact_name ?? "").localeCompare(b.contact_name ?? ""),
+                render: (r) =>
+                  r.contact_name ? (
+                    <span>{r.contact_name}</span>
+                  ) : (
+                    <span className="muted subtle">-</span>
+                  ),
+              },
             ]}
           />
           <span className="cap">
@@ -215,6 +235,108 @@ export default function ClientsList() {
           </span>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * 5.7.4 smoke followup: vertically stacked Deliverables cell. Each entry
+ * renders Deliverable title (coral hyperlink) above Project title
+ * (muted). Caps at 3 visible entries; the rest spill into a "+N more"
+ * popover, matching the OverflowList affordance shape used elsewhere.
+ */
+function DeliverablesStack({
+  items,
+  fromLabel,
+  visible = 3,
+}: {
+  items: ClientRollupRef[];
+  fromLabel: string;
+  visible?: number;
+}) {
+  const location = useLocation();
+  const fromState = backState(location, fromLabel);
+
+  if (items.length === 0) return <span className="muted subtle">-</span>;
+
+  const head = items.slice(0, visible);
+  const rest = items.slice(visible);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {head.map((d) => (
+        <div key={d.id}>
+          <Link
+            to={`/deliverables/${d.id}`}
+            className="tlink"
+            style={{ display: "block", lineHeight: 1.25 }}
+            state={{ from: fromState }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {d.label}
+          </Link>
+          {d.subLabel ? (
+            <div
+              className="muted"
+              style={{ fontSize: 11.5, lineHeight: 1.25 }}
+            >
+              {d.subLabel}
+            </div>
+          ) : null}
+        </div>
+      ))}
+      {rest.length > 0 ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="cap muted"
+              style={{
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                cursor: "pointer",
+                textDecoration: "underline",
+                textAlign: "left",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              +{rest.length} more
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            className="w-[260px] p-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ul
+              className="stack-2"
+              style={{ listStyle: "none", padding: 0, margin: 0 }}
+            >
+              {rest.map((d) => (
+                <li key={d.id}>
+                  <Link
+                    to={`/deliverables/${d.id}`}
+                    className="tlink"
+                    style={{ display: "block", lineHeight: 1.25 }}
+                    state={{ from: fromState }}
+                  >
+                    {d.label}
+                  </Link>
+                  {d.subLabel ? (
+                    <div
+                      className="muted"
+                      style={{ fontSize: 11.5, lineHeight: 1.25 }}
+                    >
+                      {d.subLabel}
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </PopoverContent>
+        </Popover>
+      ) : null}
     </div>
   );
 }

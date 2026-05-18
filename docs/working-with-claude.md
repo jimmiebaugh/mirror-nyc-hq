@@ -295,20 +295,19 @@ The ship flow:
 2. From the worktree directory: `supabase gen types typescript --linked > src/integrations/supabase/types.ts`.
 3. Run the spec's `## Seed data for the visual check` SQL block against the live DB.
 4. Commit any regenerated `types.ts` to the worktree branch as `[skip netlify] regen types from linked DB`.
-5. From the bare repo: `git checkout main && git pull && git merge --squash <worktree-branch>` and commit with the message body drafted in the AWAITING block.
-5b. From the bare repo: `git push origin main` (the squash commit alone). **Push the squash BEFORE the CHECKPOINT backfill.** Netlify checks `[skip netlify]` against the HEAD commit of each push, not per-commit. If the backfill (which is `[skip netlify]`) is pushed in the same `git push` as the squash, Netlify sees `[skip netlify]` at HEAD and skips the deploy entirely, leaving the squash sitting on `origin/main` un-deployed. Pushing the squash first lets Netlify trigger the deploy; the backfill follows in its own push (step 5d) and gets correctly skipped. Empirically confirmed in Phase 5.3 ship (single-push approach silently lost the deploy; required a manual trigger). See § 4.5.b.
-5c. Update `CHECKPOINT.md` with What's-live entry + Recent commits + Recent migrations + Next up. From the bare repo: `git add CHECKPOINT.md && git commit -m "[skip netlify] Backfill <squash-hash> Phase <X.Y> into CHECKPOINT.md"`.
-5d. From the bare repo: `git push origin main` (the CHECKPOINT backfill alone). Netlify sees `[skip netlify]` at HEAD and skips.
-5e. Worktree cleanup: `git worktree remove .claude/worktrees/<branch> && git branch -D claude/<branch>`.
-5f. Overwrite `OUTPUTS/COWORK_SYNC.md` with the SHIPPED block per the two-write convention. The block accurately records "Pushed to origin: yes (commit <squash-hash>)" since both pushes already ran.
+5. **Update `CHECKPOINT.md` on the worktree branch BEFORE squash-merging.** Edit the head paragraph + Active-feature-branch + Current-phase lines + shift the predecessor chain. Do NOT reference the upcoming squash commit's hash — see § 4.5.c. Commit on the worktree branch as `[skip netlify] CHECKPOINT.md for Phase X.Y`.
+6. From the bare repo: `git checkout main && git pull && git merge --squash <worktree-branch>` and commit with the message body drafted in the AWAITING block. The squash now includes the CHECKPOINT.md update from step 5 in the same commit (one commit per ship, not two).
+7. From the bare repo: `git push origin main`. Netlify sees the deploy-worthy commit at HEAD (assuming no `[skip netlify]` for a real deploy, or `[skip netlify]` if the deploy budget is in effect — either way only one push fires).
+8. Worktree cleanup: `git worktree remove .claude/worktrees/<branch> && git branch -D claude/<branch>`.
+9. Overwrite `OUTPUTS/COWORK_SYNC.md` with the SHIPPED block per the two-write convention.
 
 Jimmie's role at the gate: review screenshots, give a one-word go (or send specific iteration feedback if anything reads off). Code does everything else.
 
 When Code drafts the AWAITING SQUASH APPROVAL block, frame the squash-flow section as Code's own checklist of what it will execute after approval. Not as instructions for Jimmie. The framing matters: "Squash + push flow (Code executes after approval)" not "Run from the BARE REPO root."
 
-### 4.5.a. Why step 5b runs autonomously (Bash permission rule)
+### 4.5.a. Why step 7 runs autonomously (Bash permission rule)
 
-(Renumbered from the original 5c when the ship flow split the single push into 5b + 5d per § 4.5.b. The Bash allowlist rule applies to both pushes; both run autonomously after Jimmie's approval.)
+(Renumbered from the original 5c → 5b → 7 as the ship flow consolidated from two pushes back to one in 2026-05-17 per § 4.5.c. The Bash allowlist rule applies to the single push.)
 
 
 The auto-mode classifier enforces at the Bash-tool layer; it doesn't read AskUserQuestion answers or chat approvals as policy overrides. Phase 5.2.3 confirmed this empirically (the autonomous push was blocked despite Jimmie's explicit "go"; Jimmie ran the push manually from his terminal). Phase 5.2 cleanup then codified a manual hand-off as the official pattern and immediately bit us: Jimmie pushed cleanup but the 5.2.3 squash + backfill commits from the previous session had never actually reached origin (the prior SHIPPED block claimed "Pushed to origin: yes" but the local-only commits sat unsent until Jimmie ran the next push), forcing two separate Netlify deploys when one was expected.
@@ -324,19 +323,27 @@ If `.claude/settings.json` is ever reset / cloned fresh, the rule needs to be re
 
 Migration push specifically: `supabase db push --linked` reads the CWD's `supabase/migrations/` folder. Since the new migration files only exist on the worktree branch, the push MUST run from inside the worktree directory (`.claude/worktrees/<branch>/`). Running from the bare repo when main lacks the new migration files is a silent no-op and breaks the seed run downstream. The git operations in steps 5 through 5e still need the bare repo (you can't `git merge --squash` from inside a worktree of the branch you're trying to merge), but everything in steps 1-4 happens in the worktree.
 
-### 4.5.b. Why the ship flow uses two pushes (Netlify `[skip netlify]` trigger semantics)
+### 4.5.b. Historical: why the ship flow used two pushes (Phase 5.3 → 5.7.3)
 
-Netlify evaluates `[skip netlify]` (and the sibling tokens `[skip ci]`, `[ci skip]`, `***NO_CI***`) against the HEAD commit of each push, not per-commit within the push. Empirical confirmation came from the Phase 5.3 ship (2026-05-16): the single-push approach codified in the original § 4.5 step 5c put the squash commit (`1c21ea9` Phase 5.3) and the CHECKPOINT backfill (`26f100d` `[skip netlify]`) into the same `git push`. Netlify saw `[skip netlify]` at HEAD and skipped the entire push, leaving the squash deploy-worthy but un-deployed; Jimmie had to trigger the deploy manually.
+Between Phase 5.3 and Phase 5.7.3, the ship flow used **two separate pushes** to handle Netlify's `[skip netlify]` HEAD-commit-only check. The squash commit (deploy-worthy) pushed alone first; the CHECKPOINT backfill (`[skip netlify]`) pushed alone second so its skip token only applied to itself.
 
-The fix: split into two pushes.
-- **Push 1 (step 5b)** carries only the squash commit. HEAD is the deploy-worthy commit; Netlify fires the build.
-- **Push 2 (step 5d)** carries only the CHECKPOINT backfill. HEAD is `[skip netlify]`; Netlify correctly skips.
+Empirical trigger: Phase 5.3 (2026-05-16) tried single-push and lost the deploy because Netlify saw `[skip netlify]` at HEAD and skipped the whole push.
 
-Cost: two git pushes per ship instead of one. Benefit: deploys actually fire when intended.
+**Replaced 2026-05-17 by the single-commit convention in § 4.5.c.** The new convention merges the CHECKPOINT.md update INTO the squash commit, so there's only one commit per ship + one push. The "deploy fires only when HEAD lacks `[skip netlify]`" rule still holds, but the single combined commit's `[skip netlify]` (or absence thereof) cleanly maps to "deploy or don't" without needing a follow-on backfill.
 
-This pattern also generalizes: any time a ship sequence on `main` includes a deploy-worthy commit + administrative tail, push them separately so the administrative tail's `[skip netlify]` only applies to itself.
+The 50+ backfill commits that accumulated under the old convention were rewritten + folded into their squash commits on 2026-05-17 (see `pre-backfill-cleanup-2026-05-17` tag for the pre-rewrite state, `main-backup-pre-cleanup` branch as the local + remote recovery point). The Phase 3.7 backfill remained as a standalone orphan commit (`0dc0ca8`) because its target squash was outside the rebase range.
 
-Worktree-side commits (the `[skip netlify] regen types from linked DB` in step 4) don't have this concern because they're on the feature branch, not on `main`. Netlify only watches `main`; the feature branch never reaches it as a separate push (squash-merge folds them away).
+### 4.5.c. Single-commit ship convention (current)
+
+Each ship is exactly one commit on `main`: the squash itself, with CHECKPOINT.md updates folded in. No separate backfill commit. No "Backfill X into CHECKPOINT.md" follow-on cluttering the log.
+
+**Why a single commit works.** The old two-commit pattern existed to give the CHECKPOINT.md update its own `[skip netlify]` trigger semantics (per § 4.5.b). With one combined commit, the commit's own `[skip netlify]` flag (or absence) drives Netlify's decision directly. No second commit needed.
+
+**Chicken-and-egg on the squash hash.** The old "Backfilled at `<hash>`" pattern referenced the squash commit's own hash, which can't be computed before the commit is made. The new convention drops the explicit self-reference from CHECKPOINT.md's head paragraph: the head paragraph describes WHAT shipped (phase name, summary, file count, migrations), not the commit identity. Anyone wanting the hash runs `git log --oneline | head -1`. Predecessor paragraphs in CHECKPOINT.md continue to cite explicit hashes because those squashes are already historical (their hashes were knowable when they were demoted from head to predecessor).
+
+**Operational impact.** Step 5 (CHECKPOINT.md update) moves to the WORKTREE branch BEFORE the squash-merge. The merge-squash folds CHECKPOINT.md changes into the same commit as everything else. Step 7 (single `git push`) replaces the old 5b + 5d two-push dance.
+
+Worktree-side commits (the `[skip netlify] regen types from linked DB` in step 4) still don't affect Netlify because they're on the feature branch, not on main. Squash-merge folds them all into the single ship commit.
 
 ---
 

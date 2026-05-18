@@ -12,6 +12,11 @@ import { currentWeekWindow } from "@/lib/home/week";
  * write before refetching parent state; the local optimistic state flips
  * immediately for snappy feedback, then the row reloads from the DB to
  * confirm (and revert on failure).
+ *
+ * Phase 5.7.7 followup-1: Home cards are read-only. The task title links
+ * to `/tasks/:id` for detail-page editing; project sub-line links to
+ * `/projects/:id`. Field-level inline editing belongs on the detail page,
+ * not the dashboard summary.
  */
 
 type Row = {
@@ -19,6 +24,7 @@ type Row = {
   title: string;
   priority: "Urgent" | "High" | "Normal" | "Low";
   dueDateIso: string | null;
+  projectId: string | null;
   projectName: string | null;
   clientName: string | null;
 };
@@ -29,6 +35,7 @@ type DbTaskRow = {
   due_date: string | null;
   status: string;
   priority: "Urgent" | "High" | "Normal" | "Low";
+  project_id: string | null;
   // The Supabase generated relationship type returns the join shape inline;
   // the project nested object is the small subset we need on the dashboard.
   project: {
@@ -77,7 +84,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
       const { data } = await supabase
         .from("tasks")
         .select(
-          "id, title, due_date, status, priority, project:projects(id, name, client:clients(name))",
+          "id, title, due_date, status, priority, project_id, project:projects(id, name, client:clients(name))",
         )
         .eq("assignee_id", userId)
         .gte("due_date", mondayIso)
@@ -90,6 +97,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
         title: t.title,
         priority: t.priority,
         dueDateIso: t.due_date,
+        projectId: t.project_id,
         projectName: t.project?.name ?? null,
         clientName: t.project?.client?.name ?? null,
       }));
@@ -141,7 +149,11 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
             rows.map((r) => {
               const due = formatDue(r.dueDateIso);
               return (
-                <tr key={r.id}>
+                <tr
+                  key={r.id}
+                  onClick={() => navigate(`/tasks/${r.id}`)}
+                  style={{ cursor: "pointer" }}
+                >
                   <td className="text-center">
                     <button
                       type="button"
@@ -156,10 +168,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
                       {completing[r.id] ? <IconCheck className="h-[11px] w-[11px] text-primary" /> : null}
                     </button>
                   </td>
-                  <td
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/tasks/${r.id}`)}
-                  >
+                  <td>
                     <div className="lead">{r.title}</div>
                     <div className="sub">
                       {r.clientName && r.projectName

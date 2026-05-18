@@ -1,13 +1,48 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Pencil } from "lucide-react";
+import { Check, Pencil, Plus, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   IconArrowLeft,
   IconDrive,
   IconSlack,
   IconExt,
+  IconActivity,
+  IconClients,
+  IconComment,
+  IconDeliverables,
+  IconLock,
+  IconOrgs,
+  IconOutlook,
+  IconPeople,
+  IconProjects,
+  IconTasks,
+  IconVenues,
+  IconWiki,
 } from "@/components/icons/HQIcons";
+import {
+  loadActivityByProject,
+  type ActivityRow,
+  type ActivityViewerRole,
+} from "@/lib/activity/queries";
+import {
+  activityRowTimestamp,
+  formatActivitySentence,
+  iconKeyForEntity,
+} from "@/lib/activity/formatSentence";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   projectStatusToken,
   deliverableStatusToken,
@@ -27,6 +62,7 @@ import {
 } from "@/lib/projects/queries";
 import { useBackHref } from "@/lib/hq/useBackHref";
 import { InlineEditText } from "@/components/hq/InlineEditText";
+import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { InlineTagInput } from "@/components/hq/InlineTagInput";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
@@ -64,8 +100,6 @@ type Project = {
   design_decks_folder_url: string | null;
   slack_channel_url: string | null;
   budget_sheet_url: string | null;
-  status_notes: string | null;
-  client_notes: string | null;
   job_number: string | null;
   category: string | null;
   city: string | null;
@@ -76,13 +110,14 @@ type Project = {
   venues: { venue: { id: string; name: string | null } | null }[];
   account_managers: { user: { id: string; full_name: string | null; email: string | null } | null }[];
   designers: { user: { id: string; full_name: string | null; email: string | null } | null }[];
+  members: { user: { id: string; full_name: string | null; email: string | null } | null }[];
 };
 
 type Deliverable = {
   id: string;
   title: string;
   type: string | null;
-  status: "Upcoming" | "In Progress" | "Complete" | "Skipped";
+  status: "Upcoming" | "Complete" | "Skipped";
   due_date: string | null;
 };
 
@@ -106,6 +141,28 @@ function formatBudget(b: number | null): string {
   return `$${b.toLocaleString("en-US")}`;
 }
 
+// Phase 5.7.3 § 3.F: row-dot icon for the Project Activity card. Same mapping
+// the global ActivityFeed uses (kept inline so this card doesn't pull in the
+// full feed component).
+function ActivityRowIcon({ entityType }: { entityType: string }) {
+  const key = iconKeyForEntity(entityType);
+  const style = { width: 14, height: 14 } as const;
+  switch (key) {
+    case "project":       return <IconProjects style={style} />;
+    case "task":          return <IconTasks style={style} />;
+    case "deliverable":   return <IconDeliverables style={style} />;
+    case "venue":         return <IconVenues style={style} />;
+    case "vendor":        return <IconOrgs style={style} />;
+    case "client":        return <IconClients style={style} />;
+    case "person":        return <IconPeople style={style} />;
+    case "wiki_page":     return <IconWiki style={style} />;
+    case "credential":    return <IconLock style={style} />;
+    case "outlook_entry": return <IconOutlook style={style} />;
+    case "notes_log":     return <IconComment style={style} />;
+    default:              return <IconActivity style={style} />;
+  }
+}
+
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -113,17 +170,32 @@ export default function ProjectDetail() {
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [vendors, setVendors] = useState<VendorLink[]>([]);
+  const [vendorOptions, setVendorOptions] = useState<{ id: string; label: string }[]>([]);
+  const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
+  const [vendorSearch, setVendorSearch] = useState("");
   const [clientOptions, setClientOptions] = useState<{ id: string; label: string }[]>([]);
   const [venueOptions, setVenueOptions] = useState<{ id: string; label: string }[]>([]);
   const [venueIds, setVenueIds] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
+  const [memberPickerOpen, setMemberPickerOpen] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState<Error | null>(null);
   const back = useBackHref({ to: "/projects", label: "Projects" });
+  const { isAdmin, isFreelance, loading: roleLoading } = useUserRole();
+  const viewerRole: ActivityViewerRole = isAdmin
+    ? "admin"
+    : isFreelance
+      ? "freelance"
+      : "standard";
 
   useEffect(() => {
     if (!id) return;
     let active = true;
     (async () => {
-      const [proj, dels, tks, vds, clientsRes, venuesAllRes] = await Promise.all([
+      const [proj, dels, tks, vds, clientsRes, venuesAllRes, vendorsAllRes, usersAllRes] = await Promise.all([
         supabase
           .from("projects")
           .select(
@@ -131,12 +203,13 @@ export default function ProjectDetail() {
              live_dates_start, live_dates_end,
              removal_dates_start, removal_dates_end,
              production_folder_url, design_decks_folder_url, slack_channel_url,
-             budget_sheet_url, status_notes, client_notes,
+             budget_sheet_url,
              job_number, category, city, tags, budget, client_id,
              client:clients!projects_client_id_fkey(id, name),
              venues:project_venues(venue:venues!project_venues_venue_id_fkey(id, name)),
              account_managers:project_account_managers(user:users(id, full_name, email)),
-             designers:project_designers(user:users(id, full_name, email))`,
+             designers:project_designers(user:users(id, full_name, email)),
+             members:project_members(user:users!project_members_user_id_fkey(id, full_name, email))`,
           )
           .eq("id", id)
           .single(),
@@ -159,6 +232,12 @@ export default function ProjectDetail() {
           .order("created_at", { ascending: false }),
         supabase.from("clients").select("id, name").order("name", { ascending: true }),
         supabase.from("venues").select("id, name").order("name", { ascending: true }),
+        supabase.from("vendors").select("id, name").order("name", { ascending: true }),
+        supabase
+          .from("users")
+          .select("id, full_name, email")
+          .eq("active", true)
+          .order("full_name", { ascending: true }),
       ]);
       if (!active) return;
       if (proj.error) {
@@ -166,15 +245,17 @@ export default function ProjectDetail() {
         setLoading(false);
         return;
       }
-      const projRow = proj.data as unknown as Omit<Project, "tags" | "venues"> & {
+      const projRow = proj.data as unknown as Omit<Project, "tags" | "venues" | "members"> & {
         tags: string[] | null;
         venues: { venue: { id: string; name: string | null } | null }[] | null;
+        members: { user: { id: string; full_name: string | null; email: string | null } | null }[] | null;
       };
       const venueJoin = projRow.venues ?? [];
       setProject({
         ...projRow,
         tags: projRow.tags ?? [],
         venues: venueJoin,
+        members: projRow.members ?? [],
       });
       setVenueIds(
         venueJoin
@@ -211,6 +292,18 @@ export default function ProjectDetail() {
         ((venuesAllRes.data ?? []) as { id: string; name: string | null }[]).map((v) => ({
           id: v.id,
           label: v.name ?? "Untitled",
+        })),
+      );
+      setVendorOptions(
+        ((vendorsAllRes.data ?? []) as { id: string; name: string | null }[]).map((v) => ({
+          id: v.id,
+          label: v.name ?? "Untitled",
+        })),
+      );
+      setUserOptions(
+        ((usersAllRes.data ?? []) as { id: string; full_name: string | null; email: string | null }[]).map((u) => ({
+          id: u.id,
+          label: u.full_name ?? u.email ?? "Unnamed",
         })),
       );
       setLoading(false);
@@ -297,6 +390,180 @@ export default function ProjectDetail() {
   const loadClientOptions = useCallback(async () => clientOptions, [clientOptions]);
   const loadVenueOptions = useCallback(async () => venueOptions, [venueOptions]);
 
+  // Phase 5.7.3 followup-12: inline Vendors picker on the detail page.
+  // Toggles a project_vendors join row directly; optimistic local update +
+  // rollback toast on failure (matches saveVenueIds shape).
+  const toggleVendor = async (vendorId: string) => {
+    if (!project) return;
+    const previous = vendors;
+    const isSelected = vendors.some((v) => v.id === vendorId);
+    if (isSelected) {
+      setVendors(vendors.filter((v) => v.id !== vendorId));
+      const { error } = await supabase
+        .from("project_vendors")
+        .delete()
+        .eq("project_id", project.id)
+        .eq("vendor_id", vendorId);
+      if (error) {
+        setVendors(previous);
+        toast({
+          title: "Could not remove vendor",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } else {
+      const opt = vendorOptions.find((v) => v.id === vendorId);
+      if (!opt) return;
+      const optimistic = [
+        ...vendors,
+        { id: opt.id, name: opt.label, category_name: null },
+      ];
+      setVendors(optimistic);
+      const { error } = await supabase
+        .from("project_vendors")
+        .insert({ project_id: project.id, vendor_id: vendorId });
+      if (error) {
+        setVendors(previous);
+        toast({
+          title: "Could not add vendor",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        // Refresh just the category for the newly added vendor.
+        const { data } = await supabase
+          .from("vendors")
+          .select(
+            "id, name, category:vendor_categories!vendors_category_id_fkey(name)",
+          )
+          .eq("id", vendorId)
+          .single();
+        const row = data as unknown as {
+          id: string;
+          name: string | null;
+          category: { name: string | null } | null;
+        } | null;
+        if (row) {
+          setVendors((prev) =>
+            prev.map((v) =>
+              v.id === vendorId
+                ? {
+                    id: row.id,
+                    name: row.name ?? "Untitled",
+                    category_name: row.category?.name ?? null,
+                  }
+                : v,
+            ),
+          );
+        }
+      }
+    }
+  };
+
+  // Phase 5.7.7: project_members general bucket. Add + remove fire the
+  // join row optimistically; the AM + D buckets stay edit-page only.
+  const handleAddMember = async (userId: string) => {
+    if (!project) return;
+    const opt = userOptions.find((u) => u.id === userId);
+    if (!opt) return;
+    const prev = project.members;
+    const optimistic = [
+      ...project.members,
+      { user: { id: opt.id, full_name: opt.label, email: null } },
+    ];
+    setProject({ ...project, members: optimistic });
+    setMemberPickerOpen(false);
+    setMemberSearch("");
+    const { data: userRes } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from("project_members")
+      .insert({
+        project_id: project.id,
+        user_id: userId,
+        created_by: userRes.user?.id ?? null,
+      });
+    if (error) {
+      setProject({ ...project, members: prev });
+      toast({
+        title: "Could not add to team",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveMember = async (userId: string) => {
+    if (!project) return;
+    const prev = project.members;
+    setProject({
+      ...project,
+      members: project.members.filter((j) => j.user?.id !== userId),
+    });
+    const { error } = await supabase
+      .from("project_members")
+      .delete()
+      .eq("project_id", project.id)
+      .eq("user_id", userId);
+    if (error) {
+      setProject({ ...project, members: prev });
+      toast({
+        title: "Could not remove from team",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Phase 5.7.3 § 3.F: hydrate the Project Activity card. Wait on the
+  // user-role hook so the `viewerRole` filter matches the global feed
+  // (avoids a flash of admin-tier rows for a standard viewer).
+  useEffect(() => {
+    if (!id || roleLoading) return;
+    let active = true;
+    setActivityLoading(true);
+    setActivityError(null);
+    loadActivityByProject({ projectId: id, limit: 5, viewerRole })
+      .then((rows) => {
+        if (!active) return;
+        setActivityRows(rows);
+        setActivityLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setActivityError(err instanceof Error ? err : new Error("Activity load failed"));
+        setActivityLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, viewerRole, roleLoading]);
+
+  // Phase 5.7.14 § 6.F.1: live-refresh the Project Activity card on
+  // activity_log INSERTs. Server-side filter is coarse (any new row); we
+  // re-run the loader so the project/task/deliverable rollup stays
+  // accurate without per-row merge logic.
+  useEffect(() => {
+    if (!id || roleLoading) return;
+    const channel = supabase
+      .channel(`project-activity:${id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "activity_log" },
+        () => {
+          loadActivityByProject({ projectId: id, limit: 5, viewerRole })
+            .then((rows) => setActivityRows(rows))
+            .catch(() => {
+              /* swallow: stale rows still render */
+            });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id, viewerRole, roleLoading]);
+
   if (loading) {
     return (
       <div className="empty">
@@ -313,7 +580,7 @@ export default function ProjectDetail() {
   }
 
   const nextDeliverable = deliverables
-    .filter((d) => d.due_date && (d.status === "Upcoming" || d.status === "In Progress"))
+    .filter((d) => d.due_date && d.status === "Upcoming")
     .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))[0];
 
   const thisWeekDeliverable = (() => {
@@ -332,7 +599,7 @@ export default function ProjectDetail() {
         d.due_date &&
         d.due_date >= mondayIso &&
         d.due_date <= sundayIso &&
-        (d.status === "Upcoming" || d.status === "In Progress"),
+        d.status === "Upcoming",
     );
   })();
 
@@ -354,20 +621,53 @@ export default function ProjectDetail() {
         Back to {back.label}
       </Link>
 
-      <header
-        className="stack-3"
-        style={{ display: "grid", gridTemplateColumns: "1fr 172px", alignItems: "end", gap: 16 }}
-      >
-        <div className="stack-3">
-          <h1 className="h-page">
-            {project.name || "(untitled)"}
-          </h1>
-          <div className="row-c" style={{ gap: 24 }}>
-            <span className="cap">
-              {[project.category, project.city].filter(Boolean).join(" · ") || ""}
-            </span>
+      <header className="stack-3">
+        <div className="row between" style={{ alignItems: "center", paddingTop: 16 }}>
+          <div className="row-c" style={{ gap: 16, alignItems: "center", flex: 1, minWidth: 0 }}>
+            <h1 className="h-page" style={{ minWidth: 0 }}>{project.name || "(untitled)"}</h1>
+            <ClickPillCell
+              value={project.status}
+              options={PROJECT_STATUS_VALUES}
+              tokenMap={projectStatusToken}
+              size="lg"
+              onSave={async (next) => {
+                await updateProjectStatus(project.id, next as ProjectStatus);
+                setProject({ ...project, status: next as ProjectStatus });
+              }}
+            />
           </div>
-          <div className="g3" style={{ gap: 16, maxWidth: 640 }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            aria-label="Edit Project"
+            title="Edit Project"
+            onClick={() => navigate(`/projects/${project.id}/edit`)}
+            style={{ padding: "0 10px" }}
+          >
+            <Pencil className="ic" style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+        <div className="row-c" style={{ gap: 24 }}>
+          <span
+            className="cap"
+            style={{ fontSize: 16, letterSpacing: ".06em" }}
+          >
+            {project.job_number ? (
+              <>
+                <span style={{ color: "hsl(var(--primary) / 0.6)" }}>
+                  #{project.job_number}
+                </span>
+                {project.category || project.city ? " · " : null}
+              </>
+            ) : null}
+            {[project.category, project.city].filter(Boolean).join(" · ")}
+          </span>
+        </div>
+        <div
+          className="row between"
+          style={{ alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}
+        >
+          <div className="row-c" style={{ gap: 0, flexWrap: "wrap" }}>
             <div>
               <div className="label-form">Install</div>
               <div className="mono" style={{ marginTop: 4 }}>
@@ -380,7 +680,13 @@ export default function ProjectDetail() {
                   : "-"}
               </div>
             </div>
-            <div>
+            <div
+              style={{
+                marginLeft: 24,
+                paddingLeft: 24,
+                borderLeft: "1px solid hsl(var(--border))",
+              }}
+            >
               <div className="label-form">Live</div>
               <div className="mono" style={{ marginTop: 4 }}>
                 {project.live_dates_start
@@ -390,7 +696,13 @@ export default function ProjectDetail() {
                   : "-"}
               </div>
             </div>
-            <div>
+            <div
+              style={{
+                marginLeft: 24,
+                paddingLeft: 24,
+                borderLeft: "1px solid hsl(var(--border))",
+              }}
+            >
               <div className="label-form">Removal</div>
               <div className="mono" style={{ marginTop: 4 }}>
                 {project.removal_dates_start
@@ -413,8 +725,14 @@ export default function ProjectDetail() {
                 className={`btn ${b.url ? "btn-secondary" : "btn-secondary"} btn-sm`}
                 style={
                   b.url
-                    ? undefined
-                    : { opacity: 0.45, pointerEvents: "none", cursor: "not-allowed" }
+                    ? { height: 36, fontSize: 13 }
+                    : {
+                        height: 36,
+                        fontSize: 13,
+                        opacity: 0.45,
+                        pointerEvents: "none",
+                        cursor: "not-allowed",
+                      }
                 }
                 onClick={(e) => {
                   if (!b.url) e.preventDefault();
@@ -426,48 +744,36 @@ export default function ProjectDetail() {
             ))}
           </div>
         </div>
-        <div className="stack-2" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <ClickPillCell
-            value={project.status}
-            options={PROJECT_STATUS_VALUES}
-            tokenMap={projectStatusToken}
-            onSave={async (next) => {
-              await updateProjectStatus(project.id, next as ProjectStatus);
-              setProject({ ...project, status: next as ProjectStatus });
-            }}
-          />
-          <button
-            type="button"
-            className="btn btn-secondary"
-            aria-label="Edit Project"
-            title="Edit Project"
-            onClick={() => navigate(`/projects/${project.id}/edit`)}
-            style={{ padding: "0 10px" }}
-          >
-            <Pencil className="ic" style={{ width: 14, height: 14 }} />
-          </button>
-        </div>
       </header>
 
-      <div className="g3">
-        <div className="stat">
-          <div className="lbl">Next Deliverable</div>
-          <div className="num">{nextDeliverable?.title ?? "-"}</div>
-          <div className="sub">
-            {nextDeliverable?.due_date
-              ? `${relativeDay(nextDeliverable.due_date)} · ${formatMediumDate(nextDeliverable.due_date)}`
-              : "Nothing dated"}
+      {/* Top 3-stat row mirrors the Overview/Team 70/30 grid below so
+          the stat tiles' left + right edges line up with the cards
+          underneath: Next Deliverable left = Overview left, This Week
+          right = Overview right, Days Until Install spans the Team
+          column. Cards land near-equal width at typical viewport
+          (~33% / 33% / 30%); exact equality + alignment would need a
+          ~9% gap which doesn't read clean. */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 70%) minmax(0, 30%)", gap: 24, alignItems: "start" }}>
+        <div className="g2" style={{ gap: 24 }}>
+          <div className="stat">
+            <div className="lbl">Next Deliverable</div>
+            <div className="num">{nextDeliverable?.title ?? "-"}</div>
+            <div className="sub">
+              {nextDeliverable?.due_date
+                ? `${relativeDay(nextDeliverable.due_date)} · ${formatMediumDate(nextDeliverable.due_date)}`
+                : "Nothing dated"}
+            </div>
           </div>
-        </div>
-        <div className="stat">
-          <div className="lbl">This Week</div>
-          <div className="num">{thisWeekDeliverable?.title ?? "-"}</div>
-          <div className="sub">
-            {thisWeekDeliverable?.due_date
-              ? formatMediumDate(thisWeekDeliverable.due_date)
-              : nextDeliverable?.due_date
-                ? `Next: ${relativeDay(nextDeliverable.due_date)}`
-                : "Nothing dated this week"}
+          <div className="stat">
+            <div className="lbl">This Week</div>
+            <div className="num">{thisWeekDeliverable?.title ?? "-"}</div>
+            <div className="sub">
+              {thisWeekDeliverable?.due_date
+                ? formatMediumDate(thisWeekDeliverable.due_date)
+                : nextDeliverable?.due_date
+                  ? `Next: ${relativeDay(nextDeliverable.due_date)}`
+                  : "Nothing dated this week"}
+            </div>
           </div>
         </div>
         <div className="stat stat--accent">
@@ -479,8 +785,8 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "70% 30%", gap: 24, alignItems: "start" }}>
-        <div className="stack-6">
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 70%) minmax(0, 30%)", gap: 24, alignItems: "start" }}>
+        <div className="stack-6" style={{ minWidth: 0 }}>
           <section className="card">
             <div className="card-headbar">
               <span className="h-card">Overview</span>
@@ -495,7 +801,7 @@ export default function ProjectDetail() {
                     value={project.job_number}
                     placeholder="Job number"
                     renderRead={(v) =>
-                      v ? <span className="text-primary mono">#{v}</span> : <span className="muted subtle">-</span>
+                      v ? <span className="mono">#{v}</span> : <span className="muted subtle">-</span>
                     }
                     onSave={(next) => saveField("job_number", next || null)}
                   />
@@ -508,6 +814,8 @@ export default function ProjectDetail() {
                     onChange={(next) => void saveClientId(next)}
                     entityLabel="Client"
                     placeholder="No client"
+                    quickCreate
+                    getRecordHref={(id) => `/clients/${id}`}
                     miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
                     onMiniCreate={async (data) => {
                       const created = await createClientInline(data);
@@ -571,8 +879,9 @@ export default function ProjectDetail() {
               </dl>
               {/* Right column: Venue → Live (start/end pair, tight) → Install
                   (start/end pair, tight) → Removal (start/end pair, tight) →
-                  Tags. Each date pair is its own .kv--pair block (tight
-                  gap), separated from siblings by stack-4 (24px). */}
+                  Tags. Phase 5.7.3 followup-3: the three date pairs sit
+                  inside a single bordered container with internal dividers
+                  so the date trio reads as a grouped section. */}
               <div className="stack-4">
                 <dl className="kv">
                   <dt>Venue</dt>
@@ -584,6 +893,9 @@ export default function ProjectDetail() {
                       onMultiChange={(next) => void saveVenueIds(next)}
                       entityLabel="Venue"
                       placeholder="Add venue..."
+                      quickCreate
+                      getRecordHref={(id) => `/venues/${id}`}
+                      displayAs="stack"
                       miniCreateFields={VENUE_MINI_CREATE_FIELDS}
                       onMiniCreate={async (data) => {
                         const created = await createVenueInline(data);
@@ -599,7 +911,16 @@ export default function ProjectDetail() {
                     />
                   </dd>
                 </dl>
-                <dl className="kv kv--pair">
+                <div
+                  style={{
+                    borderTop: "1px solid hsl(var(--border))",
+                    borderBottom: "1px solid hsl(var(--border))",
+                  }}
+                >
+                <dl
+                  className="kv kv--pair"
+                  style={{ paddingTop: 14, paddingBottom: 14 }}
+                >
                   <dt>Live start</dt>
                   <dd>
                     <InlineEditText
@@ -625,7 +946,14 @@ export default function ProjectDetail() {
                     />
                   </dd>
                 </dl>
-                <dl className="kv kv--pair">
+                <dl
+                  className="kv kv--pair"
+                  style={{
+                    paddingTop: 14,
+                    paddingBottom: 14,
+                    borderTop: "1px solid hsl(var(--border))",
+                  }}
+                >
                   <dt>Install start</dt>
                   <dd>
                     <InlineEditText
@@ -651,7 +979,14 @@ export default function ProjectDetail() {
                     />
                   </dd>
                 </dl>
-                <dl className="kv kv--pair">
+                <dl
+                  className="kv kv--pair"
+                  style={{
+                    paddingTop: 14,
+                    paddingBottom: 14,
+                    borderTop: "1px solid hsl(var(--border))",
+                  }}
+                >
                   <dt>Removal start</dt>
                   <dd>
                     <InlineEditText
@@ -677,6 +1012,7 @@ export default function ProjectDetail() {
                     />
                   </dd>
                 </dl>
+                </div>
                 <dl className="kv">
                   <dt>Tags</dt>
                   <dd>
@@ -803,22 +1139,72 @@ export default function ProjectDetail() {
               </table>
             )}
           </section>
-
-          <section className="card empty" style={{ borderStyle: "dashed" }}>
-            <p>No attachments yet</p>
-            <button type="button" className="btn btn-secondary btn-sm" disabled>
-              Upload (coming in 5.4)
-            </button>
-          </section>
         </div>
 
-        <aside className="stack-6">
+        <aside className="stack-6" style={{ minWidth: 0 }}>
           <section className="card">
             <div className="card-headbar">
               <span className="h-card">Team</span>
+              <Popover
+                open={memberPickerOpen}
+                onOpenChange={(o) => {
+                  setMemberPickerOpen(o);
+                  if (!o) setMemberSearch("");
+                }}
+              >
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="combo-picker-btn"
+                    aria-label="Add team member"
+                    title="Add team member"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0" align="end">
+                  <Command shouldFilter>
+                    <CommandInput
+                      value={memberSearch}
+                      onValueChange={setMemberSearch}
+                      placeholder="Search users..."
+                    />
+                    <CommandList>
+                      <CommandEmpty>No users.</CommandEmpty>
+                      {userOptions.map((opt) => {
+                        const isAlreadyOnProject =
+                          project.account_managers.some((j) => j.user?.id === opt.id) ||
+                          project.designers.some((j) => j.user?.id === opt.id) ||
+                          project.members.some((j) => j.user?.id === opt.id);
+                        return (
+                          <CommandItem
+                            key={opt.id}
+                            value={opt.label}
+                            disabled={isAlreadyOnProject}
+                            onSelect={() => {
+                              if (isAlreadyOnProject) return;
+                              void handleAddMember(opt.id);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <span className="flex-1 truncate">{opt.label}</span>
+                            {isAlreadyOnProject ? (
+                              <span className="cap" style={{ opacity: 0.6 }}>
+                                on project
+                              </span>
+                            ) : null}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="card-pad stack-3">
-              {project.account_managers.length === 0 && project.designers.length === 0 ? (
+              {project.account_managers.length === 0 &&
+              project.designers.length === 0 &&
+              project.members.length === 0 ? (
                 <div className="subtle">No team assigned.</div>
               ) : null}
               {project.account_managers.map((j, i) =>
@@ -847,19 +1233,95 @@ export default function ProjectDetail() {
                   </div>
                 ) : null,
               )}
+              {project.members.map((j, i) =>
+                j.user ? (
+                  <div
+                    key={`m-${i}`}
+                    className="row-c team-member-row"
+                    style={{ justifyContent: "space-between" }}
+                  >
+                    <div className="row-c">
+                      <span className="av-i">
+                        {(j.user.full_name ?? j.user.email ?? "?").slice(0, 2).toUpperCase()}
+                      </span>
+                      <div>
+                        <div>{j.user.full_name ?? j.user.email}</div>
+                        <div className="cap">Team</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="combo-picker-btn team-member-remove"
+                      aria-label={`Remove ${j.user.full_name ?? j.user.email ?? "member"} from team`}
+                      title="Remove from team"
+                      onClick={() => {
+                        if (j.user) void handleRemoveMember(j.user.id);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null,
+              )}
             </div>
           </section>
+
+          {/* Status Notes (Phase 5.7.3 followup-13): append-only via
+              shared InternalNotesEditor; users can be @-mentioned. Existing
+              projects.status_notes content was backfilled into notes_log by
+              migration 20260523100000. */}
+          <InternalNotesEditor
+            parentType="project"
+            parentId={project.id}
+            title="Status Notes"
+            maxVisibleNotes={2}
+          />
 
           <section className="card">
             <div className="card-headbar">
               <span className="h-card">Vendors</span>
-              <button
-                type="button"
-                className="tlink"
-                onClick={() => navigate(`/projects/${project.id}/edit`)}
-              >
-                Manage
-              </button>
+              <Popover open={vendorPickerOpen} onOpenChange={(o) => { setVendorPickerOpen(o); if (!o) setVendorSearch(""); }}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="combo-picker-btn"
+                    aria-label="Add or remove vendors"
+                    title="Manage vendors"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0" align="end">
+                  <Command shouldFilter>
+                    <CommandInput
+                      value={vendorSearch}
+                      onValueChange={setVendorSearch}
+                      placeholder="Search vendors..."
+                    />
+                    <CommandList>
+                      <CommandEmpty>No vendors.</CommandEmpty>
+                      {vendorOptions.map((opt) => {
+                        const selected = vendors.some((v) => v.id === opt.id);
+                        return (
+                          <CommandItem
+                            key={opt.id}
+                            value={opt.label}
+                            onSelect={() => {
+                              void toggleVendor(opt.id);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <span className="flex-1 truncate">{opt.label}</span>
+                            {selected ? (
+                              <Check className="ml-2 h-4 w-4 text-primary" />
+                            ) : null}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="card-pad stack-2">
               {vendors.length === 0 ? (
@@ -887,57 +1349,61 @@ export default function ProjectDetail() {
 
           <section className="card">
             <div className="card-headbar">
-              <span className="h-card">Status Notes</span>
-            </div>
-            <div className="card-pad">
-              <InlineEditText
-                value={project.status_notes}
-                placeholder="Free-form context for status check-ins..."
-                multiline
-                renderRead={(v) =>
-                  v ? (
-                    <span className="muted" style={{ whiteSpace: "pre-wrap" }}>{v}</span>
-                  ) : (
-                    <span className="muted subtle">(empty)</span>
-                  )
-                }
-                onSave={(next) => saveField("status_notes", next || null)}
-              />
-            </div>
-          </section>
-
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Client Notes</span>
-            </div>
-            <div className="card-pad">
-              <InlineEditText
-                value={project.client_notes}
-                placeholder="Client-facing context shared at touchpoints..."
-                multiline
-                renderRead={(v) =>
-                  v ? (
-                    <span className="muted" style={{ whiteSpace: "pre-wrap" }}>{v}</span>
-                  ) : (
-                    <span className="muted subtle">(empty)</span>
-                  )
-                }
-                onSave={(next) => saveField("client_notes", next || null)}
-              />
-            </div>
-          </section>
-
-          <section className="card">
-            <div className="card-headbar">
               <span className="h-card">Project Activity</span>
-              <a className="tlink" href="/activity">
+              <Link to="/activity" className="tlink">
                 View all
                 <IconExt className="ic" style={{ width: 11, height: 11 }} />
-              </a>
+              </Link>
             </div>
-            <div className="card-pad subtle">
-              Activity feed lands in 5.5. This card will populate from the
-              activity_log table once the feed surface ships.
+            <div className="card-pad">
+              {activityLoading ? (
+                <p className="subtle" style={{ fontSize: 13 }}>Loading...</p>
+              ) : activityError ? (
+                <p className="subtle" style={{ fontSize: 13 }}>
+                  Could not load activity.
+                </p>
+              ) : activityRows.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>
+                  No project activity yet.
+                </p>
+              ) : (
+                activityRows.map((row) => {
+                  const f = formatActivitySentence(row);
+                  // Phase 5.7.2 carry-forward: /users (Team list) is admin-only.
+                  // Demote the mention-fallback link for non-admin viewers so we
+                  // don't render a dead-end. Revert in 5.7.11 once /users/:id ships.
+                  const recordHrefEffective =
+                    f.recordHref === "/users" && viewerRole !== "admin"
+                      ? null
+                      : f.recordHref;
+                  return (
+                    <div key={row.id} className="activity-row">
+                      <span className="actdot">
+                        <ActivityRowIcon entityType={row.entity_type} />
+                      </span>
+                      <div>
+                        <div className="txt">
+                          <span className="who">{f.actor.name}</span>
+                          {f.leadingText}
+                          {f.recordName ? (
+                            f.recordIsBoldOnly ? (
+                              <span className="dlv">{f.recordName}</span>
+                            ) : recordHrefEffective ? (
+                              <Link to={recordHrefEffective}>
+                                <b>{f.recordName}</b>
+                              </Link>
+                            ) : (
+                              <b>{f.recordName}</b>
+                            )
+                          ) : null}
+                          {f.trailingText}
+                        </div>
+                        <div className="ts">{activityRowTimestamp(row.created_at)}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </section>
         </aside>

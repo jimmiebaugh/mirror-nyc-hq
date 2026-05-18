@@ -343,6 +343,7 @@ export function OutlookEntryPanel({
                 }}
                 entityLabel="Client"
                 placeholder="No client"
+                quickCreate
                 miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
                 onMiniCreate={async (data) => {
                   const created = await createClientInline(data);
@@ -653,16 +654,20 @@ export function OutlookEntryPanel({
 
           <div className="field">
             <label className="label-form">Client</label>
-            <select
-              className={`input ${form.clientId ? "input--filled" : ""}`}
-              value={form.clientId ?? ""}
-              onChange={(e) => set("clientId", e.target.value || null)}
-            >
-              <option value="">None</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <RecordCombobox
+              source={{ kind: "record", loadOptions: loadClientOptions }}
+              value={form.clientId ?? null}
+              onChange={(next) => set("clientId", next)}
+              entityLabel="Client"
+              placeholder="None"
+              quickCreate
+              miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
+              onMiniCreate={async (data) => {
+                const created = await createClientInline(data);
+                if (created) setExtraClients((prev) => [...prev, created]);
+                return created;
+              }}
+            />
           </div>
 
           <div className="row between" style={{ alignItems: "center" }}>

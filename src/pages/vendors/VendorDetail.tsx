@@ -5,15 +5,16 @@ import { Pencil } from "lucide-react";
 import {
   IconArrowLeft,
   IconLink,
-  IconPlus,
 } from "@/components/icons/HQIcons";
 import { StarRating } from "@/components/data/StarRating";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
+import { VendorFilesEditor } from "@/components/data/VendorFilesEditor";
 import { isInternalPartner } from "@/lib/vendors/queries";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { InlineTagInput } from "@/components/hq/InlineTagInput";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { useBackHref } from "@/lib/hq/useBackHref";
+import { useAuth } from "@/hooks/useAuth";
 import { useLookup, getLookupCached } from "@/lib/hq/lookups";
 import { formatPhone } from "@/lib/hq/phone";
 import { toast } from "@/hooks/use-toast";
@@ -44,7 +45,6 @@ type Vendor = {
   contact_phone: string | null;
   primary_address: string | null;
   tags: string[];
-  internal_rating: number | null;
 };
 
 type Contact = {
@@ -61,12 +61,20 @@ type ProjectLink = {
   job_number: string | null;
 };
 
+type RatingRow = {
+  user_id: string;
+  rating: number;
+};
+
 export default function VendorDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const currentUserId = user?.id ?? null;
   const [vendor, setVendor] = useState<Vendor | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [projects, setProjects] = useState<ProjectLink[]>([]);
+  const [ratings, setRatings] = useState<RatingRow[]>([]);
   const [primaryContactPersonId, setPrimaryContactPersonId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const back = useBackHref({ to: "/vendors", label: "Vendors" });
@@ -79,11 +87,11 @@ export default function VendorDetail() {
     if (!id) return;
     let active = true;
     (async () => {
-      const [vendorRes, contactsRes, projectsRes] = await Promise.all([
+      const [vendorRes, contactsRes, projectsRes, ratingsRes] = await Promise.all([
         supabase
           .from("vendors")
           .select(
-            "id, name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating, " +
+            "id, name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, " +
               "category:vendor_categories!vendors_category_id_fkey(id, name), " +
               "subcategory:vendor_subcategories!vendors_subcategory_id_fkey(id, name)",
           )
@@ -101,6 +109,10 @@ export default function VendorDetail() {
           )
           .eq("vendor_id", id)
           .order("created_at", { ascending: false }),
+        supabase
+          .from("vendor_ratings")
+          .select("user_id, rating")
+          .eq("vendor_id", id),
       ]);
       if (!active) return;
       if (vendorRes.error || !vendorRes.data) {
@@ -121,6 +133,7 @@ export default function VendorDetail() {
         capabilities: v.capabilities ?? [],
         tags: v.tags ?? [],
       });
+      setRatings((ratingsRes.data ?? []) as RatingRow[]);
       const contactRows = (contactsRes.data ?? []) as unknown as Contact[];
       setContacts(contactRows);
       // Best-effort resolve which person is the Primary Contact: match by
@@ -352,6 +365,49 @@ export default function VendorDetail() {
     await applyPrimaryContact(person);
   };
 
+  // Phase 5.7.13: per-user vendor ratings. `myRating` is the viewer's own
+  // row (null if they haven't rated); aggregate is the team-wide average +
+  // count across every rater. UPSERT on click; DELETE on Clear.
+  const myRating = currentUserId
+    ? ratings.find((r) => r.user_id === currentUserId)?.rating ?? null
+    : null;
+  const teamCount = ratings.length;
+  const teamAverage =
+    teamCount > 0 ? ratings.reduce((s, r) => s + r.rating, 0) / teamCount : 0;
+
+  const saveMyRating = async (next: number | null) => {
+    if (!id || !currentUserId) return;
+    try {
+      if (next === null) {
+        const { error } = await supabase
+          .from("vendor_ratings")
+          .delete()
+          .eq("vendor_id", id)
+          .eq("user_id", currentUserId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("vendor_ratings")
+          .upsert(
+            { vendor_id: id, user_id: currentUserId, rating: next },
+            { onConflict: "vendor_id,user_id" },
+          );
+        if (error) throw error;
+      }
+      const { data: r } = await supabase
+        .from("vendor_ratings")
+        .select("user_id, rating")
+        .eq("vendor_id", id);
+      setRatings((r ?? []) as RatingRow[]);
+    } catch (err) {
+      toast({
+        title: "Could not save rating",
+        description: err instanceof Error ? err.message : "Save failed",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -375,9 +431,9 @@ export default function VendorDetail() {
         <Link to={back.to} className="crumb">
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
-        <div className="row between" style={{ alignItems: "flex-start" }}>
-          <div>
-            <div className="eyebrow">Vendor</div>
+        <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="eyebrow" style={{ paddingTop: 8 }}>Vendor</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
               <InlineEditText
                 value={vendor.name}
@@ -387,15 +443,28 @@ export default function VendorDetail() {
                 onSave={(next) => saveField("name", next)}
               />
             </h1>
-            <div className="row-c" style={{ marginTop: 10 }}>
-              {internalPartner ? (
-                <span className="pill pill-lg p-info">Internal Partner</span>
-              ) : null}
-              {vendor.category_name ? (
-                <span className="cap">{vendor.category_name}</span>
-              ) : null}
-              {vendor.city ? <span className="cap">{vendor.city}</span> : null}
-            </div>
+            {internalPartner ||
+            vendor.category_name ||
+            vendor.subcategory_name ||
+            vendor.city ? (
+              <div className="row-c" style={{ marginTop: 10 }}>
+                {internalPartner ? (
+                  <span className="pill pill-lg p-info">Internal</span>
+                ) : null}
+                {vendor.category_name || vendor.subcategory_name || vendor.city ? (
+                  <span
+                    style={{
+                      fontSize: 14,
+                      color: "hsl(var(--muted-foreground))",
+                    }}
+                  >
+                    {[vendor.category_name, vendor.subcategory_name, vendor.city]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
@@ -561,6 +630,7 @@ export default function VendorDetail() {
                     onChange={(next) => void savePrimaryContact(next)}
                     entityLabel="contact"
                     placeholder="Pick or add a contact..."
+                    getRecordHref={(id) => `/people/${id}`}
                     miniCreateFields={[
                       { key: "full_name", label: "Full name", required: true },
                       { key: "email", label: "Email" },
@@ -606,101 +676,119 @@ export default function VendorDetail() {
             </div>
           </section>
 
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Files &amp; Assets</span>
-              <button type="button" className="tlink" disabled style={{ opacity: 0.45, cursor: "not-allowed" }}>
-                <IconPlus className="ic ic-sm" /> Add
-              </button>
-            </div>
-            <div className="card-pad subtle" style={{ fontSize: 13 }}>
-              File uploads land in 5.4.
-            </div>
-          </section>
+          <VendorFilesEditor vendorId={vendor.id} />
         </div>
 
         <aside className="stack-6">
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Contacts</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Contacts</span>
             </div>
-            {contacts.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
-            ) : (
-              <div className="stack-3">
-                {contacts.map((c) => (
-                  <Link
-                    key={c.id}
-                    to={`/people/${c.id}`}
-                    className="row-c"
-                    style={{ textDecoration: "none", color: "inherit" }}
-                  >
-                    <span className="av-i">
-                      {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <div style={{ fontSize: 13 }}>{c.full_name}</div>
-                      <div className="cap">{c.role_title ?? "-"}</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {contacts.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
+              ) : (
+                <div className="stack-3">
+                  {contacts.map((c) => (
+                    <Link
+                      key={c.id}
+                      to={`/people/${c.id}`}
+                      className="row-c"
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <span className="av-i">
+                        {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: 13 }}>{c.full_name}</div>
+                        <div className="cap">{c.role_title ?? "-"}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Internal Rating</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Team Rating</span>
             </div>
-            <div className="row-c" style={{ gap: 8 }}>
-              <StarRating
-                value={vendor.internal_rating}
-                editable
-                size="lg"
-                onChange={(next) => {
-                  void saveField("internal_rating", next).catch((err) => {
-                    toast({
-                      title: "Could not save rating",
-                      description: err instanceof Error ? err.message : "Save failed",
-                      variant: "destructive",
-                    });
-                  });
+            <div className="card-pad stack-3">
+              <div className="row-c" style={{ gap: 8 }}>
+                <StarRating
+                  value={Math.round(teamAverage * 2) / 2}
+                  editable={false}
+                  size="lg"
+                />
+                <span className="cap">
+                  {teamCount > 0
+                    ? `${teamAverage.toFixed(1)} of 5 · ${teamCount} ${teamCount === 1 ? "rating" : "ratings"}`
+                    : "No ratings yet"}
+                </span>
+              </div>
+              <div
+                className="row between"
+                style={{
+                  alignItems: "center",
+                  borderTop: "1px solid hsl(var(--border))",
+                  paddingTop: 12,
                 }}
-              />
-              <span className="cap">
-                {vendor.internal_rating != null
-                  ? `${vendor.internal_rating} of 5`
-                  : "Not rated"}
-              </span>
+              >
+                <span className="cap">Your rating</span>
+                <div className="row-c" style={{ gap: 8 }}>
+                  <StarRating
+                    value={myRating}
+                    editable
+                    size="md"
+                    onChange={(next) => void saveMyRating(next)}
+                  />
+                  {myRating != null ? (
+                    <button
+                      type="button"
+                      className="tlink"
+                      style={{
+                        background: "none",
+                        border: 0,
+                        padding: 0,
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                      onClick={() => void saveMyRating(null)}
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
-            <p className="cap" style={{ marginTop: 10, lineHeight: 1.5 }}>
-              Visible to all Standard users.
-            </p>
           </section>
 
           <InternalNotesEditor parentType="vendor" parentId={vendor.id} />
 
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Projects</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Projects</span>
             </div>
-            {projects.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
-            ) : (
-              <div className="stack-2">
-                {projects.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/projects/${p.id}`}
-                    className="tlink"
-                    style={{ fontSize: 12.5 }}
-                  >
-                    {p.job_number ? `#${p.job_number} ` : ""}
-                    {p.name}
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {projects.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
+              ) : (
+                <div className="stack-2">
+                  {projects.map((p) => (
+                    <Link
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      className="tlink"
+                      style={{ fontSize: 12.5 }}
+                    >
+                      {p.job_number ? `#${p.job_number} ` : ""}
+                      {p.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         </aside>
       </div>

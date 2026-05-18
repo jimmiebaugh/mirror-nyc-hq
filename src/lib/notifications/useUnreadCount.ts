@@ -11,10 +11,17 @@ import { fetchUnreadCount, type NotificationRow } from "./queries";
  * toggles. This is the same Realtime pattern used by PullDetail.tsx for
  * ts_pull_rounds (3.4) and the deliverables board (5.2.1).
  *
+ * Phase 5.7.2: optional `typeFilter` narrows the count to a single
+ * notification.type so the @-mention bell can render its own badge in
+ * parallel with the catch-all bell without double-counting.
+ *
  * Returns the unread count + a `refresh` function the bell panel can call
  * after a local mark-read to converge optimistic state with the server.
  */
-export function useUnreadCount(userId: string | undefined): {
+export function useUnreadCount(
+  userId: string | undefined,
+  typeFilter?: string,
+): {
   count: number;
   refresh: () => Promise<void>;
 } {
@@ -26,7 +33,7 @@ export function useUnreadCount(userId: string | undefined): {
       return;
     }
     try {
-      const n = await fetchUnreadCount();
+      const n = await fetchUnreadCount(typeFilter);
       setCount(n);
     } catch {
       // Surface as zero; the bell still renders. The full bell panel will
@@ -40,7 +47,7 @@ export function useUnreadCount(userId: string | undefined): {
       return;
     }
     let active = true;
-    fetchUnreadCount()
+    fetchUnreadCount(typeFilter)
       .then((n) => {
         if (active) setCount(n);
       })
@@ -48,8 +55,12 @@ export function useUnreadCount(userId: string | undefined): {
         if (active) setCount(0);
       });
 
+    const channelName = typeFilter
+      ? `notifications:${userId}:${typeFilter}`
+      : `notifications:${userId}`;
+
     const channel = supabase
-      .channel(`notifications:${userId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -60,6 +71,7 @@ export function useUnreadCount(userId: string | undefined): {
         },
         (payload) => {
           const row = payload.new as NotificationRow;
+          if (typeFilter && row.type !== typeFilter) return;
           if (row.delivered_in_app && !row.read) {
             setCount((c) => c + 1);
           }
@@ -76,6 +88,7 @@ export function useUnreadCount(userId: string | undefined): {
         (payload) => {
           const oldRow = payload.old as Partial<NotificationRow>;
           const newRow = payload.new as NotificationRow;
+          if (typeFilter && newRow.type !== typeFilter) return;
           // Unread -> read: decrement. Read -> unread (rare): increment.
           if (oldRow.read === false && newRow.read === true) {
             setCount((c) => Math.max(0, c - 1));
@@ -90,7 +103,7 @@ export function useUnreadCount(userId: string | undefined): {
       active = false;
       supabase.removeChannel(channel);
     };
-  }, [userId]);
+  }, [userId, typeFilter]);
 
   return { count, refresh };
 }

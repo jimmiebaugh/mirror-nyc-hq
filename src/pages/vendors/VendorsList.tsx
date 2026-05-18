@@ -7,7 +7,7 @@ import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { StarRating } from "@/components/data/StarRating";
 import { OverflowList, type OverflowItem } from "@/components/hq/OverflowList";
-import { IconPlus } from "@/components/icons/HQIcons";
+import { IconPlus, IconSearch } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
 import {
   isInternalPartner,
@@ -32,15 +32,23 @@ import {
  * design-system § 11.
  */
 
+// Phase 5.7.6 follow-up: ordered to match the list-view DataTable
+// column display order (name, category_name, subcategory_name, city,
+// capabilities, team_rating, projects). tags has no visible column
+// so it lands at the end.
 const VENDOR_FILTER_FIELDS: FilterFieldDef[] = [
   { key: "category_name", label: "Category", type: "text" },
   { key: "subcategory_name", label: "Subcategory", type: "text" },
-  { key: "capabilities", label: "Capabilities", type: "text" },
   { key: "city", label: "City", type: "text" },
+  { key: "capabilities", label: "Capabilities", type: "text" },
   { key: "tags", label: "Tags", type: "text" },
 ];
 
 const FROM_LABEL = "Vendors";
+
+type VendorFilterState = FilterState & {
+  searchQuery?: string;
+};
 
 export default function VendorsList() {
   const navigate = useNavigate();
@@ -48,8 +56,10 @@ export default function VendorsList() {
   const fromState = backState(location, FROM_LABEL);
   const [rows, setRows] = useState<VendorListRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterState, setFilterState] = useState<FilterState>(emptyFilterState());
+  const [filterState, setFilterState] = useState<VendorFilterState>(emptyFilterState());
   const [activeViewName, setActiveViewName] = useState("All vendors");
+
+  const searchQuery = filterState.searchQuery ?? "";
 
   useEffect(() => {
     let active = true;
@@ -70,7 +80,7 @@ export default function VendorsList() {
     let active = true;
     getDefaultSavedView("vendor").then((v) => {
       if (!active || !v) return;
-      setFilterState(v.filter_state);
+      setFilterState(v.filter_state as VendorFilterState);
       setActiveViewName(v.name);
     });
     return () => {
@@ -81,7 +91,7 @@ export default function VendorsList() {
   const handleResetToGlobal = async () => {
     const v = await getDefaultSavedView("vendor");
     if (v) {
-      setFilterState(v.filter_state);
+      setFilterState(v.filter_state as VendorFilterState);
       setActiveViewName(v.name);
     } else {
       setFilterState(emptyFilterState());
@@ -89,16 +99,64 @@ export default function VendorsList() {
     }
   };
 
-  const filtered = useMemo(
-    () =>
-      applyFilters(rows, filterState, (row, key) => {
-        const val = (row as unknown as Record<string, unknown>)[key];
-        if (val == null) return null;
-        if (Array.isArray(val)) return val.map(String);
-        return typeof val === "string" ? val : String(val);
-      }),
-    [rows, filterState],
-  );
+  const setSearchQuery = (next: string) => {
+    setFilterState((prev) => ({ ...prev, searchQuery: next }));
+    setActiveViewName("Custom filter");
+  };
+
+  const filtered = useMemo(() => {
+    let result = applyFilters(rows, filterState, (row, key) => {
+      const val = (row as unknown as Record<string, unknown>)[key];
+      if (val == null) return null;
+      if (Array.isArray(val)) return val.map(String);
+      return typeof val === "string" ? val : String(val);
+    });
+
+    // Phase 5.7.8 search bar (scope: name + category + subcategory + capabilities + tags).
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((r) => {
+        if (r.name.toLowerCase().includes(q)) return true;
+        if (r.category_name && r.category_name.toLowerCase().includes(q)) return true;
+        if (r.subcategory_name && r.subcategory_name.toLowerCase().includes(q)) return true;
+        if (r.capabilities.some((c) => c.toLowerCase().includes(q))) return true;
+        if (r.tags.some((t) => t.toLowerCase().includes(q))) return true;
+        return false;
+      });
+    }
+
+    return result;
+  }, [rows, filterState, searchQuery]);
+
+  // Phase 5.7.6: distinct values per text/enum filter field. Some
+  // vendor fields are arrays (capabilities, tags) — flatten before
+  // distincting so each element becomes its own combobox option.
+  const distinctValuesByField = useMemo(() => {
+    const pickScalar = (key: string) =>
+      Array.from(
+        new Set(
+          rows
+            .map((r) => (r as unknown as Record<string, unknown>)[key])
+            .filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort();
+    const pickArray = (key: string) =>
+      Array.from(
+        new Set(
+          rows.flatMap((r) => {
+            const v = (r as unknown as Record<string, unknown>)[key];
+            return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+          }),
+        ),
+      ).sort();
+    return {
+      category_name: pickScalar("category_name"),
+      subcategory_name: pickScalar("subcategory_name"),
+      city: pickScalar("city"),
+      capabilities: pickArray("capabilities"),
+      tags: pickArray("tags"),
+    };
+  }, [rows]);
 
   return (
     <div className="stack-4">
@@ -116,27 +174,32 @@ export default function VendorsList() {
         </div>
       </div>
 
+      <SearchInput
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search vendors..."
+      />
+
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <SavedViewsDropdown
-            entityType="vendor"
-            activeName={activeViewName}
-            activeViewKind="list"
-            activeFilterState={filterState}
-            onPick={(v) => {
-              setFilterState(v.filter_state);
-              setActiveViewName(v.name);
-            }}
-            onResetToGlobal={handleResetToGlobal}
-          />
-        </div>
         <FilterBar
           state={filterState}
           onChange={(next) => {
-            setFilterState(next);
+            setFilterState((prev) => ({ ...next, searchQuery: prev.searchQuery }));
             setActiveViewName("Custom filter");
           }}
           fields={VENDOR_FILTER_FIELDS}
+          distinctValuesByField={distinctValuesByField}
+        />
+        <SavedViewsDropdown
+          entityType="vendor"
+          activeName={activeViewName}
+          activeViewKind="list"
+          activeFilterState={filterState}
+          onPick={(v) => {
+            setFilterState(v.filter_state as VendorFilterState);
+            setActiveViewName(v.name);
+          }}
+          onResetToGlobal={handleResetToGlobal}
         />
       </div>
 
@@ -155,7 +218,10 @@ export default function VendorsList() {
             }
             onRowClick={(r) => navigate(`/vendors/${r.id}`, { state: { from: fromState } })}
             empty={{
-              message: "No vendors match your filters.",
+              message:
+                searchQuery.trim()
+                  ? `No matches for "${searchQuery.trim()}".`
+                  : "No vendors match your filters.",
               ctaLabel: "+ New Vendor",
               onCta: () => navigate("/vendors/new"),
             }}
@@ -223,13 +289,16 @@ export default function VendorsList() {
               },
               // (Rating column below)
               {
-                key: "internal_rating",
+                key: "team_rating",
                 label: "Rating",
                 align: "c",
-                sort: (a, b) => (a.internal_rating ?? -1) - (b.internal_rating ?? -1),
+                sort: (a, b) => (a.teamAverage ?? -1) - (b.teamAverage ?? -1),
                 render: (r) =>
-                  r.internal_rating != null ? (
-                    <StarRating value={r.internal_rating} size="sm" />
+                  r.teamCount > 0 ? (
+                    <StarRating
+                      value={Math.round((r.teamAverage ?? 0) * 2) / 2}
+                      size="sm"
+                    />
                   ) : (
                     <span className="muted subtle">-</span>
                   ),
@@ -255,6 +324,64 @@ export default function VendorsList() {
           </span>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Phase 5.7.8 search input chrome. No debounce per the TopBar pattern
+ * (src/components/shell/TopBar.tsx:60-64). Coral `tlink` Clear button is
+ * permitted by feedback_coral_reserved_for_hyperlinks.md (clickable text).
+ * Duplicated from VenuesList per spec § 1 (page-local until a third
+ * consumer arrives, then lift to a shared <ListPageChrome>).
+ */
+function SearchInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div
+      className="row-c"
+      style={{
+        gap: 8,
+        padding: "8px 12px",
+        border: "1px solid hsl(var(--border))",
+        borderRadius: "var(--radius)",
+        background: "hsl(var(--surface-alt))",
+      }}
+    >
+      <IconSearch className="h-[14px] w-[14px]" />
+      <input
+        style={{
+          height: 30,
+          border: "none",
+          background: "none",
+          padding: 0,
+          flex: 1,
+          outline: "none",
+          color: "hsl(var(--foreground))",
+          fontSize: 13,
+        }}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+      />
+      {value ? (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="tlink"
+          style={{ fontSize: 11, background: "none", border: 0, padding: 0, cursor: "pointer" }}
+        >
+          Clear
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -15,7 +15,7 @@ export default {
     // Pills (Phase 5.2 wireframe-canonical + Phase 5.1 hq- prefix variants)
     "pill", "pill-sm", "pill-lg",
     "p-warn", "p-success", "p-info", "p-destructive", "p-primary", "p-muted", "p-purple",
-    "hq-pill", "hq-pill--warn", "hq-pill--success", "hq-pill--info", "hq-pill--destructive", "hq-pill--muted",
+    "hq-pill", "hq-pill--warn", "hq-pill--success", "hq-pill--info", "hq-pill--destructive", "hq-pill--muted", "hq-pill--purple",
     // Calendar event banner kind classes (selectors are `.cal-ev.<kind>`)
     "cal-ev", "in", "live", "rem", "del",
     // Phase 5.3 Calendar additions: shared Outlook + Mirror Holiday banners
@@ -24,7 +24,7 @@ export default {
     // (selectors are `.ol-ev.<kind>` and `ol-${kind}` via confidenceClass())
     "ol-ev", "ol-rad", "ol-like", "ol-conf", "ol-comp",
     // Row-border tokens (`.tbl tr[.rb-<token>]`, `.bcard[.rb-<token>]`)
-    "rb-warn", "rb-success", "rb-info", "rb-destructive", "rb-muted",
+    "rb-warn", "rb-success", "rb-info", "rb-destructive", "rb-muted", "rb-purple",
     // Board + timeline elements referenced through dynamic JSX
     "bcard", "bcol", "tl-bar", "tl-name",
     // Phase 5.4 wiki + credentials + toggle classes (constructed dynamically
@@ -37,6 +37,15 @@ export default {
     // dynamically (`notif notif--unread`) per row; activity-row + actdot
     // were already in src/index.css (Project Detail) but render here too.
     "notif", "notif--unread", "activity-row", "actdot",
+    // Phase 5.7.5 follow-up round 1: deliverable board card background scale
+    // (selectors are `.bcard.<bg-class>` driven by deliverableCardBg()).
+    "bcard--bg-coral", "bcard--bg-amber", "bcard--bg-grey", "bcard--bg-green", "bcard--bg-skipped",
+    // Phase 5.7.5 follow-up round 1: HQ Core edit-page input restyle wrapper.
+    // Strips the standard outline + coral left border from .input/.input--filled
+    // so form inputs match the RecordCombobox inline-edit chrome on hover/focus.
+    "hq-form",
+    // Phase 5.7.5 follow-up round 2: subgroup quick-add coral + button.
+    "btn-quickadd",
   ],
   prefix: "",
   theme: {

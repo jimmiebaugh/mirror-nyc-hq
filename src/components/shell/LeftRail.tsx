@@ -96,12 +96,14 @@ export function LeftRail({
   fullName,
   email,
   tier,
+  avatarUrl,
 }: {
   isAdmin: boolean;
   tasksOpenCount: number;
   fullName?: string | null;
   email: string;
   tier: Tier;
+  avatarUrl?: string | null;
 }) {
   const { pathname } = useLocation();
   const isToolApp =
@@ -132,7 +134,7 @@ export function LeftRail({
           <RailLink key={item.to} item={item} />
         ))}
       </nav>
-      <RailFooter fullName={fullName} email={email} tier={tier} />
+      <RailFooter fullName={fullName} email={email} tier={tier} avatarUrl={avatarUrl} />
     </aside>
   );
 }

@@ -16,12 +16,12 @@ export type VisibilityProject = {
 export function CalendarVisibilityPanel({
   showDeliverables,
   showHolidays,
-  showSharedOutlook,
+  showMyTasks,
   hiddenProjectIds,
   projects,
   onSetShowDeliverables,
   onSetShowHolidays,
-  onSetShowSharedOutlook,
+  onSetShowMyTasks,
   onToggleProject,
   canPublishGlobal,
   canResetToGlobal,
@@ -30,12 +30,13 @@ export function CalendarVisibilityPanel({
 }: {
   showDeliverables: boolean;
   showHolidays: boolean;
-  showSharedOutlook: boolean;
+  /** Phase 5.7.9 §9.D: personal tasks master toggle. */
+  showMyTasks: boolean;
   hiddenProjectIds: string[];
   projects: VisibilityProject[];
   onSetShowDeliverables: (v: boolean) => void;
   onSetShowHolidays: (v: boolean) => void;
-  onSetShowSharedOutlook: (v: boolean) => void;
+  onSetShowMyTasks: (v: boolean) => void;
   onToggleProject: (id: string, visible: boolean) => void;
   /**
    * Phase 5.6.5. Renders the owner-only "Save as global calendar
@@ -59,7 +60,7 @@ export function CalendarVisibilityPanel({
         </div>
         <div className="stack-2">
           <ToggleRow
-            label="Deliverables"
+            label="All Deliverables"
             pressed={showDeliverables}
             onChange={onSetShowDeliverables}
           />
@@ -69,11 +70,13 @@ export function CalendarVisibilityPanel({
             onChange={onSetShowHolidays}
           />
           <ToggleRow
-            label="Tentative"
-            pressed={showSharedOutlook}
-            onChange={onSetShowSharedOutlook}
+            label="My Tasks"
+            pressed={showMyTasks}
+            onChange={onSetShowMyTasks}
           />
         </div>
+        {/* Tentative-shared-outlook toggle dropped Phase 5.7.9 followup
+            (feature removed end-to-end). */}
         <div
           style={{
             height: 1,
@@ -169,7 +172,7 @@ function ToggleRow({
               fontSize: 11,
               color: dim
                 ? "hsl(var(--subtle-foreground))"
-                : "hsl(var(--primary))",
+                : "hsl(var(--foreground))",
               lineHeight: 1.25,
               wordBreak: "break-word",
             }}

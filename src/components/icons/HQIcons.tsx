@@ -158,12 +158,26 @@ export const IconBell = (p: IconProps) => (
   </Base>
 );
 
+// Phase 5.7.2: @-bell trigger glyph in the TopBar (sits left of the
+// notifications bell). Inner circle = the "a", outer arc = the
+// @-loop, with a tail that opens at the bottom-right.
+export const IconAt = (p: IconProps) => (
+  <Base {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M16 8v6a3 3 0 006 0v-2a10 10 0 10-4 8" />
+  </Base>
+);
+
 export const IconPlus = (p: IconProps) => (
   <Base {...p}><path d="M12 5v14M5 12h14" /></Base>
 );
 
 export const IconChevronRight = (p: IconProps) => (
   <Base {...p}><path d="M9 6l6 6-6 6" /></Base>
+);
+
+export const IconChevronLeft = (p: IconProps) => (
+  <Base {...p}><path d="M15 6l-6 6 6 6" /></Base>
 );
 
 export const IconClock = (p: IconProps) => (

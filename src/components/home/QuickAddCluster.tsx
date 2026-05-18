@@ -1,69 +1,33 @@
-import { useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { useNavigate } from "react-router-dom";
 import { IconPlus } from "@/components/icons/HQIcons";
 
 const ITEMS = [
-  "New Project",
-  "New Task",
-  "New Deliverable",
-  "New Person",
+  { label: "New Project", to: "/projects/new" },
+  { label: "New Task", to: "/tasks/new" },
+  { label: "New Deliverable", to: "/deliverables/new" },
+  { label: "New Person", to: "/people/new" },
 ] as const;
 
 /**
- * Phase 5.1 Quick-add cluster (spec § 7c).
- *
- * Four dashed-border chips. Each click opens an AlertDialog titled "Coming in
- * Phase 5.2" with a single "Got it" action. The affordance is visible so the
- * producer knows it's real and lands soon; the actual creation forms ship in
- * 5.2 alongside Projects + Tasks + Deliverables and 5.2 also handles People
- * (per locked decisions Q1).
+ * Home quick-add cluster: four dashed-border chips that route directly to
+ * the relevant `/new` form.
  */
 export function QuickAddCluster() {
-  const [open, setOpen] = useState(false);
-  const [pendingLabel, setPendingLabel] = useState<string | null>(null);
-
-  const onClick = (label: string) => {
-    setPendingLabel(label);
-    setOpen(true);
-  };
+  const navigate = useNavigate();
 
   return (
-    <>
-      <div className="hq-quickadd">
-        {ITEMS.map((label) => (
-          <button
-            key={label}
-            type="button"
-            className="hq-qa"
-            onClick={() => onClick(label)}
-          >
-            <IconPlus className="h-[14px] w-[14px]" />
-            <span>{label}</span>
-          </button>
-        ))}
-      </div>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Coming in Phase 5.2</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingLabel ?? "This action"} lands alongside the Projects, Tasks,
-              Deliverables, and People surfaces in 5.2.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setOpen(false)}>Got it</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    <div className="hq-quickadd">
+      {ITEMS.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          className="hq-qa"
+          onClick={() => navigate(item.to)}
+        >
+          <IconPlus className="h-[14px] w-[14px]" />
+          <span>{item.label}</span>
+        </button>
+      ))}
+    </div>
   );
 }

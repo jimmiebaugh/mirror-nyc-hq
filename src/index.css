@@ -363,7 +363,7 @@
     @apply flex flex-col;
   }
   .hq-brand {
-    height: 64px;
+    height: 56px;
     @apply flex items-center gap-[14px] px-[18px];
     border-bottom: 1px solid hsl(var(--border));
   }
@@ -416,7 +416,7 @@
   .hq-rail-av {
     width: 39px;
     height: 39px;
-    @apply rounded-full flex items-center justify-center;
+    @apply rounded-full flex items-center justify-center overflow-hidden;
     background: hsl(var(--surface-raised));
     border: 1px solid hsl(var(--border-strong));
     font-family: var(--font-mono);
@@ -481,11 +481,19 @@
   .hq-avatar {
     width: 30px;
     height: 30px;
-    @apply rounded-full flex items-center justify-center;
+    @apply rounded-full flex items-center justify-center overflow-hidden;
     background: hsl(var(--surface-raised));
     border: 1px solid hsl(var(--border-strong));
     font-family: var(--font-mono);
     @apply text-[11px] font-bold;
+  }
+  .hq-avatar img,
+  .hq-rail-av img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: block;
   }
   .hq-content {
     @apply flex-1 overflow-auto;
@@ -548,6 +556,19 @@
   .hq-weekcard--empty {
     background: hsl(var(--surface));
     @apply flex items-center justify-center;
+  }
+  .hq-weekstrip-nav {
+    background: transparent;
+    border: 0;
+    padding: 4px 6px;
+    color: hsl(var(--primary));
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+  }
+  .hq-weekstrip-nav .ic {
+    width: 28px;
+    height: 28px;
   }
 
   /* Pipeline stat tile */
@@ -643,6 +664,7 @@
   .hq-pill--destructive { background: rgba(239,68,68,0.10);   border-color: rgba(239,68,68,0.30);   color: hsl(var(--destructive)); }
   .hq-pill--info        { background: rgba(6,182,212,0.12);   border-color: rgba(6,182,212,0.32);   color: #06B6D4; }
   .hq-pill--muted       { background: rgba(255,255,255,0.05); border-color: hsl(var(--border-strong)); color: hsl(var(--muted-foreground)); }
+  .hq-pill--purple      { background: rgba(168,85,247,0.13);  border-color: rgba(168,85,247,0.36);  color: #B57BF5; }
 
   /* Date-picker calendar icon (native <input type="date">): flip the
      default white WebKit indicator to Mirror coral (#BE4E44). Targets the
@@ -1066,8 +1088,11 @@
   .between{justify-content:space-between;}
   .wrap{flex-wrap:wrap;}
   .flex1{flex:1;min-width:0;}
-  .g2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-  .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  /* `minmax(0, 1fr)` (vs `1fr`) lets grid items shrink below their
+     intrinsic content width — fixes Venue/Tags combobox overflow on the
+     Overview card at narrow viewports (Phase 5.7.3 followup-2). */
+  .g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;}
+  .g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
   .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
 
   /* Block label */
@@ -1098,7 +1123,7 @@
   .tlink:hover{text-decoration:underline;}
 
   /* Pills (wireframe canonical; coexists with .hq-pill from 5.1) */
-  .pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-weight:700;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:var(--radius);border:1px solid transparent;white-space:nowrap;}
+  .pill{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-mono);font-weight:700;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:var(--radius);border:1px solid transparent;white-space:nowrap;text-align:center;}
   .pill .dt{width:6px;height:6px;border-radius:999px;background:currentColor;}
   .pill-lg{font-size:13px;padding:6px 13px;}
   .pill-sm{font-size:9.5px;padding:2px 7px;}
@@ -1116,6 +1141,41 @@
   .input:focus{border-color:hsl(var(--primary));box-shadow:0 0 0 3px rgba(190,78,68,.15);}
   .input--filled{border-left:2px solid hsl(var(--primary));}
   .input--focus{border-color:hsl(var(--primary));box-shadow:0 0 0 3px rgba(190,78,68,.15);}
+
+  /* Phase 5.7.5 follow-up round 2: subgroup quick-add affordance.
+     Solid coral rounded-square button with a bold white + glyph. Click
+     adds an inline draft row to the project's table. */
+  .btn-quickadd{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:24px;height:24px;border-radius:6px;
+    background:hsl(var(--primary));
+    color:hsl(var(--primary-foreground));
+    border:1px solid hsl(var(--primary));
+    cursor:pointer;transition:background-color .12s ease;
+    padding:0;
+  }
+  .btn-quickadd:hover{background:hsl(var(--primary-hover));border-color:hsl(var(--primary-hover));}
+  .btn-quickadd:disabled{opacity:.5;cursor:not-allowed;}
+
+  /* Phase 5.7.5 follow-up round 1: HQ Core edit-page input restyle.
+     Match the .combobox-trigger inline-edit chrome — transparent fill, no
+     border outline, no coral left edge. Hover/focus get a light coral
+     tint just like RecordCombobox. Scoped to .hq-form wrappers so Talent
+     Scout + Venue Scout forms keep the original surface-alt chrome. */
+  .hq-form .input,
+  .hq-form select.input,
+  .hq-form textarea.input{
+    background:transparent;
+    border:1px solid transparent;
+    transition:background-color .12s ease;
+  }
+  .hq-form .input:hover{background:rgba(190,78,68,.06);}
+  .hq-form .input:focus{
+    background:rgba(190,78,68,.08);
+    border-color:transparent;
+    box-shadow:none;
+  }
+  .hq-form .input--filled{border-left:1px solid transparent;}
   .textarea{height:auto;min-height:92px;padding:11px 12px;line-height:1.55;}
   .field{display:flex;flex-direction:column;gap:8px;}
   .field .hint{font-size:12px;color:hsl(var(--subtle-foreground));}
@@ -1123,11 +1183,40 @@
   .selectish{display:flex;align-items:center;justify-content:space-between;}
   .selectish .ic{width:15px;height:15px;color:hsl(var(--subtle-foreground));}
 
+  /* Phase 5.7.3 followup-4: RecordCombobox visual refresh per Jimmie.
+     Drops the form-input look (grey outline + surface-alt fill) for a
+     subtler inline-edit chrome: transparent outline, content-sized
+     width. Hover surfaces a faint coral wash so the affordance is still
+     clickable. Followup-5: dropped min-width (was 140; forced overflow
+     in narrow value columns) and dropped the coral left bar (per
+     followup-5 design call). The selected-value coral hyperlink + the
+     link icon now carry the "this is a record" affordance instead. */
+  .combobox-trigger{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;max-width:100%;width:auto;padding:0;border-radius:var(--radius);background:transparent;border:1px solid transparent;color:hsl(var(--foreground));font-family:var(--font-body);font-size:14px;outline:none;cursor:pointer;transition:background-color .12s ease;}
+  .combobox-trigger:hover{background:rgba(190,78,68,.06);}
+  .combobox-trigger:focus{background:rgba(190,78,68,.08);}
+  .combobox-trigger[disabled]{opacity:.5;cursor:not-allowed;}
+
+  /* Followup-5: linked-record presentation. When the selected value is
+     navigable, the label renders as a coral hyperlink (.combo-link)
+     and the chevron is replaced with a Link icon. The picker still
+     opens on click of the icon button (.combo-picker-btn). */
+  .combo-link{color:hsl(var(--primary));font-weight:500;text-decoration:none;cursor:pointer;}
+  .combo-link:hover{text-decoration:underline;}
+  .combo-picker-btn{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;padding:4px;border-radius:var(--radius);color:hsl(var(--primary));cursor:pointer;transition:background-color .12s ease;}
+  .combo-picker-btn:hover{background:rgba(190,78,68,.1);}
+  .combo-stack{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;width:100%;}
+  .combo-stack-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;}
+  .combo-stack-row .combo-link{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
   /* Tables. Wrap in .tbl-wrap. Use .tbl--flat to strip row left borders. */
   .tbl{width:100%;border-collapse:collapse;}
   .tbl thead th{font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--subtle-foreground));text-align:left;padding:10px 14px;background:hsl(var(--surface-alt));border-bottom:1px solid hsl(var(--border));}
   .tbl thead th.r{text-align:right;}
   .tbl thead th.c{text-align:center;}
+  /* Phase 5.7.4 follow-up: vertical cell dividers at 75% row height (Jimmie smoke round 2 — was 90%/border). Pseudo-element keeps it independent of border-collapse + lets it center inside the cell without spanning the row's top/bottom borders. Cell can opt out via `.tbl-cell-nodivider`. */
+  .tbl thead th, .tbl tbody td{position:relative;}
+  .tbl thead th:not(:last-child)::after, .tbl tbody td:not(:last-child)::after{content:"";position:absolute;right:0;top:12.5%;height:75%;width:1px;background:rgba(255,255,255,0.12);}
+  .tbl thead th.tbl-cell-nodivider::after, .tbl tbody td.tbl-cell-nodivider::after{display:none;}
   .tbl tbody td{padding:12px 14px;border-bottom:1px solid hsl(var(--border));font-size:13px;vertical-align:middle;}
   .tbl tbody tr{border-left:3px solid transparent;}
   .tbl tbody tr:hover{background:rgba(255,255,255,.025);}
@@ -1141,11 +1230,13 @@
   .rb-info{border-left-color:#06B6D4!important;}
   .rb-destructive{border-left-color:hsl(var(--destructive))!important;}
   .rb-muted{border-left-color:hsl(var(--border-strong))!important;}
+  .rb-purple{border-left-color:#B57BF5!important;}
   .tbl--flat tbody tr{border-left-color:transparent!important;}
   .checkbox{width:15px;height:15px;border:1px solid hsl(var(--border-strong));border-radius:3px;background:hsl(var(--surface-alt));display:inline-flex;align-items:center;justify-content:center;color:#000;cursor:pointer;}
   .checkbox--on{background:hsl(var(--primary));border-color:hsl(var(--primary));}
   .checkbox .ic{width:11px;height:11px;stroke-width:3;}
-  .tbl-divider td{background:hsl(var(--surface));padding:7px 14px;font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:hsl(var(--subtle-foreground));border-bottom:1px solid hsl(var(--border));}
+  /* Phase 5.7.4 smoke round 2: divider row mirrors thead chrome (surface-alt fill + 11px / 10px padding) so the two-tier "Done · N hidden" footer reads as a structural section header, not floating mid-table. */
+  .tbl-divider td{background:hsl(var(--surface-alt));padding:10px 14px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:hsl(var(--subtle-foreground));border-top:1px solid hsl(var(--border));border-bottom:1px solid hsl(var(--border));}
 
   /* View switcher (icon-segmented). Active = .on. */
   .viewswitch{display:inline-flex;border:1px solid hsl(var(--border-strong));border-radius:var(--radius);overflow:hidden;}
@@ -1172,6 +1263,11 @@
   .fchip--btn span{padding:0 12px;color:hsl(var(--muted-foreground));}
   .fchip--btn.fchip--active{border-color:currentColor;background:color-mix(in srgb, currentColor 12%, transparent);}
   .fchip--btn.fchip--active span{color:currentColor;font-weight:700;}
+  /* Phase 5.7.4 smoke round 2: +10% size modifier for the PeopleList
+     Affiliation radio row. Bumps height 30->33 and span horizontal
+     padding 12->13 / font 11->12. */
+  .fchip--lg{height:33px;}
+  .fchip--lg span{padding:0 13px;font-size:12px;}
   .andor{font-family:var(--font-mono);font-size:10px;font-weight:700;color:hsl(var(--primary));letter-spacing:.06em;padding:0 2px;cursor:pointer;}
 
   /* Inline-edit primitive (Phase 5.6.3 detail-page inline edit). Read mode
@@ -1240,9 +1336,23 @@
   .kv--pair{gap:10px 16px;}
   .kv--pair dt{padding-top:1px;}
 
-  /* Sticky save bar (Phase 5.2 forms) */
-  .savebar{position:sticky;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:hsl(var(--background));padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 -12px 28px rgba(0,0,0,.6);}
-  .savebar .dirty{font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--warn));}
+  /* Sticky save bar (Phase 5.2 forms; restyled Phase 5.7.3 followup-2).
+     Switched from sticky to fixed positioning so the bar reliably pins to
+     the viewport bottom (sticky inside .hq-content's overflow:auto + 32px
+     padding-bottom left a 32px dark strip below the bar). `left: 232px`
+     matches the .hq-rail fixed width. Opaque muted-coral background:
+     coral 15% layered on top of solid background so form content doesn't
+     bleed through. Bumped padding + button + dirty-text size for stronger
+     presence. */
+  .savebar{position:fixed;left:232px;right:0;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:linear-gradient(rgba(190,78,68,.18),rgba(190,78,68,.18)),hsl(var(--background));padding:18px 32px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 -12px 28px rgba(0,0,0,.6);}
+  .savebar .dirty{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--warn));}
+  .savebar .btn{font-size:13px;height:44px;}
+  .savebar .btn-tertiary{height:40px;}
+
+  /* Shared chrome for floating bottom action bars (Venue Scout stepper
+     bars). Same shell as .savebar but without the cancel/save flex
+     layout — the consumer owns the inner content layout. */
+  .actionbar{position:fixed;left:232px;right:0;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:linear-gradient(rgba(190,78,68,.18),rgba(190,78,68,.18)),hsl(var(--background));box-shadow:0 -12px 28px rgba(0,0,0,.6);}
 
   /* Board / kanban. Standard = horizontal scroll; stacked = vertical row groups. */
   .board{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding-bottom:6px;}
@@ -1266,6 +1376,15 @@
   .board-row{display:flex;gap:14px;margin-top:11px;}
   .board-row .bcol{flex:1;width:auto;min-width:0;}
   .strike{text-decoration:line-through;opacity:.6;}
+
+  /* Phase 5.7.5 follow-up round 1: deliverable board card backgrounds.
+     Coral (≤7d), amber (8-14d), grey (>14d / muted), green (complete),
+     and skipped (grey + strikethrough handled in the renderCard). */
+  .bcard--bg-coral{background:hsl(var(--primary) / .14);border-color:hsl(var(--primary) / .35);}
+  .bcard--bg-amber{background:hsl(var(--warn) / .14);border-color:hsl(var(--warn) / .35);}
+  .bcard--bg-grey{background:hsl(0 0% 100% / .04);border-color:hsl(var(--border));}
+  .bcard--bg-green{background:hsl(var(--success) / .12);border-color:hsl(var(--success) / .35);}
+  .bcard--bg-skipped{background:hsl(0 0% 100% / .03);border-color:hsl(var(--border));}
 
   /* Timeline / gantt */
   .tl{border:1px solid hsl(var(--border));border-radius:var(--radius);overflow:hidden;}
@@ -1293,19 +1412,40 @@
   .cal-ev{font-family:var(--font-mono);font-size:9.5px;font-weight:700;border-radius:3px;padding:3px 5px;margin-top:4px;line-height:1.25;cursor:pointer;}
   .cal-ev .en{display:block;color:hsl(var(--foreground));font-weight:700;}
   .cal-ev .ek{display:block;font-weight:400;opacity:.85;margin-top:1px;}
-  .cal-ev.in{background:rgba(6,182,212,.16);color:#06B6D4;}
-  .cal-ev.live{background:rgba(190,78,68,.18);color:hsl(var(--primary));}
-  .cal-ev.rem{background:rgba(245,158,11,.16);color:hsl(var(--warn));}
-  .cal-ev.del{background:rgba(74,222,128,.14);color:hsl(var(--success));}
-  /* Phase 5.3 new cal-ev modifiers: shared Outlook entries + Mirror Holidays.
-     Both render gray, but tone differs so the two are distinguishable. */
-  .cal-ev.olk{background:rgba(58,58,58,.35);color:hsl(var(--muted-foreground));border-left:2px solid hsl(var(--border-strong));}
-  /* Phase 5.4 feedback: holidays render with a yellow (warn-token) background
-     so they read at a glance, distinct from the gray Outlook banner. */
-  .cal-ev.hol{background:rgba(245,158,11,.22);color:hsl(var(--warn));font-style:italic;}
+  /* Phase 5.7.9 color sweep. Locked mapping sourced from existing index.css
+     tokens (the `ABOUT ME/mirror-style-guide.md` referenced by plan §9.B
+     does not exist; the existing tokens represent the canonical palette).
+     Install: cyan (keep) · Live: green (was coral) · Removal: purple (was
+     amber) · Deliverable: amber (was green) · Tentative: lighter gray
+     (was Outlook) · Holiday: muted coral (was amber italic) · My Tasks:
+     muted with leading ✓ glyph (new). */
+  .cal-ev.in{background:rgba(6,182,212,.16);color:hsl(var(--info));}
+  .cal-ev.live{background:rgba(74,222,128,.14);color:hsl(var(--success));}
+  .cal-ev.rem{background:rgba(181,123,245,.16);color:#B57BF5;}
+  .cal-ev.del{background:rgba(245,158,11,.16);color:hsl(var(--warn));}
+  .cal-ev.hol{background:rgba(190,78,68,.12);color:hsl(var(--primary));}
+  .cal-ev.task{background:rgba(200,200,200,.10);color:hsl(var(--foreground));border-left:2px solid hsl(var(--muted-foreground));}
+  .cal-ev.task::before{content:"\2713\00a0";opacity:.5;}
   .callegend{display:flex;gap:16px;flex-wrap:wrap;}
   .callegend span{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--muted-foreground));}
   .callegend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  /* Phase 5.7.9 §9.E Day view: single-day vertical list. Rows lift the
+     `.cal-ev` palette but use taller padding and inline en + ek so each
+     entry reads as a list item rather than a banner squished into a cell. */
+  .caldayview{display:flex;flex-direction:column;gap:8px;}
+  .cal-ev--row{padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:8px;line-height:1.35;}
+  .cal-ev--row .en{display:inline;font-weight:700;}
+  .cal-ev--row .ek{display:inline;font-weight:400;opacity:.85;}
+
+  /* Phase 5.7.9 §9.E Week view: 7-column grid (Sun-Sat). Each column lists
+     its day's events stacked vertically, lifting `.calcell` styling so the
+     visual reads consistently with the Month view. */
+  .calweek{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid hsl(var(--border));border-radius:var(--radius);overflow:hidden;}
+  .calweekcol{min-height:320px;border-left:1px solid hsl(var(--border));padding:8px 8px;display:flex;flex-direction:column;gap:4px;}
+  .calweekcol:first-child{border-left:none;}
+  .calweekcol .dn{font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--subtle-foreground));text-transform:uppercase;letter-spacing:.06em;font-weight:700;}
+  .calweekcol--today .dn{color:hsl(var(--primary));}
 
   /* Phase 5.3 HQ Core surfaces: Outlook 12-month grid + tabs strip.
      Lifted from OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html Surface 16
@@ -1385,6 +1525,10 @@
   .wikipage.prose strong,.wikipage.prose b{color:hsl(var(--foreground));font-weight:600;}
   .wikipage.prose code{font-family:var(--font-mono);font-size:12.5px;background:hsl(var(--surface-alt));padding:1px 5px;border-radius:3px;}
   .wikipage.prose a{color:hsl(var(--primary));text-decoration:underline;}
+  /* Wiki body inline images (5.7.10). Used by both edit-mode (TipTap Image
+     extension) and read-mode (raw <img> nodes inside .wikipage HTML). */
+  .wikipage-img,
+  .wikipage img{max-width:100%;height:auto;border-radius:var(--radius);margin:12px 0;display:block;}
   .embed-note{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.06em;color:hsl(var(--subtle-foreground));text-transform:uppercase;display:flex;align-items:center;gap:7px;margin:22px 0 8px;}
 
   /* Credential reveal field (Account Logins). */

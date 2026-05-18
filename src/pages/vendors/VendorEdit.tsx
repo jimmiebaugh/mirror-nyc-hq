@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { StarRating } from "@/components/data/StarRating";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
+import { VendorFilesEditor } from "@/components/data/VendorFilesEditor";
 import { useLookup } from "@/lib/hq/lookups";
 import { formatPhone } from "@/lib/hq/phone";
 import {
@@ -37,6 +37,10 @@ import { toast } from "@/hooks/use-toast";
  * 5.2 cleanup: Primary Address textarea added below the contact
  * grid (matches ClientEdit shape; backed by the new
  * `vendors.primary_address` column added in the cleanup migration).
+ *
+ * Phase 5.7.13: Internal Rating card + form-state plumbing removed.
+ * Ratings are now per-user via vendor_ratings; the read-only Team Rating
+ * card + the editable "Your rating" row live on VendorDetail.
  */
 
 type FormState = {
@@ -51,7 +55,6 @@ type FormState = {
   contact_phone: string;
   primary_address: string;
   tags: string[];
-  internal_rating: number | null;
 };
 
 const EMPTY: FormState = {
@@ -66,7 +69,6 @@ const EMPTY: FormState = {
   contact_phone: "",
   primary_address: "",
   tags: [],
-  internal_rating: null,
 };
 
 type ProjectOption = {
@@ -86,6 +88,8 @@ export default function VendorEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const categories = useLookup("vendor_categories");
   const subcategories = useLookup("vendor_subcategories", {
@@ -104,7 +108,7 @@ export default function VendorEdit() {
           : supabase
               .from("vendors")
               .select(
-                "name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating",
+                "name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags",
               )
               .eq("id", id)
               .single(),
@@ -150,7 +154,6 @@ export default function VendorEdit() {
         contact_phone: string | null;
         primary_address: string | null;
         tags: string[] | null;
-        internal_rating: number | null;
       };
       const next: FormState = {
         name: row.name,
@@ -164,7 +167,6 @@ export default function VendorEdit() {
         contact_phone: row.contact_phone ?? "",
         primary_address: row.primary_address ?? "",
         tags: row.tags ?? [],
-        internal_rating: row.internal_rating,
       };
       setForm(next);
       setInitial(next);
@@ -225,7 +227,6 @@ export default function VendorEdit() {
       contact_phone: form.contact_phone || null,
       primary_address: form.primary_address || null,
       tags: form.tags,
-      internal_rating: form.internal_rating,
     };
     let vendorId = id ?? null;
     if (isCreate) {
@@ -288,6 +289,27 @@ export default function VendorEdit() {
     }
   };
 
+  // Phase 5.7.3 § 3.B: hard delete. Cascade posture (verified against the
+  // FK graph): vendors delete cascades `project_vendors` join rows and
+  // sets `people.vendor_id` to NULL. No standalone records cascade.
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("vendors").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete vendor",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted vendor" });
+    navigate("/vendors");
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -297,7 +319,7 @@ export default function VendorEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/vendors" : `/vendors/${id}`}
         className="tlink"
@@ -461,28 +483,6 @@ export default function VendorEdit() {
       <section className="card">
         <div className="card-pad stack-4">
           <div className="block-lbl">
-            <span className="label-section">Internal Rating</span>
-          </div>
-          <div className="row-c" style={{ gap: 12 }}>
-            <StarRating
-              value={form.internal_rating}
-              editable
-              size="lg"
-              onChange={(next) => setForm((f) => ({ ...f, internal_rating: next }))}
-            />
-            <span className="cap">
-              {form.internal_rating != null ? `${form.internal_rating} of 5` : "Not rated"}
-            </span>
-          </div>
-          <p className="cap" style={{ lineHeight: 1.5 }}>
-            Visible to all Standard users on the Detail view.
-          </p>
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="card-pad stack-4">
-          <div className="block-lbl">
             <span className="label-section">Projects</span>
           </div>
           <p className="cap" style={{ lineHeight: 1.5 }}>
@@ -502,12 +502,16 @@ export default function VendorEdit() {
         </div>
       </section>
 
+      {!isCreate && id ? <VendorFilesEditor vendorId={id} /> : null}
+
       <StickySaveBar
         dirty={dirty}
         saving={saving}
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create vendor" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -524,6 +528,31 @@ export default function VendorEdit() {
               onClick={() => navigate(isCreate ? "/vendors" : `/vendors/${id}`)}
             >
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this vendor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The vendor and its records will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

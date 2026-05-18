@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
+import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +25,6 @@ import { toast } from "@/hooks/use-toast";
 
 type FormState = {
   title: string;
-  description: string;
   status: TaskStatus;
   priority: TaskPriority;
   due_date: string;
@@ -35,7 +35,6 @@ type FormState = {
 
 const EMPTY: FormState = {
   title: "",
-  description: "",
   status: "To Do",
   priority: "Normal",
   due_date: "",
@@ -72,6 +71,8 @@ export default function TaskEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -84,7 +85,7 @@ export default function TaskEdit() {
           : supabase
               .from("tasks")
               .select(
-                "id, title, description, status, priority, due_date, project_id, assignee_id, blocked_by",
+                "id, title, status, priority, due_date, project_id, assignee_id, blocked_by",
               )
               .eq("id", id)
               .single(),
@@ -95,7 +96,6 @@ export default function TaskEdit() {
       if (!isCreate && taskRes && "data" in taskRes && taskRes.data) {
         type Row = {
           title: string;
-          description: string | null;
           status: TaskStatus;
           priority: TaskPriority;
           due_date: string | null;
@@ -106,7 +106,6 @@ export default function TaskEdit() {
         const t = taskRes.data as unknown as Row;
         const next: FormState = {
           title: t.title,
-          description: t.description ?? "",
           status: t.status,
           priority: t.priority,
           due_date: t.due_date ?? "",
@@ -143,6 +142,23 @@ export default function TaskEdit() {
     };
   }, [form.project_id, id]);
 
+  const projectOptions: Option[] = useMemo(
+    () => projects.map((p) => ({ id: p.id, label: p.name })),
+    [projects],
+  );
+  const userOptions: Option[] = useMemo(
+    () => users.map((u) => ({ id: u.id, label: u.full_name ?? u.email })),
+    [users],
+  );
+  const loadProjectOptions = useCallback(
+    () => Promise.resolve(projectOptions),
+    [projectOptions],
+  );
+  const loadUserOptions = useCallback(
+    () => Promise.resolve(userOptions),
+    [userOptions],
+  );
+
   const dirty = useMemo(
     () => JSON.stringify(form) !== JSON.stringify(initial),
     [form, initial],
@@ -165,7 +181,6 @@ export default function TaskEdit() {
     setSaving(true);
     const payload = {
       title: form.title,
-      description: form.description || null,
       status: form.status,
       priority: form.priority,
       due_date: form.due_date || null,
@@ -198,6 +213,27 @@ export default function TaskEdit() {
     }
   };
 
+  // Phase 5.7.4 § 4.F: hard delete. No FKs reference tasks; `blocked_by`
+  // is a uuid[] on sibling tasks with no FK, so deleted ids orphan
+  // cosmetically. Notes_log rows are polymorphic and survive the delete.
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("tasks").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete task",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted task" });
+    navigate("/tasks");
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -207,7 +243,7 @@ export default function TaskEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 760 }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 760 }}>
       <Link
         to={isCreate ? "/tasks" : `/tasks/${id}`}
         className="tlink"
@@ -238,49 +274,28 @@ export default function TaskEdit() {
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             />
           </Field>
-          <Field label="Description">
-            <textarea
-              className={`input textarea ${form.description ? "input--filled" : ""}`}
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              rows={5}
-              placeholder="What needs to happen?"
-            />
-          </Field>
           <div className="g2">
             <Field label="Project">
-              <select
-                className={`input ${form.project_id ? "input--filled" : ""}`}
-                value={form.project_id ?? "__none"}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    project_id: e.target.value === "__none" ? null : e.target.value,
-                  }))
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadProjectOptions }}
+                value={form.project_id}
+                onChange={(next) =>
+                  setForm((f) => ({ ...f, project_id: next }))
                 }
-              >
-                <option value="__none">Standalone</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+                entityLabel="Project"
+                placeholder="Standalone"
+              />
             </Field>
             <Field label="Assignee">
-              <select
-                className={`input ${form.assignee_id ? "input--filled" : ""}`}
-                value={form.assignee_id ?? "__none"}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    assignee_id: e.target.value === "__none" ? null : e.target.value,
-                  }))
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                value={form.assignee_id}
+                onChange={(next) =>
+                  setForm((f) => ({ ...f, assignee_id: next }))
                 }
-              >
-                <option value="__none">Unassigned</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.full_name ?? u.email}</option>
-                ))}
-              </select>
+                entityLabel="user"
+                placeholder="Unassigned"
+              />
             </Field>
             <Field label="Status">
               <select
@@ -361,6 +376,8 @@ export default function TaskEdit() {
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create task" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -375,6 +392,31 @@ export default function TaskEdit() {
             <AlertDialogCancel>Stay</AlertDialogCancel>
             <AlertDialogAction onClick={() => navigate(isCreate ? "/tasks" : `/tasks/${id}`)}>
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The task and its notes will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

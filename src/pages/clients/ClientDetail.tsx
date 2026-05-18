@@ -5,7 +5,6 @@ import { Pencil } from "lucide-react";
 import {
   IconArrowLeft,
   IconLink,
-  IconPlus,
 } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { InlineEditText } from "@/components/hq/InlineEditText";
@@ -243,9 +242,9 @@ export default function ClientDetail() {
         <Link to={back.to} className="crumb">
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
-        <div className="row between" style={{ alignItems: "flex-start" }}>
-          <div>
-            <div className="eyebrow">Client</div>
+        <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="eyebrow" style={{ paddingTop: 8 }}>Client</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
               <InlineEditText
                 value={client.name}
@@ -329,6 +328,7 @@ export default function ClientDetail() {
                       }}
                       entityLabel="contact"
                       placeholder="Pick or add a contact..."
+                      getRecordHref={(id) => `/people/${id}`}
                       miniCreateFields={[
                         { key: "full_name", label: "Full name", required: true },
                         { key: "email", label: "Email" },
@@ -445,70 +445,62 @@ export default function ClientDetail() {
           </section>
 
           <InternalNotesEditor parentType="client" parentId={client.id} />
-
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Files &amp; Assets</span>
-              <button type="button" className="tlink" disabled style={{ opacity: 0.45, cursor: "not-allowed" }}>
-                <IconPlus className="ic ic-sm" /> Add
-              </button>
-            </div>
-            <div className="card-pad subtle" style={{ fontSize: 13 }}>
-              File uploads land in 5.4.
-            </div>
-          </section>
         </div>
 
         <aside className="stack-6">
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Contacts</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Contacts</span>
             </div>
-            {contacts.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
-            ) : (
-              <div className="stack-3">
-                {contacts.map((c) => (
-                  <Link
-                    key={c.id}
-                    to={`/people/${c.id}`}
-                    className="row-c"
-                    style={{ textDecoration: "none", color: "inherit" }}
-                  >
-                    <span className="av-i">
-                      {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <div style={{ fontSize: 13 }}>{c.full_name}</div>
-                      <div className="cap">{c.role_title ?? "-"}</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {contacts.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
+              ) : (
+                <div className="stack-3">
+                  {contacts.map((c) => (
+                    <Link
+                      key={c.id}
+                      to={`/people/${c.id}`}
+                      className="row-c"
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <span className="av-i">
+                        {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: 13 }}>{c.full_name}</div>
+                        <div className="cap">{c.role_title ?? "-"}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Past Projects</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Past Projects</span>
             </div>
-            {projects.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
-            ) : (
-              <div className="stack-2">
-                {projects.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/projects/${p.id}`}
-                    className="tlink"
-                    style={{ fontSize: 12.5 }}
-                  >
-                    {p.job_number ? `#${p.job_number} ` : ""}
-                    {p.name}
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {projects.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
+              ) : (
+                <div className="stack-2">
+                  {projects.map((p) => (
+                    <Link
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      className="tlink"
+                      style={{ fontSize: 12.5 }}
+                    >
+                      {p.job_number ? `#${p.job_number} ` : ""}
+                      {p.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         </aside>
       </div>

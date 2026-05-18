@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -376,6 +377,48 @@ export type Database = {
           },
         ]
       }
+      note_mentions: {
+        Row: {
+          created_at: string
+          id: string
+          length: number
+          mentioned_user_id: string
+          note_id: string
+          start_offset: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          length: number
+          mentioned_user_id: string
+          note_id: string
+          start_offset: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          length?: number
+          mentioned_user_id?: string
+          note_id?: string
+          start_offset?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_mentions_mentioned_user_id_fkey"
+            columns: ["mentioned_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "note_mentions_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "notes_log"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notes_log: {
         Row: {
           author_id: string
@@ -712,6 +755,49 @@ export type Database = {
           },
         ]
       }
+      project_members: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_vendors: {
         Row: {
           created_at: string
@@ -793,7 +879,6 @@ export type Database = {
           category: string | null
           city: string | null
           client_id: string | null
-          client_notes: string | null
           created_at: string
           created_by: string | null
           design_decks_folder_url: string | null
@@ -810,7 +895,6 @@ export type Database = {
           removal_dates_start: string | null
           slack_channel_url: string | null
           status: Database["public"]["Enums"]["project_status"]
-          status_notes: string | null
           tags: string[]
           updated_at: string
         }
@@ -821,7 +905,6 @@ export type Database = {
           category?: string | null
           city?: string | null
           client_id?: string | null
-          client_notes?: string | null
           created_at?: string
           created_by?: string | null
           design_decks_folder_url?: string | null
@@ -849,7 +932,6 @@ export type Database = {
           category?: string | null
           city?: string | null
           client_id?: string | null
-          client_notes?: string | null
           created_at?: string
           created_by?: string | null
           design_decks_folder_url?: string | null
@@ -946,6 +1028,8 @@ export type Database = {
           id: string
           priority: string
           project_id: string | null
+          source_deliverable_id: string | null
+          source_user_id: string | null
           status: Database["public"]["Enums"]["task_status"]
           title: string
           updated_at: string
@@ -961,6 +1045,8 @@ export type Database = {
           id?: string
           priority?: string
           project_id?: string | null
+          source_deliverable_id?: string | null
+          source_user_id?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title: string
           updated_at?: string
@@ -976,6 +1062,8 @@ export type Database = {
           id?: string
           priority?: string
           project_id?: string | null
+          source_deliverable_id?: string | null
+          source_user_id?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title?: string
           updated_at?: string
@@ -1000,6 +1088,20 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_source_deliverable_id_fkey"
+            columns: ["source_deliverable_id"]
+            isOneToOne: false
+            referencedRelation: "deliverables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_source_user_id_fkey"
+            columns: ["source_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -1645,6 +1747,87 @@ export type Database = {
           },
         ]
       }
+      vendor_files: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          title: string
+          url: string
+          vendor_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          title: string
+          url: string
+          vendor_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          title?: string
+          url?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_files_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_files_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_ratings: {
+        Row: {
+          created_at: string
+          rating: number
+          updated_at: string
+          user_id: string
+          vendor_id: string
+        }
+        Insert: {
+          created_at?: string
+          rating: number
+          updated_at?: string
+          user_id: string
+          vendor_id: string
+        }
+        Update: {
+          created_at?: string
+          rating?: number
+          updated_at?: string
+          user_id?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_ratings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_ratings_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendor_subcategories: {
         Row: {
           created_at: string
@@ -1695,7 +1878,6 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
-          internal_rating: number | null
           legacy_notes: string | null
           name: string
           preferred: boolean
@@ -1715,7 +1897,6 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          internal_rating?: number | null
           legacy_notes?: string | null
           name: string
           preferred?: boolean
@@ -1735,7 +1916,6 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          internal_rating?: number | null
           legacy_notes?: string | null
           name?: string
           preferred?: boolean
@@ -2289,7 +2469,7 @@ export type Database = {
       start_over_scout: { Args: { target_scout_id: string }; Returns: Json }
     }
     Enums: {
-      deliverable_status: "Upcoming" | "In Progress" | "Complete" | "Skipped"
+      deliverable_status: "Upcoming" | "Complete" | "Skipped"
       outlook_confidence: "On Radar" | "Likely" | "Confirmed" | "Complete"
       permission_role: "admin" | "standard" | "freelance" | "pending"
       person_affiliation_type: "Client" | "Vendor" | "Venue" | "Unaffiliated"
@@ -2459,7 +2639,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      deliverable_status: ["Upcoming", "In Progress", "Complete", "Skipped"],
+      deliverable_status: ["Upcoming", "Complete", "Skipped"],
       outlook_confidence: ["On Radar", "Likely", "Confirmed", "Complete"],
       permission_role: ["admin", "standard", "freelance", "pending"],
       person_affiliation_type: ["Client", "Vendor", "Venue", "Unaffiliated"],
@@ -2505,3 +2685,6 @@ export const Constants = {
     },
   },
 } as const
+<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
+A new version of Supabase CLI is available: v2.99.0 (currently installed v2.98.1)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

@@ -298,17 +298,20 @@ export default function PersonDetail() {
         <Link to={back.to} className="crumb">
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
-        <div className="row between" style={{ alignItems: "flex-start" }}>
-          <div className="row-c">
+        <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
+          <div className="row-c" style={{ flex: 1, minWidth: 0 }}>
             <span
               className="av-i"
               style={{ width: 52, height: 52, fontSize: 16, borderRadius: 999 }}
             >
               {initials}
             </span>
-            <div>
-              <div className="eyebrow">Person</div>
-              <h1 className="h-page" style={{ marginTop: 3 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="eyebrow" style={{ paddingTop: 8 }}>Person</div>
+              <h1
+                className="h-page"
+                style={{ marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+              >
                 <InlineEditText
                   value={person.full_name}
                   required
@@ -358,6 +361,8 @@ export default function PersonDetail() {
                     onChange={(next) => void saveOrgFk("client_id", next)}
                     entityLabel="Client"
                     placeholder="Pick a client..."
+                    quickCreate
+                    getRecordHref={(id) => `/clients/${id}`}
                     miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
                     onMiniCreate={async (data) => {
                       const created = await createClientInline(data);
@@ -378,6 +383,7 @@ export default function PersonDetail() {
                     onChange={(next) => void saveOrgFk("vendor_id", next)}
                     entityLabel="Vendor"
                     placeholder="Pick a vendor..."
+                    getRecordHref={(id) => `/vendors/${id}`}
                   />
                 ) : t === "Venue" ? (
                   venues.length > 0 ? (
@@ -488,9 +494,7 @@ export default function PersonDetail() {
                 className="stack-3"
                 style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid hsl(var(--border))" }}
               >
-                <div className="block-lbl">
-                  <span className="label-section">Add Associated Venues</span>
-                </div>
+                <span className="h-card">Add Associated Venues</span>
                 <RecordCombobox
                   multi
                   source={{ kind: "record", loadOptions: loadVenueOptions }}
@@ -498,6 +502,7 @@ export default function PersonDetail() {
                   onMultiChange={(next) => void saveVenueIds(next)}
                   entityLabel="venue"
                   placeholder="Add venue..."
+                  quickCreate
                   miniCreateFields={VENUE_MINI_CREATE_FIELDS}
                   onMiniCreate={async (data) => {
                     const created = await createVenueInline(data);
@@ -518,29 +523,31 @@ export default function PersonDetail() {
 
         <aside className="stack-6">
           {person.client_id ? (
-            <section className="card card-pad">
-              <div className="block-lbl">
-                <span className="label-section">Projects</span>
+            <section className="card">
+              <div className="card-headbar">
+                <span className="h-card">Projects</span>
               </div>
-              {projects.length === 0 ? (
-                <p className="subtle" style={{ fontSize: 13 }}>
-                  No projects yet.
-                </p>
-              ) : (
-                <div className="stack-2">
-                  {projects.map((p) => (
-                    <Link
-                      key={p.id}
-                      to={`/projects/${p.id}`}
-                      className="tlink"
-                      style={{ fontSize: 12.5 }}
-                    >
-                      {p.job_number ? `#${p.job_number} ` : ""}
-                      {p.name}
-                    </Link>
-                  ))}
-                </div>
-              )}
+              <div className="card-pad">
+                {projects.length === 0 ? (
+                  <p className="subtle" style={{ fontSize: 13 }}>
+                    No projects yet.
+                  </p>
+                ) : (
+                  <div className="stack-2">
+                    {projects.map((p) => (
+                      <Link
+                        key={p.id}
+                        to={`/projects/${p.id}`}
+                        className="tlink"
+                        style={{ fontSize: 12.5 }}
+                      >
+                        {p.job_number ? `#${p.job_number} ` : ""}
+                        {p.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             </section>
           ) : null}
 

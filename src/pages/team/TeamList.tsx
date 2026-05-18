@@ -28,15 +28,17 @@ import {
 } from "@/components/ui/popover";
 import { toast } from "@/hooks/use-toast";
 
+// Phase 5.7.6 follow-up: ordered to match the team table's <th> order
+// (Name, Role / Title, Department, Tier, Account, Last Active, Active).
 const TIER_FILTER_FIELDS = (departments: { id: string; name: string }[]): FilterFieldDef[] => [
-  { key: "active", label: "Active", type: "enum", options: ["True", "False"] },
-  { key: "tier", label: "Tier", type: "enum", options: ["Admin", "Standard", "Freelance", "Pending"] },
   {
     key: "department_id",
     label: "Department",
     type: "lookup",
     lookupOptions: departments.map((d) => ({ id: d.id, name: d.name })),
   },
+  { key: "tier", label: "Tier", type: "enum", options: ["Admin", "Standard", "Freelance", "Pending"] },
+  { key: "active", label: "Active", type: "enum", options: ["True", "False"] },
 ];
 
 const ASSIGNABLE_TIERS: PermissionRole[] = ["admin", "standard", "freelance"];
@@ -92,6 +94,23 @@ export default function TeamList() {
       }),
     [rows, filterState],
   );
+
+  // Phase 5.7.6: distinct values for the active + tier enum filters.
+  // Mirrors the accessor mapping above so the combobox options match
+  // the values applyFilters actually compares against.
+  const distinctValuesByField = useMemo(() => {
+    const active = Array.from(new Set(rows.map((r) => (r.active ? "True" : "False")))).sort();
+    const tierMap: Record<PermissionRole, string> = {
+      admin: "Admin",
+      standard: "Standard",
+      freelance: "Freelance",
+      pending: "Pending",
+    };
+    const tier = Array.from(
+      new Set(rows.map((r) => tierMap[r.permission_role]).filter(Boolean)),
+    ).sort();
+    return { active, tier };
+  }, [rows]);
 
   const updateTier = async (row: TeamMemberRow, next: PermissionRole) => {
     const { error } = await supabase
@@ -159,18 +178,12 @@ export default function TeamList() {
         </div>
       </div>
 
-      <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <div className="viewswitch">
-            <button type="button" className="on" disabled>List</button>
-          </div>
-        </div>
-        <FilterBar
-          state={filterState}
-          onChange={setFilterState}
-          fields={TIER_FILTER_FIELDS(departments)}
-        />
-      </div>
+      <FilterBar
+        state={filterState}
+        onChange={setFilterState}
+        fields={TIER_FILTER_FIELDS(departments)}
+        distinctValuesByField={distinctValuesByField}
+      />
 
       {loading ? (
         <div className="empty"><p>Loading team...</p></div>

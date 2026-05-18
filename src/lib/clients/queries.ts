@@ -3,26 +3,31 @@ import { supabase } from "@/integrations/supabase/client";
 /**
  * Shared loaders + types for Clients.
  *
- * Phase 5.6.2 reshape: the list page now surfaces three per-client
- * rollups (contacts / upcoming deliverables / active projects) instead
- * of the slim 5.2.3 industry+contact+city+pastProjectCount+tags shape.
- * Rollups load via three batched aggregate queries keyed on client_id so
- * the page still fires within one round trip per table.
+ * Phase 5.7.4 reshape: list page now surfaces Projects / Deliverables /
+ * Primary Contact. The earlier 5.6.2 contacts rollup is dropped.
  *
- *   - Contacts: every `people` row where `client_id = client.id`.
  *   - Deliverables: every `deliverables` row whose project's `client_id`
  *     matches, filtered to `due_date >= today AND status NOT IN
  *     ('Complete', 'Skipped')`. Ordered by due_date ASC.
  *   - Projects: every `projects` row where `client_id = client.id AND
  *     status NOT IN ('Complete', 'Cancelled', 'On Hold')`. Ordered by
  *     name ASC for stable list rendering.
- *
- * The columns dropped in this reshape (industry, contact_*, city, tags,
- * pastProjectCount) stay on the row type for filter / sort surfaces that
- * still consume them. The DataTable just doesn't render those keys.
+ *   - Primary Contact: the denormalized `contact_name` text column.
  */
 
-export type ClientRollupRef = { id: string; label: string };
+export type ClientRollupRef = {
+  id: string;
+  label: string;
+  /**
+   * Phase 5.7.4 smoke followup: optional secondary label rendered stacked
+   * beneath the primary label. Set to the parent project name on the
+   * Deliverables rollup so the cell reads
+   *   <Deliverable title>
+   *   <Project title>
+   * Null for Projects (already self-describing).
+   */
+  subLabel?: string | null;
+};
 
 export type ClientListRow = {
   id: string;
@@ -35,7 +40,6 @@ export type ClientListRow = {
   primary_address: string | null;
   website_url: string | null;
   tags: string[];
-  contacts: ClientRollupRef[];
   upcomingDeliverables: ClientRollupRef[];
   activeProjects: ClientRollupRef[];
 };
@@ -46,18 +50,13 @@ const NON_ACTIVE_PROJECT_STATUSES = ["Complete", "Cancelled", "On Hold"];
 export async function loadClients(): Promise<ClientListRow[]> {
   const today = new Date().toISOString().slice(0, 10);
 
-  const [clientsRes, peopleRes, projectsRes, deliverablesRes] = await Promise.all([
+  const [clientsRes, projectsRes, deliverablesRes] = await Promise.all([
     supabase
       .from("clients")
       .select(
         "id, name, industry, city, contact_name, contact_email, contact_phone, primary_address, website_url, tags",
       )
       .order("name", { ascending: true }),
-    supabase
-      .from("people")
-      .select("id, full_name, client_id")
-      .not("client_id", "is", null)
-      .order("full_name", { ascending: true }),
     supabase
       .from("projects")
       .select("id, name, client_id, status")
@@ -66,7 +65,7 @@ export async function loadClients(): Promise<ClientListRow[]> {
     supabase
       .from("deliverables")
       .select(
-        "id, title, due_date, status, project:projects!deliverables_project_id_fkey(id, client_id)",
+        "id, title, due_date, status, project:projects!deliverables_project_id_fkey(id, name, client_id)",
       )
       .gte("due_date", today)
       .not("status", "in", `(${TERMINAL_DELIVERABLE_STATUSES.join(",")})`)
@@ -76,15 +75,6 @@ export async function loadClients(): Promise<ClientListRow[]> {
   if (clientsRes.error) {
     console.warn("clients load failed", clientsRes.error);
     return [];
-  }
-
-  const contactsByClient = new Map<string, ClientRollupRef[]>();
-  for (const r of peopleRes.data ?? []) {
-    const row = r as { id: string; full_name: string | null; client_id: string | null };
-    if (!row.client_id) continue;
-    const list = contactsByClient.get(row.client_id) ?? [];
-    list.push({ id: row.id, label: row.full_name ?? "Unnamed" });
-    contactsByClient.set(row.client_id, list);
   }
 
   const projectsByClient = new Map<string, ClientRollupRef[]>();
@@ -102,12 +92,16 @@ export async function loadClients(): Promise<ClientListRow[]> {
     const row = r as unknown as {
       id: string;
       title: string | null;
-      project: { id: string; client_id: string | null } | null;
+      project: { id: string; name: string | null; client_id: string | null } | null;
     };
     const clientId = row.project?.client_id ?? null;
     if (!clientId) continue;
     const list = deliverablesByClient.get(clientId) ?? [];
-    list.push({ id: row.id, label: row.title ?? "Untitled" });
+    list.push({
+      id: row.id,
+      label: row.title ?? "Untitled",
+      subLabel: row.project?.name ?? null,
+    });
     deliverablesByClient.set(clientId, list);
   }
 
@@ -135,7 +129,6 @@ export async function loadClients(): Promise<ClientListRow[]> {
       primary_address: row.primary_address,
       website_url: row.website_url,
       tags: row.tags ?? [],
-      contacts: contactsByClient.get(row.id) ?? [],
       upcomingDeliverables: deliverablesByClient.get(row.id) ?? [],
       activeProjects: projectsByClient.get(row.id) ?? [],
     };

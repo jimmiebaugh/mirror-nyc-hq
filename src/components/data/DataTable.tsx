@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
   IconChevronDown,
   IconChevronRight,
@@ -25,6 +25,26 @@ export type Column<T> = {
   width?: string | number;
   /** Sort comparator (negative = a before b). Required to enable sort. */
   sort?: (a: T, b: T) => number;
+  /**
+   * Phase 5.7.4 smoke round 2: suppress the vertical divider on this
+   * cell's right edge. Used by PeopleList Affiliation so the pill cell
+   * sits flush against Name without a separator line.
+   */
+  noRightDivider?: boolean;
+  /**
+   * Phase 5.7.4 smoke round 5: optional inline style applied to the
+   * <th> only (not the body cells). Used by ProjectsList "Job #" to
+   * reduce the header padding so the label fits on one line without
+   * touching cell padding.
+   */
+  headerStyle?: CSSProperties;
+  /**
+   * Phase 5.7.5 follow-up round 2: optional group label rendered in a
+   * top-tier header row spanning all consecutive same-group columns.
+   * Used by the Deliverables grouped list to put a merged "Due" header
+   * over the relative-label + actual-date sub-columns.
+   */
+  group?: string;
 };
 
 export type SortState = { key: string; dir: "asc" | "desc" } | null;
@@ -39,6 +59,7 @@ export function DataTable<T extends { id: string }>({
   empty,
   sort: controlledSort,
   onSortChange,
+  quickAdd,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -58,6 +79,14 @@ export function DataTable<T extends { id: string }>({
    */
   sort?: SortState;
   onSortChange?: (next: SortState) => void;
+  /**
+   * Phase 5.7.7 followup-1: optional in-table quick-add CTA row. Renders
+   * at the bottom of the active list (right above the `twoTier` divider
+   * if present, otherwise at the bottom of the table). Clicking calls
+   * `onClick`; the parent owns the insert + the resulting row appears
+   * in the rendered list via the `rows` prop on next render.
+   */
+  quickAdd?: { label: string; onClick: () => void | Promise<void>; disabled?: boolean };
 }) {
   const isControlledSort = onSortChange !== undefined;
   const [internalSort, setInternalSort] = useState<SortState>(null);
@@ -111,15 +140,20 @@ export function DataTable<T extends { id: string }>({
         }}
         onClick={() => onRowClick?.(row)}
       >
-        {columns.map((c) => (
-          <td
-            key={c.key}
-            className={c.align === "r" ? "r" : c.align === "c" ? "c" : ""}
-            style={c.width ? { width: c.width } : undefined}
-          >
-            {c.render(row)}
-          </td>
-        ))}
+        {columns.map((c) => {
+          const alignCls = c.align === "r" ? "r" : c.align === "c" ? "c" : "";
+          const dividerCls = c.noRightDivider ? "tbl-cell-nodivider" : "";
+          const className = [alignCls, dividerCls].filter(Boolean).join(" ") || undefined;
+          return (
+            <td
+              key={c.key}
+              className={className}
+              style={c.width ? { width: c.width } : undefined}
+            >
+              {c.render(row)}
+            </td>
+          );
+        })}
       </tr>
     );
   };
@@ -143,21 +177,86 @@ export function DataTable<T extends { id: string }>({
 
   const totalCols = columns.length;
 
+  // Walk columns left-to-right and build header "runs": each ungrouped
+  // column is its own single-cell run; each maximal sequence of
+  // consecutive same-group columns is a merged run rendered as one
+  // colspanned <th> with the group label. Renders as a SINGLE thead
+  // row (no second tier) so the merged group header sits on the same
+  // line as the surrounding ungrouped column headers, matching the
+  // screenshot expectation from 5.7.5 round 2 follow-up.
+  type HeaderRun =
+    | { kind: "col"; col: Column<T>; key: string }
+    | { kind: "group"; label: string; span: number; firstCol: Column<T>; key: string };
+  const headerRuns: HeaderRun[] = [];
+  for (let i = 0; i < columns.length; ) {
+    const c = columns[i];
+    if (!c.group) {
+      headerRuns.push({ kind: "col", col: c, key: c.key });
+      i += 1;
+      continue;
+    }
+    let span = 1;
+    while (i + span < columns.length && columns[i + span].group === c.group) span += 1;
+    headerRuns.push({
+      kind: "group",
+      label: c.group,
+      span,
+      firstCol: c,
+      key: `__grp-${i}-${c.group}`,
+    });
+    i += span;
+  }
+
   return (
     <div className="tbl-wrap">
       <table className={`tbl ${flat ? "tbl--flat" : ""}`}>
         <thead>
           <tr>
-            {columns.map((c) => {
+            {headerRuns.map((run) => {
+              if (run.kind === "group") {
+                const c = run.firstCol;
+                const isSorted = sort?.key === c.key;
+                return (
+                  <th
+                    key={run.key}
+                    colSpan={run.span}
+                    className="c"
+                    style={{
+                      cursor: c.sort ? "pointer" : undefined,
+                      color: isSorted ? "hsl(var(--foreground))" : undefined,
+                    }}
+                    onClick={() => c.sort && toggleHeaderSort(c.key)}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {run.label}
+                      {isSorted ? (
+                        <IconChevronDown
+                          className="ic"
+                          style={{
+                            width: 9,
+                            height: 9,
+                            transform: sort?.dir === "asc" ? "rotate(180deg)" : undefined,
+                          }}
+                        />
+                      ) : null}
+                    </span>
+                  </th>
+                );
+              }
+              const c = run.col;
               const isSorted = sort?.key === c.key;
+              const alignCls = c.align === "r" ? "r" : c.align === "c" ? "c" : "";
+              const dividerCls = c.noRightDivider ? "tbl-cell-nodivider" : "";
+              const className = [alignCls, dividerCls].filter(Boolean).join(" ") || undefined;
               return (
                 <th
                   key={c.key}
-                  className={c.align === "r" ? "r" : c.align === "c" ? "c" : ""}
+                  className={className}
                   style={{
                     width: c.width,
                     cursor: c.sort ? "pointer" : undefined,
                     color: isSorted ? "hsl(var(--foreground))" : undefined,
+                    ...c.headerStyle,
                   }}
                   onClick={() => c.sort && toggleHeaderSort(c.key)}
                 >
@@ -181,6 +280,32 @@ export function DataTable<T extends { id: string }>({
         </thead>
         <tbody>
           {active.map((r) => renderRow(r, false))}
+          {quickAdd ? (
+            <tr className="tbl-quickadd">
+              <td colSpan={totalCols}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void quickAdd.onClick();
+                  }}
+                  disabled={quickAdd.disabled}
+                  style={{
+                    width: "100%",
+                    background: "transparent",
+                    border: "none",
+                    padding: "10px 14px",
+                    textAlign: "left",
+                    cursor: quickAdd.disabled ? "default" : "pointer",
+                    color: "hsl(var(--muted-foreground))",
+                    fontSize: 12.5,
+                    font: "inherit",
+                  }}
+                >
+                  + {quickAdd.label}
+                </button>
+              </td>
+            </tr>
+          ) : null}
           {twoTier && terminal.length > 0 ? (
             <>
               <tr className="tbl-divider">
@@ -200,9 +325,9 @@ export function DataTable<T extends { id: string }>({
                     onClick={() => setCollapsed((v) => !v)}
                   >
                     {collapsed ? (
-                      <IconChevronRight className="ic" style={{ width: 10, height: 10 }} />
+                      <IconChevronRight className="ic" style={{ width: 16, height: 16 }} />
                     ) : (
-                      <IconChevronDown className="ic" style={{ width: 10, height: 10 }} />
+                      <IconChevronDown className="ic" style={{ width: 16, height: 16 }} />
                     )}
                     {twoTier.dividerLabel(terminal.length)}
                   </button>

@@ -35,18 +35,22 @@ export type VendorListRow = {
   capabilities: string[];
   city: string | null;
   website_url: string | null;
-  internal_rating: number | null;
+  teamAverage: number | null;
+  teamCount: number;
   tags: string[];
   preferred: boolean;
   recentProjects: VendorProjectLink[];
 };
 
 export async function loadVendors(): Promise<VendorListRow[]> {
-  const [vendorsRes, pvRes] = await Promise.all([
+  // Phase 5.7.13: vendor_ratings replaces vendors.internal_rating. Fired
+  // alongside the existing vendors + project_vendors loads via Promise.all
+  // so the extra round trip stays off the critical path.
+  const [vendorsRes, pvRes, ratingsRes] = await Promise.all([
     supabase
       .from("vendors")
       .select(
-        "id, name, category_id, subcategory_id, capabilities, city, website_url, internal_rating, tags, preferred, " +
+        "id, name, category_id, subcategory_id, capabilities, city, website_url, tags, preferred, " +
           "category:vendor_categories!vendors_category_id_fkey(id, name), " +
           "subcategory:vendor_subcategories!vendors_subcategory_id_fkey(id, name)",
       )
@@ -57,11 +61,15 @@ export async function loadVendors(): Promise<VendorListRow[]> {
         "vendor_id, created_at, project:projects!project_vendors_project_id_fkey(id, name)",
       )
       .order("created_at", { ascending: false }),
+    supabase.from("vendor_ratings").select("vendor_id, rating"),
   ]);
 
   if (vendorsRes.error) {
     console.warn("vendors load failed", vendorsRes.error);
     return [];
+  }
+  if (ratingsRes.error) {
+    console.warn("vendor_ratings load failed", ratingsRes.error);
   }
 
   const projectsByVendor = new Map<string, VendorProjectLink[]>();
@@ -76,6 +84,16 @@ export async function loadVendors(): Promise<VendorListRow[]> {
     projectsByVendor.set(row.vendor_id, list);
   }
 
+  const ratingAgg = new Map<string, { sum: number; count: number }>();
+  for (const r of ratingsRes.data ?? []) {
+    const row = r as { vendor_id: string; rating: number };
+    const cur = ratingAgg.get(row.vendor_id) ?? { sum: 0, count: 0 };
+    ratingAgg.set(row.vendor_id, {
+      sum: cur.sum + row.rating,
+      count: cur.count + 1,
+    });
+  }
+
   return (vendorsRes.data ?? []).map((v) => {
     const row = v as {
       id: string;
@@ -85,12 +103,14 @@ export async function loadVendors(): Promise<VendorListRow[]> {
       capabilities: string[] | null;
       city: string | null;
       website_url: string | null;
-      internal_rating: number | null;
       tags: string[] | null;
       preferred: boolean | null;
       category: { id: string; name: string | null } | null;
       subcategory: { id: string; name: string | null } | null;
     };
+    const agg = ratingAgg.get(row.id);
+    const teamCount = agg?.count ?? 0;
+    const teamAverage = teamCount > 0 ? (agg as { sum: number; count: number }).sum / teamCount : null;
     return {
       id: row.id,
       name: row.name ?? "Untitled",
@@ -101,7 +121,8 @@ export async function loadVendors(): Promise<VendorListRow[]> {
       capabilities: row.capabilities ?? [],
       city: row.city,
       website_url: row.website_url,
-      internal_rating: row.internal_rating,
+      teamAverage,
+      teamCount,
       tags: row.tags ?? [],
       preferred: row.preferred ?? false,
       recentProjects: projectsByVendor.get(row.id) ?? [],

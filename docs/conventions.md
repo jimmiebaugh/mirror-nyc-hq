@@ -47,6 +47,24 @@ How we write code in this repo. Read this before adding tables, columns, edge fu
 - `src/lib/venue-scout/venueTypes.ts` mirrors `supabase/functions/_shared/venueTypes.ts`. Any change to `CANONICAL_TYPES`, `TYPE_STYLES`, `canonicalizeType`, `canonicalizeMultiType`, `parseTypes`, or `sanitizeWebsiteUrl` touches BOTH files in the same commit. The header comment on each file flags the rule; drift produces mismatched venue-type pills between the matrix UI and the AI / sheet source data.
 - VS surfaces that display photos use `supabase.storage.from("vs_venue_photos").createSignedUrl(path, 3600)` for 1-hour TTL signed URLs (the `vs_venue_photos` bucket is private, producer-or-admin storage RLS). Public-bucket reads are reserved for HQ Core's `venue_photos` bucket on the master `venues` table; the two buckets are distinct.
 
+## PostgREST embeds
+
+Any join with multiple FKs to the same parent table must use a
+constraint-named embed alias. PostgREST's default heuristic can return
+arrays vs. objects inconsistently across calls when more than one FK
+matches the embed, and silently returns no rows when it can't decide.
+
+Wrong:
+  `supabase.from("vendor_ratings").select("user:users(full_name)")`
+
+Right:
+  `supabase.from("vendor_ratings").select("user:users!vendor_ratings_user_id_fkey(full_name)")`
+
+Lesson learned in 5.6.2 (client cell rendered blank when `projects` had
+both `client_id` and `venue_id` FKs to the same join target) and 5.7.7
+(`project_members` embed). When an embed silently returns no rows even
+though the underlying join is intact, suspect FK disambiguation first.
+
 ## Naming
 
 - Talent Scout tables: `ts_*` prefix. Venue Scout: `vs_*` prefix. HQ Core: no prefix.

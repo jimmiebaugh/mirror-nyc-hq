@@ -23,7 +23,7 @@ export type InlineTagInputProps = {
 export function InlineTagInput({
   values,
   onChange,
-  placeholder = "Type new tag and hit enter to add",
+  placeholder = "Type tag + enter",
 }: InlineTagInputProps) {
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +46,7 @@ export function InlineTagInput({
   return (
     <div
       className="row-c wrap"
-      style={{ gap: 6, display: "inline-flex", alignItems: "center" }}
+      style={{ gap: 6, alignItems: "center", minWidth: 0 }}
     >
       {values.map((v) => (
         <span
@@ -79,7 +79,9 @@ export function InlineTagInput({
           height: 28,
           fontSize: 12,
           padding: "2px 8px",
-          minWidth: 220,
+          width: 120,
+          minWidth: 0,
+          flex: "1 1 120px",
           background: "transparent",
         }}
         value={draft}

@@ -24,6 +24,12 @@ type ClickPillCellProps = {
   options: readonly string[];
   tokenMap: (status: string) => StatusToken;
   onSave: (next: string) => Promise<void>;
+  /**
+   * Phase 5.7.3 followup-7: optional `lg` size for detail-page header
+   * placements where the pill needs to read at title scale. Default keeps
+   * the existing 5.6.1 cell size for DataTable use.
+   */
+  size?: "default" | "lg";
 };
 
 function tokenColor(token: StatusToken): string {
@@ -36,13 +42,15 @@ function tokenColor(token: StatusToken): string {
       return "hsl(var(--warn))";
     case "destructive":
       return "hsl(var(--destructive))";
+    case "purple":
+      return "#B57BF5";
     case "muted":
     default:
       return "hsl(var(--muted-foreground))";
   }
 }
 
-export function ClickPillCell({ value, options, tokenMap, onSave }: ClickPillCellProps) {
+export function ClickPillCell({ value, options, tokenMap, onSave, size = "default" }: ClickPillCellProps) {
   const [open, setOpen] = useState(false);
   const [localValue, setLocalValue] = useState(value);
 
@@ -74,7 +82,7 @@ export function ClickPillCell({ value, options, tokenMap, onSave }: ClickPillCel
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`hq-pill hq-pill--${currentToken} cursor-pointer`}
+          className={`hq-pill hq-pill--${currentToken} ${size === "lg" ? "hq-pill-lg" : ""} cursor-pointer`}
           onClick={(e) => e.stopPropagation()}
         >
           <span className="hq-pill-dt" />

@@ -408,7 +408,7 @@ export default function SourcingReport() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur">
+      <div className="actionbar">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-6">
           <Link
             to={`/venue-scout/scouts/${scoutId}/sourcing/sheet-prompt`}

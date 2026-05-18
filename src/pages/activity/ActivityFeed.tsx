@@ -11,7 +11,9 @@ import {
   fetchActivityPage,
   ACTIVITY_PAGE_SIZE,
   type ActivityRow,
+  type ActivityViewerRole,
 } from "@/lib/activity/queries";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   activityRowTimestamp,
   dayBucketLabel,
@@ -135,11 +137,22 @@ export default function ActivityFeed() {
     [],
   );
 
-  // First-page load.
+  // Phase 5.7.2: scope the feed by viewer tier so admin-only entities
+  // (outlook entries today; credentials for freelance) don't surface to
+  // viewers who can't navigate to them.
+  const { role, loading: roleLoading } = useUserRole();
+  const viewerRole: ActivityViewerRole =
+    role === "admin" || role === "standard" || role === "freelance"
+      ? role
+      : null;
+
+  // First-page load. Waits for the role lookup so the filter applies on the
+  // first fetch (avoids a flash of admin-only rows for non-admin viewers).
   useEffect(() => {
+    if (roleLoading) return;
     let active = true;
     setStatus("loading");
-    fetchActivityPage()
+    fetchActivityPage({ viewerRole })
       .then((res) => {
         if (!active) return;
         setPages([res.rows]);
@@ -154,7 +167,7 @@ export default function ActivityFeed() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [roleLoading, viewerRole]);
 
   // Populate the actor lookup options once. Falls back to an empty list on
   // RLS denial so the filter bar still works (chip just won't match anything).
@@ -241,6 +254,22 @@ export default function ActivityFeed() {
     });
   }, [flatRows, filterState]);
 
+  // Phase 5.7.6: distinct entity_type labels present in flatRows. The
+  // FilterBar combobox narrows to just the labels that have at least
+  // one row in the current pages. actor_id is a lookup type (keeps its
+  // existing picker); date_range is enum but options are intentionally
+  // canonical windows, not row-derived (skip).
+  const distinctValuesByField = useMemo(() => {
+    const entityTypeLabels = Array.from(
+      new Set(
+        flatRows
+          .map((r) => ENTITY_TYPE_OPTIONS.find((o) => o.value === r.entity_type)?.label)
+          .filter((v): v is string => typeof v === "string"),
+      ),
+    ).sort();
+    return { entity_type: entityTypeLabels };
+  }, [flatRows]);
+
   // Day-bucket the filtered rows for the section headers.
   const grouped = useMemo(() => {
     const acc: { label: string; rows: ActivityRow[] }[] = [];
@@ -263,7 +292,10 @@ export default function ActivityFeed() {
     if (!last) return;
     setLoadingMore(true);
     try {
-      const res = await fetchActivityPage({ cursor: last.created_at });
+      const res = await fetchActivityPage({
+        cursor: last.created_at,
+        viewerRole,
+      });
       setPages((prev) => [...prev, res.rows]);
       setHasMore(res.hasMore);
     } catch (err) {
@@ -275,7 +307,7 @@ export default function ActivityFeed() {
 
   const handleRetry = () => {
     setStatus("loading");
-    fetchActivityPage()
+    fetchActivityPage({ viewerRole })
       .then((res) => {
         setPages([res.rows]);
         setHasMore(res.hasMore);
@@ -293,7 +325,12 @@ export default function ActivityFeed() {
         <h1 className="h-page">Activity Feed</h1>
       </div>
 
-      <FilterBar state={filterState} onChange={setFilterState} fields={fields} />
+      <FilterBar
+        state={filterState}
+        onChange={setFilterState}
+        fields={fields}
+        distinctValuesByField={distinctValuesByField}
+      />
 
       {status === "loading" ? (
         <div className="card card-pad">
@@ -330,6 +367,10 @@ export default function ActivityFeed() {
                 const f = formatActivitySentence(row);
                 const isLastOverall =
                   gi === grouped.length - 1 && ri === group.rows.length - 1;
+                // Phase 5.7.12: /users/:id (read-only Profile) is now
+                // accessible to every tier, so actor names link and the
+                // mention `recordHref="/users/:id"` resolves directly.
+                // No demotion needed.
                 return (
                   <div
                     key={row.id}

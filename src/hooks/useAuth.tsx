@@ -18,6 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const stampedUserIdRef = useRef<string | null>(null);
+  const stampedAvatarUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Phase 3.6.15: manual hash-fallback. Kept as defense-in-depth after
@@ -127,6 +128,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           /* private-mode; the useRef guard still prevents re-fire */
         }
       });
+  }, [session?.user?.id]);
+
+  // Stamp users.avatar_url on session resolve when the Google metadata URL
+  // differs from the stored row. handle_new_user only captures avatar_url
+  // on auth.users INSERT; users whose auth row predates the column add will
+  // have NULL avatar_url forever without a refresh. Mirrors the
+  // last_active_at throttle: useRef one-shot per provider lifecycle plus
+  // sessionStorage 5-min floor across mounts.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    const metaAvatar = ((session?.user?.user_metadata ?? {}) as Record<string, string>).avatar_url
+      ?? null;
+    if (!uid || !metaAvatar || stampedAvatarUserIdRef.current === uid) return;
+    stampedAvatarUserIdRef.current = uid;
+    const STAMP_FLOOR_MS = 5 * 60 * 1000;
+    const storageKey = `avatar_url_stamped:${uid}`;
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = parseInt(stored, 10);
+        if (Number.isFinite(parsed) && Date.now() - parsed < STAMP_FLOOR_MS) {
+          return;
+        }
+      }
+    } catch {
+      /* private-mode browsers; proceed with the UPDATE */
+    }
+    void (async () => {
+      const { data: existing, error: readErr } = await supabase
+        .from("users")
+        .select("avatar_url")
+        .eq("id", uid)
+        .maybeSingle();
+      if (readErr) {
+        console.warn("avatar_url read failed", readErr);
+        return;
+      }
+      if (existing?.avatar_url === metaAvatar) {
+        try {
+          sessionStorage.setItem(storageKey, String(Date.now()));
+        } catch {
+          /* private-mode; ref guard still holds */
+        }
+        return;
+      }
+      const { error: writeErr } = await supabase
+        .from("users")
+        .update({ avatar_url: metaAvatar })
+        .eq("id", uid);
+      if (writeErr) {
+        console.warn("avatar_url stamp failed", writeErr);
+        return;
+      }
+      try {
+        sessionStorage.setItem(storageKey, String(Date.now()));
+      } catch {
+        /* private-mode; ref guard still holds */
+      }
+    })();
   }, [session?.user?.id]);
 
   const signInWithGoogle = async () => {

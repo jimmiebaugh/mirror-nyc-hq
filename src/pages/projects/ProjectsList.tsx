@@ -35,12 +35,21 @@ import { supabase } from "@/integrations/supabase/client";
  *   Timeline -> lines 1210-1315
  */
 
+// Phase 5.7.6 follow-up: ordered to match the list-view DataTable
+// column display order. The "Project / Client" column stacks the client
+// link above the project name, so clientName is visually first after
+// jobNumber. Remaining columns: category, city, status, ..., lead.
 const FILTER_FIELDS = [
-  { key: "status", label: "Status", type: "enum" as const, options: PROJECT_STATUS_VALUES },
+  { key: "clientName", label: "Client", type: "text" as const },
   { key: "category", label: "Category", type: "text" as const },
   { key: "city", label: "City", type: "text" as const },
-  { key: "clientName", label: "Client", type: "text" as const },
-  { key: "leadName", label: "Lead", type: "text" as const },
+  { key: "status", label: "Status", type: "enum" as const, options: PROJECT_STATUS_VALUES },
+  // Phase 5.7.7: label renamed "Account" -> "Team". Key stays `leadName`
+  // so existing saved views resolve unchanged; the applyFn callback in
+  // `filtered` below remaps `leadName` -> the row's derived `teamNames`
+  // string (lead + designer + project_members), broadening the matching
+  // scope to the full team roster.
+  { key: "leadName", label: "Team", type: "text" as const },
 ];
 
 const BOARD_ROWS: { label: string; statuses: ProjectStatus[] }[] = [
@@ -125,12 +134,55 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
   const filtered = useMemo(
     () =>
       applyFilters(rows, filterState, (row, key) => {
+        // Phase 5.7.7: the `leadName` filter (now labeled "Team") matches
+        // against the union of every Account Manager + Designer + general
+        // project_member name. The chip's stored key stays `leadName` for
+        // saved-view back-compat; the lookup quietly remaps to the joined
+        // `teamNames` string. The `leadName` column-cell render still reads
+        // `row.leadName` (single first-name for the avatar initials).
+        if (key === "leadName") {
+          const r = row as unknown as ProjectListRow;
+          const parts = [...r.leadNames, ...r.designerNames, ...r.memberNames];
+          if (parts.length === 0) return null;
+          return parts.join(" · ");
+        }
         const val = (row as unknown as Record<string, unknown>)[key];
         if (val == null) return null;
         return typeof val === "string" ? val : String(val);
       }),
     [rows, filterState],
   );
+
+  // Phase 5.7.6: distinct values per text/enum filter field.
+  // Phase 5.7.7: `leadName` now pulls from the AM + Designer + project_member
+  // name union so the "Team" filter's dropdown lists every name across the
+  // three roster sources.
+  const distinctValuesByField = useMemo(() => {
+    const pick = (key: string) =>
+      Array.from(
+        new Set(
+          rows
+            .map((r) => (r as unknown as Record<string, unknown>)[key])
+            .filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort();
+    const teamUnion = Array.from(
+      new Set([
+        ...rows.flatMap((r) => r.leadNames),
+        ...rows.flatMap((r) => r.designerNames),
+        ...rows.flatMap((r) => r.memberNames),
+      ]),
+    )
+      .filter(Boolean)
+      .sort();
+    return {
+      status: pick("status"),
+      category: pick("category"),
+      city: pick("city"),
+      clientName: pick("clientName"),
+      leadName: teamUnion,
+    };
+  }, [rows]);
 
   // Calendar tab routes out to the unified /calendar surface (lands 5.3).
   useEffect(() => {
@@ -160,58 +212,50 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
 
   return (
     <div className="stack-4">
-      <div className="pagehead">
-        <div className="row between">
-          <h1 className="h-page">Projects</h1>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/projects/new")}
-          >
-            <IconPlus className="ic" />
-            New Project
-          </button>
-        </div>
-        <p className="desc">Every active project across the agency.</p>
+      <div className="row between" style={{ alignItems: "flex-end" }}>
+        <h1 className="h-page">Projects</h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate("/projects/new")}
+        >
+          <IconPlus className="ic" />
+          New Project
+        </button>
       </div>
+
+      <ViewSwitch
+        active={view}
+        available={["list", "board", "timeline", "calendar"]}
+        surface="projects"
+      />
 
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <ViewSwitch
-            active={view}
-            available={["list", "board", "timeline", "calendar"]}
-            surface="projects"
-          />
-          <SavedViewsDropdown
-            entityType="project"
-            activeName={activeViewName}
-            activeViewKind={view}
-            activeFilterState={filterState}
-            onPick={(v) => {
-              setFilterState(v.filter_state);
-              setActiveViewName(v.name);
-            }}
-            onNavigate={(kind) => {
-              const target = viewSwitchRoute("projects", kind);
-              if (target) navigate(target);
-            }}
-            onResetToGlobal={handleResetToGlobal}
-          />
-        </div>
-        <div className="row-c">
-          <button type="button" className="btn btn-secondary btn-sm">Columns</button>
-          <button type="button" className="btn btn-secondary btn-sm">Save view</button>
-        </div>
+        <FilterBar
+          state={filterState}
+          onChange={(next) => {
+            setFilterState(next);
+            setActiveViewName("Custom filter");
+          }}
+          fields={FILTER_FIELDS}
+          distinctValuesByField={distinctValuesByField}
+        />
+        <SavedViewsDropdown
+          entityType="project"
+          activeName={activeViewName}
+          activeViewKind={view}
+          activeFilterState={filterState}
+          onPick={(v) => {
+            setFilterState(v.filter_state);
+            setActiveViewName(v.name);
+          }}
+          onNavigate={(kind) => {
+            const target = viewSwitchRoute("projects", kind);
+            if (target) navigate(target);
+          }}
+          onResetToGlobal={handleResetToGlobal}
+        />
       </div>
-
-      <FilterBar
-        state={filterState}
-        onChange={(next) => {
-          setFilterState(next);
-          setActiveViewName("Custom filter");
-        }}
-        fields={FILTER_FIELDS}
-      />
 
       {loading ? (
         <div className="empty">
@@ -241,7 +285,9 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "jobNumber",
                 label: "Job #",
-                width: 76,
+                width: 55,
+                noRightDivider: true,
+                headerStyle: { paddingLeft: 14, paddingRight: 2 },
                 sort: (a, b) => (a.jobNumber ?? "").localeCompare(b.jobNumber ?? ""),
                 render: (r) => (
                   <span className="mono muted">{r.jobNumber ?? "-"}</span>
@@ -265,7 +311,11 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                           <Link
                             to={`/clients/${r.clientId}`}
                             className="sub"
-                            style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                            style={{
+                              color: "rgba(190,78,68,0.85)",
+                              display: "block",
+                              fontSize: 12,
+                            }}
                             state={{ from: fromState }}
                             onClick={(e) => e.stopPropagation()}
                           >
@@ -274,7 +324,11 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                         ) : (
                           <span
                             className="sub"
-                            style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                            style={{
+                              color: "rgba(190,78,68,0.85)",
+                              display: "block",
+                              fontSize: 12,
+                            }}
                           >
                             {clientLabel}
                           </span>
@@ -283,7 +337,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                       <Link
                         to={`/projects/${r.id}`}
                         className="lead"
-                        style={{ display: "block" }}
+                        style={{ display: "block", fontSize: 13.5 }}
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -296,18 +350,22 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "category",
                 label: "Category",
+                width: 120,
+                align: "c",
                 sort: (a, b) => (a.category ?? "").localeCompare(b.category ?? ""),
                 render: (r) => r.category ?? "-",
               },
               {
                 key: "city",
                 label: "City",
+                align: "c",
                 sort: (a, b) => (a.city ?? "").localeCompare(b.city ?? ""),
                 render: (r) => r.city ?? "-",
               },
               {
                 key: "status",
                 label: "Status",
+                align: "c",
                 width: 96,
                 sort: (a, b) => a.status.localeCompare(b.status),
                 render: (r) => (
@@ -356,18 +414,36 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                   ),
               },
               {
-                key: "leadName",
-                label: "Lead",
-                width: 140,
-                sort: (a, b) => (a.leadName ?? "").localeCompare(b.leadName ?? ""),
-                render: (r) => r.leadName ?? "-",
-              },
-              {
-                key: "designerName",
-                label: "Design",
-                width: 140,
-                sort: (a, b) => (a.designerName ?? "").localeCompare(b.designerName ?? ""),
-                render: (r) => r.designerName ?? "-",
+                key: "leadDesignerNames",
+                label: "Account / Design Leads",
+                width: 150,
+                sort: (a, b) =>
+                  (a.leadNames[0] ?? "").localeCompare(b.leadNames[0] ?? ""),
+                render: (r) => {
+                  // 5.7.4 smoke round 2: show first names only; both rows
+                  // share the same text style; hairline divider is 60% of
+                  // cell width with the left edge flush at the cell start.
+                  const firstNamesOf = (names: string[]) =>
+                    names
+                      .map((n) => n.trim().split(/\s+/)[0])
+                      .filter(Boolean);
+                  const leads = firstNamesOf(r.leadNames);
+                  const designers = firstNamesOf(r.designerNames);
+                  return (
+                    <div style={{ fontSize: 12, lineHeight: 1.35 }}>
+                      <div>{leads.length ? leads.join(" · ") : "-"}</div>
+                      <div
+                        style={{
+                          height: 1,
+                          width: "75%",
+                          background: "hsl(var(--border))",
+                          margin: "4px 0",
+                        }}
+                      />
+                      <div>{designers.length ? designers.join(" · ") : "-"}</div>
+                    </div>
+                  );
+                },
               },
             ]}
           />

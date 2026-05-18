@@ -188,9 +188,9 @@ export default function NotificationPreferences() {
   return (
     <div style={{ maxWidth: 760, margin: "0 auto" }} className="space-y-6">
       <div className="space-y-3">
-        <Link to="/home" className="crumb">
+        <Link to="/settings/profile" className="crumb">
           <IconArrowLeft className="ic ic-sm" style={{ width: 12, height: 12 }} />{" "}
-          Back to Home
+          Back to Profile settings
         </Link>
         <div>
           <div className="eyebrow">Profile</div>

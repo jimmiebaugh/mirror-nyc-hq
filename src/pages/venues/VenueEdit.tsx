@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
-import { IconArrowLeft, IconX } from "@/components/icons/HQIcons";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,6 +82,8 @@ export default function VenueEdit() {
   const [loading, setLoading] = useState(!isCreate);
   const [saving, setSaving] = useState(false);
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [logRateOpen, setLogRateOpen] = useState<"event_day" | "prod_day" | null>(null);
   const [newRateAmount, setNewRateAmount] = useState("");
   const [newRateDate, setNewRateDate] = useState(new Date().toISOString().slice(0, 10));
@@ -163,6 +165,15 @@ export default function VenueEdit() {
       JSON.stringify([...typeIds].sort()) !== JSON.stringify([...initialTypeIds].sort()) ||
       JSON.stringify([...vendorIds].sort()) !== JSON.stringify([...initialVendorIds].sort()),
     [form, initial, typeIds, initialTypeIds, vendorIds, initialVendorIds],
+  );
+
+  const vendorRecordOptions: Option[] = useMemo(
+    () => vendorOptions.map((v) => ({ id: v.id, label: v.name })),
+    [vendorOptions],
+  );
+  const loadVendorOptions = useCallback(
+    () => Promise.resolve(vendorRecordOptions),
+    [vendorRecordOptions],
   );
 
   const onCancel = () => {
@@ -289,6 +300,29 @@ export default function VenueEdit() {
     toast({ title: "Rate logged" });
   };
 
+  // Phase 5.7.3 § 3.B: hard delete. Cascade posture (verified against the
+  // FK graph): venues delete cascades `venue_venue_types`, `venue_rate_history`,
+  // `venue_contact_people`, and `project_venues` join/per-venue rows, and
+  // sets `people.venue_id` and `vs_scouts.linked_venue_id` to NULL.
+  // No standalone records cascade.
+  const handleDelete = async () => {
+    if (!id) return;
+    setDeleting(true);
+    const { error } = await supabase.from("venues").delete().eq("id", id);
+    if (error) {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      toast({
+        title: "Could not delete venue",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Deleted venue" });
+    navigate("/venues");
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -299,10 +333,9 @@ export default function VenueEdit() {
 
   const eventRate = rates.find((r) => r.rate_kind === "event_day");
   const prodRate = rates.find((r) => r.rate_kind === "prod_day");
-  const availableVendors = vendorOptions.filter((v) => !vendorIds.includes(v.id));
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 24, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/venues" : `/venues/${id}`}
         className="tlink"
@@ -461,46 +494,14 @@ export default function VenueEdit() {
           <div className="block-lbl">
             <span className="label-section">Exclusive Vendors</span>
           </div>
-          <div className="row-c wrap" style={{ gap: 6 }}>
-            {vendorIds.map((vid) => {
-              const v = vendorOptions.find((x) => x.id === vid);
-              if (!v) return null;
-              return (
-                <span key={vid} className="tag" style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
-                  {v.name}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${v.name}`}
-                    onClick={() => setVendorIds(vendorIds.filter((x) => x !== vid))}
-                    style={{
-                      background: "transparent",
-                      border: 0,
-                      cursor: "pointer",
-                      color: "inherit",
-                      padding: 0,
-                      display: "inline-flex",
-                    }}
-                  >
-                    <IconX className="ic" style={{ width: 10, height: 10 }} />
-                  </button>
-                </span>
-              );
-            })}
-            <select
-              className="input"
-              style={{ height: 32, fontSize: 12, padding: "4px 8px" }}
-              value=""
-              onChange={(e) => {
-                if (!e.target.value) return;
-                setVendorIds([...vendorIds, e.target.value]);
-              }}
-            >
-              <option value="">Add vendor...</option>
-              {availableVendors.map((v) => (
-                <option key={v.id} value={v.id}>{v.name}</option>
-              ))}
-            </select>
-          </div>
+          <RecordCombobox
+            multi
+            source={{ kind: "record", loadOptions: loadVendorOptions }}
+            multiValue={vendorIds}
+            onMultiChange={setVendorIds}
+            entityLabel="Vendor"
+            placeholder="Add vendor..."
+          />
         </div>
       </section>
 
@@ -535,6 +536,8 @@ export default function VenueEdit() {
         onCancel={onCancel}
         onSave={onSave}
         saveLabel={isCreate ? "Create venue" : "Save changes"}
+        onDelete={isCreate ? undefined : () => setConfirmDeleteOpen(true)}
+        deleting={deleting}
       />
 
       <AlertDialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
@@ -551,6 +554,31 @@ export default function VenueEdit() {
               onClick={() => navigate(isCreate ? "/venues" : `/venues/${id}`)}
             >
               Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this venue?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The venue and its records will be removed
+              permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+              style={{ background: "hsl(var(--destructive))" }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

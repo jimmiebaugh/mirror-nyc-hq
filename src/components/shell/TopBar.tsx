@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { IconSearch } from "@/components/icons/HQIcons";
+import { MentionBellPanel } from "./MentionBellPanel";
 import { NotificationBellPanel } from "./NotificationBellPanel";
 
 function initialsFor(name?: string | null, email?: string | null) {
@@ -21,12 +22,15 @@ function initialsFor(name?: string | null, email?: string | null) {
 export function TopBar({
   fullName,
   email,
+  avatarUrl,
 }: {
   fullName?: string | null;
   email: string;
+  avatarUrl?: string | null;
 }) {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const userId = user?.id ?? null;
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -64,15 +68,27 @@ export function TopBar({
         />
       </form>
       <div className="flex-1" />
+      <MentionBellPanel />
       <NotificationBellPanel />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className="hq-avatar">
-            {initials}
+          <button type="button" className="hq-avatar" aria-label={initials}>
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={initials} referrerPolicy="no-referrer" />
+            ) : (
+              initials
+            )}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem disabled>Profile (5.4)</DropdownMenuItem>
+          {userId ? (
+            <DropdownMenuItem onClick={() => navigate(`/users/${userId}`)}>
+              Your profile
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem onClick={() => navigate("/settings/profile")}>
+            Profile settings
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={signOut}>Sign out</DropdownMenuItem>
         </DropdownMenuContent>

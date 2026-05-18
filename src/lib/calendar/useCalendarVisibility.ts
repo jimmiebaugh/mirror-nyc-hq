@@ -22,10 +22,15 @@ import { supabase } from "@/integrations/supabase/client";
  * Writes are debounced (250ms) so a flurry of toggles produces one write.
  */
 
+export type CalendarViewKind = "day" | "week" | "month";
+
 export type CalendarVisibilityState = {
   showDeliverables: boolean;
   showHolidays: boolean;
-  showSharedOutlook: boolean;
+  /** Phase 5.7.9 §9.D: master toggle for the personal tasks layer. */
+  showMyTasks: boolean;
+  /** Phase 5.7.9 §9.E: persisted active view kind (Day / Week / Month). */
+  activeView: CalendarViewKind;
   /** OFF set: projects whose toggle is currently off. */
   hiddenProjectIds: string[];
 };
@@ -35,14 +40,16 @@ export type CalendarSource = "projects" | "tasks" | null;
 const ALL_ON: CalendarVisibilityState = {
   showDeliverables: true,
   showHolidays: true,
-  showSharedOutlook: true,
+  showMyTasks: false,
+  activeView: "month",
   hiddenProjectIds: [],
 };
 
 const SOURCE_DEFAULT: CalendarVisibilityState = {
   showDeliverables: false,
   showHolidays: false,
-  showSharedOutlook: false,
+  showMyTasks: false,
+  activeView: "month",
   hiddenProjectIds: [],
 };
 
@@ -53,10 +60,13 @@ type SavedRow = {
 
 function parseFilterState(raw: unknown): CalendarVisibilityState {
   const fs = (raw ?? {}) as Record<string, unknown>;
+  const view = fs.activeView;
   return {
     showDeliverables: typeof fs.showDeliverables === "boolean" ? fs.showDeliverables : true,
     showHolidays: typeof fs.showHolidays === "boolean" ? fs.showHolidays : true,
-    showSharedOutlook: typeof fs.showSharedOutlook === "boolean" ? fs.showSharedOutlook : true,
+    showMyTasks: typeof fs.showMyTasks === "boolean" ? fs.showMyTasks : false,
+    activeView:
+      view === "day" || view === "week" || view === "month" ? view : "month",
     hiddenProjectIds: Array.isArray(fs.hiddenProjectIds)
       ? (fs.hiddenProjectIds as unknown[]).filter((x): x is string => typeof x === "string")
       : [],
@@ -232,10 +242,21 @@ export function useCalendarVisibility(source: CalendarSource) {
     [scheduleWrite],
   );
 
-  const setShowSharedOutlook = useCallback(
+  const setShowMyTasks = useCallback(
     (v: boolean) => {
       setState((s) => {
-        const next = { ...s, showSharedOutlook: v };
+        const next = { ...s, showMyTasks: v };
+        scheduleWrite(next);
+        return next;
+      });
+    },
+    [scheduleWrite],
+  );
+
+  const setActiveView = useCallback(
+    (v: CalendarViewKind) => {
+      setState((s) => {
+        const next = { ...s, activeView: v };
         scheduleWrite(next);
         return next;
       });
@@ -267,7 +288,8 @@ export function useCalendarVisibility(source: CalendarSource) {
     hasPerUserRow,
     setShowDeliverables,
     setShowHolidays,
-    setShowSharedOutlook,
+    setShowMyTasks,
+    setActiveView,
     toggleProject,
     refresh,
   };

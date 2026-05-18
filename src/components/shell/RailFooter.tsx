@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,20 +21,30 @@ export function RailFooter({
   fullName,
   email,
   tier,
+  avatarUrl,
 }: {
   fullName?: string | null;
   email: string;
   tier: Tier;
+  avatarUrl?: string | null;
 }) {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const navigate = useNavigate();
   const initials = initialsFor(fullName, email);
   const display = (fullName || email).trim();
+  const userId = user?.id ?? null;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button type="button" className="hq-rail-foot w-full text-left">
-          <span className="hq-rail-av">{initials}</span>
+          <span className="hq-rail-av" aria-label={initials}>
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={initials} referrerPolicy="no-referrer" />
+            ) : (
+              initials
+            )}
+          </span>
           <span className="hq-rail-who">
             <b>{display}</b>
             <span>{tier}</span>
@@ -41,7 +52,14 @@ export function RailFooter({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="w-56">
-        <DropdownMenuItem disabled>Profile (5.4)</DropdownMenuItem>
+        {userId ? (
+          <DropdownMenuItem onClick={() => navigate(`/users/${userId}`)}>
+            Your profile
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem onClick={() => navigate("/settings/profile")}>
+          Profile settings
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={signOut}>Sign out</DropdownMenuItem>
       </DropdownMenuContent>

@@ -38,6 +38,8 @@ import WikiPage from "./pages/wiki/WikiPage";
 import WikiPageEdit from "./pages/wiki/WikiPageEdit";
 import TeamList from "./pages/team/TeamList";
 import TeamMemberEdit from "./pages/team/TeamMemberEdit";
+import UserProfile from "./pages/users/UserProfile";
+import ProfileSettings from "./pages/users/ProfileSettings";
 import SettingsPage from "./pages/settings/SettingsPage";
 import ActivityFeed from "./pages/activity/ActivityFeed";
 import SearchPage from "./pages/search/SearchPage";
@@ -210,7 +212,7 @@ const App = () => (
                 path="/deliverables"
                 element={
                   <StandardOrAdminRoute>
-                    <DeliverablesList view="calendar" />
+                    <DeliverablesList view="board" />
                   </StandardOrAdminRoute>
                 }
               />
@@ -227,6 +229,14 @@ const App = () => (
                 element={
                   <StandardOrAdminRoute>
                     <DeliverablesList view="board" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/calendar"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverablesList view="calendar" />
                   </StandardOrAdminRoute>
                 }
               />
@@ -488,6 +498,15 @@ const App = () => (
                   </AdminRoute>
                 }
               />
+              {/* Phase 5.7.12: read-only Profile route. All tiers can view.
+                  Placed AFTER /users/new + /users/:id/edit so the more
+                  specific routes still win during React Router resolution. */}
+              <Route path="/users/:id" element={<UserProfile />} />
+              {/* Phase 5.7.12: self-only Profile Settings. Non-admin path to
+                  edit own role_title / department / Slack fields. Tier
+                  columns + name + email stay admin-only (gated by the
+                  extended users_protect_admin_columns trigger). */}
+              <Route path="/settings/profile" element={<ProfileSettings />} />
               {/* Phase 5.4 feedback round: /team renamed to /users. Keep
                   redirects so old bookmarks + pre-feedback notifications
                   (link_url = '/team') still land on the right surface. */}

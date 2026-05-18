@@ -277,13 +277,13 @@ export default function VenueDetail() {
 
   return (
     <div className="stack-6">
-      <div className="stack-3">
+      <div className="stack-2">
         <Link to={back.to} className="crumb">
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
-        <div className="row between" style={{ alignItems: "flex-start", gap: 24 }}>
-          <div>
-            <div className="eyebrow">Venue</div>
+        <div className="row between" style={{ alignItems: "flex-start", gap: 24, paddingTop: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="eyebrow" style={{ paddingTop: 8 }}>Venue</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
               <InlineEditText
                 value={venue.name}
@@ -324,14 +324,13 @@ export default function VenueDetail() {
         </div>
         <div
           className="row-c"
-          style={{ gap: 12, fontSize: 15, color: "hsl(var(--muted-foreground))" }}
+          style={{ gap: 12, fontSize: 15, color: "hsl(var(--muted-foreground))", marginTop: 0 }}
         >
           {venueTypes.map((t) => (
             <VenueTypePill key={t} type={t} />
           ))}
-          <span>
-            {[venue.neighborhood, venue.city].filter(Boolean).join(", ") || "-"}
-          </span>
+          {venue.city ? <span>{venue.city}</span> : null}
+          {venue.neighborhood ? <span>({venue.neighborhood})</span> : null}
         </div>
       </div>
 
@@ -353,9 +352,24 @@ export default function VenueDetail() {
                 <dl className="kv" style={{ gridTemplateColumns: "130px 1fr" }}>
                   <dt>Venue Type</dt>
                   <dd>
-                    <div className="stack-2">
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 8,
+                      }}
+                    >
+                      {venueTypes.length > 0 ? (
+                        <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
+                          {venueTypes.map((t) => (
+                            <VenueTypePill key={t} type={t} small />
+                          ))}
+                        </span>
+                      ) : null}
                       <RecordCombobox
                         multi
+                        hideMultiValueChips
                         source={{ kind: "lookup", table: "venue_types" }}
                         multiValue={venueTypesLookup.options
                           .filter((o) => venueTypeIds.includes(o.id))
@@ -379,13 +393,6 @@ export default function VenueDetail() {
                         entityLabel="Venue type"
                         placeholder="Select"
                       />
-                      {venueTypes.length > 0 ? (
-                        <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
-                          {venueTypes.map((t) => (
-                            <VenueTypePill key={t} type={t} small />
-                          ))}
-                        </span>
-                      ) : null}
                     </div>
                   </dd>
                   <dt>City</dt>
@@ -631,57 +638,61 @@ export default function VenueDetail() {
         </div>
 
         <aside className="stack-6">
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Contacts</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Contacts</span>
             </div>
-            {contacts.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
-            ) : (
-              <div className="stack-3">
-                {contacts.map((c) => (
-                  <Link
-                    key={c.id}
-                    to={`/people/${c.id}`}
-                    className="row-c"
-                    style={{ textDecoration: "none", color: "inherit" }}
-                  >
-                    <span className="av-i">
-                      {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <div style={{ fontSize: 13 }}>{c.full_name}</div>
-                      <div className="cap">{c.role_title ?? "-"}</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {contacts.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
+              ) : (
+                <div className="stack-3">
+                  {contacts.map((c) => (
+                    <Link
+                      key={c.id}
+                      to={`/people/${c.id}`}
+                      className="row-c"
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <span className="av-i">
+                        {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
+                      </span>
+                      <div>
+                        <div style={{ fontSize: 13 }}>{c.full_name}</div>
+                        <div className="cap">{c.role_title ?? "-"}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
           <InternalNotesEditor parentType="venue" parentId={venue.id} />
 
-          <section className="card card-pad">
-            <div className="block-lbl">
-              <span className="label-section">Past Projects</span>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Past Projects</span>
             </div>
-            {projects.length === 0 ? (
-              <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
-            ) : (
-              <div className="stack-2">
-                {projects.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/projects/${p.id}`}
-                    className="tlink"
-                    style={{ fontSize: 12.5 }}
-                  >
-                    {p.job_number ? `#${p.job_number} ` : ""}
-                    {p.name}
-                  </Link>
-                ))}
-              </div>
-            )}
+            <div className="card-pad">
+              {projects.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
+              ) : (
+                <div className="stack-2">
+                  {projects.map((p) => (
+                    <Link
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      className="tlink"
+                      style={{ fontSize: 12.5 }}
+                    >
+                      {p.job_number ? `#${p.job_number} ` : ""}
+                      {p.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         </aside>
       </div>

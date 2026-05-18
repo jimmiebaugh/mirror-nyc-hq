@@ -46,7 +46,7 @@ type AffiliationFilter = "All" | "Client" | "Vendor" | "Venue";
 // as the in-row pills (.p-primary / .p-purple / .p-info). Slightly muted
 // fill is delegated to .fchip--active in src/index.css.
 const AFFILIATION_BUTTONS: { value: AffiliationFilter; label: string; color: string }[] = [
-  { value: "All", label: "All", color: "hsl(var(--muted-foreground))" },
+  { value: "All", label: "All", color: "hsl(var(--success))" },
   { value: "Client", label: "Client", color: "hsl(var(--primary))" },
   { value: "Vendor", label: "Vendor", color: "#B57BF5" },
   { value: "Venue", label: "Venue", color: "#06B6D4" },
@@ -180,6 +180,29 @@ export default function PeopleList() {
     [decorated, filterState],
   );
 
+  // Phase 5.7.6: distinct values per text/enum filter field. `type` is
+  // the derived person type (Client / Vendor / Venue / Unaffiliated);
+  // `tags` is an array column flattened to per-element distincts.
+  // organization_id is a lookup type and keeps its existing picker.
+  const distinctValuesByField = useMemo(() => {
+    const types = Array.from(
+      new Set(
+        decorated
+          .map((r) => r.type)
+          .filter((v): v is string => typeof v === "string" && v.length > 0),
+      ),
+    ).sort();
+    const tags = Array.from(
+      new Set(
+        decorated.flatMap((r) => {
+          const v = (r as unknown as Record<string, unknown>).tags;
+          return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+        }),
+      ),
+    ).sort();
+    return { type: types, tags };
+  }, [decorated]);
+
   return (
     <div className="stack-4">
       <div className="pagehead">
@@ -196,36 +219,46 @@ export default function PeopleList() {
         </div>
       </div>
 
+      <div className="row-c" style={{ gap: 6 }}>
+        {AFFILIATION_BUTTONS.map((b) => {
+          const isActive = activeAffiliation === b.value;
+          // 5.7.4 smoke round 3: button color rules.
+          //   All active   -> All highlighted in success; siblings render
+          //                   in their full tier color at opacity 1 (no
+          //                   mutedness).
+          //   Tier active  -> selected pill in its tier color highlighted;
+          //                   ALL siblings (including All) render as
+          //                   muted-foreground at opacity 0.5.
+          // Inline color/opacity must land on the inner <span> because
+          // `.fchip--btn span` (src/index.css:1213) hard-codes
+          // color:muted-foreground for inactive buttons; the button-
+          // level color is only consumed by .fchip--active's currentColor
+          // border + background mix.
+          let color: string;
+          let opacity = 1;
+          if (isActive) {
+            color = b.color;
+          } else if (activeAffiliation === "All") {
+            color = b.color;
+          } else {
+            color = "hsl(var(--muted-foreground))";
+            opacity = 0.3;
+          }
+          return (
+            <button
+              key={b.value}
+              type="button"
+              className={`fchip fchip--btn fchip--lg ${isActive ? "fchip--active" : ""}`}
+              style={{ color }}
+              onClick={() => setAffiliationFilter(b.value)}
+            >
+              <span style={{ color, opacity }}>{b.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c">
-          <SavedViewsDropdown
-            entityType="person"
-            activeName={activeViewName}
-            activeViewKind="list"
-            activeFilterState={filterState}
-            onPick={(v) => {
-              setFilterState(v.filter_state);
-              setActiveViewName(v.name);
-            }}
-            onResetToGlobal={handleResetToGlobal}
-          />
-          <div className="row-c" style={{ gap: 6 }}>
-            {AFFILIATION_BUTTONS.map((b) => {
-              const isActive = activeAffiliation === b.value;
-              return (
-                <button
-                  key={b.value}
-                  type="button"
-                  className={`fchip fchip--btn ${isActive ? "fchip--active" : ""}`}
-                  style={{ color: b.color }}
-                  onClick={() => setAffiliationFilter(b.value)}
-                >
-                  <span>{b.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
         <FilterBar
           state={filterState}
           onChange={(next) => {
@@ -233,6 +266,18 @@ export default function PeopleList() {
             setActiveViewName("Custom filter");
           }}
           fields={peopleFilterFields}
+          distinctValuesByField={distinctValuesByField}
+        />
+        <SavedViewsDropdown
+          entityType="person"
+          activeName={activeViewName}
+          activeViewKind="list"
+          activeFilterState={filterState}
+          onPick={(v) => {
+            setFilterState(v.filter_state);
+            setActiveViewName(v.name);
+          }}
+          onResetToGlobal={handleResetToGlobal}
         />
       </div>
 
@@ -257,22 +302,32 @@ export default function PeopleList() {
             }}
             columns={[
               {
-                key: "full_name",
-                label: "Name",
-                sort: (a, b) => a.full_name.localeCompare(b.full_name),
-                render: (r) => <span className="lead">{r.full_name}</span>,
-              },
-              {
                 key: "type",
-                label: "Affiliation",
+                label: "",
+                width: 64,
+                noRightDivider: true,
                 sort: (a, b) => a.type.localeCompare(b.type),
                 render: (r) => {
                   const t = personType(r);
                   if (t === "Unaffiliated") return <span />;
+                  // 5.7.4 smoke followup: pill shrinks ~5% on this column
+                  // (font 9.5 -> 9, padding 2/7 -> 2/6) to fit the 64px
+                  // column without crowding the Name cell.
                   return (
-                    <span className={`pill pill-sm p-${personTypeToken(t)}`}>{t}</span>
+                    <span
+                      className={`pill pill-sm p-${personTypeToken(t)}`}
+                      style={{ fontSize: 9, padding: "2px 6px" }}
+                    >
+                      {t}
+                    </span>
                   );
                 },
+              },
+              {
+                key: "full_name",
+                label: "Name",
+                sort: (a, b) => a.full_name.localeCompare(b.full_name),
+                render: (r) => <span className="lead">{r.full_name}</span>,
               },
               {
                 key: "organization_name",
@@ -284,27 +339,31 @@ export default function PeopleList() {
                 sort: (a, b) => {
                   const aKey =
                     a.organization_name ??
-                    (a.is_venue_contact && a.venue_names.length > 0
-                      ? a.venue_names.length === 1
-                        ? a.venue_names[0]
-                        : `${a.venue_names.length} venues`
+                    (a.is_venue_contact && a.venues.length > 0
+                      ? a.venues.length === 1
+                        ? a.venues[0].name
+                        : `${a.venues.length} venues`
                       : "");
                   const bKey =
                     b.organization_name ??
-                    (b.is_venue_contact && b.venue_names.length > 0
-                      ? b.venue_names.length === 1
-                        ? b.venue_names[0]
-                        : `${b.venue_names.length} venues`
+                    (b.is_venue_contact && b.venues.length > 0
+                      ? b.venues.length === 1
+                        ? b.venues[0].name
+                        : `${b.venues.length} venues`
                       : "");
                   return aKey.localeCompare(bKey);
                 },
                 render: (r) => {
+                  // 5.7.4 smoke followup: Organization link color matches
+                  // the affiliation pill (coral client / purple vendor /
+                  // cyan venue). Multi-venue cell stays plain text (no
+                  // link) at muted cyan opacity per Jimmie's spec.
                   if (r.client_id && r.client_name) {
                     return (
                       <Link
                         to={`/clients/${r.client_id}`}
                         className="tlink"
-                        style={{ color: "rgba(190,78,68,.85)" }}
+                        style={{ color: "hsl(var(--primary))" }}
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -317,7 +376,7 @@ export default function PeopleList() {
                       <Link
                         to={`/vendors/${r.vendor_id}`}
                         className="tlink"
-                        style={{ color: "rgba(190,78,68,.85)" }}
+                        style={{ color: "#B57BF5" }}
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -325,12 +384,20 @@ export default function PeopleList() {
                       </Link>
                     );
                   }
-                  if (r.is_venue_contact && r.venue_names.length > 0) {
-                    return (
-                      <span className="cap">
-                        {r.venue_names.length === 1
-                          ? r.venue_names[0]
-                          : `${r.venue_names.length} venues`}
+                  if (r.is_venue_contact && r.venues.length > 0) {
+                    return r.venues.length === 1 ? (
+                      <Link
+                        to={`/venues/${r.venues[0].id}`}
+                        className="tlink"
+                        style={{ color: "#06B6D4" }}
+                        state={{ from: fromState }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {r.venues[0].name}
+                      </Link>
+                    ) : (
+                      <span style={{ color: "#06B6D4", opacity: 0.6, fontWeight: 400 }}>
+                        {r.venues.length} venues
                       </span>
                     );
                   }
