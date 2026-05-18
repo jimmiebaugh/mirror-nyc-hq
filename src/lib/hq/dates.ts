@@ -8,6 +8,29 @@
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const WEEKDAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
+/**
+ * Phase 5.7.9 Calendar Week-view helper. Returns the Sunday of the week
+ * containing `d` at local midnight. Sunday-first matches the existing
+ * CalendarMonthView column order.
+ */
+export function startOfWeek(d: Date): Date {
+  const out = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  out.setDate(out.getDate() - out.getDay());
+  return out;
+}
+
+/** Phase 5.7.9: add `days` (can be negative) to a Date, returning a new Date. */
+export function addDays(d: Date, days: number): Date {
+  const out = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  out.setDate(out.getDate() + days);
+  return out;
+}
+
+/** Phase 5.7.9: add `months` to a Date, snapping to day 1 of the result month. */
+export function addMonths(d: Date, months: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + months, 1);
+}
+
 export function parseIso(iso: string | null | undefined): Date | null {
   if (!iso) return null;
   const [y, m, d] = iso.split("-").map(Number);

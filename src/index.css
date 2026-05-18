@@ -1399,19 +1399,40 @@
   .cal-ev{font-family:var(--font-mono);font-size:9.5px;font-weight:700;border-radius:3px;padding:3px 5px;margin-top:4px;line-height:1.25;cursor:pointer;}
   .cal-ev .en{display:block;color:hsl(var(--foreground));font-weight:700;}
   .cal-ev .ek{display:block;font-weight:400;opacity:.85;margin-top:1px;}
-  .cal-ev.in{background:rgba(6,182,212,.16);color:#06B6D4;}
-  .cal-ev.live{background:rgba(190,78,68,.18);color:hsl(var(--primary));}
-  .cal-ev.rem{background:rgba(245,158,11,.16);color:hsl(var(--warn));}
-  .cal-ev.del{background:rgba(74,222,128,.14);color:hsl(var(--success));}
-  /* Phase 5.3 new cal-ev modifiers: shared Outlook entries + Mirror Holidays.
-     Both render gray, but tone differs so the two are distinguishable. */
-  .cal-ev.olk{background:rgba(58,58,58,.35);color:hsl(var(--muted-foreground));border-left:2px solid hsl(var(--border-strong));}
-  /* Phase 5.4 feedback: holidays render with a yellow (warn-token) background
-     so they read at a glance, distinct from the gray Outlook banner. */
-  .cal-ev.hol{background:rgba(245,158,11,.22);color:hsl(var(--warn));font-style:italic;}
+  /* Phase 5.7.9 color sweep. Locked mapping sourced from existing index.css
+     tokens (the `ABOUT ME/mirror-style-guide.md` referenced by plan §9.B
+     does not exist; the existing tokens represent the canonical palette).
+     Install: cyan (keep) · Live: green (was coral) · Removal: purple (was
+     amber) · Deliverable: amber (was green) · Tentative: lighter gray
+     (was Outlook) · Holiday: muted coral (was amber italic) · My Tasks:
+     muted with leading ✓ glyph (new). */
+  .cal-ev.in{background:rgba(6,182,212,.16);color:hsl(var(--info));}
+  .cal-ev.live{background:rgba(74,222,128,.14);color:hsl(var(--success));}
+  .cal-ev.rem{background:rgba(181,123,245,.16);color:#B57BF5;}
+  .cal-ev.del{background:rgba(245,158,11,.16);color:hsl(var(--warn));}
+  .cal-ev.hol{background:rgba(190,78,68,.12);color:hsl(var(--primary));}
+  .cal-ev.task{background:rgba(200,200,200,.10);color:hsl(var(--foreground));border-left:2px solid hsl(var(--muted-foreground));}
+  .cal-ev.task::before{content:"\2713\00a0";opacity:.5;}
   .callegend{display:flex;gap:16px;flex-wrap:wrap;}
   .callegend span{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--muted-foreground));}
   .callegend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  /* Phase 5.7.9 §9.E Day view: single-day vertical list. Rows lift the
+     `.cal-ev` palette but use taller padding and inline en + ek so each
+     entry reads as a list item rather than a banner squished into a cell. */
+  .caldayview{display:flex;flex-direction:column;gap:8px;}
+  .cal-ev--row{padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:8px;line-height:1.35;}
+  .cal-ev--row .en{display:inline;font-weight:700;}
+  .cal-ev--row .ek{display:inline;font-weight:400;opacity:.85;}
+
+  /* Phase 5.7.9 §9.E Week view: 7-column grid (Sun-Sat). Each column lists
+     its day's events stacked vertically, lifting `.calcell` styling so the
+     visual reads consistently with the Month view. */
+  .calweek{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid hsl(var(--border));border-radius:var(--radius);overflow:hidden;}
+  .calweekcol{min-height:320px;border-left:1px solid hsl(var(--border));padding:8px 8px;display:flex;flex-direction:column;gap:4px;}
+  .calweekcol:first-child{border-left:none;}
+  .calweekcol .dn{font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--subtle-foreground));text-transform:uppercase;letter-spacing:.06em;font-weight:700;}
+  .calweekcol--today .dn{color:hsl(var(--primary));}
 
   /* Phase 5.3 HQ Core surfaces: Outlook 12-month grid + tabs strip.
      Lifted from OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html Surface 16

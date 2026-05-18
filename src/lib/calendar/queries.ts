@@ -35,17 +35,14 @@ export type CalendarDeliverableRow = {
   dueIso: string;
 };
 
-export type CalendarOutlookRow = {
+export type CalendarTaskRow = {
   id: string;
-  name: string;
-  clientName: string | null;
-  city: string | null;
-  year: number;
-  month: number;
-  week: number;
-  dateText: string | null;
-  confidence: "On Radar" | "Likely" | "Confirmed" | "Complete";
-  sharedWithTeam: boolean;
+  title: string;
+  dueIso: string;
+  status: "To Do" | "Doing" | "Blocked" | "Done";
+  priority: "Urgent" | "High" | "Normal" | "Low";
+  projectId: string | null;
+  projectName: string | null;
 };
 
 /**
@@ -157,59 +154,53 @@ export async function loadCalendarDeliverables(
 }
 
 /**
- * Loads shared Outlook entries for the year window. RLS handles the
- * shared_with_team gate for standard users (their SELECT only returns
- * shared rows); admins get back all entries but the Calendar still only
- * renders shared ones per spec § 6a.
+ * Phase 5.7.9 §9.D personal tasks layer. Loads tasks assigned to the
+ * current user with `due_date` in the active window. Done tasks are
+ * excluded to mirror MyTasksThisWeekCard posture; the calendar shows
+ * actionable items only.
+ *
+ * PostgREST FK disambiguation: `tasks` has two FKs to `users`
+ * (assignee_id + created_by) so a bare `user:users(...)` embed would
+ * 300. The `project:projects(...)` embed has only one path, but we
+ * still name the constraint so the intent is explicit per
+ * `feedback_postgrest_embed_constraint_named_fk.md`.
  */
-export async function loadCalendarOutlook(
-  year: number,
-): Promise<CalendarOutlookRow[]> {
+export async function loadCalendarTasks(
+  userId: string,
+  windowStartIso: string,
+  windowEndIso: string,
+): Promise<CalendarTaskRow[]> {
   const { data, error } = await supabase
-    .from("outlook_entries")
+    .from("tasks")
     .select(
-      `id, name, city, year, month, week, date_text, confidence, shared_with_team,
-       client:clients(name)`,
+      `id, title, due_date, status, priority,
+       project:projects!tasks_project_id_fkey(id, name)`,
     )
-    .eq("year", year);
+    .eq("assignee_id", userId)
+    .not("due_date", "is", null)
+    .gte("due_date", windowStartIso)
+    .lte("due_date", windowEndIso)
+    .in("status", ["To Do", "Doing", "Blocked"]);
   if (error) {
-    console.warn("loadCalendarOutlook error", error);
+    console.warn("loadCalendarTasks error", error);
     return [];
   }
   type Row = {
     id: string;
-    name: string;
-    city: string | null;
-    year: number;
-    month: number;
-    week: number;
-    date_text: string | null;
-    confidence: "On Radar" | "Likely" | "Confirmed" | "Complete";
-    shared_with_team: boolean;
-    client: { name: string | null } | null;
+    title: string;
+    due_date: string;
+    status: "To Do" | "Doing" | "Blocked" | "Done";
+    priority: "Urgent" | "High" | "Normal" | "Low";
+    project: { id: string; name: string } | null;
   };
-  return ((data ?? []) as unknown as Row[]).map((e) => ({
-    id: e.id,
-    name: e.name,
-    clientName: e.client?.name ?? null,
-    city: e.city,
-    year: e.year,
-    month: e.month,
-    week: e.week,
-    dateText: e.date_text,
-    confidence: e.confidence,
-    sharedWithTeam: e.shared_with_team,
+  return ((data ?? []) as unknown as Row[]).map((t) => ({
+    id: t.id,
+    title: t.title,
+    dueIso: t.due_date,
+    status: t.status,
+    priority: t.priority,
+    projectId: t.project?.id ?? null,
+    projectName: t.project?.name ?? null,
   }));
 }
 
-/**
- * Mirror date convention: Week 1 = day 1, Week 2 = day 8, Week 3 = day 15,
- * Week 4 = day 22. The Outlook page stores entries by (year, month, week);
- * the Calendar derives a calendar date for shared entries via this map.
- */
-export function weekToDateIso(year: number, month: number, week: number): string {
-  const day = (week - 1) * 7 + 1;
-  const m = String(month).padStart(2, "0");
-  const d = String(day).padStart(2, "0");
-  return `${year}-${m}-${d}`;
-}

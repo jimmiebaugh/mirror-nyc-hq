@@ -21,8 +21,8 @@ export type CalendarEventKind =
   | "live"
   | "rem"
   | "del"
-  | "olk"
   | "hol"
+  | "task"
   | "plain";
 
 export type CalendarEvent = {

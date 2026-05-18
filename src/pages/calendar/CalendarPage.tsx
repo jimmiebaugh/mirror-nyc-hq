@@ -5,6 +5,8 @@ import {
   CalendarMonthView,
   type CalendarEvent,
 } from "@/components/data/CalendarMonthView";
+import { CalendarDayView } from "@/components/data/CalendarDayView";
+import { CalendarWeekView } from "@/components/data/CalendarWeekView";
 import {
   CalendarVisibilityPanel,
   type VisibilityProject,
@@ -16,19 +18,19 @@ import {
 import {
   loadCalendarProjects,
   loadCalendarDeliverables,
-  loadCalendarOutlook,
-  weekToDateIso,
-  type CalendarProjectRow,
+  loadCalendarTasks,
 } from "@/lib/calendar/queries";
 import { useMirrorHolidays } from "@/lib/calendar/holidays";
 import {
   useCalendarVisibility,
   type CalendarSource,
+  type CalendarViewKind,
 } from "@/lib/calendar/useCalendarVisibility";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { hasGlobalDefault } from "@/lib/hq/savedViews";
 import { toast } from "@/hooks/use-toast";
+import { addDays, addMonths, startOfWeek } from "@/lib/hq/dates";
 
 /**
  * Surface 15 unified Calendar.
@@ -83,16 +85,6 @@ function isoRange(start: string | null, end: string | null): string[] {
   return out;
 }
 
-function projectMatchesFilters(
-  p: CalendarProjectRow,
-  leadFilter: string | null,
-  categoryFilter: string | null,
-): boolean {
-  if (leadFilter && !p.accountManagerIds.includes(leadFilter)) return false;
-  if (categoryFilter && p.category !== categoryFilter) return false;
-  return true;
-}
-
 export default function CalendarPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -100,17 +92,29 @@ export default function CalendarPage() {
   const source: CalendarSource =
     sourceParam === "projects" || sourceParam === "tasks" ? sourceParam : null;
 
-  const { isAdmin, isOwner } = useUserRole();
+  const { isOwner } = useUserRole();
+
+  // Phase 5.7.9 §9.D: current user id for the personal tasks query.
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setUserId(data.user?.id ?? null);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const today = new Date();
-  const [activeMonth, setActiveMonth] = useState<Date>(
+  // Phase 5.7.9 §9.E: `activeFocus` is the focus date for the current view
+  // (day-of, week-of, month-of). Keeps the existing month-window query keys
+  // working since `windowStart`/`windowEnd` still derive from it.
+  const [activeFocus, setActiveFocus] = useState<Date>(
     new Date(today.getFullYear(), today.getMonth(), 1),
   );
-
-  const [leadFilter, setLeadFilter] = useState<string | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
-  const [leadOpen, setLeadOpen] = useState(false);
-  const [categoryOpen, setCategoryOpen] = useState(false);
+  const activeMonth = activeFocus;
+  const setActiveMonth = setActiveFocus;
 
   const visibility = useCalendarVisibility(source);
 
@@ -213,58 +217,40 @@ export default function CalendarPage() {
   );
   const windowStartIso = isoOf(windowStart);
   const windowEndIso = isoOf(windowEnd);
-  const activeYear = activeMonth.getFullYear();
 
   const deliverablesQuery = useQuery({
     queryKey: ["calendar-deliverables", windowStartIso, windowEndIso],
     queryFn: () => loadCalendarDeliverables(windowStartIso, windowEndIso),
   });
 
-  const outlookQuery = useQuery({
-    queryKey: ["calendar-outlook", activeYear],
-    queryFn: () => loadCalendarOutlook(activeYear),
+  // Phase 5.7.9 §9.D: personal tasks layer (assignee_id = me, due in window,
+  // status != Done). Gated client-side by `visibility.state.showMyTasks` in
+  // the events useMemo; the query still runs in the background so toggling
+  // doesn't trigger a refetch.
+  const tasksQuery = useQuery({
+    queryKey: ["calendar-tasks", userId, windowStartIso, windowEndIso],
+    queryFn: () =>
+      userId
+        ? loadCalendarTasks(userId, windowStartIso, windowEndIso)
+        : Promise.resolve([]),
+    enabled: !!userId,
   });
 
   const projects = projectsQuery.data ?? [];
   const deliverables = deliverablesQuery.data ?? [];
-  const outlookEntries = outlookQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
   const { holidays: mirrorHolidays } = useMirrorHolidays();
-
-  // Filter chip option sources.
-  const leadOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const p of projects) {
-      for (let i = 0; i < p.accountManagerIds.length; i++) {
-        const id = p.accountManagerIds[i];
-        if (!seen.has(id)) {
-          seen.set(id, p.accountManagerLabel ?? id.slice(0, 6));
-        }
-      }
-    }
-    return Array.from(seen.entries()).map(([id, label]) => ({ id, label }));
-  }, [projects]);
-  const categoryOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of projects) if (p.category) set.add(p.category);
-    return Array.from(set).sort();
-  }, [projects]);
-
-  // Filtered project set (applies lead + category chips only).
-  const filteredProjects = useMemo(
-    () => projects.filter((p) => projectMatchesFilters(p, leadFilter, categoryFilter)),
-    [projects, leadFilter, categoryFilter],
-  );
 
   // Visibility panel project list (sorted alphabetically by display).
   const visibilityProjects: VisibilityProject[] = useMemo(() => {
-    return filteredProjects
+    return projects
       .map((p) => ({ id: p.id, clientName: p.clientName, name: p.name }))
       .sort((a, b) => {
         const al = a.clientName ? `${a.clientName} · ${a.name}` : a.name;
         const bl = b.clientName ? `${b.clientName} · ${b.name}` : b.name;
         return al.localeCompare(bl);
       });
-  }, [filteredProjects]);
+  }, [projects]);
 
   // Build the CalendarEvent[] array for CalendarMonthView.
   const events: CalendarEvent[] = useMemo(() => {
@@ -274,7 +260,7 @@ export default function CalendarPage() {
     // Project Install / Live / Removal ranges. ID encoding uses `|` as the
     // separator so the projectId (which contains `-`) parses cleanly back
     // out for click routing.
-    for (const p of filteredProjects) {
+    for (const p of projects) {
       if (hiddenSet.has(p.id)) continue;
 
       for (const iso of isoRange(p.installStartIso, p.installEndIso)) {
@@ -308,7 +294,7 @@ export default function CalendarPage() {
 
     // Deliverables (gated by master toggle + per-project visibility).
     if (visibility.state.showDeliverables) {
-      const filteredProjectIds = new Set(filteredProjects.map((p) => p.id));
+      const filteredProjectIds = new Set(projects.map((p) => p.id));
       for (const d of deliverables) {
         if (!filteredProjectIds.has(d.projectId)) continue;
         if (hiddenSet.has(d.projectId)) continue;
@@ -323,27 +309,9 @@ export default function CalendarPage() {
       }
     }
 
-    // Shared Outlook entries (always shared-only; spec § 6a). Renders with
-    // the `.cal-ev.olk` modifier (gray, muted-foreground, 2px gray
-    // border-left).
-    if (visibility.state.showSharedOutlook) {
-      for (const e of outlookEntries) {
-        if (!e.sharedWithTeam) continue;
-        const iso = weekToDateIso(e.year, e.month, e.week);
-        const projectTitle = e.clientName ? `${e.clientName} · ${e.name}` : e.name;
-        out.push({
-          id: `olk-${e.id}`,
-          dateIso: iso,
-          projectTitle,
-          title: "Outlook",
-          kind: "olk",
-        });
-      }
-    }
-
-    // Mirror Holidays. Renders with the `.cal-ev.hol` modifier (gray,
-    // subtle-foreground, italic) so it's distinguishable from shared
-    // Outlook banners + plain Deliverables.
+    // Mirror Holidays. Renders with the `.cal-ev.hol` modifier (muted
+    // coral per Phase 5.7.9 color sweep) so it's distinguishable from
+    // shared Outlook banners + plain Deliverables.
     if (visibility.state.showHolidays) {
       for (const h of mirrorHolidays) {
         out.push({
@@ -356,19 +324,29 @@ export default function CalendarPage() {
       }
     }
 
+    // Phase 5.7.9 §9.D personal tasks layer. Gated by the master toggle;
+    // routes click to /tasks/:id.
+    if (visibility.state.showMyTasks && userId) {
+      for (const t of tasks) {
+        out.push({
+          id: `task-${t.id}`,
+          dateIso: t.dueIso,
+          projectTitle: t.projectName ?? "No project",
+          title: t.title,
+          kind: "task",
+        });
+      }
+    }
+
     return out;
-  }, [filteredProjects, deliverables, outlookEntries, mirrorHolidays, visibility.state]);
+  }, [projects, deliverables, mirrorHolidays, tasks, userId, visibility.state]);
 
   // Click routing.
   const onEventClick = (ev: CalendarEvent) => {
     if (ev.id.startsWith("hol-")) return; // no-op
-    if (ev.id.startsWith("olk-")) {
-      if (!isAdmin) return; // non-admins can see banner, no click target
-      const e = outlookEntries.find((x) => `olk-${x.id}` === ev.id);
-      if (!e) return;
-      navigate(
-        `/outlook?year=${e.year}&month=${String(e.month).padStart(2, "0")}#entry=${e.id}`,
-      );
+    if (ev.id.startsWith("task-")) {
+      const taskId = ev.id.replace(/^task-/, "");
+      navigate(`/tasks/${taskId}`);
       return;
     }
     if (ev.id.startsWith("del-")) {
@@ -383,66 +361,167 @@ export default function CalendarPage() {
     }
   };
 
-  const prevMonth = () =>
-    setActiveMonth(
-      new Date(activeMonth.getFullYear(), activeMonth.getMonth() - 1, 1),
-    );
-  const nextMonth = () =>
-    setActiveMonth(
-      new Date(activeMonth.getFullYear(), activeMonth.getMonth() + 1, 1),
-    );
-  const goToToday = () =>
-    setActiveMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+  // Phase 5.7.9 §9.E: Prev/Next/Today shift at the active resolution. Day
+  // = ±1 day, Week = ±7 days, Month = ±1 month. Today snaps to the current
+  // day for Day/Week views and to the first of the current month for Month.
+  const activeView: CalendarViewKind = visibility.state.activeView;
+  const goPrev = () => {
+    if (activeView === "day") setActiveFocus((d) => addDays(d, -1));
+    else if (activeView === "week") setActiveFocus((d) => addDays(d, -7));
+    else setActiveFocus((d) => addMonths(d, -1));
+  };
+  const goNext = () => {
+    if (activeView === "day") setActiveFocus((d) => addDays(d, 1));
+    else if (activeView === "week") setActiveFocus((d) => addDays(d, 7));
+    else setActiveFocus((d) => addMonths(d, 1));
+  };
+  const goToToday = () => {
+    if (activeView === "month") {
+      setActiveFocus(new Date(today.getFullYear(), today.getMonth(), 1));
+    } else {
+      setActiveFocus(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+    }
+  };
+
+  // Phase 5.7.9 §9.E: focus-date label adapts to the active view. Day shows
+  // "May 17, 2026"; Week shows "May 17 - May 23"; Month shows "May 2026".
+  const focusLabel = useMemo(() => {
+    if (activeView === "day") {
+      return `${MONTH_LABELS[activeFocus.getMonth()]} ${activeFocus.getDate()}, ${activeFocus.getFullYear()}`;
+    }
+    if (activeView === "week") {
+      const ws = startOfWeek(activeFocus);
+      const we = addDays(ws, 6);
+      const sameMonth = ws.getMonth() === we.getMonth();
+      const left = `${MONTH_LABELS[ws.getMonth()]} ${ws.getDate()}`;
+      const right = sameMonth
+        ? `${we.getDate()}`
+        : `${MONTH_LABELS[we.getMonth()]} ${we.getDate()}`;
+      return `${left} – ${right}, ${we.getFullYear()}`;
+    }
+    return formatMonthYear(activeFocus);
+  }, [activeView, activeFocus]);
 
   const loading =
     projectsQuery.isLoading ||
     deliverablesQuery.isLoading ||
-    outlookQuery.isLoading ||
+    tasksQuery.isLoading ||
     visibility.loading;
 
   return (
     <div className="stack-4">
       <div className="pagehead">
-        <div className="row between">
+        <div className="stack-2">
           <div>
             <div className="eyebrow">HQ</div>
             <h1 className="h-page" style={{ marginTop: 4 }}>
               Calendar
             </h1>
           </div>
-          {/* Right-inset by 248px = visibility panel width (232) + grid gap
-              (16) so the right edge of the Today button lines up with the
-              right edge of the Category filter chip below. */}
-          <div className="row-c" style={{ marginRight: 248 }}>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={prevMonth}
-              aria-label="Previous month"
+          {/* Row beneath the title. Mirrors the calendar grid's column
+              structure (1fr 232px / gap 16) so the legend's right edge
+              lands at the calendar table's right edge by structure rather
+              than by inset math. LEFT cell: button cluster (month switcher
+              + vertical divider + Day/Week/Month) on the left; color
+              legend on the right via `.row between`. RIGHT cell: empty
+              (visibility-panel column is intentionally unused above). */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 232px",
+              gap: 16,
+              alignItems: "center",
+            }}
+          >
+            <div
+              className="row between"
+              style={{ alignItems: "center", flexWrap: "wrap", gap: 16 }}
             >
-              <IconArrowLeft className="ic" />
-            </button>
-            <span
-              className="h-card"
-              style={{ fontSize: 15, minWidth: 130, textAlign: "center" }}
-            >
-              {formatMonthYear(activeMonth)}
-            </span>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={nextMonth}
-              aria-label="Next month"
-            >
-              <IconChevronRight className="ic" />
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={goToToday}
-            >
-              Today
-            </button>
+              <div className="row-c" style={{ gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={goPrev}
+                  aria-label={`Previous ${activeView}`}
+                >
+                  <IconArrowLeft className="ic" />
+                </button>
+                <span
+                  className="h-card"
+                  style={{ fontSize: 15, minWidth: 170, textAlign: "center" }}
+                >
+                  {focusLabel}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={goNext}
+                  aria-label={`Next ${activeView}`}
+                >
+                  <IconChevronRight className="ic" />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={goToToday}
+                >
+                  Today
+                </button>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 1,
+                    height: 20,
+                    background: "hsl(var(--border))",
+                    margin: "0 4px",
+                  }}
+                />
+                {(["day", "week", "month"] as const).map((kind) => {
+                  const isActive = activeView === kind;
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      className={`fchip fchip--btn ${isActive ? "fchip--active" : ""}`}
+                      onClick={() => visibility.setActiveView(kind)}
+                      aria-pressed={isActive}
+                    >
+                      <span>{kind.charAt(0).toUpperCase() + kind.slice(1)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="callegend" style={{ justifyContent: "flex-end" }}>
+                <span>
+                  <i style={{ background: "hsl(var(--info))" }} /> Install
+                </span>
+                <span>
+                  <i style={{ background: "hsl(var(--success))" }} /> Live
+                </span>
+                <span>
+                  <i style={{ background: "#B57BF5" }} /> Removal
+                </span>
+                <span>
+                  <i style={{ background: "hsl(var(--warn))" }} /> Deliverable
+                </span>
+                <span>
+                  <i
+                    style={{
+                      background: "hsl(var(--primary))",
+                      opacity: 0.5,
+                    }}
+                  />{" "}
+                  Holiday
+                </span>
+                <span>
+                  <i style={{ background: "hsl(var(--muted-foreground))" }} />{" "}
+                  My Tasks
+                </span>
+              </div>
+            </div>
+            {/* Right grid cell intentionally empty so the row above tracks
+                the calendar grid below pixel-for-pixel. */}
+            <div />
           </div>
         </div>
       </div>
@@ -456,84 +535,6 @@ export default function CalendarPage() {
         }}
       >
         <div className="stack-3">
-          <div className="row between wrap" style={{ alignItems: "center" }}>
-            <div className="callegend">
-              <span>
-                <i style={{ background: "#06B6D4" }} /> Install
-              </span>
-              <span>
-                <i style={{ background: "hsl(var(--primary))" }} /> Live
-              </span>
-              <span>
-                <i style={{ background: "hsl(var(--warn))" }} /> Removal
-              </span>
-              <span>
-                <i style={{ background: "hsl(var(--success))" }} /> Deliverable
-              </span>
-              <span>
-                <i style={{ background: "hsl(var(--border-strong))" }} /> Outlook
-                / Holiday
-              </span>
-            </div>
-            <div className="row-c">
-              <FilterChip
-                label="Lead"
-                value={
-                  leadFilter
-                    ? leadOptions.find((o) => o.id === leadFilter)?.label ??
-                      "Unknown"
-                    : "All"
-                }
-                open={leadOpen}
-                onToggle={() => {
-                  setLeadOpen((v) => !v);
-                  setCategoryOpen(false);
-                }}
-                onClear={leadFilter ? () => setLeadFilter(null) : undefined}
-              >
-                {leadOpen ? (
-                  <FilterPicker
-                    items={[{ id: null, label: "All" }, ...leadOptions.map((o) => ({ id: o.id as string | null, label: o.label }))]}
-                    activeId={leadFilter}
-                    onPick={(id) => {
-                      setLeadFilter(id);
-                      setLeadOpen(false);
-                    }}
-                  />
-                ) : null}
-              </FilterChip>
-              <FilterChip
-                label="Category"
-                value={categoryFilter ?? "All"}
-                open={categoryOpen}
-                onToggle={() => {
-                  setCategoryOpen((v) => !v);
-                  setLeadOpen(false);
-                }}
-                onClear={
-                  categoryFilter ? () => setCategoryFilter(null) : undefined
-                }
-              >
-                {categoryOpen ? (
-                  <FilterPicker
-                    items={[
-                      { id: null, label: "All" },
-                      ...categoryOptions.map((c) => ({
-                        id: c as string | null,
-                        label: c,
-                      })),
-                    ]}
-                    activeId={categoryFilter}
-                    onPick={(id) => {
-                      setCategoryFilter(id);
-                      setCategoryOpen(false);
-                    }}
-                  />
-                ) : null}
-              </FilterChip>
-            </div>
-          </div>
-
           {loading ? (
             <div
               className="flex flex-col items-center gap-4 py-24 text-center"
@@ -541,6 +542,18 @@ export default function CalendarPage() {
             >
               <span className="subtle">Loading Calendar...</span>
             </div>
+          ) : activeView === "day" ? (
+            <CalendarDayView
+              events={events}
+              date={activeFocus}
+              onEventClick={onEventClick}
+            />
+          ) : activeView === "week" ? (
+            <CalendarWeekView
+              events={events}
+              weekStart={startOfWeek(activeFocus)}
+              onEventClick={onEventClick}
+            />
           ) : (
             <CalendarMonthView
               events={events}
@@ -555,12 +568,12 @@ export default function CalendarPage() {
         <CalendarVisibilityPanel
           showDeliverables={visibility.state.showDeliverables}
           showHolidays={visibility.state.showHolidays}
-          showSharedOutlook={visibility.state.showSharedOutlook}
+          showMyTasks={visibility.state.showMyTasks}
           hiddenProjectIds={visibility.state.hiddenProjectIds}
           projects={visibilityProjects}
           onSetShowDeliverables={visibility.setShowDeliverables}
           onSetShowHolidays={visibility.setShowHolidays}
-          onSetShowSharedOutlook={visibility.setShowSharedOutlook}
+          onSetShowMyTasks={visibility.setShowMyTasks}
           onToggleProject={visibility.toggleProject}
           canPublishGlobal={isOwner}
           canResetToGlobal={
@@ -574,98 +587,3 @@ export default function CalendarPage() {
   );
 }
 
-function FilterChip({
-  label,
-  value,
-  open,
-  onToggle,
-  onClear,
-  children,
-}: {
-  label: string;
-  value: string;
-  open: boolean;
-  onToggle: () => void;
-  onClear?: () => void;
-  children?: React.ReactNode;
-}) {
-  return (
-    <span style={{ position: "relative", display: "inline-block" }}>
-      <span
-        className="fchip"
-        role="button"
-        style={{ height: 26 }}
-        onClick={onToggle}
-      >
-        <span className="k">{label}</span>
-        <span className="op">is</span>
-        <span className="v">{value}</span>
-        {onClear ? (
-          <span
-            className="x"
-            role="button"
-            aria-label={`Clear ${label}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onClear();
-            }}
-          >
-            ×
-          </span>
-        ) : null}
-      </span>
-      {open ? (
-        <div
-          className="card"
-          style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            right: 0,
-            zIndex: 30,
-            minWidth: 220,
-            maxHeight: 320,
-            overflowY: "auto",
-          }}
-        >
-          {children}
-        </div>
-      ) : null}
-    </span>
-  );
-}
-
-function FilterPicker({
-  items,
-  activeId,
-  onPick,
-}: {
-  items: { id: string | null; label: string }[];
-  activeId: string | null;
-  onPick: (id: string | null) => void;
-}) {
-  return (
-    <div className="card-pad stack-2" style={{ padding: 8 }}>
-      {items.map((item) => {
-        const active = item.id === activeId;
-        return (
-          <button
-            key={item.id ?? "__all"}
-            type="button"
-            className="btn btn-tertiary btn-sm"
-            style={{
-              justifyContent: "flex-start",
-              textAlign: "left",
-              fontWeight: active ? 700 : 400,
-              color: active
-                ? "hsl(var(--primary))"
-                : "hsl(var(--foreground))",
-            }}
-            onClick={() => onPick(item.id)}
-          >
-            {item.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
