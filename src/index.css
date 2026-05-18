@@ -363,7 +363,7 @@
     @apply flex flex-col;
   }
   .hq-brand {
-    height: 64px;
+    height: 56px;
     @apply flex items-center gap-[14px] px-[18px];
     border-bottom: 1px solid hsl(var(--border));
   }

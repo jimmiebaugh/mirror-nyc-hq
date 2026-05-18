@@ -219,45 +219,55 @@ export default function PeopleList() {
         </div>
       </div>
 
+      <div className="row-c" style={{ gap: 6 }}>
+        {AFFILIATION_BUTTONS.map((b) => {
+          const isActive = activeAffiliation === b.value;
+          // 5.7.4 smoke round 3: button color rules.
+          //   All active   -> All highlighted in success; siblings render
+          //                   in their full tier color at opacity 1 (no
+          //                   mutedness).
+          //   Tier active  -> selected pill in its tier color highlighted;
+          //                   ALL siblings (including All) render as
+          //                   muted-foreground at opacity 0.5.
+          // Inline color/opacity must land on the inner <span> because
+          // `.fchip--btn span` (src/index.css:1213) hard-codes
+          // color:muted-foreground for inactive buttons; the button-
+          // level color is only consumed by .fchip--active's currentColor
+          // border + background mix.
+          let color: string;
+          let opacity = 1;
+          if (isActive) {
+            color = b.color;
+          } else if (activeAffiliation === "All") {
+            color = b.color;
+          } else {
+            color = "hsl(var(--muted-foreground))";
+            opacity = 0.3;
+          }
+          return (
+            <button
+              key={b.value}
+              type="button"
+              className={`fchip fchip--btn fchip--lg ${isActive ? "fchip--active" : ""}`}
+              style={{ color }}
+              onClick={() => setAffiliationFilter(b.value)}
+            >
+              <span style={{ color, opacity }}>{b.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <div className="row-c" style={{ gap: 6 }}>
-          {AFFILIATION_BUTTONS.map((b) => {
-            const isActive = activeAffiliation === b.value;
-            // 5.7.4 smoke round 3: button color rules.
-            //   All active   -> All highlighted in success; siblings render
-            //                   in their full tier color at opacity 1 (no
-            //                   mutedness).
-            //   Tier active  -> selected pill in its tier color highlighted;
-            //                   ALL siblings (including All) render as
-            //                   muted-foreground at opacity 0.5.
-            // Inline color/opacity must land on the inner <span> because
-            // `.fchip--btn span` (src/index.css:1213) hard-codes
-            // color:muted-foreground for inactive buttons; the button-
-            // level color is only consumed by .fchip--active's currentColor
-            // border + background mix.
-            let color: string;
-            let opacity = 1;
-            if (isActive) {
-              color = b.color;
-            } else if (activeAffiliation === "All") {
-              color = b.color;
-            } else {
-              color = "hsl(var(--muted-foreground))";
-              opacity = 0.3;
-            }
-            return (
-              <button
-                key={b.value}
-                type="button"
-                className={`fchip fchip--btn fchip--lg ${isActive ? "fchip--active" : ""}`}
-                style={{ color }}
-                onClick={() => setAffiliationFilter(b.value)}
-              >
-                <span style={{ color, opacity }}>{b.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        <FilterBar
+          state={filterState}
+          onChange={(next) => {
+            setFilterState(next);
+            setActiveViewName("Custom filter");
+          }}
+          fields={peopleFilterFields}
+          distinctValuesByField={distinctValuesByField}
+        />
         <SavedViewsDropdown
           entityType="person"
           activeName={activeViewName}
@@ -270,16 +280,6 @@ export default function PeopleList() {
           onResetToGlobal={handleResetToGlobal}
         />
       </div>
-
-      <FilterBar
-        state={filterState}
-        onChange={(next) => {
-          setFilterState(next);
-          setActiveViewName("Custom filter");
-        }}
-        fields={peopleFilterFields}
-        distinctValuesByField={distinctValuesByField}
-      />
 
       {loading ? (
         <div className="empty">

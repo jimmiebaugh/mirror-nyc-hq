@@ -306,8 +306,19 @@ export default function TasksList({ view }: { view: ViewKind }) {
         <p className="desc">Default view: my open tasks across every project.</p>
       </div>
 
+      <ViewSwitch active={view} available={["list", "board"]} surface="tasks" />
+
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <ViewSwitch active={view} available={["list", "board"]} surface="tasks" />
+        <FilterBar
+          state={filterState}
+          onChange={(next) => {
+            setFilterState(next);
+            setActiveViewName("Custom filter");
+          }}
+          fields={FILTER_FIELDS}
+          distinctValuesByField={distinctValuesByField}
+          allowIsNot
+        />
         <SavedViewsDropdown
           entityType="task"
           activeName={activeViewName}
@@ -325,16 +336,6 @@ export default function TasksList({ view }: { view: ViewKind }) {
           onResetToGlobal={handleResetToGlobal}
         />
       </div>
-
-      <FilterBar
-        state={filterState}
-        onChange={(next) => {
-          setFilterState(next);
-          setActiveViewName("Custom filter");
-        }}
-        fields={FILTER_FIELDS}
-        distinctValuesByField={distinctValuesByField}
-      />
 
       {loading ? (
         <div className="empty">

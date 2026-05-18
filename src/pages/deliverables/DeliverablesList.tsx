@@ -185,11 +185,22 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
         </p>
       </div>
 
+      <ViewSwitch
+        active={view}
+        available={["list", "board", "calendar"]}
+        surface="deliverables"
+      />
+
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <ViewSwitch
-          active={view}
-          available={["list", "board", "calendar"]}
-          surface="deliverables"
+        <FilterBar
+          state={filterState}
+          onChange={(next) => {
+            setFilterState(next);
+            setActiveViewName("Custom filter");
+          }}
+          fields={FILTER_FIELDS}
+          distinctValuesByField={distinctValuesByField}
+          allowIsNot
         />
         <SavedViewsDropdown
           entityType="deliverable"
@@ -207,16 +218,6 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
           onResetToGlobal={handleResetToGlobal}
         />
       </div>
-
-      <FilterBar
-        state={filterState}
-        onChange={(next) => {
-          setFilterState(next);
-          setActiveViewName("Custom filter");
-        }}
-        fields={FILTER_FIELDS}
-        distinctValuesByField={distinctValuesByField}
-      />
 
       {loading ? (
         <div className="empty">

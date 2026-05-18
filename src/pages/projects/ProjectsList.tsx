@@ -227,11 +227,21 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
         <p className="desc">Every active project across the agency.</p>
       </div>
 
+      <ViewSwitch
+        active={view}
+        available={["list", "board", "timeline", "calendar"]}
+        surface="projects"
+      />
+
       <div className="row between wrap" style={{ alignItems: "center" }}>
-        <ViewSwitch
-          active={view}
-          available={["list", "board", "timeline", "calendar"]}
-          surface="projects"
+        <FilterBar
+          state={filterState}
+          onChange={(next) => {
+            setFilterState(next);
+            setActiveViewName("Custom filter");
+          }}
+          fields={FILTER_FIELDS}
+          distinctValuesByField={distinctValuesByField}
         />
         <SavedViewsDropdown
           entityType="project"
@@ -249,16 +259,6 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
           onResetToGlobal={handleResetToGlobal}
         />
       </div>
-
-      <FilterBar
-        state={filterState}
-        onChange={(next) => {
-          setFilterState(next);
-          setActiveViewName("Custom filter");
-        }}
-        fields={FILTER_FIELDS}
-        distinctValuesByField={distinctValuesByField}
-      />
 
       {loading ? (
         <div className="empty">

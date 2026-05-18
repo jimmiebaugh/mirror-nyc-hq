@@ -73,14 +73,6 @@ export type FilterFieldDef = {
   hidden?: boolean;
 };
 
-const OPS_FOR_TYPE: Record<FilterFieldDef["type"], string[]> = {
-  text: ["is", "is not", "contains"],
-  enum: ["is", "is not", "is any of"],
-  user: ["is", "is not"],
-  date: ["is", "is before", "is after"],
-  lookup: ["is", "is not"],
-};
-
 export function emptyFilterState(): FilterState {
   return { connector: "AND", chips: [] };
 }
@@ -90,6 +82,7 @@ export function FilterBar({
   onChange,
   fields,
   distinctValuesByField,
+  allowIsNot = false,
 }: {
   state: FilterState;
   onChange: (next: FilterState) => void;
@@ -106,6 +99,14 @@ export function FilterBar({
    * doesn't multi-select).
    */
   distinctValuesByField?: Record<string, string[]>;
+  /**
+   * Phase 5.7.8 followup: when true, the add-popover renders an
+   * is / is not toggle between the field picker and the value step.
+   * Default false (global single-op "is" lock); Tasks + Deliverables
+   * opt in because exclusion-style filtering (e.g. "status is not
+   * Done") is core to their default views.
+   */
+  allowIsNot?: boolean;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [building, setBuilding] = useState<{
@@ -224,7 +225,7 @@ export function FilterBar({
         <Fragment key={i}>
           <span className="fchip">
             <span className="k">{fieldLabel(chip.field)}</span>
-            <span className="op">{chip.op}</span>
+            {chip.op !== "is" ? <span className="op">{chip.op}</span> : null}
             <span className="v">{chipDisplayValue(chip)}</span>
             <span
               className="x"
@@ -292,7 +293,7 @@ export function FilterBar({
               value={building.field?.key ?? ""}
               onChange={(e) => {
                 const f = fields.find((x) => x.key === e.target.value);
-                setBuilding({ field: f, op: undefined, value: "" });
+                setBuilding({ field: f, op: "is", value: "" });
               }}
             >
               <option value="" disabled>
@@ -305,23 +306,17 @@ export function FilterBar({
               ))}
             </select>
 
-            {building.field ? (
+            {allowIsNot && building.field ? (
               <select
                 className="input"
-                style={{ height: 36, width: 140, flex: "0 0 auto" }}
-                value={building.op ?? ""}
+                style={{ height: 36, width: 90, flex: "0 0 auto" }}
+                value={building.op ?? "is"}
                 onChange={(e) =>
-                  setBuilding((b) => ({ ...b, op: e.target.value, value: "" }))
+                  setBuilding((b) => ({ ...b, op: e.target.value }))
                 }
               >
-                <option value="" disabled>
-                  Op...
-                </option>
-                {OPS_FOR_TYPE[building.field.type].map((op) => (
-                  <option key={op} value={op}>
-                    {op}
-                  </option>
-                ))}
+                <option value="is">is</option>
+                <option value="is not">is not</option>
               </select>
             ) : null}
 
