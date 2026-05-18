@@ -667,7 +667,7 @@ function fireNotificationAsync(roleId: string, roundId: string) {
   try {
     // @ts-expect-error EdgeRuntime is provided by Supabase Edge runtime
     if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
-      // @ts-expect-error
+      // @ts-expect-error EdgeRuntime.waitUntil is provided by Supabase Edge runtime, not in Deno types
       EdgeRuntime.waitUntil(dispatchPullCompleteNotification(roleId, roundId));
       return;
     }
@@ -1401,7 +1401,7 @@ async function startPull(supabase: any, roleId: string, body: any): Promise<stri
 
   // @ts-expect-error EdgeRuntime is provided by Supabase Edge runtime
   if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
-    // @ts-expect-error
+    // @ts-expect-error EdgeRuntime.waitUntil is provided by Supabase Edge runtime, not in Deno types
     EdgeRuntime.waitUntil(work);
   }
 

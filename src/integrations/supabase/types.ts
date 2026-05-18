@@ -1,4 +1,3 @@
-Initialising login role...
 export type Json =
   | string
   | number
@@ -921,7 +920,6 @@ export type Database = {
           removal_dates_start?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
-          status_notes?: string | null
           tags?: string[]
           updated_at?: string
         }
@@ -948,7 +946,6 @@ export type Database = {
           removal_dates_start?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
-          status_notes?: string | null
           tags?: string[]
           updated_at?: string
         }
@@ -2457,10 +2454,7 @@ export type Database = {
         }
         Returns: string
       }
-      credentials_reveal_password: {
-        Args: { p_id: string }
-        Returns: string
-      }
+      credentials_reveal_password: { Args: { p_id: string }; Returns: string }
       credentials_set_password: {
         Args: { p_id: string; p_password: string }
         Returns: undefined
@@ -2702,6 +2696,3 @@ export const Constants = {
     },
   },
 } as const
-<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
-A new version of Supabase CLI is available: v2.99.0 (currently installed v2.98.1)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

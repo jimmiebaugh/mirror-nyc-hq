@@ -44,7 +44,6 @@
     "cmdk": "^1.1.1",
     "dompurify": "^3.4.5",
     "lucide-react": "^0.462.0",
-    "next-themes": "^0.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.1",

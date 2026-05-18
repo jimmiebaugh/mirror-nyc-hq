@@ -42,7 +42,7 @@ function redactSecrets(s: string): string {
   return s
     .replace(/sb_[a-zA-Z0-9_]+/g, "[REDACTED sb token]")
     .replace(/sk-[a-zA-Z0-9_-]+/g, "[REDACTED sk token]")
-    .replace(/Bearer [a-zA-Z0-9_.\-]+/g, "Bearer [REDACTED]");
+    .replace(/Bearer [a-zA-Z0-9_.-]+/g, "Bearer [REDACTED]");
 }
 
 // Cap Anthropic calls at 60s wall-clock. A hung upstream burns the full

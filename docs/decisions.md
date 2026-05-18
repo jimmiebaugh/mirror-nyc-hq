@@ -30,6 +30,22 @@ Two options on the table: rip React Query out, or convert the remaining pages to
 
 The Supabase advisor flags `auth_leaked_password_protection` as a recommended setting. The toggle integrates with HaveIBeenPwned to reject passwords that appear in known breach corpora. HQ Core does not store passwords. Auth is Google Workspace OAuth restricted to `@mirrornyc.com`; the only "password" in the system is the user's Google account password, which Google itself protects (with HIBP and many other checks). The advisor warning is moot for this project and will remain in scan output indefinitely. Documenting here so future advisor reviews don't relitigate it.
 
+### `rls_auto_enable` defensive event trigger (do not drop)
+
+`public.rls_auto_enable()` is wired to an `ensure_rls` event trigger (`ddl_command_end` on `CREATE TABLE` / `CREATE TABLE AS` / `SELECT INTO`). It iterates the newly-created `public.*` tables and runs `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on each. SECURITY DEFINER, fail-safe (logs instead of raising), owned by `postgres`, not exposed to caller EXECUTE.
+
+This is a load-bearing safety net for the open-authenticated RLS baseline: any future migration that creates a public table without explicitly enabling RLS is caught automatically. The 5.8.5 spec misread the advisor framing and called it Phase 3 cruft; the 5.8.6 DROP attempt failed with a dependency error.
+
+**Do not drop.** The function exists in prod but not in the migration tree; reify in a future schema-baseline ship. Future advisor scans flagging it as `*_security_definer_function_executable` should add it to the existing carve-out paragraph alongside `is_admin`, `is_producer_or_admin`, `current_user_role`, and the credentials RPCs.
+
+### `tmp_5_8_5_probe` pgsodium key (accept-risk, leave in place)
+
+A probe key named `tmp_5_8_5_probe` remains in `pgsodium.valid_key` from the 5.8.5 spec-deviation #3 migration rewrite. The UUID `399d53c0-ebcd-4cad-8c51-57fb6a26dd97` was never used in any `crypto_aead_det_encrypt` call; live encryption uses the `credentials` key (UUID `b5b8bfea-01ce-41e3-a5e2-8fea96c2b9a0`).
+
+pgsodium restricts DELETE on `pgsodium.key` to its own internal role by design, because encryption keys are append-only in the intended workflow ("rotate, don't delete"). Supabase Dashboard SQL editor lacks the required role. The probe key is functionally inert: not referenced by any encrypted data, not exposed via RLS, negligible storage.
+
+**Accept-risk: leave in place.** If pgsodium ever exposes a key-rotate or key-delete primitive at the dashboard level, the probe key is the first candidate for cleanup. Until then it sits.
+
 ## Phase 5.7.10 (2026-05-18)
 
 ### Wiki images: private bucket + 1-year signed URLs (not public bucket)

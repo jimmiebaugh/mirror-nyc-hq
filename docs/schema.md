@@ -414,12 +414,13 @@ function falls back to system defaults (see spec § 2b).
 `ts-cron-monthly-spend-reset` (Phase 3.8) resets `anthropic_spend_current_month_usd` to 0 and `cap_alert_sent_this_month` to false on the 1st of each month at 00:01 UTC.
 
 ### activity_log
-- `id`, `entity_type` (text: `project`, `venue`, `task`, etc.)
+- `id`, `entity_type` (text: `project`, `venue`, `task`, `credential`, etc.)
 - `entity_id` (uuid)
-- `action` (text: `created`, `updated`, `status_changed`, `assigned`)
+- `action` (text: `created`, `updated`, `status_changed`, `assigned`, `credential_revealed`)
 - `actor_id` (FK to users)
 - `payload` (jsonb)
 - `created_at`
+- `entity_type` is an open text column (no CHECK constraint). Phase 5.8.7 added `credential` / `credential_revealed` as the audit trail written inside `credentials_reveal_password`.
 
 ### deliverables (Phase 5.2.1)
 Per-project workflow checkpoints surfaced on Surface 14 (Calendar default view) and on the Project detail (Surface 07).
