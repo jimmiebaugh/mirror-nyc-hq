@@ -209,7 +209,7 @@ export default function DeliverableDetail() {
         <IconArrowLeft className="ic" />
         Back to {back.label}
       </Link>
-      <div className="row between" style={{ alignItems: "flex-start" }}>
+      <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
         <h1 className={`h-page ${statusTextDecoration("deliverable", row.status)}`}>
           <InlineEditText
             value={row.title}

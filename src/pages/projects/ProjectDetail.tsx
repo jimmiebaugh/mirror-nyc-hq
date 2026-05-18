@@ -100,8 +100,6 @@ type Project = {
   design_decks_folder_url: string | null;
   slack_channel_url: string | null;
   budget_sheet_url: string | null;
-  status_notes: string | null;
-  client_notes: string | null;
   job_number: string | null;
   category: string | null;
   city: string | null;
@@ -205,7 +203,7 @@ export default function ProjectDetail() {
              live_dates_start, live_dates_end,
              removal_dates_start, removal_dates_end,
              production_folder_url, design_decks_folder_url, slack_channel_url,
-             budget_sheet_url, status_notes, client_notes,
+             budget_sheet_url,
              job_number, category, city, tags, budget, client_id,
              client:clients!projects_client_id_fkey(id, name),
              venues:project_venues(venue:venues!project_venues_venue_id_fkey(id, name)),
@@ -541,6 +539,31 @@ export default function ProjectDetail() {
     };
   }, [id, viewerRole, roleLoading]);
 
+  // Phase 5.7.14 § 6.F.1: live-refresh the Project Activity card on
+  // activity_log INSERTs. Server-side filter is coarse (any new row); we
+  // re-run the loader so the project/task/deliverable rollup stays
+  // accurate without per-row merge logic.
+  useEffect(() => {
+    if (!id || roleLoading) return;
+    const channel = supabase
+      .channel(`project-activity:${id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "activity_log" },
+        () => {
+          loadActivityByProject({ projectId: id, limit: 5, viewerRole })
+            .then((rows) => setActivityRows(rows))
+            .catch(() => {
+              /* swallow: stale rows still render */
+            });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id, viewerRole, roleLoading]);
+
   if (loading) {
     return (
       <div className="empty">
@@ -599,9 +622,9 @@ export default function ProjectDetail() {
       </Link>
 
       <header className="stack-3">
-        <div className="row between" style={{ alignItems: "center" }}>
-          <div className="row-c" style={{ gap: 16, alignItems: "center" }}>
-            <h1 className="h-page">{project.name || "(untitled)"}</h1>
+        <div className="row between" style={{ alignItems: "center", paddingTop: 16 }}>
+          <div className="row-c" style={{ gap: 16, alignItems: "center", flex: 1, minWidth: 0 }}>
+            <h1 className="h-page" style={{ minWidth: 0 }}>{project.name || "(untitled)"}</h1>
             <ClickPillCell
               value={project.status}
               options={PROJECT_STATUS_VALUES}
@@ -629,13 +652,15 @@ export default function ProjectDetail() {
             className="cap"
             style={{ fontSize: 16, letterSpacing: ".06em" }}
           >
-            {[
-              project.job_number ? `#${project.job_number}` : null,
-              project.category,
-              project.city,
-            ]
-              .filter(Boolean)
-              .join(" · ") || ""}
+            {project.job_number ? (
+              <>
+                <span style={{ color: "hsl(var(--primary) / 0.6)" }}>
+                  #{project.job_number}
+                </span>
+                {project.category || project.city ? " · " : null}
+              </>
+            ) : null}
+            {[project.category, project.city].filter(Boolean).join(" · ")}
           </span>
         </div>
         <div

@@ -201,7 +201,7 @@ export default function TaskDetail() {
         <IconArrowLeft className="ic" />
         Back to {back.label}
       </Link>
-      <div className="row between" style={{ alignItems: "flex-start" }}>
+      <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
         <h1 className={`h-page ${statusTextDecoration("task", task.status)}`}>
           {task.title || "(untitled)"}
         </h1>

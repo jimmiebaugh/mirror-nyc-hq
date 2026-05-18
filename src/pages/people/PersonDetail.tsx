@@ -298,17 +298,20 @@ export default function PersonDetail() {
         <Link to={back.to} className="crumb">
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
-        <div className="row between" style={{ alignItems: "flex-start" }}>
-          <div className="row-c">
+        <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
+          <div className="row-c" style={{ flex: 1, minWidth: 0 }}>
             <span
               className="av-i"
               style={{ width: 52, height: 52, fontSize: 16, borderRadius: 999 }}
             >
               {initials}
             </span>
-            <div>
-              <div className="eyebrow">Person</div>
-              <h1 className="h-page" style={{ marginTop: 3 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="eyebrow" style={{ paddingTop: 8 }}>Person</div>
+              <h1
+                className="h-page"
+                style={{ marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+              >
                 <InlineEditText
                   value={person.full_name}
                   required
@@ -491,9 +494,7 @@ export default function PersonDetail() {
                 className="stack-3"
                 style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid hsl(var(--border))" }}
               >
-                <div className="block-lbl">
-                  <span className="label-section">Add Associated Venues</span>
-                </div>
+                <span className="h-card">Add Associated Venues</span>
                 <RecordCombobox
                   multi
                   source={{ kind: "record", loadOptions: loadVenueOptions }}

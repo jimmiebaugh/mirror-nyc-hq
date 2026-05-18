@@ -242,9 +242,9 @@ export default function ClientDetail() {
         <Link to={back.to} className="crumb">
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
-        <div className="row between" style={{ alignItems: "flex-start" }}>
-          <div>
-            <div className="eyebrow">Client</div>
+        <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="eyebrow" style={{ paddingTop: 8 }}>Client</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
               <InlineEditText
                 value={client.name}

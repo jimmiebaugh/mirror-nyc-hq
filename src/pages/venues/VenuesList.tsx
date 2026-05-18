@@ -216,21 +216,16 @@ export default function VenuesList() {
 
   return (
     <div className="stack-4">
-      <div className="pagehead">
-        <div className="row between">
-          <h1 className="h-page">Venues</h1>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/venues/new")}
-          >
-            <IconPlus className="ic" />
-            New Venue
-          </button>
-        </div>
-        <p className="desc">
-          Every venue Mirror uses. Venue Scout writes here when a scout's chosen venue is promoted.
-        </p>
+      <div className="row between" style={{ alignItems: "flex-end" }}>
+        <h1 className="h-page">Venues</h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate("/venues/new")}
+        >
+          <IconPlus className="ic" />
+          New Venue
+        </button>
       </div>
 
       <SearchInput

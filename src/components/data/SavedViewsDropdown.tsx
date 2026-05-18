@@ -245,7 +245,7 @@ export function SavedViewsDropdown({
                         fontSize: 9,
                         textTransform: "uppercase",
                         letterSpacing: ".06em",
-                        color: "hsl(var(--primary))",
+                        color: "hsl(var(--subtle-foreground))",
                       }}
                     >
                       {v.scope === "global" ? "global default" : "default"}

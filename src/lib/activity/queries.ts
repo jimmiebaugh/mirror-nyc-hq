@@ -114,17 +114,14 @@ export async function fetchActivityPage({
 }
 
 /**
- * Phase 5.7.3 § 3.F: small loader for the ProjectDetail "Project Activity"
- * card. Returns the most-recent `activity_log` rows whose entity matches
- * the given project (singular + plural variants). Child-entity rollup
- * (tasks / deliverables / mentions on this project) is out of scope for
- * 5.7.3; future enhancement can subquery or denormalize a project_id.
+ * Phase 5.7.3 § 3.F + 5.7.14 § 6.F.1: ProjectDetail "Project Activity" card.
+ * Returns the most-recent `activity_log` rows whose entity is the project
+ * itself (singular + plural variants) UNION rows whose entity is a task or
+ * deliverable belonging to the project. Three SELECTs + client-side merge
+ * keeps the query shape portable across PostgREST versions (the OR-with-
+ * compound-AND syntax has surprised us before; see 5.7.13 loadVendors).
  *
  * The `viewerRole` exclusion mirrors `fetchActivityPage` for consistency.
- * In practice it's a no-op for project rows today (project isn't in any
- * admin-only / freelance-blocked list), but keeping the filter call means
- * the global feed and the per-project card never diverge if the exclusion
- * lists change.
  */
 export async function loadActivityByProject({
   projectId,
@@ -135,29 +132,59 @@ export async function loadActivityByProject({
   limit?: number;
   viewerRole?: ActivityViewerRole;
 }): Promise<ActivityRow[]> {
-  let query = supabase
-    .from("activity_log")
-    .select(
-      "id, entity_type, entity_id, action, payload, created_at, actor:users(id, full_name, email)",
-    )
-    .in("entity_type", ["project", "projects"])
-    .eq("entity_id", projectId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
   const excluded = excludedTypesFor(viewerRole);
-  if (excluded.length > 0) {
-    query = query.not(
-      "entity_type",
-      "in",
-      `(${excluded.map((t) => `"${t}"`).join(",")})`,
-    );
+
+  // 1. Resolve child entity ids belonging to this project.
+  const [tasksRes, dlvRes] = await Promise.all([
+    supabase.from("tasks").select("id").eq("project_id", projectId),
+    supabase.from("deliverables").select("id").eq("project_id", projectId),
+  ]);
+  const taskIds = (tasksRes.data ?? []).map((t) => t.id as string);
+  const dlvIds = (dlvRes.data ?? []).map((d) => d.id as string);
+
+  // 2. Three parallel activity_log queries (project / tasks / deliverables),
+  //    each capped at `limit` rows so we never pull more than 3 * limit before
+  //    merge+truncate. PostgREST applies the .limit() per-query so total
+  //    network cost is bounded.
+  const select =
+    "id, entity_type, entity_id, action, payload, created_at, actor:users(id, full_name, email)";
+
+  const buildQuery = (types: string[], ids: string[]) => {
+    let q = supabase
+      .from("activity_log")
+      .select(select)
+      .in("entity_type", types)
+      .in("entity_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (excluded.length > 0) {
+      q = q.not(
+        "entity_type",
+        "in",
+        `(${excluded.map((t) => `"${t}"`).join(",")})`,
+      );
+    }
+    return q;
+  };
+
+  const queries = [buildQuery(["project", "projects"], [projectId])];
+  if (taskIds.length > 0) queries.push(buildQuery(["task", "tasks"], taskIds));
+  if (dlvIds.length > 0)
+    queries.push(buildQuery(["deliverable", "deliverables"], dlvIds));
+
+  const results = await Promise.all(queries);
+  for (const r of results) {
+    if (r.error) throw r.error;
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
+  // 3. Merge, sort newest-first, truncate to `limit`.
+  const merged: DbActivityRow[] = [];
+  for (const r of results) {
+    merged.push(...((r.data ?? []) as unknown as DbActivityRow[]));
+  }
+  merged.sort((a, b) => b.created_at.localeCompare(a.created_at));
 
-  return ((data ?? []) as unknown as DbActivityRow[]).map<ActivityRow>((r) => ({
+  return merged.slice(0, limit).map<ActivityRow>((r) => ({
     id: r.id,
     entity_type: r.entity_type,
     entity_id: r.entity_id,

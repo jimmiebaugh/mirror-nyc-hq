@@ -172,7 +172,7 @@ function ToggleRow({
               fontSize: 11,
               color: dim
                 ? "hsl(var(--subtle-foreground))"
-                : "hsl(var(--primary))",
+                : "hsl(var(--foreground))",
               lineHeight: 1.25,
               wordBreak: "break-word",
             }}

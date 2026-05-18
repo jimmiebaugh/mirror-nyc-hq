@@ -212,19 +212,16 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
 
   return (
     <div className="stack-4">
-      <div className="pagehead">
-        <div className="row between">
-          <h1 className="h-page">Projects</h1>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/projects/new")}
-          >
-            <IconPlus className="ic" />
-            New Project
-          </button>
-        </div>
-        <p className="desc">Every active project across the agency.</p>
+      <div className="row between" style={{ alignItems: "flex-end" }}>
+        <h1 className="h-page">Projects</h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate("/projects/new")}
+        >
+          <IconPlus className="ic" />
+          New Project
+        </button>
       </div>
 
       <ViewSwitch

@@ -879,7 +879,6 @@ export type Database = {
           category: string | null
           city: string | null
           client_id: string | null
-          client_notes: string | null
           created_at: string
           created_by: string | null
           design_decks_folder_url: string | null
@@ -896,7 +895,6 @@ export type Database = {
           removal_dates_start: string | null
           slack_channel_url: string | null
           status: Database["public"]["Enums"]["project_status"]
-          status_notes: string | null
           tags: string[]
           updated_at: string
         }
@@ -907,7 +905,6 @@ export type Database = {
           category?: string | null
           city?: string | null
           client_id?: string | null
-          client_notes?: string | null
           created_at?: string
           created_by?: string | null
           design_decks_folder_url?: string | null
@@ -935,7 +932,6 @@ export type Database = {
           category?: string | null
           city?: string | null
           client_id?: string | null
-          client_notes?: string | null
           created_at?: string
           created_by?: string | null
           design_decks_folder_url?: string | null

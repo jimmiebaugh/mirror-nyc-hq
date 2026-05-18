@@ -135,6 +135,13 @@ type CommonProps = {
    *     row (e.g. ProjectDetail Venue).
    */
   displayAs?: "chips" | "stack";
+  /**
+   * Phase 5.7.14: when true, the in-trigger chip render for `multi` mode is
+   * suppressed and the trigger shows the placeholder text instead. Use when
+   * the consumer is rendering the selection somewhere else (e.g. a sibling
+   * VenueTypePill row). Selection state, popover, and "+ Add" are unaffected.
+   */
+  hideMultiValueChips?: boolean;
 };
 
 export type RecordComboboxProps = CommonProps & (SingleProps | MultiProps);
@@ -312,7 +319,10 @@ function ComboboxView(props: ViewProps) {
     props.allowCreate !== false &&
     (props.source.kind === "lookup" || Boolean(props.onMiniCreate));
 
-  const filled = isMulti ? selectedLabels.length > 0 : Boolean(props.value);
+  const hideMultiValueChips = isMulti && props.hideMultiValueChips === true;
+  const filled = isMulti
+    ? selectedLabels.length > 0 && !hideMultiValueChips
+    : Boolean(props.value);
   const getRecordHref = props.getRecordHref;
   const displayAs = props.displayAs ?? "chips";
   // Phase 5.7.3 followup-5: when getRecordHref is supplied AND a value is

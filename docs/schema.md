@@ -100,8 +100,7 @@ The legacy `organizations` entry below is preserved for historical reference; tr
 - `live_dates_start`, `live_dates_end` (date, nullable)
 - `removal_dates_start`, `removal_dates_end` (date, nullable). Added Phase 5.3. Drives Calendar Removal banners + Project Timeline Removal bar.
 - `production_folder_url`, `design_decks_folder_url`, `budget_sheet_url`, `latest_creative_deck_url`, `slack_channel_url` (text, all nullable)
-- `status_notes` (text, renamed from `notes` in Phase 5.2.2). Surface 07 detail Status Notes sidebar card body + Surface 08 edit Status Notes textarea.
-- `client_notes` (text, nullable). Surface 07 detail Client Notes sidebar card body + Surface 08 edit Client Notes textarea. Added Phase 5.2.2 alongside the `notes` rename.
+- ~~`status_notes` / `client_notes` (text, nullable)~~ DROPPED Phase 5.7.14 (`20260530100000_phase_5_7_14_drop_projects_legacy_notes.sql`). `status_notes` UI was swapped to `notes_log` via shared `<InternalNotesEditor>` in Phase 5.7.3 (the column was kept on disk for a soak; columns were dead-data since); `client_notes` UI was removed in Phase 5.7.7. Status Notes content was backfilled into `notes_log` rows by migration `20260523100000`.
 - `archived_at` (timestamptz, nullable; null = active, non-null = archived; default queries filter `archived_at IS NULL`)
 - `created_by` (uuid, FK to users)
 - `created_at`, `updated_at`
@@ -455,7 +454,7 @@ Polymorphic Internal Notes log shared by Clients, Vendors, People, Venues, Outlo
 
 - `id` (uuid, PK, default `gen_random_uuid()`)
 - `parent_type` (text, NOT NULL, CHECK `IN ('client', 'vendor', 'person', 'venue', 'outlook_entry', 'task', 'deliverable', 'project')`)
-- `parent_id` (uuid, NOT NULL): logical FK to the parent record. Not a real FK because the parent table varies. Tightening to per-type split tables can land later if it ever matters.
+- `parent_id` (uuid, NOT NULL): logical FK to the parent record. Not a real FK because the parent table varies. Tightening to per-type split tables can land later if it ever matters. **Phase 5.7.14 (`20260530110000_phase_5_7_14_notes_log_orphan_sweep.sql`)** one-shot DELETEs any orphan rows where the parent record no longer exists (one anti-join DELETE per parent_type, wrapped in a single transaction). No standing AFTER DELETE trigger on the parent tables — future deletes still produce orphans until a polymorphic FK design lands; re-run the sweep periodically if growth becomes an issue.
 - `body` (text, NOT NULL)
 - `author_id` (uuid, NOT NULL, FK to `users.id`)
 - `created_at` (timestamptz, NOT NULL, default `now()`)

@@ -277,13 +277,13 @@ export default function VenueDetail() {
 
   return (
     <div className="stack-6">
-      <div className="stack-3">
+      <div className="stack-2">
         <Link to={back.to} className="crumb">
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
-        <div className="row between" style={{ alignItems: "flex-start", gap: 24 }}>
+        <div className="row between" style={{ alignItems: "flex-start", gap: 24, paddingTop: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="eyebrow">Venue</div>
+            <div className="eyebrow" style={{ paddingTop: 8 }}>Venue</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
               <InlineEditText
                 value={venue.name}
@@ -324,14 +324,13 @@ export default function VenueDetail() {
         </div>
         <div
           className="row-c"
-          style={{ gap: 12, fontSize: 15, color: "hsl(var(--muted-foreground))" }}
+          style={{ gap: 12, fontSize: 15, color: "hsl(var(--muted-foreground))", marginTop: 0 }}
         >
           {venueTypes.map((t) => (
             <VenueTypePill key={t} type={t} />
           ))}
-          <span>
-            {[venue.neighborhood, venue.city].filter(Boolean).join(", ") || "-"}
-          </span>
+          {venue.city ? <span>{venue.city}</span> : null}
+          {venue.neighborhood ? <span>({venue.neighborhood})</span> : null}
         </div>
       </div>
 
@@ -353,9 +352,24 @@ export default function VenueDetail() {
                 <dl className="kv" style={{ gridTemplateColumns: "130px 1fr" }}>
                   <dt>Venue Type</dt>
                   <dd>
-                    <div className="stack-2">
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 8,
+                      }}
+                    >
+                      {venueTypes.length > 0 ? (
+                        <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
+                          {venueTypes.map((t) => (
+                            <VenueTypePill key={t} type={t} small />
+                          ))}
+                        </span>
+                      ) : null}
                       <RecordCombobox
                         multi
+                        hideMultiValueChips
                         source={{ kind: "lookup", table: "venue_types" }}
                         multiValue={venueTypesLookup.options
                           .filter((o) => venueTypeIds.includes(o.id))
@@ -379,13 +393,6 @@ export default function VenueDetail() {
                         entityLabel="Venue type"
                         placeholder="Select"
                       />
-                      {venueTypes.length > 0 ? (
-                        <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
-                          {venueTypes.map((t) => (
-                            <VenueTypePill key={t} type={t} small />
-                          ))}
-                        </span>
-                      ) : null}
                     </div>
                   </dd>
                   <dt>City</dt>

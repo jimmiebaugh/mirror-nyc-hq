@@ -291,19 +291,16 @@ export default function TasksList({ view }: { view: ViewKind }) {
 
   return (
     <div className="stack-4">
-      <div className="pagehead">
-        <div className="row between">
-          <h1 className="h-page">Tasks</h1>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/tasks/new")}
-          >
-            <IconPlus className="ic" />
-            New Task
-          </button>
-        </div>
-        <p className="desc">Default view: my open tasks across every project.</p>
+      <div className="row between" style={{ alignItems: "flex-end" }}>
+        <h1 className="h-page">Tasks</h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate("/tasks/new")}
+        >
+          <IconPlus className="ic" />
+          New Task
+        </button>
       </div>
 
       <ViewSwitch active={view} available={["list", "board"]} surface="tasks" />
@@ -561,9 +558,9 @@ export default function TasksList({ view }: { view: ViewKind }) {
                 style={{ marginTop: 9 }}
               >
                 <span className={priorityTokenClass(r.priority)}>{r.priority}</span>
-                <span className="cap">
-                  {r.project?.name ? r.project.name : "No project"}
-                </span>
+                {r.project?.name ? (
+                  <span className="cap">{r.project.name}</span>
+                ) : null}
               </div>
               {r.status === "Blocked" && r.blocked_by[0] ? (
                 <div

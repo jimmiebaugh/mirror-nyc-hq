@@ -168,21 +168,16 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
 
   return (
     <div className="stack-4">
-      <div className="pagehead">
-        <div className="row between">
-          <h1 className="h-page">Deliverables</h1>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/deliverables/new")}
-          >
-            <IconPlus className="ic" />
-            New Deliverable
-          </button>
-        </div>
-        <p className="desc">
-          Every dated project checkpoint. Board is the default view.
-        </p>
+      <div className="row between" style={{ alignItems: "flex-end" }}>
+        <h1 className="h-page">Deliverables</h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate("/deliverables/new")}
+        >
+          <IconPlus className="ic" />
+          New Deliverable
+        </button>
       </div>
 
       <ViewSwitch

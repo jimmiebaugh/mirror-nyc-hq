@@ -39,9 +39,9 @@ export function PermissionDenied({
             width: 44,
             height: 44,
             margin: "0 auto 16px",
-            color: "hsl(var(--primary))",
-            borderColor: "rgba(190,78,68,.4)",
-            background: "rgba(190,78,68,.1)",
+            color: "hsl(var(--destructive))",
+            borderColor: "hsl(var(--destructive) / 0.4)",
+            background: "hsl(var(--destructive) / 0.1)",
           }}
         >
           <IconLock style={{ width: 20, height: 20 }} />

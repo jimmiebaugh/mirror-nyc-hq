@@ -431,9 +431,9 @@ export default function VendorDetail() {
         <Link to={back.to} className="crumb">
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
-        <div className="row between" style={{ alignItems: "flex-start" }}>
+        <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="eyebrow">Vendor</div>
+            <div className="eyebrow" style={{ paddingTop: 8 }}>Vendor</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
               <InlineEditText
                 value={vendor.name}
