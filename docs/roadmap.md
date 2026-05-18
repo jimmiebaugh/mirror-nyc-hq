@@ -361,7 +361,11 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     (Team list) stays admin-only. Self-mention dispatch behavior stays
     on by design — not in scope for 5.7.12. Slot before HQ v1 checkpoint
     so the Phase 5.7.2 link-demotions can be reverted to real links
-    inside the v1 cut. Spec TBD.
+    inside the v1 cut.
+  - **Status:** DONE 2026-05-18. Commit: `60f6ff0`. Spec:
+    `OUTPUTS/phase-5-7-12-spec.md`. Slack DM dispatch verified
+    end-to-end the same day (Slack app created, `SLACK_BOT_TOKEN`
+    secret set, self-mention DM delivered).
 - **HQ v1 checkpoint.** After 5.7 wraps: tag the squash commit, write
   `docs/v1-changelog.md` summarizing 5.1 through 5.7. Not a sub-phase;
   a release milestone.
