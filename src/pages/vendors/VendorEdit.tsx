@@ -6,6 +6,7 @@ import { StarRating } from "@/components/data/StarRating";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
+import { VendorFilesEditor } from "@/components/data/VendorFilesEditor";
 import { useLookup } from "@/lib/hq/lookups";
 import { formatPhone } from "@/lib/hq/phone";
 import {
@@ -524,6 +525,8 @@ export default function VendorEdit() {
           </FormField>
         </div>
       </section>
+
+      {!isCreate && id ? <VendorFilesEditor vendorId={id} /> : null}
 
       <StickySaveBar
         dirty={dirty}

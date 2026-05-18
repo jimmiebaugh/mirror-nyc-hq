@@ -5,10 +5,10 @@ import { Pencil } from "lucide-react";
 import {
   IconArrowLeft,
   IconLink,
-  IconPlus,
 } from "@/components/icons/HQIcons";
 import { StarRating } from "@/components/data/StarRating";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
+import { VendorFilesEditor } from "@/components/data/VendorFilesEditor";
 import { isInternalPartner } from "@/lib/vendors/queries";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { InlineTagInput } from "@/components/hq/InlineTagInput";
@@ -376,7 +376,7 @@ export default function VendorDetail() {
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
         <div className="row between" style={{ alignItems: "flex-start" }}>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow">Vendor</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
               <InlineEditText
@@ -607,17 +607,7 @@ export default function VendorDetail() {
             </div>
           </section>
 
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Files &amp; Assets</span>
-              <button type="button" className="tlink" disabled style={{ opacity: 0.45, cursor: "not-allowed" }}>
-                <IconPlus className="ic ic-sm" /> Add
-              </button>
-            </div>
-            <div className="card-pad subtle" style={{ fontSize: 13 }}>
-              File uploads land in 5.4.
-            </div>
-          </section>
+          <VendorFilesEditor vendorId={vendor.id} />
         </div>
 
         <aside className="stack-6">
@@ -677,9 +667,6 @@ export default function VendorDetail() {
                     : "Not rated"}
                 </span>
               </div>
-              <p className="cap" style={{ marginTop: 10, lineHeight: 1.5 }}>
-                Visible to all Standard users.
-              </p>
             </div>
           </section>
 
