@@ -2,6 +2,38 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.7.10 (2026-05-18)
+
+### Wiki images: private bucket + 1-year signed URLs (not public bucket)
+
+The drafted spec offered public bucket as the "simple" path. Locked PRIVATE on 2026-05-18 to keep wiki-image confidentiality consistent with `wiki_pages` table RLS (admin write, authenticated read). SELECT policy lets any authenticated user fetch the object, so signed URLs work for every reader tier. Inserts/updates/deletes gate on `is_admin()`.
+
+The TTL tradeoff is the cost: signed URLs are bearer-token-style and have a Supabase maximum of 1 year. URLs embed directly into `wiki_pages.body` HTML at upload time. After ~365 days, an unedited page's `<img>` tags 403. Acceptable for a v1 wiki where every page is touched often enough; if it bites, the carry-forward is the render-time URL-swap pattern (store `data-storage-path` attr, generate a fresh signed URL on mount).
+
+### Browser-side resize cap = 1200px
+
+Canvas resize ceiling sits at 1200px max width. Big enough that a typical wiki diagram or photo renders crisp on a 13" laptop without distortion; small enough that a 4K original (8-12MB) drops to ~200KB. JPEG quality fixed at 0.85 (canvas `toBlob` ignores it for PNG). Easy to tune later; only one caller today.
+
+### Diff-on-save cleanup (no orphan-image sweep job)
+
+On save, diff the old `body` HTML against the new one and `storage.remove()` any image paths that left the document. On page-delete, sweep every embedded path. On editor-cancel / unmount, sweep this-session uploads via a `makeSessionUploadTracker()` ref. Pattern avoids needing a periodic cleanup cron. Tradeoff: a hard browser refresh mid-edit can't reliably fire async storage deletes from `beforeunload`, so a small orphan window exists — accept and document. If it grows, future carry-forward is a nightly job that diffs `storage.objects` against `extractWikiImagePaths()` over all `wiki_pages.body` rows.
+
+### `TiptapImage` alias for the TipTap Image extension
+
+`@tiptap/extension-image`'s default export is named `Image`, which collides with the global `Image` constructor used inside `resizeImage()` (`new Image()` to read pixel dimensions for the canvas resize). Aliased the import as `TiptapImage` so the resize helper keeps using the native constructor without a `window.Image` indirection. Documented inline.
+
+### Lookup Lists merge: single unified card, no standalone Project Categories / Cities pair
+
+Pre-5.7.10 Settings split Project Categories + Cities into their own `g2`-grid card pair above an "Other Lookup Lists" table. Merged into one "Lookup Lists" card holding all six (project_categories + cities + venue_types + vendor_capabilities + vendor_categories + departments) with the inline `layout="tags"` editor. Two reasons: the two highlighted lookups don't deserve special chrome (they're not used more often than venue_types or departments in practice); and the unified table is easier to scan when an admin is hunting for the right list.
+
+### Inline editor renders directly under its own row (not at table bottom)
+
+First-cut implementation rendered the expanded `<tr>` after the `OTHER_LOOKUPS.map(...)` loop, so the editor always opened at the bottom of `<tbody>` regardless of which row was clicked. Smoke surfaced the visual mismatch: clicking Edit on Cities popped an editor down under Departments. Refactored to wrap each row + its conditional expanded row in a `<Fragment>`, so the editor renders as the next row immediately below the one being edited. Spatial parity matches how admins read the table (top-to-bottom; the editor for row N belongs under row N, not at the end).
+
+### Integrations card collapsed to a header-only Coming Soon stub
+
+Pre-followup the card carried three `<IntegrationRow>` children (Google Calendar push / Slack DM notifications / Google Drive link integration) with disabled toggles + a "display-only in this release" caption. Smoke ask 2026-05-18: drop the body entirely and reduce the card to a one-line `Integrations — Coming Soon` header with no expand affordance. Reason: shipping the toggles + descriptions visually advertises features that don't actually work and invites the support question "why is my toggle stuck?". A muted "Coming Soon" label sets the right expectation in fewer pixels. The notification dispatch wiring (which would make at least the Slack DM toggle real) is a future-phase scope; restore the row primitives at that point.
+
 ## Phase 5.5 (2026-05-16)
 
 ### `notifications-dispatch` is internal-only (no user-JWT path)

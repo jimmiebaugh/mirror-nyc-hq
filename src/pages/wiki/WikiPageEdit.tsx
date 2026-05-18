@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -15,6 +15,11 @@ import {
   type WikiPage,
   type WikiVisibility,
 } from "@/lib/wiki/queries";
+import {
+  cleanupRemovedWikiImages,
+  extractWikiImagePaths,
+  makeSessionUploadTracker,
+} from "@/lib/wiki/images";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,6 +78,10 @@ export default function WikiPageEdit() {
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
+  // Tracks images uploaded during this edit session. Cleared on a
+  // successful save; flushed on cancel / unmount so editor-only uploads
+  // don't orphan in the wiki_images bucket.
+  const sessionUploads = useRef(makeSessionUploadTracker()).current;
 
   useEffect(() => {
     let active = true;
@@ -132,6 +141,16 @@ export default function WikiPageEdit() {
     setForm((f) => ({ ...f, slug: slugify(f.title) }));
   }, [form.title, isCreate, slugTouched]);
 
+  // Best-effort cleanup if the user navigates away without saving (covers
+  // hard route changes that bypass the confirm dialog). Successful save
+  // clears the tracker first, so this becomes a no-op in that path.
+  useEffect(() => {
+    return () => {
+      void sessionUploads.cleanupAll();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const onCancel = () => {
     if (!dirty) {
       navigate(routeSlug ? `/wiki/${routeSlug}` : "/wiki");
@@ -184,6 +203,8 @@ export default function WikiPageEdit() {
         toast({ title: "Save failed", description: error.message, variant: "destructive" });
         return;
       }
+      // Successful save persists every uploaded-this-session file.
+      sessionUploads.clear();
       toast({ title: "Page created" });
       navigate(`/wiki/${data.slug}`);
     } else {
@@ -196,6 +217,9 @@ export default function WikiPageEdit() {
         toast({ title: "Save failed", description: error.message, variant: "destructive" });
         return;
       }
+      // Diff old vs new body — delete files that left the HTML body.
+      await cleanupRemovedWikiImages(initial.body, form.body);
+      sessionUploads.clear();
       toast({ title: "Saved" });
       setInitial(form);
       // If slug changed, navigate to new url.
@@ -213,6 +237,18 @@ export default function WikiPageEdit() {
       toast({ title: "Delete failed", description: error.message, variant: "destructive" });
       return;
     }
+    // Sweep every image embedded in the deleted page's body, plus any
+    // session-tracked uploads that never made it into the persisted body.
+    const embedded = extractWikiImagePaths(form.body);
+    if (embedded.length > 0) {
+      const { error: storageErr } = await supabase.storage
+        .from("wiki_images")
+        .remove(embedded);
+      if (storageErr) {
+        console.warn("[wiki_images] page-delete cleanup failed", storageErr);
+      }
+    }
+    await sessionUploads.cleanupAll();
     toast({ title: "Page deleted" });
     navigate("/wiki");
   };
@@ -330,6 +366,7 @@ export default function WikiPageEdit() {
               <WikiEditor
                 value={form.body}
                 onChange={(html) => setForm((f) => ({ ...f, body: html }))}
+                onImageReady={(path) => sessionUploads.add(path)}
               />
             </div>
           </section>
@@ -368,7 +405,10 @@ export default function WikiPageEdit() {
           <AlertDialogFooter>
             <AlertDialogCancel>Stay</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => navigate(routeSlug ? `/wiki/${routeSlug}` : "/wiki")}
+              onClick={async () => {
+                await sessionUploads.cleanupAll();
+                navigate(routeSlug ? `/wiki/${routeSlug}` : "/wiki");
+              }}
             >
               Discard
             </AlertDialogAction>

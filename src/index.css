@@ -1512,6 +1512,10 @@
   .wikipage.prose strong,.wikipage.prose b{color:hsl(var(--foreground));font-weight:600;}
   .wikipage.prose code{font-family:var(--font-mono);font-size:12.5px;background:hsl(var(--surface-alt));padding:1px 5px;border-radius:3px;}
   .wikipage.prose a{color:hsl(var(--primary));text-decoration:underline;}
+  /* Wiki body inline images (5.7.10). Used by both edit-mode (TipTap Image
+     extension) and read-mode (raw <img> nodes inside .wikipage HTML). */
+  .wikipage-img,
+  .wikipage img{max-width:100%;height:auto;border-radius:var(--radius);margin:12px 0;display:block;}
   .embed-note{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.06em;color:hsl(var(--subtle-foreground));text-transform:uppercase;display:flex;align-items:center;gap:7px;margin:22px 0 8px;}
 
   /* Credential reveal field (Account Logins). */

@@ -54,6 +54,7 @@ Admin checks are done via a SECURITY DEFINER function that reads `permission_rol
 - `briefs`, `sourcing_sheets`: any auth user (Venue Scout; relaxed from producer-or-admin in Phase 4.10.3-port to match the open-authenticated vs_* table RLS).
 - `venue_photos`: any auth read; producer or admin write (HQ Core master `venues` table photos)
 - `vs_venue_photos`: any auth user (Venue Scout deck photos, private; signed URLs at render time, 1-hour TTL). Distinct from the public `venue_photos` bucket; the two coexist because Venue Scout decks need private upload/render while HQ Core's master-venues bucket stays public for downstream usage. Created in Phase 4.7.1-port; producer-or-admin gate relaxed to authenticated in Phase 4.10.3-port.
+- `wiki_images`: any auth SELECT; admin-only INSERT/UPDATE/DELETE (matches `wiki_pages` RLS). Private bucket; signed URLs with 1-year TTL embedded in `wiki_pages.body` HTML at upload time. After 1 year, embedded URLs expire and images break until the page is re-edited; render-time URL-swap pattern is the deferred carry-forward if this becomes painful. Created Phase 5.7.10.
 - `profile_avatars`: any auth read; user writes only to their own folder (`{user_id}/...` path prefix)
 
 All buckets are private. URLs go through `supabase.storage.createSignedUrl` with short TTLs (typical: 60 minutes for inline rendering, 1 hour for download links).
