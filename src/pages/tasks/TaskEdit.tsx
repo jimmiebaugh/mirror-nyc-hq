@@ -243,7 +243,7 @@ export default function TaskEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 120, maxWidth: 760 }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 760 }}>
       <Link
         to={isCreate ? "/tasks" : `/tasks/${id}`}
         className="tlink"

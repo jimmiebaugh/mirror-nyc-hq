@@ -335,7 +335,7 @@ export default function VenueEdit() {
   const prodRate = rates.find((r) => r.rate_kind === "prod_day");
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/venues" : `/venues/${id}`}
         className="tlink"

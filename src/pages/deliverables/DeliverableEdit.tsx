@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
@@ -18,12 +18,12 @@ import {
   DELIVERABLE_STATUS_VALUES,
   type DeliverableStatus,
 } from "@/lib/deliverables/queries";
+import { syncDeliverableAssignees } from "@/lib/deliverables/assigneeSync";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 
 type FormState = {
   title: string;
-  type: string;
   status: DeliverableStatus;
   due_date: string;
   project_id: string | null;
@@ -32,14 +32,13 @@ type FormState = {
 
 const EMPTY: FormState = {
   title: "",
-  type: "",
   status: "Upcoming",
   due_date: "",
   project_id: null,
   assigned_user_ids: [],
 };
 
-type ProjectOption = { id: string; name: string };
+type ProjectOption = { id: string; name: string; client: { id: string; name: string | null } | null };
 type UserOption = { id: string; full_name: string | null; email: string };
 
 export default function DeliverableEdit() {
@@ -65,28 +64,35 @@ export default function DeliverableEdit() {
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Phase 5.7.5 § 5.D: snapshot the original assignees on load so onSave
+  // can diff against the current form.assigned_user_ids and fire the
+  // right auto-task INSERTs / DELETEs.
+  const originalAssignedUserIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     let active = true;
     (async () => {
       const [projectsRes, usersRes, deliverableRes] = await Promise.all([
-        supabase.from("projects").select("id, name").is("archived_at", null).order("name"),
+        supabase
+          .from("projects")
+          .select("id, name, client:clients(id, name)")
+          .is("archived_at", null)
+          .order("name"),
         supabase.from("users").select("id, full_name, email").eq("active", true).order("full_name"),
         isCreate
           ? Promise.resolve({ data: null })
           : supabase
               .from("deliverables")
-              .select("id, title, type, status, due_date, project_id, assigned_user_ids")
+              .select("id, title, status, due_date, project_id, assigned_user_ids")
               .eq("id", id)
               .single(),
       ]);
       if (!active) return;
-      setProjects((projectsRes.data ?? []) as ProjectOption[]);
+      setProjects(((projectsRes.data ?? []) as unknown) as ProjectOption[]);
       setUsers((usersRes.data ?? []) as UserOption[]);
       if (!isCreate && deliverableRes && "data" in deliverableRes && deliverableRes.data) {
         type Row = {
           title: string;
-          type: string | null;
           status: DeliverableStatus;
           due_date: string | null;
           project_id: string | null;
@@ -95,7 +101,6 @@ export default function DeliverableEdit() {
         const d = deliverableRes.data as unknown as Row;
         const next: FormState = {
           title: d.title,
-          type: d.type ?? "",
           status: d.status,
           due_date: d.due_date ?? "",
           project_id: d.project_id,
@@ -103,6 +108,7 @@ export default function DeliverableEdit() {
         };
         setForm(next);
         setInitial(next);
+        originalAssignedUserIdsRef.current = d.assigned_user_ids ?? [];
       }
       setLoading(false);
     })();
@@ -146,11 +152,17 @@ export default function DeliverableEdit() {
     setSaving(true);
     const payload = {
       title: form.title,
-      type: form.type || null,
       status: form.status,
       due_date: form.due_date || null,
       project_id: form.project_id,
       assigned_user_ids: form.assigned_user_ids,
+    };
+    const pickedProject = projects.find((p) => p.id === form.project_id) ?? null;
+    const syncCtxBase = {
+      deliverableTitle: form.title,
+      dueDate: form.due_date || null,
+      projectName: pickedProject?.name ?? null,
+      createdBy: user.id,
     };
     if (isCreate) {
       const { data, error } = await supabase
@@ -158,22 +170,49 @@ export default function DeliverableEdit() {
         .insert({ ...payload, created_by: user.id })
         .select("id")
         .single();
-      setSaving(false);
       if (error) {
+        setSaving(false);
         toast({ title: "Save failed", description: error.message, variant: "destructive" });
         return;
       }
+      // Phase 5.7.5 § 5.D: fire auto-tasks for any initial assignees.
+      if (form.assigned_user_ids.length > 0) {
+        const { errors } = await syncDeliverableAssignees({
+          ctx: { ...syncCtxBase, deliverableId: data.id },
+          prevIds: [],
+          nextIds: form.assigned_user_ids,
+        });
+        if (errors.length > 0) {
+          console.warn("[DeliverableEdit:create] task lifecycle errors", errors);
+        }
+      }
+      setSaving(false);
       toast({ title: "Deliverable created" });
       navigate(`/deliverables/${data.id}`);
     } else {
       const { error } = await supabase.from("deliverables").update(payload).eq("id", id);
-      setSaving(false);
       if (error) {
+        setSaving(false);
         toast({ title: "Save failed", description: error.message, variant: "destructive" });
         return;
       }
+      // Phase 5.7.5 § 5.D: diff against the original assignees snapshot.
+      const { errors } = await syncDeliverableAssignees({
+        ctx: { ...syncCtxBase, deliverableId: id! },
+        prevIds: originalAssignedUserIdsRef.current,
+        nextIds: form.assigned_user_ids,
+      });
+      if (errors.length > 0) {
+        console.warn("[DeliverableEdit:update] task lifecycle errors", errors);
+        toast({
+          title: "Saved, but some auto-tasks did not sync",
+          description: errors[0],
+        });
+      }
+      originalAssignedUserIdsRef.current = form.assigned_user_ids;
+      setSaving(false);
       setInitial(form);
-      toast({ title: "Saved" });
+      if (errors.length === 0) toast({ title: "Saved" });
     }
   };
 
@@ -208,7 +247,7 @@ export default function DeliverableEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 120, maxWidth: 760 }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 760 }}>
       <Link
         to={isCreate ? "/deliverables" : `/deliverables/${id}`}
         className="tlink"
@@ -237,14 +276,7 @@ export default function DeliverableEdit() {
               className={`input ${form.title ? "input--filled" : ""}`}
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            />
-          </Field>
-          <Field label="Type">
-            <input
-              className={`input ${form.type ? "input--filled" : ""}`}
-              value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-              placeholder="Kickoff, Venue Recon, Design Round, Client Approval, Install..."
+              placeholder="Venues Deck, Design R1 Deck..."
             />
           </Field>
           <div className="g2">

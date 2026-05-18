@@ -216,7 +216,7 @@ export default function TeamMemberEdit() {
       : "Pending account link";
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 120 }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120 }}>
       <Link
         to="/users"
         className="tlink"

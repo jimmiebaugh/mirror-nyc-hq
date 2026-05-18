@@ -988,6 +988,8 @@ export type Database = {
           id: string
           priority: string
           project_id: string | null
+          source_deliverable_id: string | null
+          source_user_id: string | null
           status: Database["public"]["Enums"]["task_status"]
           title: string
           updated_at: string
@@ -1003,6 +1005,8 @@ export type Database = {
           id?: string
           priority?: string
           project_id?: string | null
+          source_deliverable_id?: string | null
+          source_user_id?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title: string
           updated_at?: string
@@ -1018,6 +1022,8 @@ export type Database = {
           id?: string
           priority?: string
           project_id?: string | null
+          source_deliverable_id?: string | null
+          source_user_id?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           title?: string
           updated_at?: string
@@ -1042,6 +1048,20 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_source_deliverable_id_fkey"
+            columns: ["source_deliverable_id"]
+            isOneToOne: false
+            referencedRelation: "deliverables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_source_user_id_fkey"
+            columns: ["source_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -2331,7 +2351,7 @@ export type Database = {
       start_over_scout: { Args: { target_scout_id: string }; Returns: Json }
     }
     Enums: {
-      deliverable_status: "Upcoming" | "In Progress" | "Complete" | "Skipped"
+      deliverable_status: "Upcoming" | "Complete" | "Skipped"
       outlook_confidence: "On Radar" | "Likely" | "Confirmed" | "Complete"
       permission_role: "admin" | "standard" | "freelance" | "pending"
       person_affiliation_type: "Client" | "Vendor" | "Venue" | "Unaffiliated"
@@ -2501,7 +2521,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      deliverable_status: ["Upcoming", "In Progress", "Complete", "Skipped"],
+      deliverable_status: ["Upcoming", "Complete", "Skipped"],
       outlook_confidence: ["On Radar", "Likely", "Confirmed", "Complete"],
       permission_role: ["admin", "standard", "freelance", "pending"],
       person_affiliation_type: ["Client", "Vendor", "Venue", "Unaffiliated"],

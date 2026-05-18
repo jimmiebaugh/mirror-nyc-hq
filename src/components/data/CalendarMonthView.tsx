@@ -9,9 +9,11 @@ import { useState, type ReactNode } from "react";
  *
  * Banner kinds (`.in / .live / .rem / .del`) map per spec § 2.G:
  *   Complete    -> .del   (success green)
- *   In Progress -> .in    (info cyan)
  *   Upcoming    -> .rem   (amber)
  *   Skipped     -> plain  (strike rendered via `strikethrough: true`)
+ *
+ * The deliverable_status 'In Progress' value was dropped in the 5.7.5
+ * follow-up; Upcoming covers all future deliverables.
  */
 
 export type CalendarEventKind =

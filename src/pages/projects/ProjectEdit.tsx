@@ -521,7 +521,7 @@ export default function ProjectEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 120 }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120 }}>
       <Link
         to={isCreate ? "/projects" : `/projects/${id}`}
         className="tlink"

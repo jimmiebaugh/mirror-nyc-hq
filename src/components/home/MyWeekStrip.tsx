@@ -72,7 +72,7 @@ async function loadEntries(userId: string, mondayIso: string, sundayIso: string)
       .not("due_date", "is", null)
       .gte("due_date", mondayIso)
       .lte("due_date", sundayIso)
-      .in("status", ["Upcoming", "In Progress"]),
+      .in("status", ["Upcoming"]),
   ]);
 
   const out: WeekEntry[] = [];

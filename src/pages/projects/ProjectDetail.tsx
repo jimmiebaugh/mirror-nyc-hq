@@ -118,7 +118,7 @@ type Deliverable = {
   id: string;
   title: string;
   type: string | null;
-  status: "Upcoming" | "In Progress" | "Complete" | "Skipped";
+  status: "Upcoming" | "Complete" | "Skipped";
   due_date: string | null;
 };
 
@@ -485,7 +485,7 @@ export default function ProjectDetail() {
   }
 
   const nextDeliverable = deliverables
-    .filter((d) => d.due_date && (d.status === "Upcoming" || d.status === "In Progress"))
+    .filter((d) => d.due_date && d.status === "Upcoming")
     .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))[0];
 
   const thisWeekDeliverable = (() => {
@@ -504,7 +504,7 @@ export default function ProjectDetail() {
         d.due_date &&
         d.due_date >= mondayIso &&
         d.due_date <= sundayIso &&
-        (d.status === "Upcoming" || d.status === "In Progress"),
+        d.status === "Upcoming",
     );
   })();
 

@@ -1128,6 +1128,41 @@
   .input:focus{border-color:hsl(var(--primary));box-shadow:0 0 0 3px rgba(190,78,68,.15);}
   .input--filled{border-left:2px solid hsl(var(--primary));}
   .input--focus{border-color:hsl(var(--primary));box-shadow:0 0 0 3px rgba(190,78,68,.15);}
+
+  /* Phase 5.7.5 follow-up round 2: subgroup quick-add affordance.
+     Solid coral rounded-square button with a bold white + glyph. Click
+     adds an inline draft row to the project's table. */
+  .btn-quickadd{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:24px;height:24px;border-radius:6px;
+    background:hsl(var(--primary));
+    color:hsl(var(--primary-foreground));
+    border:1px solid hsl(var(--primary));
+    cursor:pointer;transition:background-color .12s ease;
+    padding:0;
+  }
+  .btn-quickadd:hover{background:hsl(var(--primary-hover));border-color:hsl(var(--primary-hover));}
+  .btn-quickadd:disabled{opacity:.5;cursor:not-allowed;}
+
+  /* Phase 5.7.5 follow-up round 1: HQ Core edit-page input restyle.
+     Match the .combobox-trigger inline-edit chrome — transparent fill, no
+     border outline, no coral left edge. Hover/focus get a light coral
+     tint just like RecordCombobox. Scoped to .hq-form wrappers so Talent
+     Scout + Venue Scout forms keep the original surface-alt chrome. */
+  .hq-form .input,
+  .hq-form select.input,
+  .hq-form textarea.input{
+    background:transparent;
+    border:1px solid transparent;
+    transition:background-color .12s ease;
+  }
+  .hq-form .input:hover{background:rgba(190,78,68,.06);}
+  .hq-form .input:focus{
+    background:rgba(190,78,68,.08);
+    border-color:transparent;
+    box-shadow:none;
+  }
+  .hq-form .input--filled{border-left:1px solid transparent;}
   .textarea{height:auto;min-height:92px;padding:11px 12px;line-height:1.55;}
   .field{display:flex;flex-direction:column;gap:8px;}
   .field .hint{font-size:12px;color:hsl(var(--subtle-foreground));}
@@ -1328,6 +1363,15 @@
   .board-row{display:flex;gap:14px;margin-top:11px;}
   .board-row .bcol{flex:1;width:auto;min-width:0;}
   .strike{text-decoration:line-through;opacity:.6;}
+
+  /* Phase 5.7.5 follow-up round 1: deliverable board card backgrounds.
+     Coral (≤7d), amber (8-14d), grey (>14d / muted), green (complete),
+     and skipped (grey + strikethrough handled in the renderCard). */
+  .bcard--bg-coral{background:hsl(var(--primary) / .14);border-color:hsl(var(--primary) / .35);}
+  .bcard--bg-amber{background:hsl(var(--warn) / .14);border-color:hsl(var(--warn) / .35);}
+  .bcard--bg-grey{background:hsl(0 0% 100% / .04);border-color:hsl(var(--border));}
+  .bcard--bg-green{background:hsl(var(--success) / .12);border-color:hsl(var(--success) / .35);}
+  .bcard--bg-skipped{background:hsl(0 0% 100% / .03);border-color:hsl(var(--border));}
 
   /* Timeline / gantt */
   .tl{border:1px solid hsl(var(--border));border-radius:var(--radius);overflow:hidden;}

@@ -54,7 +54,6 @@ export function taskStatusToken(status: string | null | undefined): StatusToken 
 
 const DELIVERABLE_STATUS_TOKENS: Record<string, StatusToken> = {
   Upcoming: "muted",
-  "In Progress": "warn",
   Complete: "success",
   Skipped: "muted",
 };

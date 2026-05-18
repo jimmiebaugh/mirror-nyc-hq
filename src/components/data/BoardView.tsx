@@ -34,6 +34,12 @@ export type BoardColumn<T extends { id: string }> = {
   /** Optional CTA inside the column footer (`.bcol-add`). */
   addLabel?: string;
   onAdd?: () => void;
+  /**
+   * Phase 5.7.5: optional sub-line under the column title. Used on the
+   * Deliverables board to stack the client name under the project name
+   * in the column header.
+   */
+  labelExtra?: ReactNode;
 };
 
 export type BoardRow<T extends { id: string }> = {
@@ -51,12 +57,18 @@ export function BoardView<T extends { id: string }>({
   renderCard,
   onCardMove,
   onCardClick,
+  cardClassName,
 }: {
   layout: BoardLayout;
   rows: BoardRow<T>[];
   renderCard: (row: T, column: BoardColumn<T>) => ReactNode;
   onCardMove?: (row: T, fromColumnId: string, toColumnId: string) => void;
   onCardClick?: (row: T) => void;
+  /**
+   * Phase 5.7.5 follow-up round 1: optional per-card class hook so the
+   * Deliverables board can vary card background by status + due-window.
+   */
+  cardClassName?: (row: T, column: BoardColumn<T>) => string;
 }) {
   const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
   const [dragFrom, setDragFrom] = useState<string | null>(null);
@@ -85,7 +97,22 @@ export function BoardView<T extends { id: string }>({
           className="dt"
           style={{ background: col.token ? TOKEN_COLOR[col.token] : TOKEN_COLOR.muted }}
         />
-        <span className="ttl">{col.label}</span>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+          <span
+            className="ttl"
+            style={col.labelExtra ? { fontSize: 12 } : undefined}
+          >
+            {col.label}
+          </span>
+          {col.labelExtra ? (
+            <span
+              className="bcol-extra"
+              style={{ display: "block", fontSize: 11.5, marginTop: 2 }}
+            >
+              {col.labelExtra}
+            </span>
+          ) : null}
+        </div>
         <span className="ct" style={{ marginLeft: "auto" }}>
           {col.rows.length}
         </span>
@@ -99,7 +126,13 @@ export function BoardView<T extends { id: string }>({
           col.rows.map((card) => (
             <div
               key={card.id}
-              className={`bcard ${col.token ? `rb-${col.token}` : ""}`}
+              className={[
+                "bcard",
+                col.token ? `rb-${col.token}` : "",
+                cardClassName?.(card, col) ?? "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
               draggable={Boolean(onCardMove)}
               onDragStart={(e) => {
                 setDragFrom(col.id);

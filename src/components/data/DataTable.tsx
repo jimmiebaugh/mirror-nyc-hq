@@ -38,6 +38,13 @@ export type Column<T> = {
    * touching cell padding.
    */
   headerStyle?: CSSProperties;
+  /**
+   * Phase 5.7.5 follow-up round 2: optional group label rendered in a
+   * top-tier header row spanning all consecutive same-group columns.
+   * Used by the Deliverables grouped list to put a merged "Due" header
+   * over the relative-label + actual-date sub-columns.
+   */
+  group?: string;
 };
 
 export type SortState = { key: string; dir: "asc" | "desc" } | null;
@@ -161,12 +168,73 @@ export function DataTable<T extends { id: string }>({
 
   const totalCols = columns.length;
 
+  // Walk columns left-to-right and build header "runs": each ungrouped
+  // column is its own single-cell run; each maximal sequence of
+  // consecutive same-group columns is a merged run rendered as one
+  // colspanned <th> with the group label. Renders as a SINGLE thead
+  // row (no second tier) so the merged group header sits on the same
+  // line as the surrounding ungrouped column headers, matching the
+  // screenshot expectation from 5.7.5 round 2 follow-up.
+  type HeaderRun =
+    | { kind: "col"; col: Column<T>; key: string }
+    | { kind: "group"; label: string; span: number; firstCol: Column<T>; key: string };
+  const headerRuns: HeaderRun[] = [];
+  for (let i = 0; i < columns.length; ) {
+    const c = columns[i];
+    if (!c.group) {
+      headerRuns.push({ kind: "col", col: c, key: c.key });
+      i += 1;
+      continue;
+    }
+    let span = 1;
+    while (i + span < columns.length && columns[i + span].group === c.group) span += 1;
+    headerRuns.push({
+      kind: "group",
+      label: c.group,
+      span,
+      firstCol: c,
+      key: `__grp-${i}-${c.group}`,
+    });
+    i += span;
+  }
+
   return (
     <div className="tbl-wrap">
       <table className={`tbl ${flat ? "tbl--flat" : ""}`}>
         <thead>
           <tr>
-            {columns.map((c) => {
+            {headerRuns.map((run) => {
+              if (run.kind === "group") {
+                const c = run.firstCol;
+                const isSorted = sort?.key === c.key;
+                return (
+                  <th
+                    key={run.key}
+                    colSpan={run.span}
+                    className="c"
+                    style={{
+                      cursor: c.sort ? "pointer" : undefined,
+                      color: isSorted ? "hsl(var(--foreground))" : undefined,
+                    }}
+                    onClick={() => c.sort && toggleHeaderSort(c.key)}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {run.label}
+                      {isSorted ? (
+                        <IconChevronDown
+                          className="ic"
+                          style={{
+                            width: 9,
+                            height: 9,
+                            transform: sort?.dir === "asc" ? "rotate(180deg)" : undefined,
+                          }}
+                        />
+                      ) : null}
+                    </span>
+                  </th>
+                );
+              }
+              const c = run.col;
               const isSorted = sort?.key === c.key;
               const alignCls = c.align === "r" ? "r" : c.align === "c" ? "c" : "";
               const dividerCls = c.noRightDivider ? "tbl-cell-nodivider" : "";

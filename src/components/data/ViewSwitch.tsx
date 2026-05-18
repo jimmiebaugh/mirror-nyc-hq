@@ -50,8 +50,8 @@ const SURFACE_ROUTES: Record<Surface, Partial<Record<ViewKind, string>>> = {
   },
   deliverables: {
     list: "/deliverables/list",
-    board: "/deliverables/board",
-    calendar: "/deliverables",
+    board: "/deliverables",
+    calendar: "/deliverables/calendar",
   },
   venues: {
     list: "/venues",

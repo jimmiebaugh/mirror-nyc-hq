@@ -67,7 +67,7 @@ export default function SettingsPage() {
   }, []);
 
   return (
-    <div className="stack-6" style={{ maxWidth: 980 }}>
+    <div className="stack-6 hq-form" style={{ maxWidth: 980 }}>
       <div className="pagehead">
         <div className="eyebrow">Admin</div>
         <h1 className="h-page" style={{ marginTop: 4 }}>Settings</h1>

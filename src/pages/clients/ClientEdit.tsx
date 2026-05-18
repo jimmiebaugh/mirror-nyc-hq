@@ -209,7 +209,7 @@ export default function ClientEdit() {
   }
 
   return (
-    <div className="stack-4" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/clients" : `/clients/${id}`}
         className="tlink"

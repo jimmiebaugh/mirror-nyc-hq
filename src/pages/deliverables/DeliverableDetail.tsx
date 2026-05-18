@@ -16,6 +16,7 @@ import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { toast } from "@/hooks/use-toast";
+import { syncDeliverableAssignees } from "@/lib/deliverables/assigneeSync";
 
 /**
  * Deliverable Detail (Surface 14).
@@ -28,13 +29,16 @@ import { toast } from "@/hooks/use-toast";
 type DbDeliverable = {
   id: string;
   title: string;
-  type: string | null;
   status: DeliverableStatus;
   due_date: string | null;
   assigned_user_ids: string[];
   completed_at: string | null;
   project_id: string | null;
-  project: { id: string; name: string } | null;
+  project: {
+    id: string;
+    name: string;
+    client: { id: string; name: string | null } | null;
+  } | null;
 };
 
 export default function DeliverableDetail() {
@@ -54,9 +58,9 @@ export default function DeliverableDetail() {
         supabase
           .from("deliverables")
           .select(
-            `id, title, type, status, due_date, assigned_user_ids, completed_at,
+            `id, title, status, due_date, assigned_user_ids, completed_at,
              project_id,
-             project:projects!deliverables_project_id_fkey(id, name)`,
+             project:projects!deliverables_project_id_fkey(id, name, client:clients(id, name))`,
           )
           .eq("id", id)
           .single(),
@@ -98,7 +102,11 @@ export default function DeliverableDetail() {
   const loadProjectOptions = useCallback(async () => projectOptions, [projectOptions]);
   const loadUserOptions = useCallback(async () => userOptions, [userOptions]);
 
-  const saveField = async <K extends keyof DbDeliverable>(
+  // K is restricted to scalar columns; project + project_id have their own
+  // dedicated savers because the embedded project shape doesn't round-trip
+  // through a deliverables UPDATE.
+  type ScalarField = Exclude<keyof DbDeliverable, "project" | "project_id">;
+  const saveField = async <K extends ScalarField>(
     field: K,
     nextValue: DbDeliverable[K],
   ): Promise<void> => {
@@ -122,7 +130,10 @@ export default function DeliverableDetail() {
     setRow({
       ...row,
       project_id: nextId,
-      project: nextProject ? { id: nextProject.id, name: nextProject.label } : null,
+      // Client is unknown from the lean projectOptions list; leave null
+      // until a page refresh re-runs the join. Auto-task title falls back
+      // to "(no client)" in that window — acceptable per spec.
+      project: nextProject ? { id: nextProject.id, name: nextProject.label, client: null } : null,
     });
     const { error } = await supabase
       .from("deliverables")
@@ -138,6 +149,12 @@ export default function DeliverableDetail() {
     if (!row) return;
     const prev = row.assigned_user_ids;
     setRow({ ...row, assigned_user_ids: nextIds });
+
+    // Phase 5.7.5 follow-up round 1: reordered. UPDATE the deliverables
+    // row first so the source-of-truth assignee list reflects the user
+    // intent; only fire the auto-task lifecycle once the UPDATE succeeds.
+    // Prevents the failure mode where the deliverables UPDATE rejects but
+    // we'd already INSERTed / DELETEd the matching task.
     const { error } = await supabase
       .from("deliverables")
       .update({ assigned_user_ids: nextIds })
@@ -145,6 +162,29 @@ export default function DeliverableDetail() {
     if (error) {
       setRow({ ...row, assigned_user_ids: prev });
       toast({ title: "Assignees save failed", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    const { data: userRes } = await supabase.auth.getUser();
+    const createdBy = userRes.user?.id;
+    if (!createdBy) return;
+    const { errors } = await syncDeliverableAssignees({
+      ctx: {
+        deliverableId: row.id,
+        deliverableTitle: row.title,
+        dueDate: row.due_date,
+        projectName: row.project?.name ?? null,
+        createdBy,
+      },
+      prevIds: prev,
+      nextIds,
+    });
+    if (errors.length > 0) {
+      console.warn("[saveAssigneeIds] task lifecycle errors", errors);
+      toast({
+        title: "Assignees saved, but some auto-tasks did not sync",
+        description: errors[0],
+      });
     }
   };
 
@@ -204,15 +244,6 @@ export default function DeliverableDetail() {
                   await updateDeliverableStatus(row.id, next as DeliverableStatus);
                   setRow({ ...row, status: next as DeliverableStatus });
                 }}
-              />
-            </dd>
-            <dt>Type</dt>
-            <dd>
-              <InlineEditText
-                value={row.type}
-                placeholder="Kickoff / Venue Recon / Design Round / ..."
-                renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
-                onSave={(next) => saveField("type", next || null)}
               />
             </dd>
             <dt>Due</dt>

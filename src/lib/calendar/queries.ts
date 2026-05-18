@@ -31,7 +31,7 @@ export type CalendarDeliverableRow = {
   projectId: string;
   projectName: string;
   title: string;
-  status: "Upcoming" | "In Progress" | "Complete" | "Skipped";
+  status: "Upcoming" | "Complete" | "Skipped";
   dueIso: string;
 };
 
@@ -140,7 +140,7 @@ export async function loadCalendarDeliverables(
   type Row = {
     id: string;
     title: string;
-    status: "Upcoming" | "In Progress" | "Complete" | "Skipped";
+    status: "Upcoming" | "Complete" | "Skipped";
     due_date: string;
     project: { id: string; name: string } | null;
   };

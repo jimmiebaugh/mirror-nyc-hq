@@ -37,6 +37,15 @@ export default {
     // dynamically (`notif notif--unread`) per row; activity-row + actdot
     // were already in src/index.css (Project Detail) but render here too.
     "notif", "notif--unread", "activity-row", "actdot",
+    // Phase 5.7.5 follow-up round 1: deliverable board card background scale
+    // (selectors are `.bcard.<bg-class>` driven by deliverableCardBg()).
+    "bcard--bg-coral", "bcard--bg-amber", "bcard--bg-grey", "bcard--bg-green", "bcard--bg-skipped",
+    // Phase 5.7.5 follow-up round 1: HQ Core edit-page input restyle wrapper.
+    // Strips the standard outline + coral left border from .input/.input--filled
+    // so form inputs match the RecordCombobox inline-edit chrome on hover/focus.
+    "hq-form",
+    // Phase 5.7.5 follow-up round 2: subgroup quick-add coral + button.
+    "btn-quickadd",
   ],
   prefix: "",
   theme: {

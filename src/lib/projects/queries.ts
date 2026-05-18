@@ -117,7 +117,7 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
     const am = (p.account_managers ?? []).map((j) => j.user).filter(Boolean);
     const ds = (p.designers ?? []).map((j) => j.user).filter(Boolean);
     const nextDeliverable = (p.deliverables ?? [])
-      .filter((d) => d.due_date && (d.status === "Upcoming" || d.status === "In Progress"))
+      .filter((d) => d.due_date && d.status === "Upcoming")
       .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))[0];
     return {
       id: p.id,

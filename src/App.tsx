@@ -210,7 +210,7 @@ const App = () => (
                 path="/deliverables"
                 element={
                   <StandardOrAdminRoute>
-                    <DeliverablesList view="calendar" />
+                    <DeliverablesList view="board" />
                   </StandardOrAdminRoute>
                 }
               />
@@ -227,6 +227,14 @@ const App = () => (
                 element={
                   <StandardOrAdminRoute>
                     <DeliverablesList view="board" />
+                  </StandardOrAdminRoute>
+                }
+              />
+              <Route
+                path="/deliverables/calendar"
+                element={
+                  <StandardOrAdminRoute>
+                    <DeliverablesList view="calendar" />
                   </StandardOrAdminRoute>
                 }
               />

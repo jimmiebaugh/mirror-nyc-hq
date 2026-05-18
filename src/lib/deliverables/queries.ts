@@ -1,9 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type DeliverableStatus = "Upcoming" | "In Progress" | "Complete" | "Skipped";
+export type DeliverableStatus = "Upcoming" | "Complete" | "Skipped";
 export const DELIVERABLE_STATUS_VALUES: DeliverableStatus[] = [
   "Upcoming",
-  "In Progress",
   "Complete",
   "Skipped",
 ];
@@ -11,9 +10,9 @@ export const DELIVERABLE_STATUS_VALUES: DeliverableStatus[] = [
 export type DeliverableListRow = {
   id: string;
   title: string;
-  type: string | null;
   status: DeliverableStatus;
   due_date: string | null;
+  completed_at: string | null;
   assigned_user_ids: string[];
   notes: string | null;
   project: { id: string; name: string; client: { id: string; name: string | null } | null } | null;
@@ -23,7 +22,7 @@ export async function loadDeliverables(): Promise<DeliverableListRow[]> {
   const { data, error } = await supabase
     .from("deliverables")
     .select(
-      `id, title, type, status, due_date, assigned_user_ids, notes,
+      `id, title, status, due_date, completed_at, assigned_user_ids, notes,
        project:projects(id, name, client:clients(id, name))`,
     )
     .order("due_date", { ascending: true, nullsFirst: false });
