@@ -1,7 +1,9 @@
+import { useNavigate } from "react-router-dom";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
@@ -26,9 +28,11 @@ export function RailFooter({
   tier: Tier;
   avatarUrl?: string | null;
 }) {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const navigate = useNavigate();
   const initials = initialsFor(fullName, email);
   const display = (fullName || email).trim();
+  const userId = user?.id ?? null;
 
   return (
     <DropdownMenu>
@@ -48,6 +52,15 @@ export function RailFooter({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="w-56">
+        {userId ? (
+          <DropdownMenuItem onClick={() => navigate(`/users/${userId}`)}>
+            Your profile
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem onClick={() => navigate("/settings/profile")}>
+          Profile settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={signOut}>Sign out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

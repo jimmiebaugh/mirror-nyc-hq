@@ -4,6 +4,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
@@ -28,7 +29,8 @@ export function TopBar({
   avatarUrl?: string | null;
 }) {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const userId = user?.id ?? null;
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -79,6 +81,15 @@ export function TopBar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
+          {userId ? (
+            <DropdownMenuItem onClick={() => navigate(`/users/${userId}`)}>
+              Your profile
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem onClick={() => navigate("/settings/profile")}>
+            Profile settings
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={signOut}>Sign out</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

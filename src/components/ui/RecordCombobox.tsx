@@ -109,6 +109,14 @@ type CommonProps = {
    */
   quickCreate?: boolean;
   /**
+   * Phase 5.7.12 followup: when explicitly false, the "+ Add" affordance
+   * is suppressed even on lookup-mode sources where insert is otherwise
+   * always available. Use when the caller wants the picker to be choose-only
+   * (e.g. self-service surfaces like /settings/profile, where only admins
+   * should add departments via the Settings Lookup Lists card).
+   */
+  allowCreate?: boolean;
+  /**
    * Phase 5.7.3 followup-5: when set, a populated value renders as a coral
    * hyperlink to the record's detail page. The chevron becomes a Link2 icon
    * and the icon button (not the label) is the picker trigger. Pass `null`
@@ -298,9 +306,11 @@ function ComboboxView(props: ViewProps) {
   // always have one (lookup.addOption). Record sources only have one when
   // the parent wired up `onMiniCreate` — without it, insertOption silently
   // returns null and MiniCreateModal shows a misleading "Create failed"
-  // toast. Hide the affordance entirely in that case.
+  // toast. Hide the affordance entirely in that case. Also hide when the
+  // caller explicitly opts out via `allowCreate={false}` (choose-only mode).
   const canCreate =
-    props.source.kind === "lookup" || Boolean(props.onMiniCreate);
+    props.allowCreate !== false &&
+    (props.source.kind === "lookup" || Boolean(props.onMiniCreate));
 
   const filled = isMulti ? selectedLabels.length > 0 : Boolean(props.value);
   const getRecordHref = props.getRecordHref;

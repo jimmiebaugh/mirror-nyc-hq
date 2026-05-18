@@ -367,14 +367,10 @@ export default function ActivityFeed() {
                 const f = formatActivitySentence(row);
                 const isLastOverall =
                   gi === grouped.length - 1 && ri === group.rows.length - 1;
-                // Phase 5.7.2: actor name was previously linked to
-                // /users/{id} which never existed as a route. Render plain.
-                // /users (Team list) record-link targets are admin-only;
-                // demote them to bold-only for non-admin viewers.
-                const recordHrefEffective =
-                  f.recordHref === "/users" && viewerRole !== "admin"
-                    ? null
-                    : f.recordHref;
+                // Phase 5.7.12: /users/:id (read-only Profile) is now
+                // accessible to every tier, so actor names link and the
+                // mention `recordHref="/users/:id"` resolves directly.
+                // No demotion needed.
                 return (
                   <div
                     key={row.id}
@@ -390,13 +386,19 @@ export default function ActivityFeed() {
                     </span>
                     <div>
                       <div className="txt">
-                        <span className="who">{f.actor.name}</span>
+                        {f.actor.id ? (
+                          <Link to={`/users/${f.actor.id}`} className="who">
+                            {f.actor.name}
+                          </Link>
+                        ) : (
+                          <span className="who">{f.actor.name}</span>
+                        )}
                         {f.leadingText}
                         {f.recordName ? (
                           f.recordIsBoldOnly ? (
                             <span className="dlv">{f.recordName}</span>
-                          ) : recordHrefEffective ? (
-                            <Link to={recordHrefEffective}>
+                          ) : f.recordHref ? (
+                            <Link to={f.recordHref}>
                               <b>{f.recordName}</b>
                             </Link>
                           ) : (

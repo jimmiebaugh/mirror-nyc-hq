@@ -234,10 +234,18 @@ export function formatActivitySentence(row: ActivityRow): FormattedActivity {
         leadingText: ` mentioned ${mentioned} in `,
       };
     }
+    // Phase 5.7.12: /users/:id (read-only Profile) exists for every tier,
+    // so the mentioned-user name links directly to their profile when
+    // payload.mentioned_user_id is present (Phase 5.7.2 mention rows
+    // include it). Pre-5.7.2 rows without the id fall back to no link.
+    const mentionedUserId =
+      typeof row.payload?.mentioned_user_id === "string"
+        ? row.payload.mentioned_user_id
+        : null;
     return {
       actor,
       recordName: mentioned,
-      recordHref: "/users",
+      recordHref: mentionedUserId ? `/users/${mentionedUserId}` : null,
       leadingText: " mentioned ",
       trailingText: ` in this ${entityWord(entityType)}`,
     };

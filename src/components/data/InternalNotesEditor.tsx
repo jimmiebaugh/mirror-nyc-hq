@@ -44,9 +44,10 @@ import {
  * At save time, mentions whose offsets still validate against the final
  * body are INSERTed into `note_mentions`; the Postgres triggers fan out a
  * `notifications` row and an `activity_log` row per mention. Render path
- * walks `note_mentions` per note and produces coral `<Link to="/users">`
- * spans (no `/users/:id` profile route exists yet; cap on `/users` per
- * spec § 6.C lock).
+ * walks `note_mentions` per note and produces coral `<Link>` spans to
+ * `/users/${mentioned_user_id}` (the read-only Profile route landed in
+ * Phase 5.7.12; replaces the prior /users cap that demoted to spans for
+ * non-admin viewers).
  *
  * Notes themselves stay immutable except for delete; the author OR an
  * admin can delete (RLS enforces this server-side). The disambiguated
@@ -382,26 +383,17 @@ export function InternalNotesEditor({
         out.push(note.body.slice(cursor, m.start_offset));
       }
       const token = note.body.slice(m.start_offset, m.start_offset + m.length);
-      // Phase 5.7.2: /users (Team list) is admin-gated. Render the mention
-      // as a coral link only for admins; non-admins see plain coral text so
-      // they aren't pointed at a route they can't access.
+      // Phase 5.7.12: every tier can view /users/:id (read-only Profile),
+      // so render mentions as coral links for everyone. Replaces the
+      // 5.7.2 admin-only / span-fallback split.
       out.push(
-        isAdmin ? (
-          <Link
-            key={`m-${note.id}-${idx}`}
-            to="/users"
-            style={{ color: "hsl(var(--primary))", fontWeight: 500 }}
-          >
-            {token}
-          </Link>
-        ) : (
-          <span
-            key={`m-${note.id}-${idx}`}
-            style={{ color: "hsl(var(--primary))", fontWeight: 500 }}
-          >
-            {token}
-          </span>
-        ),
+        <Link
+          key={`m-${note.id}-${idx}`}
+          to={`/users/${m.mentioned_user_id}`}
+          style={{ color: "hsl(var(--primary))", fontWeight: 500 }}
+        >
+          {token}
+        </Link>,
       );
       cursor = m.start_offset + m.length;
     });

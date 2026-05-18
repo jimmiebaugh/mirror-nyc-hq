@@ -303,10 +303,11 @@ export function RecentActivityCard({
       ) : (
         rows.map((r) => {
           const { lead, record, recordHref } = describe(r);
-          // Phase 5.7.2: /users (Team list) is admin-gated; don't render a
-          // dead-end link for non-admin viewers.
-          const recordHrefEffective =
-            recordHref === "/users" && role !== "admin" ? null : recordHref;
+          // Phase 5.7.12: /users/:id (read-only Profile) is now accessible
+          // to every tier, so recordHref="/users/:id" resolves directly.
+          // Actor stays as a plain span per feedback_home_cards_read_only.md
+          // (Home cards are read-only summaries; click-through happens in
+          // /activity).
           return (
             <div key={r.id} className="hq-activity-row">
               <span className="hq-actdot">
@@ -316,8 +317,8 @@ export function RecentActivityCard({
                 <div className="hq-activity-txt">
                   <span className="who">{actorDisplay(r.actor)}</span>{" "}
                   {lead}{" "}
-                  {record && recordHrefEffective ? (
-                    <Link to={recordHrefEffective}>
+                  {record && recordHref ? (
+                    <Link to={recordHref}>
                       <b>{record}</b>
                     </Link>
                   ) : record ? (
