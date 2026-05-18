@@ -344,12 +344,12 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     `src/lib/hq/dates.ts`). Deferred from 5.7.4 smoke round 1 per Jimmie's
     request so the same "in X days" treatment can apply consistently
     across every surface that surfaces a deliverable due date.
-  - **Carry-forward into 5.7.6:** ProjectsList "Account" filter rename
+  - **Carry-forward into 5.7.7:** ProjectsList "Account" filter rename
     to "Team" with scope = any user in the planned `project_members`
     table. Deferred from 5.7.4 smoke round 1 because renaming the
     filter today would either mislead (still scoped to leadName only)
-    or orphan the rename when `project_members` ships in 5.7.6.
-  - **5.7.11 Profile + Settings split surfaces.** Originally CUT in
+    or orphan the rename when `project_members` ships in 5.7.7.
+  - **5.7.12 Profile + Settings split surfaces.** Originally CUT in
     plan decision #20 (2026-05-17); un-cut 2026-05-17 PM during 5.7.2
     when the activity-feed user-link demotion surfaced that the dead-end
     `/users` link target was hurting the experience. Two split routes:
@@ -359,7 +359,7 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     (self-only Settings; collects avatar, slack_user_id, profile copy;
     links out to the existing `/notifications/preferences`). `/users`
     (Team list) stays admin-only. Self-mention dispatch behavior stays
-    on by design — not in scope for 5.7.11. Slot before HQ v1 checkpoint
+    on by design — not in scope for 5.7.12. Slot before HQ v1 checkpoint
     so the Phase 5.7.2 link-demotions can be reverted to real links
     inside the v1 cut. Spec TBD.
 - **HQ v1 checkpoint.** After 5.7 wraps: tag the squash commit, write

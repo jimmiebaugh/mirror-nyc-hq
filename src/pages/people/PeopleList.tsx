@@ -180,6 +180,29 @@ export default function PeopleList() {
     [decorated, filterState],
   );
 
+  // Phase 5.7.6: distinct values per text/enum filter field. `type` is
+  // the derived person type (Client / Vendor / Venue / Unaffiliated);
+  // `tags` is an array column flattened to per-element distincts.
+  // organization_id is a lookup type and keeps its existing picker.
+  const distinctValuesByField = useMemo(() => {
+    const types = Array.from(
+      new Set(
+        decorated
+          .map((r) => r.type)
+          .filter((v): v is string => typeof v === "string" && v.length > 0),
+      ),
+    ).sort();
+    const tags = Array.from(
+      new Set(
+        decorated.flatMap((r) => {
+          const v = (r as unknown as Record<string, unknown>).tags;
+          return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+        }),
+      ),
+    ).sort();
+    return { type: types, tags };
+  }, [decorated]);
+
   return (
     <div className="stack-4">
       <div className="pagehead">
@@ -255,6 +278,7 @@ export default function PeopleList() {
           setActiveViewName("Custom filter");
         }}
         fields={peopleFilterFields}
+        distinctValuesByField={distinctValuesByField}
       />
 
       {loading ? (

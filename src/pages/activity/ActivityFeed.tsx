@@ -254,6 +254,22 @@ export default function ActivityFeed() {
     });
   }, [flatRows, filterState]);
 
+  // Phase 5.7.6: distinct entity_type labels present in flatRows. The
+  // FilterBar combobox narrows to just the labels that have at least
+  // one row in the current pages. actor_id is a lookup type (keeps its
+  // existing picker); date_range is enum but options are intentionally
+  // canonical windows, not row-derived (skip).
+  const distinctValuesByField = useMemo(() => {
+    const entityTypeLabels = Array.from(
+      new Set(
+        flatRows
+          .map((r) => ENTITY_TYPE_OPTIONS.find((o) => o.value === r.entity_type)?.label)
+          .filter((v): v is string => typeof v === "string"),
+      ),
+    ).sort();
+    return { entity_type: entityTypeLabels };
+  }, [flatRows]);
+
   // Day-bucket the filtered rows for the section headers.
   const grouped = useMemo(() => {
     const acc: { label: string; rows: ActivityRow[] }[] = [];
@@ -309,7 +325,12 @@ export default function ActivityFeed() {
         <h1 className="h-page">Activity Feed</h1>
       </div>
 
-      <FilterBar state={filterState} onChange={setFilterState} fields={fields} />
+      <FilterBar
+        state={filterState}
+        onChange={setFilterState}
+        fields={fields}
+        distinctValuesByField={distinctValuesByField}
+      />
 
       {status === "loading" ? (
         <div className="card card-pad">

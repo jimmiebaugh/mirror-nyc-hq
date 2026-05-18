@@ -96,6 +96,22 @@ export default function ClientsList() {
     [rows, filterState],
   );
 
+  // Phase 5.7.6: distinct values per text/enum filter field.
+  const distinctValuesByField = useMemo(() => {
+    const pick = (key: string) =>
+      Array.from(
+        new Set(
+          rows
+            .map((r) => (r as unknown as Record<string, unknown>)[key])
+            .filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort();
+    return {
+      city: pick("city"),
+      industry: pick("industry"),
+    };
+  }, [rows]);
+
   return (
     <div className="stack-4">
       <div className="pagehead">
@@ -120,6 +136,7 @@ export default function ClientsList() {
             setActiveViewName("Custom filter");
           }}
           fields={CLIENT_FILTER_FIELDS}
+          distinctValuesByField={distinctValuesByField}
         />
         <SavedViewsDropdown
           entityType="client"

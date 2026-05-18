@@ -32,10 +32,14 @@ import { daysUntil, deliverableDueLabel, formatShortDate } from "@/lib/hq/dates"
  * reviewer C2 from that pass).
  */
 
+// Phase 5.7.6 follow-up: ordered to match the visual layout — each
+// subgroup header reads client (coral, left) then project (white bold,
+// next), and the per-group DataTable's only filterable column is Status
+// at the right.
 const FILTER_FIELDS = [
-  { key: "status", label: "Status", type: "enum" as const, options: DELIVERABLE_STATUS_VALUES },
-  { key: "projectName", label: "Project", type: "text" as const },
   { key: "clientName", label: "Client", type: "text" as const },
+  { key: "projectName", label: "Project", type: "text" as const },
+  { key: "status", label: "Status", type: "enum" as const, options: DELIVERABLE_STATUS_VALUES },
 ];
 
 // Maps deliverable_status -> calendar event banner class per spec § 2.G.
@@ -143,6 +147,25 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
     [flat, filterState],
   );
 
+  // Phase 5.7.6: distinct values per text/enum filter field, derived
+  // from the current page's rows. FilterBar swaps its text/enum value-
+  // step input for a searchable combobox listing exactly these values.
+  const distinctValuesByField = useMemo(() => {
+    const pick = (key: string) =>
+      Array.from(
+        new Set(
+          flat
+            .map((r) => (r as unknown as Record<string, unknown>)[key])
+            .filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort();
+    return {
+      status: pick("status"),
+      projectName: pick("projectName"),
+      clientName: pick("clientName"),
+    };
+  }, [flat]);
+
   return (
     <div className="stack-4">
       <div className="pagehead">
@@ -192,6 +215,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
           setActiveViewName("Custom filter");
         }}
         fields={FILTER_FIELDS}
+        distinctValuesByField={distinctValuesByField}
       />
 
       {loading ? (

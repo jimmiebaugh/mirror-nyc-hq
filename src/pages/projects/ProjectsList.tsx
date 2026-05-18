@@ -35,11 +35,15 @@ import { supabase } from "@/integrations/supabase/client";
  *   Timeline -> lines 1210-1315
  */
 
+// Phase 5.7.6 follow-up: ordered to match the list-view DataTable
+// column display order. The "Project / Client" column stacks the client
+// link above the project name, so clientName is visually first after
+// jobNumber. Remaining columns: category, city, status, ..., lead.
 const FILTER_FIELDS = [
-  { key: "status", label: "Status", type: "enum" as const, options: PROJECT_STATUS_VALUES },
+  { key: "clientName", label: "Client", type: "text" as const },
   { key: "category", label: "Category", type: "text" as const },
   { key: "city", label: "City", type: "text" as const },
-  { key: "clientName", label: "Client", type: "text" as const },
+  { key: "status", label: "Status", type: "enum" as const, options: PROJECT_STATUS_VALUES },
   { key: "leadName", label: "Account", type: "text" as const },
 ];
 
@@ -132,6 +136,25 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
     [rows, filterState],
   );
 
+  // Phase 5.7.6: distinct values per text/enum filter field.
+  const distinctValuesByField = useMemo(() => {
+    const pick = (key: string) =>
+      Array.from(
+        new Set(
+          rows
+            .map((r) => (r as unknown as Record<string, unknown>)[key])
+            .filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort();
+    return {
+      status: pick("status"),
+      category: pick("category"),
+      city: pick("city"),
+      clientName: pick("clientName"),
+      leadName: pick("leadName"),
+    };
+  }, [rows]);
+
   // Calendar tab routes out to the unified /calendar surface (lands 5.3).
   useEffect(() => {
     if (view !== "calendar") return;
@@ -205,6 +228,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
           setActiveViewName("Custom filter");
         }}
         fields={FILTER_FIELDS}
+        distinctValuesByField={distinctValuesByField}
       />
 
       {loading ? (

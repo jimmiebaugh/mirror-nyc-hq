@@ -103,6 +103,33 @@ export default function VenuesList() {
     [rows, filterState],
   );
 
+  // Phase 5.7.6: distinct values per text/enum filter field. venueTypes
+  // is an array column flattened to per-element distincts. city +
+  // neighborhood are scalar text.
+  const distinctValuesByField = useMemo(() => {
+    const pickScalar = (key: string) =>
+      Array.from(
+        new Set(
+          rows
+            .map((r) => (r as unknown as Record<string, unknown>)[key])
+            .filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort();
+    const venueTypes = Array.from(
+      new Set(
+        rows.flatMap((r) => {
+          const v = (r as unknown as Record<string, unknown>).venueTypes;
+          return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+        }),
+      ),
+    ).sort();
+    return {
+      city: pickScalar("city"),
+      neighborhood: pickScalar("neighborhood"),
+      venueTypes,
+    };
+  }, [rows]);
+
   return (
     <div className="stack-4">
       <div className="pagehead">
@@ -130,6 +157,7 @@ export default function VenuesList() {
             setActiveViewName("Custom filter");
           }}
           fields={venueFilterFields}
+          distinctValuesByField={distinctValuesByField}
         />
         <SavedViewsDropdown
           entityType="venue"

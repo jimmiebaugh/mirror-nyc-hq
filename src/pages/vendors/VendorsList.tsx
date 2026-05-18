@@ -32,11 +32,15 @@ import {
  * design-system § 11.
  */
 
+// Phase 5.7.6 follow-up: ordered to match the list-view DataTable
+// column display order (name, category_name, subcategory_name, city,
+// capabilities, internal_rating, projects). tags has no visible column
+// so it lands at the end.
 const VENDOR_FILTER_FIELDS: FilterFieldDef[] = [
   { key: "category_name", label: "Category", type: "text" },
   { key: "subcategory_name", label: "Subcategory", type: "text" },
-  { key: "capabilities", label: "Capabilities", type: "text" },
   { key: "city", label: "City", type: "text" },
+  { key: "capabilities", label: "Capabilities", type: "text" },
   { key: "tags", label: "Tags", type: "text" },
 ];
 
@@ -100,6 +104,36 @@ export default function VendorsList() {
     [rows, filterState],
   );
 
+  // Phase 5.7.6: distinct values per text/enum filter field. Some
+  // vendor fields are arrays (capabilities, tags) — flatten before
+  // distincting so each element becomes its own combobox option.
+  const distinctValuesByField = useMemo(() => {
+    const pickScalar = (key: string) =>
+      Array.from(
+        new Set(
+          rows
+            .map((r) => (r as unknown as Record<string, unknown>)[key])
+            .filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort();
+    const pickArray = (key: string) =>
+      Array.from(
+        new Set(
+          rows.flatMap((r) => {
+            const v = (r as unknown as Record<string, unknown>)[key];
+            return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+          }),
+        ),
+      ).sort();
+    return {
+      category_name: pickScalar("category_name"),
+      subcategory_name: pickScalar("subcategory_name"),
+      city: pickScalar("city"),
+      capabilities: pickArray("capabilities"),
+      tags: pickArray("tags"),
+    };
+  }, [rows]);
+
   return (
     <div className="stack-4">
       <div className="pagehead">
@@ -124,6 +158,7 @@ export default function VendorsList() {
             setActiveViewName("Custom filter");
           }}
           fields={VENDOR_FILTER_FIELDS}
+          distinctValuesByField={distinctValuesByField}
         />
         <SavedViewsDropdown
           entityType="vendor"

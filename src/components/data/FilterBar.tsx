@@ -5,6 +5,14 @@ import {
   IconPlus,
   IconChevronDown,
 } from "@/components/icons/HQIcons";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 /**
  * Notion-style chip-builder filter bar. Wireframe-fidelity rebuild
@@ -81,10 +89,23 @@ export function FilterBar({
   state,
   onChange,
   fields,
+  distinctValuesByField,
 }: {
   state: FilterState;
   onChange: (next: FilterState) => void;
   fields: FilterFieldDef[];
+  /**
+   * Phase 5.7.6: map of field key -> distinct values present in the
+   * current page's row data. When provided for a text or enum field,
+   * the value-step picker renders a cmdk searchable combobox listing
+   * only those values + auto-commits the chip on select. Omit a key to
+   * keep the field on its existing text input (text type) or full-enum
+   * <select> (enum type) fallback.
+   *
+   * For "is any of" op the existing text input stays (cmdk single-pick
+   * doesn't multi-select).
+   */
+  distinctValuesByField?: Record<string, string[]>;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [building, setBuilding] = useState<{
@@ -93,6 +114,7 @@ export function FilterBar({
     value?: string;
   }>({});
   const popRef = useRef<HTMLDivElement>(null);
+  const fieldSelectRef = useRef<HTMLSelectElement>(null);
 
   useEffect(() => {
     if (!addOpen) return;
@@ -104,6 +126,26 @@ export function FilterBar({
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
+  }, [addOpen]);
+
+  // Phase 5.7.6 follow-up: auto-open the native field <select> on add-
+  // popover open so the user skips one click. Chromium 99+ / Firefox
+  // 105+ expose HTMLSelectElement.showPicker(); on older browsers we
+  // fall back to focus alone (the existing autoFocus prop covers it).
+  useEffect(() => {
+    if (!addOpen) return;
+    const el = fieldSelectRef.current;
+    if (!el) return;
+    const t = setTimeout(() => {
+      try {
+        (el as HTMLSelectElement & { showPicker?: () => void }).showPicker?.();
+      } catch {
+        // Some browsers throw if showPicker is called outside a user
+        // gesture; click on the + Add filter chip IS a gesture so this
+        // should usually succeed, but swallow defensively.
+      }
+    }, 0);
+    return () => clearTimeout(t);
   }, [addOpen]);
 
   const fieldLabel = (key: string) =>
@@ -147,6 +189,27 @@ export function FilterBar({
       chips: [
         ...state.chips,
         { field: building.field.key, op: building.op, value },
+      ],
+    });
+    setAddOpen(false);
+    setBuilding({});
+  };
+
+  /**
+   * Phase 5.7.6: cmdk picks call this to skip the manual "Add chip"
+   * click. Field + op are already locked in by the time the value step
+   * renders; auto-commit on select is the canonical Notion / Linear
+   * pattern for chip builders.
+   */
+  const commitWithValue = (rawValue: string) => {
+    if (!building.field || !building.op) return;
+    const v = rawValue.trim();
+    if (!v) return;
+    onChange({
+      ...state,
+      chips: [
+        ...state.chips,
+        { field: building.field.key, op: building.op, value: v },
       ],
     });
     setAddOpen(false);
@@ -206,19 +269,25 @@ export function FilterBar({
             className="card card-pad"
             style={{
               position: "absolute",
-              top: "calc(100% + 6px)",
-              left: 0,
+              top: 0,
+              left: "calc(100% + 6px)",
               zIndex: 30,
-              minWidth: 280,
-              padding: 12,
+              padding: 10,
               display: "flex",
-              flexDirection: "column",
+              flexDirection: "row",
               gap: 8,
+              alignItems: "center",
+              // Renders inline to the right of the + Add filter chip
+              // rather than below it (5.7.6 round 2 follow-up). Each
+              // step grows the popover further to the right; the
+              // viewport-relative cap prevents overflow off-screen.
+              maxWidth: "calc(100vw - 48px)",
             }}
           >
             <select
+              ref={fieldSelectRef}
               className="input"
-              style={{ height: 36 }}
+              style={{ height: 36, width: 180, flex: "0 0 auto" }}
               autoFocus
               value={building.field?.key ?? ""}
               onChange={(e) => {
@@ -239,7 +308,7 @@ export function FilterBar({
             {building.field ? (
               <select
                 className="input"
-                style={{ height: 36 }}
+                style={{ height: 36, width: 140, flex: "0 0 auto" }}
                 value={building.op ?? ""}
                 onChange={(e) =>
                   setBuilding((b) => ({ ...b, op: e.target.value, value: "" }))
@@ -256,54 +325,117 @@ export function FilterBar({
               </select>
             ) : null}
 
-            {building.field && building.op ? (
-              building.field.type === "lookup" &&
-              building.field.lookupOptions ? (
-                <select
-                  className="input"
-                  style={{ height: 36 }}
-                  value={building.value ?? ""}
-                  onChange={(e) =>
-                    setBuilding((b) => ({ ...b, value: e.target.value }))
-                  }
-                >
-                  <option value="" disabled>
-                    Value...
-                  </option>
-                  {building.field.lookupOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.sublabel ? `${o.name} (${o.sublabel})` : o.name}
+            {(() => {
+              if (!building.field || !building.op) return null;
+              const fieldDef = building.field;
+              const op = building.op;
+              const distincts = distinctValuesByField?.[fieldDef.key];
+              const hasDistinct =
+                distincts !== undefined && distincts.length > 0;
+
+              // Lookup type keeps its native select (id-based picker).
+              if (fieldDef.type === "lookup" && fieldDef.lookupOptions) {
+                return (
+                  <select
+                    className="input"
+                    style={{ height: 36, width: 220, flex: "0 0 auto" }}
+                    value={building.value ?? ""}
+                    onChange={(e) =>
+                      setBuilding((b) => ({ ...b, value: e.target.value }))
+                    }
+                  >
+                    <option value="" disabled>
+                      Value...
                     </option>
-                  ))}
-                </select>
-              ) : building.field.type === "enum" &&
-                building.field.options &&
-                building.op !== "is any of" ? (
-                <select
-                  className="input"
-                  style={{ height: 36 }}
-                  value={building.value ?? ""}
-                  onChange={(e) =>
-                    setBuilding((b) => ({ ...b, value: e.target.value }))
-                  }
-                >
-                  <option value="" disabled>
-                    Value...
-                  </option>
-                  {building.field.options.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
+                    {fieldDef.lookupOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.sublabel ? `${o.name} (${o.sublabel})` : o.name}
+                      </option>
+                    ))}
+                  </select>
+                );
+              }
+
+              // Phase 5.7.6: searchable combobox for text + enum fields
+              // when the parent provides distinct values from the current
+              // rendered rows. "is any of" still falls through to the
+              // text input (single-pick combobox can't multi-select).
+              if (
+                hasDistinct &&
+                op !== "is any of" &&
+                (fieldDef.type === "text" || fieldDef.type === "enum")
+              ) {
+                return (
+                  <div
+                    style={{
+                      border: "1px solid hsl(var(--border-strong))",
+                      borderRadius: "var(--radius)",
+                      overflow: "hidden",
+                      width: 240,
+                      flex: "0 0 auto",
+                    }}
+                  >
+                    <Command shouldFilter>
+                      <CommandInput
+                        placeholder="Search values..."
+                        autoFocus
+                      />
+                      <CommandList style={{ maxHeight: 220 }}>
+                        <CommandEmpty>No matches.</CommandEmpty>
+                        <CommandGroup>
+                          {distincts!.map((v) => (
+                            <CommandItem
+                              key={v}
+                              value={v}
+                              onSelect={() => commitWithValue(v)}
+                              className="cursor-pointer"
+                            >
+                              {v}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </div>
+                );
+              }
+
+              // Enum fallback (no distinct values provided): existing
+              // native dropdown over the full enum options list.
+              if (
+                fieldDef.type === "enum" &&
+                fieldDef.options &&
+                op !== "is any of"
+              ) {
+                return (
+                  <select
+                    className="input"
+                    style={{ height: 36, width: 200, flex: "0 0 auto" }}
+                    value={building.value ?? ""}
+                    onChange={(e) =>
+                      setBuilding((b) => ({ ...b, value: e.target.value }))
+                    }
+                  >
+                    <option value="" disabled>
+                      Value...
                     </option>
-                  ))}
-                </select>
-              ) : (
+                    {fieldDef.options.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                );
+              }
+
+              // Text / date / "is any of" / fallback: existing free-text
+              // input (date type uses the native date picker via type).
+              return (
                 <input
                   className="input"
-                  style={{ height: 36 }}
-                  type={building.field.type === "date" ? "date" : "text"}
-                  placeholder={
-                    building.op === "is any of" ? "a, b, c" : "value"
-                  }
+                  style={{ height: 36, width: 220, flex: "0 0 auto" }}
+                  type={fieldDef.type === "date" ? "date" : "text"}
+                  placeholder={op === "is any of" ? "a, b, c" : "value"}
                   value={building.value ?? ""}
                   onChange={(e) =>
                     setBuilding((b) => ({ ...b, value: e.target.value }))
@@ -316,13 +448,14 @@ export function FilterBar({
                     }
                   }}
                 />
-              )
-            ) : null}
+              );
+            })()}
 
             {building.field && building.op && building.value?.trim() ? (
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
+                style={{ flex: "0 0 auto", alignSelf: "center" }}
                 onClick={commit}
               >
                 Add chip

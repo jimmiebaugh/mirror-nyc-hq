@@ -41,12 +41,16 @@ import { toast } from "@/hooks/use-toast";
 // input would be a raw UUID text box, which isn't usable). The default
 // "Me" chip is constructed in code below; FilterBar still needs the def
 // to resolve the chip's label.
+// Phase 5.7.6 follow-up: ordered to match the list-view DataTable
+// column display order (title, project, assigneeName, status, priority,
+// notesblocks, due_date). title isn't filterable; the hidden assigneeId
+// chip backs the "Me" filter and stays last (not user-visible).
 const FILTER_FIELDS = [
+  { key: "projectName", label: "Project", type: "text" as const },
+  { key: "assigneeName", label: "Assignee name", type: "text" as const },
   { key: "status", label: "Status", type: "enum" as const, options: TASK_STATUS_VALUES },
   { key: "priority", label: "Priority", type: "enum" as const, options: TASK_PRIORITY_VALUES },
   { key: "assigneeId", label: "Assignee", type: "user" as const, hidden: true },
-  { key: "assigneeName", label: "Assignee name", type: "text" as const },
-  { key: "projectName", label: "Project", type: "text" as const },
 ];
 
 function priorityTokenClass(p: TaskPriority): string {
@@ -204,6 +208,24 @@ export default function TasksList({ view }: { view: ViewKind }) {
     [flatRows, filterState, user?.id],
   );
 
+  // Phase 5.7.6: distinct values per text/enum filter field.
+  const distinctValuesByField = useMemo(() => {
+    const pick = (key: string) =>
+      Array.from(
+        new Set(
+          flatRows
+            .map((r) => (r as unknown as Record<string, unknown>)[key])
+            .filter((v): v is string => typeof v === "string" && v.length > 0),
+        ),
+      ).sort();
+    return {
+      status: pick("status"),
+      priority: pick("priority"),
+      assigneeName: pick("assigneeName"),
+      projectName: pick("projectName"),
+    };
+  }, [flatRows]);
+
   const handleQuickAdd = async () => {
     if (!quickAdd.trim() || !user?.id) return;
     setAdding(true);
@@ -290,6 +312,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
           setActiveViewName("Custom filter");
         }}
         fields={FILTER_FIELDS}
+        distinctValuesByField={distinctValuesByField}
       />
 
       {view === "list" ? (
