@@ -168,7 +168,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
-          password: string
+          password_encrypted: string
           service_name: string
           updated_at: string
           updated_by: string | null
@@ -179,7 +179,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          password: string
+          password_encrypted: string
           service_name: string
           updated_at?: string
           updated_by?: string | null
@@ -190,7 +190,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          password?: string
+          password_encrypted?: string
           service_name?: string
           updated_at?: string
           updated_by?: string | null
@@ -2448,6 +2448,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      credentials_create: {
+        Args: {
+          p_password: string
+          p_service_name: string
+          p_url: string
+          p_username: string
+        }
+        Returns: string
+      }
+      credentials_reveal_password: {
+        Args: { p_id: string }
+        Returns: string
+      }
+      credentials_set_password: {
+        Args: { p_id: string; p_password: string }
+        Returns: undefined
+      }
       current_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["permission_role"]

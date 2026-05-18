@@ -2,6 +2,32 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.8.5 (2026-05-18) — security pass
+
+### Open-authenticated RLS posture (HQ Core baseline)
+
+The Supabase advisor's full scan on 2026-05-18 emitted 54 `rls_policy_always_true` warnings across roughly 5 categories of tables. Reviewed each category; the open-authenticated posture is intentional and matches HQ Core's threat model (a single trusted Google-OAuth-gated tenant). Recording the decision here so future advisor scans can be cross-checked instead of mistaken for drift.
+
+The five categories, and why each opts out of row-level scoping:
+
+- **Lookup tables.** `departments`, `cities`, `project_categories`, `venue_types`, `vendor_capabilities`, `vendor_categories`, `mirror_holidays`. Cross-team reference data; SELECT `(true)` is the entire point. Writes still gate on `is_admin()`.
+- **Top-level domain tables.** `projects`, `clients`, `venues`, `vendors`, `people`, `organizations`, `tasks`, `deliverables`, `outlook_entries`. Open SELECT + open INSERT/UPDATE; DELETE either admin-only or open-authenticated depending on the domain (see Jimmie's 2026-05-18 call on DELETE: open-authenticated is acceptable — the team is small and audit log captures every delete via `activity_log`).
+- **Join tables.** `project_account_managers`, `project_designers`, `project_venues`, `project_members`, `vs_candidate_venues`. Membership data inherits the parent record's openness; per-row scoping would force every screen to JOIN through the parent.
+- **File and history tables.** `notes_log` SELECT, `note_mentions` SELECT, `activity_log` SELECT, `vendor_files` SELECT, `wiki_pages` SELECT (authenticated), `wiki_images` SELECT. Read-only-to-everyone, write-gated.
+- **VS (Venue Scout) tables.** `vs_scouts`, `vs_candidate_venues`, `vs_venue_photos`, `vs_scout_settings`. Producer-driven workflow; open-authenticated SELECT lets any team member observe state. Writes scoped per producer/admin per the existing VS RLS.
+
+The 2 `authenticated_security_definer_function_executable` warnings the advisor emits on `credentials_set_password` and `credentials_reveal_password` are an intentional carve-out: the RPCs are SECURITY DEFINER (to access `pgsodium.key`), gate on the same `permission_role IN ('admin', 'standard')` predicate the existing RLS uses, and have no alternative non-RPC path because the client never sees the encrypted column.
+
+### React Query partial adoption (tech-debt audit F042 correction)
+
+The 2026-05-18 tech-debt audit's F042 claimed `QueryClient` was instantiated but `useQuery` was never called. Live grep on the same date contradicted this: three files use React Query for roughly 13 call sites. `src/pages/outlook/OutlookPage.tsx` runs the full pattern (queries + mutations + invalidate-on-write); `src/pages/calendar/CalendarPage.tsx` uses three queries; `src/components/home/OutlookCondensedCard.tsx` uses one query. Every other page (around 25 of them) is on the legacy `useState + useEffect + supabase.from()` pattern.
+
+Two options on the table: rip React Query out, or convert the remaining pages to it. Both are valid; both are out of scope for any audit-integration phase. The decision documented here is to defer the commit-or-migrate call to a future refactor phase. F015 (the audit's "data-layer centralization" finding) is the natural home for that conversation; doing it as part of a security pass would balloon the diff and force a hand-on-every-page review without delivering security value. F042 is closed as "audit was wrong; no action this ship."
+
+### Auth: HIBP password leak check N/A
+
+The Supabase advisor flags `auth_leaked_password_protection` as a recommended setting. The toggle integrates with HaveIBeenPwned to reject passwords that appear in known breach corpora. HQ Core does not store passwords. Auth is Google Workspace OAuth restricted to `@mirrornyc.com`; the only "password" in the system is the user's Google account password, which Google itself protects (with HIBP and many other checks). The advisor warning is moot for this project and will remain in scan output indefinitely. Documenting here so future advisor reviews don't relitigate it.
+
 ## Phase 5.7.10 (2026-05-18)
 
 ### Wiki images: private bucket + 1-year signed URLs (not public bucket)

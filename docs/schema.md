@@ -35,11 +35,13 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - Triggers: `updated_at_auto`, `activity_log_writer`.
 - RLS: open SELECT for authenticated; admin INSERT/UPDATE/DELETE.
 
-### credentials (Phase 5.4)
-- `id`, `service_name` (text, not null), `username` (text, nullable), `password` (text, not null, plaintext-at-rest; see `docs/decisions.md` Phase 5.4 for rationale), `url` (text, nullable), `related_note` (text, nullable)
+### credentials (Phase 5.4; encrypted Phase 5.8.5)
+- `id`, `service_name` (text, not null), `username` (text, nullable), `password_encrypted` (bytea, not null; pgsodium AEAD-deterministic via the 4-arg `crypto_aead_det_encrypt(message, additional, key_uuid, nonce)` overload with NULL nonce; key name `credentials`), `url` (text, nullable)
 - `created_by`, `updated_by` (uuid FKs to users, nullable), `created_at`, `updated_at`
+- (`related_note` was created in 5.4 then dropped in `20260516170000_phase_5_4_feedback.sql`; never reintroduced.)
 - Triggers: `updated_at_auto`, `activity_log_writer`.
-- RLS: Freelance blocked entirely. SELECT for `admin` + `standard`. Admin-only INSERT/UPDATE/DELETE.
+- RLS: Freelance blocked entirely. SELECT + INSERT/UPDATE/DELETE for `admin` + `standard` (widened in 5.4 feedback round 2). Policies use the `(select auth.uid())` initplan optimization (Phase 5.8.5).
+- Password access flows through three SECURITY DEFINER RPCs: `credentials_create(service_name, username, password, url) -> uuid` (atomic insert with encryption), `credentials_set_password(id, password)` (re-encrypt + bump `updated_at`/`updated_by`), `credentials_reveal_password(id) -> text` (decrypt). All three gate on the same `permission_role IN ('admin', 'standard')` predicate the RLS uses. Non-password column edits stay on the regular PostgREST UPDATE path.
 
 ### mirror_holidays (Phase 5.4 — replaces 5.3 hardcoded constant)
 - `id`, `name` (text), `date` (date), `created_by` (uuid FK to users, nullable), `created_at`

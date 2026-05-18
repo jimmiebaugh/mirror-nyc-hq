@@ -14,15 +14,18 @@ export function CredentialRevealField({
   masked,
   maskable = true,
   onToggleMask,
+  loading = false,
 }: {
   value: string;
   masked: boolean;
   maskable?: boolean;
   onToggleMask?: () => void;
+  loading?: boolean;
 }) {
   const [justCopied, setJustCopied] = useState(false);
 
   const copy = async () => {
+    if (!value) return;
     try {
       await navigator.clipboard.writeText(value);
       setJustCopied(true);
@@ -33,9 +36,10 @@ export function CredentialRevealField({
   };
 
   const showMasked = maskable && masked;
-  const display = showMasked
-    ? "•".repeat(Math.min(12, Math.max(8, value.length)))
-    : value;
+  // Fall back to 8 bullets when masked + no plaintext loaded yet (post-F001
+  // reveal is async, so the cached value is empty until the RPC returns).
+  const bulletLen = value.length > 0 ? Math.min(12, Math.max(8, value.length)) : 8;
+  const display = showMasked ? "•".repeat(bulletLen) : value;
 
   return (
     <div className="cred">
@@ -45,7 +49,8 @@ export function CredentialRevealField({
           type="button"
           className="ca"
           onClick={onToggleMask}
-          title={masked ? "Reveal" : "Hide"}
+          disabled={loading}
+          title={loading ? "Loading…" : masked ? "Reveal" : "Hide"}
           aria-label={masked ? "Reveal password" : "Hide password"}
         >
           {masked ? (
@@ -59,6 +64,7 @@ export function CredentialRevealField({
         type="button"
         className="ca"
         onClick={copy}
+        disabled={!value}
         title="Copy"
         aria-label="Copy to clipboard"
       >
