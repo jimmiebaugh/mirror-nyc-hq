@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ExternalLink, Plus } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/Field";
@@ -169,7 +169,7 @@ export default function Review() {
         .from("vs_candidate_venues")
         .update(patch)
         .eq("id", id);
-      if (error) toast.error(error.message);
+      if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     }, 600);
   }
 
@@ -264,7 +264,7 @@ export default function Review() {
       })
       .eq("id", scoutId);
     if (error) {
-      toast.error(error.message);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       setConfirming(false);
       return;
     }

@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 import { X } from "lucide-react";
 import {
   DndContext,
@@ -389,7 +389,7 @@ export function PhotoUploadModal({
         }
       }
       const msg = e instanceof Error ? e.message : "Save failed";
-      toast.error(msg);
+      toast({ title: "Error", description: msg, variant: "destructive" });
     } finally {
       setSaving(false);
     }

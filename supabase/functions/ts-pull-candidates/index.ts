@@ -628,7 +628,7 @@ async function dispatchNextBatch(roundId: string, attempt = 1): Promise<boolean>
 
 function selfInvokeContinue(roundId: string) {
   try {
-    // @ts-ignore EdgeRuntime is provided by Supabase Edge runtime
+    // @ts-expect-error EdgeRuntime is provided by Supabase Edge runtime
     EdgeRuntime.waitUntil(dispatchNextBatch(roundId));
   } catch {
     dispatchNextBatch(roundId).catch((err) =>
@@ -665,9 +665,9 @@ async function dispatchPullCompleteNotification(roleId: string, roundId: string)
 
 function fireNotificationAsync(roleId: string, roundId: string) {
   try {
-    // @ts-ignore EdgeRuntime is provided by Supabase Edge runtime
+    // @ts-expect-error EdgeRuntime is provided by Supabase Edge runtime
     if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
-      // @ts-ignore
+      // @ts-expect-error
       EdgeRuntime.waitUntil(dispatchPullCompleteNotification(roleId, roundId));
       return;
     }
@@ -1399,9 +1399,9 @@ async function startPull(supabase: any, roleId: string, body: any): Promise<stri
     }
   })();
 
-  // @ts-ignore EdgeRuntime is provided by Supabase Edge runtime
+  // @ts-expect-error EdgeRuntime is provided by Supabase Edge runtime
   if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
-    // @ts-ignore
+    // @ts-expect-error
     EdgeRuntime.waitUntil(work);
   }
 

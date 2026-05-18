@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { NotesModal } from "@/components/venue-scout/NotesModal";
@@ -185,7 +185,7 @@ export default function Shortlist() {
       .update({ pitched: next })
       .eq("id", id);
     if (error) {
-      toast.error(error.message);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       load();
     }
   }
@@ -228,7 +228,7 @@ export default function Shortlist() {
         // the only editable fields were on manual rows the producer just
         // typed); 4.10.2 extends editing to every research / sheet row, so
         // a silent stale-state on the matrix would be worse.
-        toast.error(error.message);
+        toast({ title: "Error", description: error.message, variant: "destructive" });
         load();
       }
     }, 600);
@@ -247,7 +247,7 @@ export default function Shortlist() {
       .select("*")
       .single();
     if (error) {
-      toast.error(error.message);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
     const inserted = (data as unknown) as Venue;
@@ -274,7 +274,7 @@ export default function Shortlist() {
       })
       .eq("id", scoutId);
     if (error) {
-      toast.error(error.message);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
     nav(`/venue-scout/scouts/${scoutId}/sourcing/review`);

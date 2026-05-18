@@ -14,7 +14,7 @@
  *   - presentations   (Slides deck generation)
  *
  * Usage:
- *   SERVICE_ACCOUNT_KEY_PATH=secrets/mirror-sa-key.json \
+ *   SERVICE_ACCOUNT_KEY_PATH=~/.config/mirror-nyc-hq/mirror-sa-key.json \
  *     npx tsx scripts/verify-service-account.ts
  *
  * Most common failure: HTTP 403 / `unauthorized_client` on token request.
@@ -83,7 +83,7 @@ function loadKey(): { client_email: string; private_key: string } {
   const keyPathRaw = process.env.SERVICE_ACCOUNT_KEY_PATH;
   if (!keyPathRaw) {
     console.error("SERVICE_ACCOUNT_KEY_PATH is not set.");
-    console.error("Example: SERVICE_ACCOUNT_KEY_PATH=secrets/mirror-sa-key.json npx tsx scripts/verify-service-account.ts");
+    console.error("Example: SERVICE_ACCOUNT_KEY_PATH=~/.config/mirror-nyc-hq/mirror-sa-key.json npx tsx scripts/verify-service-account.ts");
     process.exit(1);
   }
 
