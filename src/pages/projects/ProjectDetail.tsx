@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Check, Pencil, Plus } from "lucide-react";
+import { Check, Pencil, Plus, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Popover,
@@ -112,6 +112,7 @@ type Project = {
   venues: { venue: { id: string; name: string | null } | null }[];
   account_managers: { user: { id: string; full_name: string | null; email: string | null } | null }[];
   designers: { user: { id: string; full_name: string | null; email: string | null } | null }[];
+  members: { user: { id: string; full_name: string | null; email: string | null } | null }[];
 };
 
 type Deliverable = {
@@ -177,6 +178,9 @@ export default function ProjectDetail() {
   const [clientOptions, setClientOptions] = useState<{ id: string; label: string }[]>([]);
   const [venueOptions, setVenueOptions] = useState<{ id: string; label: string }[]>([]);
   const [venueIds, setVenueIds] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
+  const [memberPickerOpen, setMemberPickerOpen] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
@@ -193,7 +197,7 @@ export default function ProjectDetail() {
     if (!id) return;
     let active = true;
     (async () => {
-      const [proj, dels, tks, vds, clientsRes, venuesAllRes, vendorsAllRes] = await Promise.all([
+      const [proj, dels, tks, vds, clientsRes, venuesAllRes, vendorsAllRes, usersAllRes] = await Promise.all([
         supabase
           .from("projects")
           .select(
@@ -206,7 +210,8 @@ export default function ProjectDetail() {
              client:clients!projects_client_id_fkey(id, name),
              venues:project_venues(venue:venues!project_venues_venue_id_fkey(id, name)),
              account_managers:project_account_managers(user:users(id, full_name, email)),
-             designers:project_designers(user:users(id, full_name, email))`,
+             designers:project_designers(user:users(id, full_name, email)),
+             members:project_members(user:users!project_members_user_id_fkey(id, full_name, email))`,
           )
           .eq("id", id)
           .single(),
@@ -230,6 +235,11 @@ export default function ProjectDetail() {
         supabase.from("clients").select("id, name").order("name", { ascending: true }),
         supabase.from("venues").select("id, name").order("name", { ascending: true }),
         supabase.from("vendors").select("id, name").order("name", { ascending: true }),
+        supabase
+          .from("users")
+          .select("id, full_name, email")
+          .eq("active", true)
+          .order("full_name", { ascending: true }),
       ]);
       if (!active) return;
       if (proj.error) {
@@ -237,15 +247,17 @@ export default function ProjectDetail() {
         setLoading(false);
         return;
       }
-      const projRow = proj.data as unknown as Omit<Project, "tags" | "venues"> & {
+      const projRow = proj.data as unknown as Omit<Project, "tags" | "venues" | "members"> & {
         tags: string[] | null;
         venues: { venue: { id: string; name: string | null } | null }[] | null;
+        members: { user: { id: string; full_name: string | null; email: string | null } | null }[] | null;
       };
       const venueJoin = projRow.venues ?? [];
       setProject({
         ...projRow,
         tags: projRow.tags ?? [],
         venues: venueJoin,
+        members: projRow.members ?? [],
       });
       setVenueIds(
         venueJoin
@@ -288,6 +300,12 @@ export default function ProjectDetail() {
         ((vendorsAllRes.data ?? []) as { id: string; name: string | null }[]).map((v) => ({
           id: v.id,
           label: v.name ?? "Untitled",
+        })),
+      );
+      setUserOptions(
+        ((usersAllRes.data ?? []) as { id: string; full_name: string | null; email: string | null }[]).map((u) => ({
+          id: u.id,
+          label: u.full_name ?? u.email ?? "Unnamed",
         })),
       );
       setLoading(false);
@@ -442,6 +460,60 @@ export default function ProjectDetail() {
           );
         }
       }
+    }
+  };
+
+  // Phase 5.7.7: project_members general bucket. Add + remove fire the
+  // join row optimistically; the AM + D buckets stay edit-page only.
+  const handleAddMember = async (userId: string) => {
+    if (!project) return;
+    const opt = userOptions.find((u) => u.id === userId);
+    if (!opt) return;
+    const prev = project.members;
+    const optimistic = [
+      ...project.members,
+      { user: { id: opt.id, full_name: opt.label, email: null } },
+    ];
+    setProject({ ...project, members: optimistic });
+    setMemberPickerOpen(false);
+    setMemberSearch("");
+    const { data: userRes } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from("project_members")
+      .insert({
+        project_id: project.id,
+        user_id: userId,
+        created_by: userRes.user?.id ?? null,
+      });
+    if (error) {
+      setProject({ ...project, members: prev });
+      toast({
+        title: "Could not add to team",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveMember = async (userId: string) => {
+    if (!project) return;
+    const prev = project.members;
+    setProject({
+      ...project,
+      members: project.members.filter((j) => j.user?.id !== userId),
+    });
+    const { error } = await supabase
+      .from("project_members")
+      .delete()
+      .eq("project_id", project.id)
+      .eq("user_id", userId);
+    if (error) {
+      setProject({ ...project, members: prev });
+      toast({
+        title: "Could not remove from team",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -1048,9 +1120,66 @@ export default function ProjectDetail() {
           <section className="card">
             <div className="card-headbar">
               <span className="h-card">Team</span>
+              <Popover
+                open={memberPickerOpen}
+                onOpenChange={(o) => {
+                  setMemberPickerOpen(o);
+                  if (!o) setMemberSearch("");
+                }}
+              >
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="combo-picker-btn"
+                    aria-label="Add team member"
+                    title="Add team member"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0" align="end">
+                  <Command shouldFilter>
+                    <CommandInput
+                      value={memberSearch}
+                      onValueChange={setMemberSearch}
+                      placeholder="Search users..."
+                    />
+                    <CommandList>
+                      <CommandEmpty>No users.</CommandEmpty>
+                      {userOptions.map((opt) => {
+                        const isAlreadyOnProject =
+                          project.account_managers.some((j) => j.user?.id === opt.id) ||
+                          project.designers.some((j) => j.user?.id === opt.id) ||
+                          project.members.some((j) => j.user?.id === opt.id);
+                        return (
+                          <CommandItem
+                            key={opt.id}
+                            value={opt.label}
+                            disabled={isAlreadyOnProject}
+                            onSelect={() => {
+                              if (isAlreadyOnProject) return;
+                              void handleAddMember(opt.id);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <span className="flex-1 truncate">{opt.label}</span>
+                            {isAlreadyOnProject ? (
+                              <span className="cap" style={{ opacity: 0.6 }}>
+                                on project
+                              </span>
+                            ) : null}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="card-pad stack-3">
-              {project.account_managers.length === 0 && project.designers.length === 0 ? (
+              {project.account_managers.length === 0 &&
+              project.designers.length === 0 &&
+              project.members.length === 0 ? (
                 <div className="subtle">No team assigned.</div>
               ) : null}
               {project.account_managers.map((j, i) =>
@@ -1076,6 +1205,36 @@ export default function ProjectDetail() {
                       <div>{j.user.full_name ?? j.user.email}</div>
                       <div className="cap">Design</div>
                     </div>
+                  </div>
+                ) : null,
+              )}
+              {project.members.map((j, i) =>
+                j.user ? (
+                  <div
+                    key={`m-${i}`}
+                    className="row-c team-member-row"
+                    style={{ justifyContent: "space-between" }}
+                  >
+                    <div className="row-c">
+                      <span className="av-i">
+                        {(j.user.full_name ?? j.user.email ?? "?").slice(0, 2).toUpperCase()}
+                      </span>
+                      <div>
+                        <div>{j.user.full_name ?? j.user.email}</div>
+                        <div className="cap">Team</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="combo-picker-btn team-member-remove"
+                      aria-label={`Remove ${j.user.full_name ?? j.user.email ?? "member"} from team`}
+                      title="Remove from team"
+                      onClick={() => {
+                        if (j.user) void handleRemoveMember(j.user.id);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
                 ) : null,
               )}

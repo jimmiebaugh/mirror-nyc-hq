@@ -59,6 +59,7 @@ export function DataTable<T extends { id: string }>({
   empty,
   sort: controlledSort,
   onSortChange,
+  quickAdd,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -78,6 +79,14 @@ export function DataTable<T extends { id: string }>({
    */
   sort?: SortState;
   onSortChange?: (next: SortState) => void;
+  /**
+   * Phase 5.7.7 followup-1: optional in-table quick-add CTA row. Renders
+   * at the bottom of the active list (right above the `twoTier` divider
+   * if present, otherwise at the bottom of the table). Clicking calls
+   * `onClick`; the parent owns the insert + the resulting row appears
+   * in the rendered list via the `rows` prop on next render.
+   */
+  quickAdd?: { label: string; onClick: () => void | Promise<void>; disabled?: boolean };
 }) {
   const isControlledSort = onSortChange !== undefined;
   const [internalSort, setInternalSort] = useState<SortState>(null);
@@ -271,6 +280,32 @@ export function DataTable<T extends { id: string }>({
         </thead>
         <tbody>
           {active.map((r) => renderRow(r, false))}
+          {quickAdd ? (
+            <tr className="tbl-quickadd">
+              <td colSpan={totalCols}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void quickAdd.onClick();
+                  }}
+                  disabled={quickAdd.disabled}
+                  style={{
+                    width: "100%",
+                    background: "transparent",
+                    border: "none",
+                    padding: "10px 14px",
+                    textAlign: "left",
+                    cursor: quickAdd.disabled ? "default" : "pointer",
+                    color: "hsl(var(--muted-foreground))",
+                    fontSize: 12.5,
+                    font: "inherit",
+                  }}
+                >
+                  + {quickAdd.label}
+                </button>
+              </td>
+            </tr>
+          ) : null}
           {twoTier && terminal.length > 0 ? (
             <>
               <tr className="tbl-divider">

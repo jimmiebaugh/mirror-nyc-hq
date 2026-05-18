@@ -46,6 +46,14 @@ export type InlineEditTextProps = {
   onBlurFormat?: (raw: string) => string;
   /** Optional input type (e.g. "email", "url"). Ignored when multiline. */
   inputType?: string;
+  /**
+   * Phase 5.7.7 followup-2: when true, the primitive mounts directly in
+   * edit mode + auto-focuses. Used by TasksList's quick-add row so the
+   * user can start typing the title immediately on insert.
+   */
+  defaultEditing?: boolean;
+  /** Optional callback fired when the primitive exits edit mode. */
+  onEditingChange?: (editing: boolean) => void;
 };
 
 export function InlineEditText({
@@ -57,8 +65,14 @@ export function InlineEditText({
   multiline,
   onBlurFormat,
   inputType = "text",
+  defaultEditing = false,
+  onEditingChange,
 }: InlineEditTextProps) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditingState] = useState(defaultEditing);
+  const setEditing = (next: boolean) => {
+    setEditingState(next);
+    onEditingChange?.(next);
+  };
   const [draft, setDraft] = useState(value ?? "");
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);

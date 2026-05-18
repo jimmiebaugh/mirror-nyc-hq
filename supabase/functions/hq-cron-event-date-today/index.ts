@@ -3,8 +3,9 @@
 // Phase 5.5. Daily 07:00 ET (11:00 UTC) cron. Queries projects where
 // install_dates_start = CURRENT_DATE OR live_dates_start = CURRENT_DATE OR
 // removal_dates_start = CURRENT_DATE. Resolves assigned users from
-// project_account_managers + project_designers (deduped). Fans out a
-// notifications-dispatch call per project with the event kind in `extra`.
+// project_account_managers + project_designers + project_members (deduped,
+// 5.7.7 added the third bucket). Fans out a notifications-dispatch call per
+// project with the event kind in `extra`.
 //
 // Auth: requireInternalOrUserAuth. verify_jwt = false in config.toml.
 
@@ -87,14 +88,16 @@ Deno.serve(async (req) => {
 
   let fanout = 0;
   for (const ev of events) {
-    const [amRes, dgRes] = await Promise.all([
+    const [amRes, dgRes, pmRes] = await Promise.all([
       supabase.from("project_account_managers").select("user_id").eq("project_id", ev.id),
       supabase.from("project_designers").select("user_id").eq("project_id", ev.id),
+      supabase.from("project_members").select("user_id").eq("project_id", ev.id),
     ]);
     const recipientIds = Array.from(
       new Set([
         ...((amRes.data ?? []).map((r) => r.user_id)),
         ...((dgRes.data ?? []).map((r) => r.user_id)),
+        ...((pmRes.data ?? []).map((r) => r.user_id)),
       ]),
     );
     if (recipientIds.length === 0) continue;

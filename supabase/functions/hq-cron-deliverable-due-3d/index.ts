@@ -2,8 +2,10 @@
 //
 // Phase 5.5. Daily 09:00 ET (13:00 UTC) cron. Queries deliverables where
 // due_date = CURRENT_DATE + 3 AND status NOT IN ('Complete', 'Skipped'),
-// resolves project owners from project_account_managers, fans out a
-// notifications-dispatch call per deliverable. The dispatch fn handles
+// resolves project owners from project_account_managers + project_designers
+// + project_members (5.7.7 expanded the recipient union to match the
+// "identically to AM + D" plan wording plus the new general bucket), fans
+// out a notifications-dispatch call per deliverable. The dispatch fn handles
 // per-user preference checks + in-app vs Slack delivery.
 //
 // Idempotency: notifications has no unique constraint on (user_id, type,
@@ -84,11 +86,18 @@ Deno.serve(async (req) => {
 
   let fanout = 0;
   for (const d of deliverables ?? []) {
-    const { data: ams } = await supabase
-      .from("project_account_managers")
-      .select("user_id")
-      .eq("project_id", d.project_id);
-    const recipientIds = (ams ?? []).map((r) => r.user_id);
+    const [amsRes, dgRes, pmsRes] = await Promise.all([
+      supabase.from("project_account_managers").select("user_id").eq("project_id", d.project_id),
+      supabase.from("project_designers").select("user_id").eq("project_id", d.project_id),
+      supabase.from("project_members").select("user_id").eq("project_id", d.project_id),
+    ]);
+    const recipientIds = Array.from(
+      new Set([
+        ...((amsRes.data ?? []).map((r) => r.user_id)),
+        ...((dgRes.data ?? []).map((r) => r.user_id)),
+        ...((pmsRes.data ?? []).map((r) => r.user_id)),
+      ]),
+    );
     if (recipientIds.length === 0) continue;
     await postDispatch({
       event_type: "deliverable_due_3d",

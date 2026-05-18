@@ -44,7 +44,12 @@ const FILTER_FIELDS = [
   { key: "category", label: "Category", type: "text" as const },
   { key: "city", label: "City", type: "text" as const },
   { key: "status", label: "Status", type: "enum" as const, options: PROJECT_STATUS_VALUES },
-  { key: "leadName", label: "Account", type: "text" as const },
+  // Phase 5.7.7: label renamed "Account" -> "Team". Key stays `leadName`
+  // so existing saved views resolve unchanged; the applyFn callback in
+  // `filtered` below remaps `leadName` -> the row's derived `teamNames`
+  // string (lead + designer + project_members), broadening the matching
+  // scope to the full team roster.
+  { key: "leadName", label: "Team", type: "text" as const },
 ];
 
 const BOARD_ROWS: { label: string; statuses: ProjectStatus[] }[] = [
@@ -129,6 +134,18 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
   const filtered = useMemo(
     () =>
       applyFilters(rows, filterState, (row, key) => {
+        // Phase 5.7.7: the `leadName` filter (now labeled "Team") matches
+        // against the union of every Account Manager + Designer + general
+        // project_member name. The chip's stored key stays `leadName` for
+        // saved-view back-compat; the lookup quietly remaps to the joined
+        // `teamNames` string. The `leadName` column-cell render still reads
+        // `row.leadName` (single first-name for the avatar initials).
+        if (key === "leadName") {
+          const r = row as unknown as ProjectListRow;
+          const parts = [...r.leadNames, ...r.designerNames, ...r.memberNames];
+          if (parts.length === 0) return null;
+          return parts.join(" · ");
+        }
         const val = (row as unknown as Record<string, unknown>)[key];
         if (val == null) return null;
         return typeof val === "string" ? val : String(val);
@@ -137,6 +154,9 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
   );
 
   // Phase 5.7.6: distinct values per text/enum filter field.
+  // Phase 5.7.7: `leadName` now pulls from the AM + Designer + project_member
+  // name union so the "Team" filter's dropdown lists every name across the
+  // three roster sources.
   const distinctValuesByField = useMemo(() => {
     const pick = (key: string) =>
       Array.from(
@@ -146,12 +166,21 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
             .filter((v): v is string => typeof v === "string" && v.length > 0),
         ),
       ).sort();
+    const teamUnion = Array.from(
+      new Set([
+        ...rows.flatMap((r) => r.leadNames),
+        ...rows.flatMap((r) => r.designerNames),
+        ...rows.flatMap((r) => r.memberNames),
+      ]),
+    )
+      .filter(Boolean)
+      .sort();
     return {
       status: pick("status"),
       category: pick("category"),
       city: pick("city"),
       clientName: pick("clientName"),
-      leadName: pick("leadName"),
+      leadName: teamUnion,
     };
   }, [rows]);
 

@@ -27,6 +27,7 @@ import {
   taskStatusToken,
 } from "@/lib/home/projectStatusToken";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
+import { InlineEditText } from "@/components/hq/InlineEditText";
 import { formatShortDate } from "@/lib/hq/dates";
 import { toast } from "@/hooks/use-toast";
 
@@ -71,8 +72,8 @@ export default function TasksList({ view }: { view: ViewKind }) {
     chips: [],
   }));
   const [activeViewName, setActiveViewName] = useState("My open tasks");
-  const [quickAdd, setQuickAdd] = useState("");
   const [adding, setAdding] = useState(false);
+  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
   const [blockedTitles, setBlockedTitles] = useState<Record<string, string>>({});
   /**
    * Phase 5.6.5: tracks whether the on-mount default-view resolution
@@ -134,6 +135,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
       active = false;
     };
   }, []);
+
 
   const handleResetToGlobal = async () => {
     const v = await getDefaultSavedView("task");
@@ -226,13 +228,18 @@ export default function TasksList({ view }: { view: ViewKind }) {
     };
   }, [flatRows]);
 
+  // Phase 5.7.7 followup-1: the quick-add now lives as an inline row at
+  // the bottom of the DataTable's active section. One click inserts a
+  // draft task with sensible defaults; the user then edits inline (Status
+  // / Priority via ClickPillCell) or clicks through to TaskDetail for
+  // title / project / due-date / description edits.
   const handleQuickAdd = async () => {
-    if (!quickAdd.trim() || !user?.id) return;
+    if (!user?.id) return;
     setAdding(true);
     const { data, error } = await supabase
       .from("tasks")
       .insert({
-        title: quickAdd.trim(),
+        title: "",
         assignee_id: user.id,
         created_by: user.id,
         status: "To Do",
@@ -249,8 +256,22 @@ export default function TasksList({ view }: { view: ViewKind }) {
       toast({ title: "Add failed", description: error.message, variant: "destructive" });
       return;
     }
-    setRows((rs) => [data as unknown as TaskListRow, ...rs]);
-    setQuickAdd("");
+    // Append at the bottom of the active list (the quick-add row sits
+    // just below); flag pendingFocusId so the title cell mounts already
+    // in edit mode with focus.
+    setRows((rs) => [...rs, data as unknown as TaskListRow]);
+    setPendingFocusId((data as { id: string }).id);
+  };
+
+  const saveTaskTitle = async (taskId: string, next: string) => {
+    const { error } = await supabase
+      .from("tasks")
+      .update({ title: next })
+      .eq("id", taskId);
+    if (error) throw error;
+    setRows((rs) =>
+      rs.map((r) => (r.id === taskId ? { ...r, title: next } : r)),
+    );
   };
 
   const handleBoardMove = async (task: TaskListRow, _from: string, to: string) => {
@@ -315,31 +336,6 @@ export default function TasksList({ view }: { view: ViewKind }) {
         distinctValuesByField={distinctValuesByField}
       />
 
-      {view === "list" ? (
-        <div
-          className="row-c"
-          style={{
-            background: "hsl(var(--surface-alt))",
-            border: "1px dashed hsl(var(--border-strong))",
-            borderRadius: "var(--radius)",
-            padding: "8px 12px",
-          }}
-        >
-          <input
-            className="input"
-            style={{ height: 30, border: "none", background: "none", padding: 0 }}
-            value={quickAdd}
-            onChange={(e) => setQuickAdd(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleQuickAdd()}
-            placeholder="Add a task and press Enter..."
-            disabled={adding}
-          />
-          <span className="cap" style={{ marginLeft: "auto" }}>
-            Project optional
-          </span>
-        </div>
-      ) : null}
-
       {loading ? (
         <div className="empty">
           <p>Loading...</p>
@@ -358,6 +354,11 @@ export default function TasksList({ view }: { view: ViewKind }) {
             isTerminal: (r) => r.status === "Done",
             dividerLabel: (n) => `Done · ${n} hidden`,
           }}
+          quickAdd={{
+            label: "Click to Quick Add Task",
+            onClick: handleQuickAdd,
+            disabled: adding,
+          }}
           empty={{
             message: "No tasks match these filters",
             ctaLabel: "+ New Task",
@@ -369,8 +370,23 @@ export default function TasksList({ view }: { view: ViewKind }) {
               label: "Task",
               sort: (a, b) => a.title.localeCompare(b.title),
               render: (r) => (
-                <span className={`lead ${statusTextDecoration("task", r.status)}`}>
-                  {r.title}
+                <span
+                  className={`lead ${statusTextDecoration("task", r.status)}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <InlineEditText
+                    value={r.title}
+                    required
+                    defaultEditing={pendingFocusId === r.id}
+                    onEditingChange={(editing) => {
+                      if (!editing && pendingFocusId === r.id) {
+                        setPendingFocusId(null);
+                      }
+                    }}
+                    placeholder="Untitled task"
+                    renderRead={(v) => <span>{v || "Untitled task"}</span>}
+                    onSave={(next) => saveTaskTitle(r.id, next)}
+                  />
                 </span>
               ),
             },

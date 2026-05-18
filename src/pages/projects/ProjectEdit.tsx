@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { MultiTagInput } from "@/components/data/MultiTagInput";
+import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
@@ -44,7 +46,7 @@ type FormState = {
   category: string;
   city: string;
   budget: string;
-  tags: string;
+  tags: string[];
   installDatesStart: string;
   installDatesEnd: string;
   liveDatesStart: string;
@@ -55,8 +57,6 @@ type FormState = {
   designDecksFolderUrl: string;
   budgetSheetUrl: string;
   slackChannelUrl: string;
-  statusNotes: string;
-  clientNotes: string;
 };
 
 const EMPTY: FormState = {
@@ -67,7 +67,7 @@ const EMPTY: FormState = {
   category: "",
   city: "",
   budget: "",
-  tags: "",
+  tags: [],
   installDatesStart: "",
   installDatesEnd: "",
   liveDatesStart: "",
@@ -78,8 +78,6 @@ const EMPTY: FormState = {
   designDecksFolderUrl: "",
   budgetSheetUrl: "",
   slackChannelUrl: "",
-  statusNotes: "",
-  clientNotes: "",
 };
 
 type ClientOption = { id: string; name: string | null };
@@ -95,6 +93,8 @@ export default function ProjectEdit() {
   const [initialAccountManagerIds, setInitialAccountManagerIds] = useState<string[]>([]);
   const [designerIds, setDesignerIds] = useState<string[]>([]);
   const [initialDesignerIds, setInitialDesignerIds] = useState<string[]>([]);
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [initialMemberIds, setInitialMemberIds] = useState<string[]>([]);
   const [vendorIds, setVendorIds] = useState<string[]>([]);
   const [initialVendorIds, setInitialVendorIds] = useState<string[]>([]);
   const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
@@ -116,6 +116,7 @@ export default function ProjectEdit() {
         projectRes,
         amRes,
         dsRes,
+        pmRes,
         pvRes,
       ] = await Promise.all([
         supabase
@@ -136,7 +137,7 @@ export default function ProjectEdit() {
           : supabase
               .from("projects")
               .select(
-                "id, name, status, client_id, job_number, category, city, budget, tags, install_dates_start, install_dates_end, live_dates_start, live_dates_end, removal_dates_start, removal_dates_end, production_folder_url, design_decks_folder_url, budget_sheet_url, slack_channel_url, status_notes, client_notes",
+                "id, name, status, client_id, job_number, category, city, budget, tags, install_dates_start, install_dates_end, live_dates_start, live_dates_end, removal_dates_start, removal_dates_end, production_folder_url, design_decks_folder_url, budget_sheet_url, slack_channel_url",
               )
               .eq("id", id)
               .single(),
@@ -150,6 +151,12 @@ export default function ProjectEdit() {
           ? Promise.resolve({ data: [] as { user_id: string }[] })
           : supabase
               .from("project_designers")
+              .select("user_id")
+              .eq("project_id", id),
+        isCreate
+          ? Promise.resolve({ data: [] as { user_id: string }[] })
+          : supabase
+              .from("project_members")
               .select("user_id")
               .eq("project_id", id),
         isCreate
@@ -181,11 +188,14 @@ export default function ProjectEdit() {
       );
       const amIds = ((amRes.data ?? []) as { user_id: string }[]).map((r) => r.user_id);
       const dsIds = ((dsRes.data ?? []) as { user_id: string }[]).map((r) => r.user_id);
+      const pmIds = ((pmRes.data ?? []) as { user_id: string }[]).map((r) => r.user_id);
       const pvIds = ((pvRes.data ?? []) as { vendor_id: string }[]).map((r) => r.vendor_id);
       setAccountManagerIds(amIds);
       setInitialAccountManagerIds(amIds);
       setDesignerIds(dsIds);
       setInitialDesignerIds(dsIds);
+      setMemberIds(pmIds);
+      setInitialMemberIds(pmIds);
       setVendorIds(pvIds);
       setInitialVendorIds(pvIds);
       if (!isCreate && projectRes && "data" in projectRes && projectRes.data) {
@@ -208,8 +218,6 @@ export default function ProjectEdit() {
           design_decks_folder_url: string | null;
           budget_sheet_url: string | null;
           slack_channel_url: string | null;
-          status_notes: string | null;
-          client_notes: string | null;
         };
         const p = projectRes.data as unknown as Row;
         const next: FormState = {
@@ -220,7 +228,7 @@ export default function ProjectEdit() {
           category: p.category ?? "",
           city: p.city ?? "",
           budget: p.budget != null ? String(p.budget) : "",
-          tags: (p.tags ?? []).join(", "),
+          tags: p.tags ?? [],
           installDatesStart: p.install_dates_start ?? "",
           installDatesEnd: p.install_dates_end ?? "",
           liveDatesStart: p.live_dates_start ?? "",
@@ -231,8 +239,6 @@ export default function ProjectEdit() {
           designDecksFolderUrl: p.design_decks_folder_url ?? "",
           budgetSheetUrl: p.budget_sheet_url ?? "",
           slackChannelUrl: p.slack_channel_url ?? "",
-          statusNotes: p.status_notes ?? "",
-          clientNotes: p.client_notes ?? "",
         };
         setForm(next);
         setInitial(next);
@@ -251,6 +257,8 @@ export default function ProjectEdit() {
         JSON.stringify([...initialAccountManagerIds].sort()) ||
       JSON.stringify([...designerIds].sort()) !==
         JSON.stringify([...initialDesignerIds].sort()) ||
+      JSON.stringify([...memberIds].sort()) !==
+        JSON.stringify([...initialMemberIds].sort()) ||
       JSON.stringify([...vendorIds].sort()) !==
         JSON.stringify([...initialVendorIds].sort()),
     [
@@ -260,6 +268,8 @@ export default function ProjectEdit() {
       initialAccountManagerIds,
       designerIds,
       initialDesignerIds,
+      memberIds,
+      initialMemberIds,
       vendorIds,
       initialVendorIds,
     ],
@@ -413,10 +423,7 @@ export default function ProjectEdit() {
       category: form.category || null,
       city: form.city || null,
       budget: parsedBudget,
-      tags: form.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
+      tags: form.tags,
       install_dates_start: form.installDatesStart || null,
       install_dates_end: form.installDatesEnd || null,
       live_dates_start: form.liveDatesStart || null,
@@ -427,8 +434,6 @@ export default function ProjectEdit() {
       design_decks_folder_url: form.designDecksFolderUrl || null,
       budget_sheet_url: form.budgetSheetUrl || null,
       slack_channel_url: form.slackChannelUrl || null,
-      status_notes: form.statusNotes || null,
-      client_notes: form.clientNotes || null,
     };
     let projectId = id;
     if (isCreate) {
@@ -483,6 +488,28 @@ export default function ProjectEdit() {
           .eq("project_id", projectId)
           .eq("user_id", userId);
       }
+      const pmAdd = memberIds.filter((u) => !initialMemberIds.includes(u));
+      const pmRemove = initialMemberIds.filter((u) => !memberIds.includes(u));
+      if (pmAdd.length > 0 || pmRemove.length > 0) {
+        const { data: userRes } = await supabase.auth.getUser();
+        const createdBy = userRes.user?.id ?? null;
+        for (const userId of pmAdd) {
+          await supabase
+            .from("project_members")
+            .insert({
+              project_id: projectId,
+              user_id: userId,
+              created_by: createdBy,
+            });
+        }
+        for (const userId of pmRemove) {
+          await supabase
+            .from("project_members")
+            .delete()
+            .eq("project_id", projectId)
+            .eq("user_id", userId);
+        }
+      }
       const pvAdd = vendorIds.filter((v) => !initialVendorIds.includes(v));
       const pvRemove = initialVendorIds.filter((v) => !vendorIds.includes(v));
       for (const vendorId of pvAdd) {
@@ -503,6 +530,7 @@ export default function ProjectEdit() {
     setInitial(form);
     setInitialAccountManagerIds(accountManagerIds);
     setInitialDesignerIds(designerIds);
+    setInitialMemberIds(memberIds);
     setInitialVendorIds(vendorIds);
     if (isCreate && projectId) {
       toast({ title: "Project created" });
@@ -616,71 +644,17 @@ export default function ProjectEdit() {
               />
             </FormField>
             <FormField label="Tags">
-              <input
-                className={`input ${form.tags ? "input--filled" : ""}`}
-                value={form.tags}
-                onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
-                placeholder="Summer 2026, CPG, Outdoor"
+              <MultiTagInput
+                options={[]}
+                values={form.tags}
+                onChange={(next) => setForm((f) => ({ ...f, tags: next }))}
+                onAdd={async (name) => ({ id: name, name })}
+                entityLabel="tag"
+                exampleName="Summer 2026"
+                placeholder="Add tag..."
               />
             </FormField>
           </div>
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Team</span>
-          </div>
-          <div className="g2">
-            <FormField label="Account Managers">
-              <RecordCombobox
-                multi
-                source={{ kind: "record", loadOptions: loadUserOptions }}
-                multiValue={accountManagerIds}
-                onMultiChange={setAccountManagerIds}
-                entityLabel="user"
-                placeholder="Add account manager..."
-              />
-            </FormField>
-            <FormField label="Designers">
-              <RecordCombobox
-                multi
-                source={{ kind: "record", loadOptions: loadUserOptions }}
-                multiValue={designerIds}
-                onMultiChange={setDesignerIds}
-                entityLabel="user"
-                placeholder="Add designer..."
-              />
-            </FormField>
-          </div>
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Project Vendors</span>
-          </div>
-          <FormField label="Vendors">
-            <RecordCombobox
-              multi
-              source={{ kind: "record", loadOptions: loadVendorOptions }}
-              multiValue={vendorIds}
-              onMultiChange={setVendorIds}
-              entityLabel="Vendor"
-              placeholder="Add vendor..."
-              miniCreateFields={[
-                { key: "name", label: "Name", required: true, placeholder: "Testrite" },
-                {
-                  key: "category_id",
-                  label: "Category",
-                  lookup: { table: "vendor_categories", entityLabel: "Category" },
-                },
-              ]}
-              onMiniCreate={handleCreateVendor}
-            />
-          </FormField>
         </div>
       </section>
 
@@ -745,6 +719,46 @@ export default function ProjectEdit() {
       <section className="card">
         <div className="card-pad stack-4">
           <div className="block-lbl">
+            <span className="label-section">Team</span>
+          </div>
+          <div className="g3">
+            <FormField label="Account">
+              <RecordCombobox
+                multi
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                multiValue={accountManagerIds}
+                onMultiChange={setAccountManagerIds}
+                entityLabel="user"
+                placeholder="Add account manager..."
+              />
+            </FormField>
+            <FormField label="Design">
+              <RecordCombobox
+                multi
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                multiValue={designerIds}
+                onMultiChange={setDesignerIds}
+                entityLabel="user"
+                placeholder="Add designer..."
+              />
+            </FormField>
+            <FormField label="Team">
+              <RecordCombobox
+                multi
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                multiValue={memberIds}
+                onMultiChange={setMemberIds}
+                entityLabel="user"
+                placeholder="Add team member..."
+              />
+            </FormField>
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-pad stack-4">
+          <div className="block-lbl">
             <span className="label-section">Links &amp; References</span>
           </div>
           <div className="g2">
@@ -781,22 +795,40 @@ export default function ProjectEdit() {
               />
             </FormField>
           </div>
-          <FormField label="Status Notes">
-            <textarea
-              className={`input textarea ${form.statusNotes ? "input--filled" : ""}`}
-              value={form.statusNotes}
-              onChange={(e) => setForm((f) => ({ ...f, statusNotes: e.target.value }))}
-              rows={5}
-              placeholder="Free-form context for the producer status check-ins."
-            />
-          </FormField>
-          <FormField label="Client Notes">
-            <textarea
-              className={`input textarea ${form.clientNotes ? "input--filled" : ""}`}
-              value={form.clientNotes}
-              onChange={(e) => setForm((f) => ({ ...f, clientNotes: e.target.value }))}
-              rows={5}
-              placeholder="Client-facing context shared at touchpoints."
+        </div>
+      </section>
+
+      {!isCreate && id ? (
+        <InternalNotesEditor
+          parentType="project"
+          parentId={id}
+          title="Status Notes"
+          maxVisibleNotes={10}
+        />
+      ) : null}
+
+      <section className="card">
+        <div className="card-pad stack-4">
+          <div className="block-lbl">
+            <span className="label-section">Project Vendors</span>
+          </div>
+          <FormField label="Vendors">
+            <RecordCombobox
+              multi
+              source={{ kind: "record", loadOptions: loadVendorOptions }}
+              multiValue={vendorIds}
+              onMultiChange={setVendorIds}
+              entityLabel="Vendor"
+              placeholder="Add vendor..."
+              miniCreateFields={[
+                { key: "name", label: "Name", required: true, placeholder: "Testrite" },
+                {
+                  key: "category_id",
+                  label: "Category",
+                  lookup: { table: "vendor_categories", entityLabel: "Category" },
+                },
+              ]}
+              onMiniCreate={handleCreateVendor}
             />
           </FormField>
         </div>

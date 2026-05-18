@@ -64,6 +64,14 @@ export type ProjectListRow = {
    */
   leadNames: string[];
   designerNames: string[];
+  /**
+   * Phase 5.7.7: full-name array of every general-bucket project team
+   * member. Joined alongside leadNames + designerNames via the new
+   * `project_members` table. Feeds the "Team" filter (key still
+   * `leadName` for saved-view back-compat; the applyFn remaps to
+   * `teamNames` for matching).
+   */
+  memberNames: string[];
 };
 
 function firstName(name: string | null | undefined, email: string | null | undefined): string | null {
@@ -83,6 +91,7 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
        client:clients!projects_client_id_fkey(id, name),
        account_managers:project_account_managers(user:users(full_name, email)),
        designers:project_designers(user:users(full_name, email)),
+       members:project_members(user:users!project_members_user_id_fkey(full_name, email)),
        deliverables(id, title, due_date, status)`,
     )
     .is("archived_at", null);
@@ -111,11 +120,13 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
       | null;
     account_managers: { user: { full_name: string | null; email: string | null } | null }[] | null;
     designers: { user: { full_name: string | null; email: string | null } | null }[] | null;
+    members: { user: { full_name: string | null; email: string | null } | null }[] | null;
     deliverables: { id: string; title: string; due_date: string | null; status: string }[] | null;
   };
   return ((data ?? []) as unknown as DbRow[]).map((p) => {
     const am = (p.account_managers ?? []).map((j) => j.user).filter(Boolean);
     const ds = (p.designers ?? []).map((j) => j.user).filter(Boolean);
+    const ms = (p.members ?? []).map((j) => j.user).filter(Boolean);
     const nextDeliverable = (p.deliverables ?? [])
       .filter((d) => d.due_date && d.status === "Upcoming")
       .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))[0];
@@ -148,6 +159,9 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
         .map((u) => u?.full_name?.trim() || u?.email?.split("@")[0] || "")
         .filter(Boolean),
       designerNames: ds
+        .map((u) => u?.full_name?.trim() || u?.email?.split("@")[0] || "")
+        .filter(Boolean),
+      memberNames: ms
         .map((u) => u?.full_name?.trim() || u?.email?.split("@")[0] || "")
         .filter(Boolean),
     };

@@ -111,6 +111,13 @@ The legacy `organizations` entry below is preserved for historical reference; tr
 ### project_designers (join, optional)
 - `project_id`, `user_id` (PK composite)
 
+### project_members (join, optional general team bucket)
+- `project_id` (FK to projects ON DELETE CASCADE), `user_id` (FK to users ON DELETE CASCADE), `created_by` (FK to users, ON DELETE SET NULL, nullable), `created_at`. PRIMARY KEY `(project_id, user_id)`. Index `project_members_user_idx (user_id)`.
+- Added Phase 5.7.7 (`20260525100000_phase_5_7_7_project_members.sql`). Third roster bucket alongside `project_account_managers` + `project_designers` (per plan decision #4). No role column; bucket is "everyone else on the project" (producers, coordinators, etc.).
+- RLS: open SELECT/INSERT/UPDATE/DELETE for authenticated. No activity-log trigger (roster join tables stay out of the feed; matches `project_account_managers` / `project_designers` / `project_vendors`).
+- Notification routing parity with AM + D per Phase 5.7.7: `notifications_dispatch_writer` projects branch now unions AM + D + members for `project_status_changed`. `hq-cron-event-date-today` + `hq-cron-deliverable-due-3d` also union all three roster buckets.
+- Surfaced read paths: ProjectDetail Team card (third loop + inline + Add picker + remove affordance), ProjectsList "Team" filter (key still `leadName` for saved-view back-compat; applyFn remaps to a derived `teamNames` row field across AM + D + members). Write paths: ProjectDetail Team card add/remove; ProjectEdit Team card diff-on-save (third RecordCombobox multi).
+
 ### project_venues (join, multi-venue per project)
 - `project_id`, `venue_id` (PK composite)
 - The Notion-style backlist on a Venue page queries this to show every project that's used or is using the venue.
@@ -462,7 +469,7 @@ Polymorphic Internal Notes log shared by Clients, Vendors, People, Venues, Outlo
 - `activity_log_writer`: on insert / update / delete / status-change to projects, venues, tasks, deliverables, write an `activity_log` row. Extended in Phase 5.2.1 with a `TG_OP = 'DELETE'` branch (`action = 'deleted'`, payload `{ old: to_jsonb(OLD) }`) so the new `trg_activity_log_deliverables` trigger can fire on AFTER DELETE; existing projects / venues / tasks triggers remain on AFTER INSERT OR UPDATE only.
 - `updated_at_auto`: standard updated_at trigger on every table with the column.
 - `handle_new_user`: on `auth.users` INSERT, mirror to `public.users` with `permission_role = 'pending'` (Phase 5.1; was `'member'` pre-rewrite). Also inserts one `notifications` row per active admin (`type='user_pending'`). Phase 5.5 rewrite: link_url changed from `/team` to `/users` (Phase 5.4 route rename); calls `notifications-dispatch` with `event_type='user_pending'` instead of `notify-admin-of-pending-user` directly. The legacy admin-notification function stays deployed one phase as a fallback. Inline durable notifications rows remain so the in-app signal lands even if the dispatch edge function 500s. Runs as service role.
-- `notifications_dispatch_writer` (Phase 5.5): AFTER INSERT OR UPDATE on `tasks`, AFTER UPDATE on `projects`. Fires `task_assigned` (assignee_id newly set or changed), `task_blocked` (status flips to `'Blocked'`), and `project_status_changed` (status changes; recipients = `project_account_managers` for the project) via `public.invoke_edge_function('notifications-dispatch', ...)`. SECURITY DEFINER. Reads `auth.uid()` to set `actor_id` so the dispatch fn can exclude self-notification.
+- `notifications_dispatch_writer` (Phase 5.5; recipient union widened in Phase 5.7.7): AFTER INSERT OR UPDATE on `tasks`, AFTER UPDATE on `projects`. Fires `task_assigned` (assignee_id newly set or changed), `task_blocked` (status flips to `'Blocked'`), and `project_status_changed` (status changes; recipients = `project_account_managers` ∪ `project_designers` ∪ `project_members` for the project, deduped via DISTINCT) via `public.invoke_edge_function('notifications-dispatch', ...)`. SECURITY DEFINER. Reads `auth.uid()` to set `actor_id` so the dispatch fn can exclude self-notification.
 
 ## Postgres functions (RPCs)
 
