@@ -2,7 +2,7 @@
 
 The applied patterns Talent Scout established that every new HQ surface (Phase 4 Venue Scout, Phase 5 Cross-cutting, anything beyond) builds on. **This is the canonical reference for new surface design.**
 
-For history of how we got here, see `docs/historical/visual-audit-phase-3-5b/`. For the brand authority itself, see `docs/mirror-style-guide.md`. This doc is forward-looking: "I'm building a new HQ page; what's the pattern?"
+For the brand authority, see `docs/mirror-style-guide.md`. This doc is forward-looking: "I'm building a new HQ page; what's the pattern?"
 
 ---
 
@@ -157,7 +157,7 @@ Keyword/tag input is custom: `src/components/talent-scout/TagInput.tsx`. Reuse f
 - Each step = its own page route (`/new/details`, `/new/search`, `/new/scorecard`)
 - Final "lock + create" step writes the record to DB and navigates to the detail page
 
-Replicated in Venue Scout's brief, research, and deck flow (Phase 4 port; see `docs/venue-scout-port-plan.md`).
+Replicated in Venue Scout's brief, research, and deck flow (Phase 4 port; sub-phase narratives in `CHECKPOINT.md` + cutover decisions in `docs/decisions.md`).
 
 ### Sticky bottom action bar
 

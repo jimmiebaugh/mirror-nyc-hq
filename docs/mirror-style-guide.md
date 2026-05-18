@@ -68,6 +68,8 @@ Google Fonts import:
 
 ### Type scale (proposed)
 
+**Note:** the table below captures the deck-canonical brand voice for type. For component sizing canon (page title, section title, card padding, button + input heights), `docs/design-system.md` § 1 is authoritative per `OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 6. This section is the brand-voice reference; design-system.md wins on any conflict.
+
 The deck uses 36pt for hero titles and 16pt for accent captions on a presentation slide. For a dashboard at typical viewing distance, scale to:
 
 | Use | Family / weight | Size | Tracking | Casing |

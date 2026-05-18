@@ -153,7 +153,7 @@ Overwrite the file each time (Cowork reads the latest, not a log).
 
 At every phase boundary (the squash-merge of the last sub-phase of a phase), Cowork verifies `docs/roadmap.md` reflects the new state:
 
-1. **Finishing phase summarizes to one line.** Per `docs/conventions.md`, completed phases collapse to a single-line `DONE` summary with shipped date and main HEAD hash. Phase 4 example: `Phase 4: Venue Scout port. DONE. Shipped to production 2026-05-13 (main at \`7cd27ed\`). Full 1:1 port from \`mirror-nyc-venue-scout-pro\`; 4.1-port through 4.10.6-port. Details in \`docs/venue-scout-port-plan.md\` and \`CHECKPOINT.md\`.`
+1. **Finishing phase summarizes to one line.** Per `docs/conventions.md`, completed phases collapse to a single-line `DONE` summary with shipped date and main HEAD hash. Phase 4 example: `Phase 4: Venue Scout port. DONE. Shipped to production 2026-05-13 (main at \`7cd27ed\`). Full 1:1 port from \`mirror-nyc-venue-scout-pro\`; 4.1-port through 4.10.6-port. Cutover + locked decisions in \`docs/decisions.md\`; sub-phase narratives in \`CHECKPOINT.md\`.`
 2. **Next phase expands to full active-phase detail.** Sub-phase candidates, ordering notes, dependencies between sub-phases.
 3. **Open questions section reconciled.** Anything answered by the finished phase moves to `docs/decisions.md` or is struck. Anything still open and forward-looking moves to the next phase's section.
 
@@ -460,7 +460,7 @@ Each surface gets a Cowork-drafted spec before any code. Six surfaces will drift
 
 ### Phase 4 context
 
-Phase 4 shipped as a 1:1 port from `mirror-nyc-venue-scout-pro`. Reference: `docs/venue-scout-port-plan.md`. The functional scope of Venue Scout was inherited; HQ design tokens were applied. Phase 5 doesn't have that crutch: every surface is greenfield against the design system Talent Scout established.
+Phase 4 shipped as a 1:1 port from `mirror-nyc-venue-scout-pro`. Cutover sequence + § 8 locked decisions captured in `docs/decisions.md` "Phase 4 cutover + port plan locked decisions". The functional scope of Venue Scout was inherited; HQ design tokens were applied. Phase 5 doesn't have that crutch: every surface is greenfield against the design system Talent Scout established.
 
 ---
 
@@ -534,4 +534,4 @@ Phase 4 was a known shape (port). Phase 5 is the real test. The infrastructure a
 
 ---
 
-*Living playbook. Update when patterns we discover deserve to be encoded. Keep under 500 lines.*
+*Living playbook. Update when patterns we discover deserve to be encoded. Currently at ~540 lines; trim opportunistically.*

@@ -2,7 +2,7 @@
 name: security-auditor
 description: Audits a new or modified edge function for auth, secrets, and data exposure issues.
 tools: Read, Grep, Glob, Bash
-model: claude-opus-4-6
+model: claude-opus-4-7
 ---
 
 You are auditing an HQ edge function. HQ runs on Supabase with admin-gated routes

@@ -18,7 +18,7 @@ Lifted from `mirror-talent-scout`. Full pipeline ported and deployed. Sub-phase 
 
 | Sub-phase | Summary |
 |---|---|
-| 3.1 | Inventory + port plan (`docs/talent-scout-port-plan.md`). |
+| 3.1 | Inventory + port plan (executed; plan doc retired in 5.8.3, Phase 3 sub-phase decisions live in `docs/decisions.md`). |
 | 3.2 | Schema augmentation (`ts_evaluations`, `ts_pull_rounds` extensions, `cap_alert_sent_this_month`); edge function shells. |
 | 3.3 | Roles CRUD + 3-step new-role wizard; `_shared/anthropic.ts callClaude` wrapper. |
 | 3.4 | `ts-pull-candidates` (chunked self-invoke, BATCH_SIZE=8); service-account Gmail; Realtime on pull rounds. |
@@ -34,9 +34,9 @@ Lifted from `mirror-talent-scout`. Full pipeline ported and deployed. Sub-phase 
 
 ### Phase 4: Venue Scout port. DONE.
 
-Shipped to production 2026-05-13 (main at `7cd27ed`). Full 1:1 port from `mirror-nyc-venue-scout-pro`; 4.1-port through 4.10.6-port. Details in `docs/venue-scout-port-plan.md` and `CHECKPOINT.md`.
+Shipped to production 2026-05-13 (main at `7cd27ed`). Full 1:1 port from `mirror-nyc-venue-scout-pro`; 4.1-port through 4.10.6-port. Phase 4 cutover sequence + § 8 locked decisions captured in `docs/decisions.md` "Phase 4 cutover + port plan locked decisions". Sub-phase narratives in `CHECKPOINT.md`.
 
-**Phase 4 Revision - Intake.** Follow-on revision (2026-05-14): rebuilt the single-page Brief into a 3-step stepper (Event -> Venue -> Review), added the venue-side fields the AI sourcing prompt needs, added the `vs-generate-brief-overview` edge function + the `brief` `current_step` value, and made the Revisit nav always-visible. Spec: `OUTPUTS/phase-4-revision-intake-spec.md`. Phase 4 stays DONE; this is a correction, not a new phase.
+**Phase 4 Revision - Intake.** Follow-on revision (2026-05-14): rebuilt the single-page Brief into a 3-step stepper (Event -> Venue -> Review), added the venue-side fields the AI sourcing prompt needs, added the `vs-generate-brief-overview` edge function + the `brief` `current_step` value, and made the Revisit nav always-visible. Spec: `OUTPUTS/historical/phase-4-revision-intake-spec.md`. Phase 4 stays DONE; this is a correction, not a new phase.
 
 ### Phase 5: HQ Core (cross-cutting). ACTIVE.
 
@@ -53,8 +53,8 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   Internal Notes parity on Organizations + People, pending-state flow, new
   left rail AppShell replacing the shipped top-nav, Surface 02 Standard
   Dashboard and Surface 03 Admin Dashboard.
-  - **Status:** DONE 2026-05-15. Commit: `665a311`. Spec:
-    `OUTPUTS/phase-5-1-spec.md`.
+  - **Status:** DONE 2026-05-15. Commit: `39bdd8c`. Spec:
+    `OUTPUTS/historical/phase-5-1-spec.md`.
 - **5.2 Projects + Tasks + Deliverables + Organizations + People + Venues
   databases.** The canonical database-list pattern (list, board, timeline,
   calendar views) plus detail + edit, applied across all six surfaces. Split
@@ -63,29 +63,29 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     cross-cutting components (`<DataTable />`, `<ViewSwitch />`, `<FilterBar />`,
     `<SavedViewsDropdown />`, `<BoardView />`, `<TimelineView />`,
     `<CalendarMonthView />`) + the rail amendment from
-    `OUTPUTS/phase-5-2-rail-amendment.md`.
-    **Status:** DONE 2026-05-15. Commit: `15511af`. Spec:
-    `OUTPUTS/phase-5-2-spec.md` §§ 0 to 5.B + 5.C + 7 + 11 to 14.
+    `OUTPUTS/historical/phase-5-2-rail-amendment.md`.
+    **Status:** DONE 2026-05-15. Commit: `2938aa1`. Spec:
+    `OUTPUTS/historical/phase-5-2-spec.md` §§ 0 to 5.B + 5.C + 7 + 11 to 14.
   - **5.2.1 Revision** Wireframe-fidelity rebuild of the seven 5.2.1
     surfaces against the locked Phase 5 wireframe. UNPREFIXED canonical
     CSS lift block in `src/index.css`.
-    **Status:** DONE 2026-05-16. Commit: `62f610e`. Spec:
-    `OUTPUTS/phase-5-2-1-revision-spec.md`.
+    **Status:** DONE 2026-05-16. Commit: `0ce758f`. Spec:
+    `OUTPUTS/historical/phase-5-2-1-revision-spec.md`.
   - **5.2.2** Entity trio (Organizations + People + Venues) using the
     cross-cutting components landed in 5.2.1, plus
     `<InternalNotesEditor />` + `<StarRating />` + 4 lookup migrations.
-    **Status:** DONE 2026-05-16. Commit: `0356a85`. Spec:
-    `OUTPUTS/phase-5-2-2-spec.md`.
+    **Status:** DONE 2026-05-16. Commit: `6214002`. Spec:
+    `OUTPUTS/historical/phase-5-2-2-spec.md`.
   - **5.2.3** Clients + vendors table split (5 migrations) + 6 new page
     files + LeftRail order flip.
-    **Status:** DONE 2026-05-16. Commit: `59c81ba`. Spec:
-    `OUTPUTS/phase-5-2-3-spec.md`.
+    **Status:** DONE 2026-05-16. Commit: `519a46c`. Spec:
+    `OUTPUTS/historical/phase-5-2-3-spec.md`.
   - **5.2 cleanup** Six small carry-forwards (People Org relabel,
     FilterBar lookup field type, `IconClients` glyph,
     `vendors.primary_address`, `vendor_capabilities` GRANT DELETE,
     workflow doc amendments § 4.1.a + § 4.5 step 5e).
-    **Status:** DONE 2026-05-16. Commit: `65159a2`. Spec:
-    `OUTPUTS/phase-5-2-cleanup-spec.md`.
+    **Status:** DONE 2026-05-16. Commit: `9b63650`. Spec:
+    `OUTPUTS/historical/phase-5-2-cleanup-spec.md`.
 - **5.3 Calendar + Outlook.** Unified Calendar surface (Surface 15) and
   admin-only Outlook 12-month grid (Surface 16).
   - **Calendar (`/calendar`, all tiers).** Reuses `<CalendarMonthView />`.
@@ -114,8 +114,8 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     Removal. ProjectsList Timeline view extends to render all three bar
     kinds (was Live only). OutlookCondensedCard on Home flips from
     placeholder text to real `outlook_entries` data.
-  - **Status:** DONE 2026-05-16. Commit: `1c21ea9`. Spec:
-    `OUTPUTS/phase-5-3-spec.md`.
+  - **Status:** DONE 2026-05-16. Commit: `740ad7e`. Spec:
+    `OUTPUTS/historical/phase-5-3-spec.md`.
 - **5.4 Wiki + Account Logins + Settings + Team.** Wiki pages with admin-
   gated Edit, Account Logins page with reveal-and-copy credential field
   and silent 30-second idle re-redact, global Settings page, Team page
@@ -123,6 +123,8 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   user-management read path). Adds `mirror_holidays` table + Settings
   CRUD editor (replaces the static `MIRROR_HOLIDAYS` constant shipped in
   5.3).
+  - **Status:** DONE 2026-05-16. Commit: `0e0f0ef`. Spec:
+    `OUTPUTS/historical/phase-5-4-spec.md`.
 - **5.5 Notifications + Activity Feed + Search + states polish.**
   - **Bell panel (Surface 21).** TopBar bell stub replaced with the
     `<NotificationBellPanel />` popover (392px wide, Radix Popover anchored
@@ -169,7 +171,7 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   - **Schema additions.** `user_notification_preferences` table +
     `notifications.delivered_slack` column + `notifications` joins
     `supabase_realtime` publication with `REPLICA IDENTITY FULL`.
-  - **Status:** DONE 2026-05-16. Spec: `OUTPUTS/phase-5-5-spec.md`.
+  - **Status:** DONE 2026-05-16. Spec: `OUTPUTS/historical/phase-5-5-spec.md`.
 - **5.5.1 Sign-in page (Surface 01 part 1).** Replaces the Phase 5.1
   stealth coming-soon Landing (hidden "STRATEGY / DESIGN / PRODUCTION"
   trigger at the bottom) with the wireframe Surface 01 sign-in page:
@@ -188,8 +190,8 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   + clears the sessionStorage key; every route including VS/TS nests
   inside the parent `<ProtectedRoute>` group, so deep links survive
   the OAuth round trip without additional gate code).
-  - **Status:** DONE 2026-05-16. Commit: `0f122c1`. Spec:
-    `OUTPUTS/phase-5-5-1-signin-spec.md`.
+  - **Status:** DONE 2026-05-16. Commit: `8e043ff`. Spec:
+    `OUTPUTS/historical/phase-5-5-1-signin-spec.md`.
 - **5.6 Smoke Test Pass 1.** Jimmie's first batch of end-to-end smoke
   notes parsed into five subphases (originally four; the locked carry-
   forward from 5.6.1 became the new 5.6.3 detail-page inline edit, which
@@ -217,8 +219,8 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     `people.phone` + `vendors.contact_phone` + `clients.contact_phone`
     to `(XXX) XXX-XXXX` on save + a one-shot migration backfills
     existing rows.
-  - **Status:** DONE 2026-05-16. Commit: `f278da7`. Spec:
-    `OUTPUTS/phase-5-6-1-spec.md`.
+  - **Status:** DONE 2026-05-16. Commit: `65e45ea`. Spec:
+    `OUTPUTS/historical/phase-5-6-1-spec.md`.
   - **5.6.2 Table reshapes + schema.** New `vendor_subcategories`
     lookup table with `parent_category_id` (parent-scoped, optional) +
     `vendors.subcategory_id` column. New `project_vendors` join table
@@ -239,13 +241,13 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     blank cell. Default Client filter dropped; inline radio filter
     buttons (All / Client / Vendor / Venue) added next to All People
     dropdown, colored to match Affiliation pills.
-  - **Status:** DONE 2026-05-16. Commits: `f2062cc` (main ship),
-    `00997c0` (5.6.2.1 follow-on: ProjectDetail Vendors sidebar,
+  - **Status:** DONE 2026-05-16. Commits: `04e9588` (main ship),
+    `01d35ac` (5.6.2.1 follow-on: ProjectDetail Vendors sidebar,
     editable VendorEdit Projects, MiniCreateModal `lookup` field type,
     Affiliation filter button recolor, OverflowList bullet separator,
-    `useBackHref` cross-cutting), `41811b5` (5.6.2.2: PostgREST
+    `useBackHref` cross-cutting), `e1b8713` (5.6.2.2: PostgREST
     constraint-named FK fix for client-name cell + PersonEdit Venue
-    picker as RecordCombobox multi). Spec: `OUTPUTS/phase-5-6-2-spec.md`.
+    picker as RecordCombobox multi). Spec: `OUTPUTS/historical/phase-5-6-2-spec.md`.
   - **5.6.3 Detail-page inline edit.** Click-to-edit on h1, pills,
     lookup/record fields, and text fields across all seven HQ Core
     detail pages (PersonDetail / ClientDetail / VendorDetail /
@@ -269,8 +271,8 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     combobox scoped to the client's people; contact email becomes
     read-only autofill). Edit-page `/edit` routes survive as power-
     user fallback. Detail-page Edit button reduced to pencil-icon only.
-  - **Status:** DONE 2026-05-16. Commits: `c29c8bd` (PersonDetail
-    prototype + affiliation_type schema), `a0c28e3` (sweep across
+  - **Status:** DONE 2026-05-16. Commits: `bdae150` (PersonDetail
+    prototype + affiliation_type schema), `ba89adb` (sweep across
     remaining six detail pages + polish round: `.label-section` 13px,
     `.tag` 12px, `.kv` row-gap 22px, `.kv dt` 12px, new `.kv--pair`
     helper, `.fchip--btn`/`.fchip--active` toggle pair).
@@ -288,9 +290,9 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     renamed to "Tentative". Outlook: entry card background tinted at
     15% opacity of the matching pill color; "Likely" pill rendered
     cyan (root-cause investigated; currently renders black).
-  - **Status:** DONE 2026-05-17. Commits: `4b884bc` (main ship),
-    `03d69f3` (5.6.4.1 follow-on: 16 items + 1 migration). Spec:
-    `OUTPUTS/phase-5-6-4-spec.md`.
+  - **Status:** DONE 2026-05-17. Commits: `2506d9d` (main ship),
+    `276df71` (5.6.4.1 follow-on: 16 items + 1 migration). Spec:
+    `OUTPUTS/historical/phase-5-6-4-spec.md`.
   - **5.6.5 Global default views (owner admin feature).**
     `saved_views.scope text CHECK IN ('user','global')` column +
     `users.is_owner boolean` column (Jimmie's row set true; delegable
@@ -304,8 +306,8 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     Deliverables, Venues, Vendors, Clients, People) AND the Calendar
     visibility panel (the `__calendar_default` saved_views row also
     supports `scope='global'`).
-  - **Status:** DONE 2026-05-17. Commit: `069895d`. Spec:
-    `OUTPUTS/phase-5-6-5-spec.md`.
+  - **Status:** DONE 2026-05-17. Commit: `986b953`. Spec:
+    `OUTPUTS/historical/phase-5-6-5-spec.md`.
   - **5.6.5.1 Owner delegation + sort persistence propagation +
     Team page account-link fixes.** Owner becomes delegable (trigger
     requires caller `is_owner = true` AND blocks self-revoke;
@@ -321,7 +323,7 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     `last_active_at` never updated post-signup (one-shot effect in
     AuthProvider stamps it once per provider lifecycle); TeamList
     accountPill same false positive (switch keying to nullability).
-  - **Status:** DONE 2026-05-17. Commit: `b51d62a`. Spec:
+  - **Status:** DONE 2026-05-17. Commit: `b2de061`. Spec:
     `OUTPUTS/phase-5-6-5-1-spec.md`.
   - **5.6.5.2 `last_active_at` throttle (micro-phase).** AuthProvider
     reads sessionStorage `last_active_stamped:${userId}` before issuing
@@ -332,12 +334,64 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     floor across mounts within the same tab; covers manual reloads
     and route changes that remount the provider tree). No schema, no
     migration, no spec.
-  - **Status:** DONE 2026-05-17. Commit: `d36b516`.
+  - **Status:** DONE 2026-05-17. Commit: `4f47cfd`.
 - **5.7 Smoke Test Pass 2.** Jimmie's second batch of smoke-test notes
   after the full 5.6 end-to-end re-test. Subphases plus deliberate
   new-surface work (mentions, deliverables reshape, calendar overhaul,
   vendor files, profile + settings). Full subphase plan in
-  `OUTPUTS/phase-5-7-plan.md`.
+  `OUTPUTS/historical/phase-5-7-plan.md`. Phase 5.7 closed 2026-05-18
+  at `59a5dac` (5.7.14).
+  - **5.7.1 Global cleanup + RecordCombobox polish + Quick-Add wiring.**
+    - **Status:** DONE 2026-05-17. Commit: `b7a5238`. Spec:
+      `OUTPUTS/historical/phase-5-7-1-spec.md`.
+  - **5.7.2 @-mentions feed + append-only Notes on Tasks + Deliverables.**
+    New `note_mentions` table; `notes_log.parent_type` CHECK widened to
+    `task` + `deliverable`. Mention dispatch fires through
+    `notifications-dispatch` with `event_type='mention'`.
+    - **Status:** DONE 2026-05-17. Commit: `5e63484`. Spec:
+      `OUTPUTS/historical/phase-5-7-2-spec.md`.
+  - **5.7.3 Detail-page polish + fixed-position `<StickySaveBar>` + Status
+    Notes on projects swapped to `<InternalNotesEditor>` (append-only).**
+    - **Status:** DONE 2026-05-17. Commit: `2e61571`. Spec:
+      `OUTPUTS/historical/phase-5-7-3-spec.md`.
+  - **5.7.4 List-page polish + TaskEdit hard-delete + combined
+    Account / Design Leads column on Projects + new `purple` StatusToken.**
+    - **Status:** DONE 2026-05-17. Commit: `aab31b9`. Spec:
+      `OUTPUTS/historical/phase-5-7-4-spec.md`.
+  - **5.7.5 Deliverables status reshape.** Drop `In Progress` (final set
+    Upcoming / Complete / Skipped). Auto-task lifecycle helper writes
+    `tasks.source_deliverable_id` with ON DELETE CASCADE.
+    - **Status:** DONE 2026-05-17. Commit: `43eeb27`. Spec:
+      `OUTPUTS/historical/phase-5-7-5-spec.md`.
+  - **5.7.6 Global FilterBar distinct-values picker.** `distinctValuesByField`
+    prop wired across all nine HQ Core list pages. Spec documented inline
+    in `OUTPUTS/historical/phase-5-7-plan.md` § 6 (no separate spec file).
+    - **Status:** DONE 2026-05-17. Commit: `612c8e8`.
+  - **5.7.7 `project_members` general-team join + ProjectEdit reshape +
+    Dashboard read-only links + Tags chips + Team filter + DataTable
+    inline quick-add prop.**
+    - **Status:** DONE 2026-05-17. Commit: `c8bc789`. Spec:
+      `OUTPUTS/historical/phase-5-7-7-spec.md`.
+  - **5.7.8 Venues + Vendors filter overhaul.** SavedViews moved inline
+    with FilterBar; FilterBar op locked to "is" globally with `allowIsNot`
+    opt-in for Tasks + Deliverables.
+    - **Status:** DONE 2026-05-17. Commit: `9bf068e`. Spec:
+      `OUTPUTS/historical/phase-5-7-8-spec.md`.
+  - **5.7.9 Calendar overhaul.** Color sweep + pagehead reshape + My Tasks
+    layer + Day / Week / Month view switcher. `activeView` + `showMyTasks`
+    persist via `__calendar_default` saved-view jsonb.
+    - **Status:** DONE 2026-05-17. Commit: `3d5f1cc`. Spec:
+      `OUTPUTS/historical/phase-5-7-9-spec.md`.
+  - **5.7.10 Settings Lookup Lists merge + Wiki image upload.** Private
+    `wiki_images` bucket; 1-year signed URLs; diff-on-save cleanup.
+    Integrations card stubbed to "Coming Soon".
+    - **Status:** DONE 2026-05-18. Commit: `367fa0e`. Spec:
+      `OUTPUTS/historical/phase-5-7-10-spec.md`.
+  - **5.7.11 Vendor Files & Assets URL list (`vendor_files` table +
+    `<VendorFilesEditor>`).** VendorDetail title-width fix; Internal Rating
+    caption removal.
+    - **Status:** DONE 2026-05-18. Commit: `d16c4c1`. Spec:
+      `OUTPUTS/historical/phase-5-7-11-spec.md`.
   - **Carry-forward into the Deliverables refactor sub-phase:** ClientsList
     Deliverables column should append "in X days" after each Deliverable
     title (parse `due_date` via the existing `relativeDay` helper in
@@ -363,26 +417,54 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
     so the Phase 5.7.2 link-demotions can be reverted to real links
     inside the v1 cut.
   - **Status:** DONE 2026-05-18. Commit: `60f6ff0`. Spec:
-    `OUTPUTS/phase-5-7-12-spec.md`. Slack DM dispatch verified
+    `OUTPUTS/historical/phase-5-7-12-spec.md`. Slack DM dispatch verified
     end-to-end the same day (Slack app created, `SLACK_BOT_TOKEN`
     secret set, self-mention DM delivered).
+  - **5.7.13 Vendor team rating.** Per-user `vendor_ratings` table + team
+    aggregate; drop legacy `vendors.internal_rating`; `<StarRating>`
+    extended with `md` size + half-star rendering. VendorDetail subtitle
+    reshape; "Internal" pill inline.
+    - **Status:** DONE 2026-05-18. Commit: `8eea759`. Spec:
+      `OUTPUTS/historical/phase-5-7-13-spec.md`.
+  - **5.7.14 Leftovers cleanup + carry-forward triage.** Drop projects
+    legacy notes columns, `notes_log` orphan sweep migration, MyWeekStrip
+    today-forward + pagination, ProjectActivity Realtime + child-entity
+    rollup, coral sweep, PostgREST embed convention documented. Closes
+    Phase 5.7.
+    - **Status:** DONE 2026-05-18. Commit: `59a5dac`. Spec:
+      `OUTPUTS/historical/phase-5-7-14-spec.md`.
 - **HQ v1 checkpoint.** After 5.7 wraps: tag the squash commit, write
   `docs/v1-changelog.md` summarizing 5.1 through 5.7. Not a sub-phase;
-  a release milestone.
-- **5.8 Audit and Review (Full Codebase).** Three-pass audit cycle
-  before the sub-app reviews kick off.
-  - **5.8.0 Clear `code-observations.md` backlog.** Fix every
-    unresolved entry from the existing observations log before any
-    new audit work. Marks rows as ✓ Verified / ✓ Resolved with commit
-    hash references.
-  - **5.8.1 Audit + triage.** Read-only blind pass across `src/` +
-    `supabase/functions/` + `docs/` for new findings beyond the
-    cleared log. Parses the Supabase security advisor report + any
-    other references Jimmie brings in. Produces a prioritized
-    findings doc (MUST FIX / SHOULD FIX / CONSIDER) without applying
-    any fixes.
-  - **5.8.2 Audit fixes.** Applies MUST FIX + SHOULD FIX items from
-    triage. CONSIDER items log to a fresh `code-observations.md`.
+  a release milestone. Executed 2026-05-18 as Phase 5.8.0 + 5.8.1.
+- **5.8 HQ v1 release + audit pass.** Locked five-sub-phase sequence per
+  `OUTPUTS/phase-5-8-plan.md` (supersedes the earlier three-pass model that
+  framed 5.8 as an audit-only phase).
+  - **5.8.0 HQ v1 marker + deferred Netlify deploy fire.** CHECKPOINT.md
+    rolls to Phase 5.8; `v1.0.0` annotated tag pinned; fires the deferred
+    Phase 5.7 Netlify deploy.
+    - **Status:** DONE 2026-05-18. Commit: `975568f`. Spec:
+      `OUTPUTS/phase-5-8-0-spec.md`.
+  - **5.8.1 HQ v1 changelog.** New `docs/v1-changelog.md` (229 lines):
+    chronological ship table covering 5.1 through 5.8.0 + seven
+    feature-area sections.
+    - **Status:** DONE 2026-05-18. Commit: `beb8914`. Spec:
+      `OUTPUTS/phase-5-8-1-spec.md`.
+  - **5.8.2 code-observations.md backlog triage.** 10 open entries
+    triaged: 2 R ☑ closed (Frontend #5 moot, Frontend #8 coral-sweep
+    partial close), 5 V ☑ flips, 6 verify-and-defer with explicit slots.
+    - **Status:** DONE 2026-05-18. Commit: `e061590`. Spec:
+      `OUTPUTS/phase-5-8-2-spec.md`.
+  - **5.8.3 MD doc audit + cleanup.** Audits both trees (Cowork-side +
+    Code-repo-side); reshapes the stale port-plan + outdated tier model +
+    superseded type-scale entries; rewrites the schema.md organizations
+    section per code-observations Docs #1; deletes 27 superseded historical
+    files (Phase 3.7-era scratchpads, port plans, visual-audit-phase-3-5b,
+    phase-4-port spec folder, prior audit docs). Working tree drops
+    ~3000 lines of stale prose; git history preserves.
+    - **Status:** SHIPPING. Spec: `OUTPUTS/phase-5-8-3-audit-report.md`.
+  - **5.8.4 HQ v1.1 close commit.** Final push fires the second Netlify
+    deploy carrying 5.8.1 + 5.8.2 + 5.8.3 together.
+    - **Status:** PENDING.
 - **5.9 Talent Scout review.** Jimmie's notes + active bug hunting
   drive the split. Verifies TS still works correctly after the HQ
   Core schema reshape (5.2.x users-table rewrite, vendors split,

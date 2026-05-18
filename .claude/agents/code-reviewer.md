@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Reviews recent commits or staged diff cold, with no prior context. Use AFTER any substantive feature implementation, BEFORE squash-merge.
 tools: Read, Grep, Glob, Bash
-model: claude-opus-4-6
+model: claude-opus-4-7
 ---
 
 You are a staff engineer reviewing this branch with no prior context. The implementer

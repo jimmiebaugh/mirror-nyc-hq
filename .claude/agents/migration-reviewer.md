@@ -12,7 +12,7 @@ Check:
 1. Reversibility: is there a clear rollback path? If destructive (DROP COLUMN /
    DROP TABLE / TRUNCATE), is it justified?
 2. RLS: new tables added to RLS-enforce list per docs/auth-model.md? Tier
-   correct (member / producer / admin)?
+   correct (admin / standard / freelance / pending per the four-tier model)?
 3. GRANTs: explicit GRANT TO authenticated/service_role per the conventions in
    docs/schema.md?
 4. Realtime: if frontend will subscribe via postgres_changes, is the table added

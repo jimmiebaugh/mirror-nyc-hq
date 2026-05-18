@@ -355,6 +355,32 @@ Persisted per-user filter / sort / view-kind snapshots for every HQ Core databas
 
 Organizations / People / Venues surfaces (5.2.2). `<InternalNotesEditor />` (5.2.2, since it's the Org / Person / Venue Internal Notes pattern). `<StarRating />` (5.2.2). Quick-add cluster on `/home` flipping placeholders to real "+ New Project / Task / Deliverable" routes (deferred until 5.2.2 lands the People route). Project Detail attachments (storage; future sub-phase). Status Notes uses existing `projects.notes`; Client Notes is rendered as a "lands in 5.2.2" empty-state placeholder. The `notes_log` Realtime publication stays deferred until simultaneous-author UX surfaces. Per-surface Calendar tabs (Projects / Tasks) route to the unified `/calendar?source=...` stub; the unified Calendar surface lands in 5.3.
 
+## Phase 4 cutover + port plan locked decisions (folded in 2026-05-18 from the deleted `docs/venue-scout-port-plan.md`)
+
+The Venue Scout port plan doc was deleted in the Phase 5.8.3 doc audit. The six locked decisions Jimmie confirmed 2026-05-11 (port plan § 8) and the cutover sequence rationale (port plan § "Done when") are captured here as the canonical record.
+
+### Port plan § 8 — six locked decisions
+
+- **§ 8.1 Single-round sourcing per scout.** One scout has one sourcing flow. No `vs_sourcing_rounds` table. Matches VS Pro 1:1. Re-research uses Start Over (Scout Settings; Phase 4.9-port), which wipes the candidate pool and resets `current_step` to `sheet_prompt`. Revisit only if real producers ask for multi-round.
+- **§ 8.2 Brief inline on `vs_scouts`.** No separate `vs_briefs` table. All brief fields live on `vs_scouts`: named columns for `client_name`, `event_name`, `live_dates`, `city`, `budget`, `event_overview`, plus `brief_data jsonb` for flexible additional fields per VS Pro's shape. Simpler queries, fewer joins, matches the state-machine model where the brief belongs to the scout.
+- **§ 8.3 `EdgeRuntime.waitUntil` + Realtime for Researching, Compiling, Generating.** All three loading pages subscribe to `vs_scouts.current_step` via Realtime instead of awaiting the edge function response synchronously. Edge functions return the scout_id immediately and run the AI work in the background. Requires `vs_scouts` in the `supabase_realtime` publication with `REPLICA IDENTITY FULL` (one line in the Phase 4.1-port migration). The only place the port intentionally diverges from VS Pro's exact behavior; consistent with HQ's `ts-final-review` pattern.
+- **§ 8.4 `current_step` state machine as canonical workflow state.** 9 values lifted verbatim from VS Pro: `sheet_prompt`, `sheet_upload`, `researching`, `sourcing_report`, `shortlist`, `review_selects`, `compiling`, `deck_prep`, `completed`. (Phase 4 Revision Intake added `brief` as a 10th value; see the Revision section below.) No `phase` enum concept. `stepToRoute()` helper from `src/lib/venue-scout/format.ts` drives every page's continue logic.
+- **§ 8.5 Deck history as `vs_scouts.generated_decks` jsonb array.** No separate `vs_pitch_decks` table. Each entry: `{deck_id, deck_name, version, generated_at, venue_count, slide_count, edit_url, embed_url}`. Matches VS Pro exactly. Deck history is small (typically 1-3 versions per scout), access pattern is "give me all decks for this scout," no query against deck fields. The jsonb array embeds cleanly in the scout-load query.
+- **§ 8.6 RLS open to all authenticated users.** `FOR ALL TO authenticated USING (true) WITH CHECK (true)` on every `vs_*` table. Collaborative model: any authenticated `@mirrornyc.com` user can read or write any scout, candidate venue, or photo. Venue Scout is an agency-wide workflow, not personal data scoped to a single producer.
+
+### Cutover sequence (executed 2026-05-13)
+
+Main was hard-reset to `vs-port-fresh` HEAD via `git push origin vs-port-fresh:main --force-with-lease`. Sequence:
+
+1. Cherry-picked `6775429` (TS Final Review re-enable Generate Packet) and `f24d3f5` (TS Final Review packet email template + layout fixes + email-as-cover-letter fallback) from origin/main onto `vs-port-fresh`; both diffstats verified byte-equal to source via `git show --stat`.
+2. Considered `4a8a5c6` (TS wizard migrates to canonical Stepper) for cherry-pick but dropped it: it imports from `src/components/ui/Stepper.tsx`, a file introduced by the failed Phase 4.3.1 squash (`564ff9e`) that the cutover discards. Carrying the file standalone was the alternative; chose the cleaner zero-contamination path. The TS wizard pages keep their import of the local `talent-scout/Stepper.tsx`.
+3. `npx tsc --noEmit` and `npm run build` both clean.
+4. Verified `git log --cherry-pick --left-only --no-merges main...vs-port-fresh` listed only the 42 commits we intended to drop (failed Phase 4 squashes 4.1 through 4.6 + URL-quality hot patches + their backfills + `4a8a5c6` + Phase 4.3.1 follow-ups + assorted doc-only commits). Cherry-picked `6775429` and `f24d3f5` were correctly excluded as patch-equivalent.
+5. Push fired Netlify deploy on `hq.mirrornyc.com`. Production VS went live as the build completed.
+6. Post-cutover cleanup: `vs-start-sourcing` orphan edge function deleted via `supabase functions delete`. The 4.1-port migration's DROP TABLE statements for `vs_briefs` / `vs_sourcing_rounds` / `vs_pitch_decks` were already applied (migration `20260512200000` is on the production ledger), so no additional DB cleanup migration was needed.
+
+Main HEAD after cutover: `7cd27ed`. The cutover verification check is `git show --stat <new-sha>` vs `git show --stat <source-sha>` for each cherry-pick, NOT the naive `git log main --not vs-port-fresh --oneline` empty check (which is impossible by design since `vs-port-fresh` branched from `dd38577`, has archived commits on main below it, and cherry-picks produce new SHAs).
+
 ## Phase 4 Revision - Intake (3-step brief stepper)
 
 Follow-on revision correcting the Phase 4.3-port + 4.9-port surfaces. Phase 4 stays DONE; this rebuilt the single-page Brief into a 3-step stepper (Event -> Venue -> Review) and gathered the venue-side fields the AI sourcing prompt needs. Spec: `OUTPUTS/phase-4-revision-intake-spec.md`. The five decision points below were resolved by Jimmie on 2026-05-14 and are binding.
@@ -1303,7 +1329,7 @@ Source's packet shows the candidate's original application email as a white "doc
 
 ## Talent Scout port (Phase 3): locked Q1-Q6
 
-Resolutions to the six open questions in `docs/talent-scout-port-plan.md` § 8.
+Resolutions to the six open questions surfaced during the Phase 3.1 Talent Scout port-plan inventory (plan doc retired in 5.8.3; questions captured below).
 
 ### Q1: re-eval history → keep history
 
