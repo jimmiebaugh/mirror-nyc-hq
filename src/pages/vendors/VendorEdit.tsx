@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { StarRating } from "@/components/data/StarRating";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
@@ -38,6 +37,10 @@ import { toast } from "@/hooks/use-toast";
  * 5.2 cleanup: Primary Address textarea added below the contact
  * grid (matches ClientEdit shape; backed by the new
  * `vendors.primary_address` column added in the cleanup migration).
+ *
+ * Phase 5.7.13: Internal Rating card + form-state plumbing removed.
+ * Ratings are now per-user via vendor_ratings; the read-only Team Rating
+ * card + the editable "Your rating" row live on VendorDetail.
  */
 
 type FormState = {
@@ -52,7 +55,6 @@ type FormState = {
   contact_phone: string;
   primary_address: string;
   tags: string[];
-  internal_rating: number | null;
 };
 
 const EMPTY: FormState = {
@@ -67,7 +69,6 @@ const EMPTY: FormState = {
   contact_phone: "",
   primary_address: "",
   tags: [],
-  internal_rating: null,
 };
 
 type ProjectOption = {
@@ -107,7 +108,7 @@ export default function VendorEdit() {
           : supabase
               .from("vendors")
               .select(
-                "name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, internal_rating",
+                "name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags",
               )
               .eq("id", id)
               .single(),
@@ -153,7 +154,6 @@ export default function VendorEdit() {
         contact_phone: string | null;
         primary_address: string | null;
         tags: string[] | null;
-        internal_rating: number | null;
       };
       const next: FormState = {
         name: row.name,
@@ -167,7 +167,6 @@ export default function VendorEdit() {
         contact_phone: row.contact_phone ?? "",
         primary_address: row.primary_address ?? "",
         tags: row.tags ?? [],
-        internal_rating: row.internal_rating,
       };
       setForm(next);
       setInitial(next);
@@ -228,7 +227,6 @@ export default function VendorEdit() {
       contact_phone: form.contact_phone || null,
       primary_address: form.primary_address || null,
       tags: form.tags,
-      internal_rating: form.internal_rating,
     };
     let vendorId = id ?? null;
     if (isCreate) {
@@ -479,28 +477,6 @@ export default function VendorEdit() {
               rows={2}
             />
           </FormField>
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Internal Rating</span>
-          </div>
-          <div className="row-c" style={{ gap: 12 }}>
-            <StarRating
-              value={form.internal_rating}
-              editable
-              size="lg"
-              onChange={(next) => setForm((f) => ({ ...f, internal_rating: next }))}
-            />
-            <span className="cap">
-              {form.internal_rating != null ? `${form.internal_rating} of 5` : "Not rated"}
-            </span>
-          </div>
-          <p className="cap" style={{ lineHeight: 1.5 }}>
-            Visible to all Standard users on the Detail view.
-          </p>
         </div>
       </section>
 

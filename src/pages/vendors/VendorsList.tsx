@@ -34,7 +34,7 @@ import {
 
 // Phase 5.7.6 follow-up: ordered to match the list-view DataTable
 // column display order (name, category_name, subcategory_name, city,
-// capabilities, internal_rating, projects). tags has no visible column
+// capabilities, team_rating, projects). tags has no visible column
 // so it lands at the end.
 const VENDOR_FILTER_FIELDS: FilterFieldDef[] = [
   { key: "category_name", label: "Category", type: "text" },
@@ -289,13 +289,16 @@ export default function VendorsList() {
               },
               // (Rating column below)
               {
-                key: "internal_rating",
+                key: "team_rating",
                 label: "Rating",
                 align: "c",
-                sort: (a, b) => (a.internal_rating ?? -1) - (b.internal_rating ?? -1),
+                sort: (a, b) => (a.teamAverage ?? -1) - (b.teamAverage ?? -1),
                 render: (r) =>
-                  r.internal_rating != null ? (
-                    <StarRating value={r.internal_rating} size="sm" />
+                  r.teamCount > 0 ? (
+                    <StarRating
+                      value={Math.round((r.teamAverage ?? 0) * 2) / 2}
+                      size="sm"
+                    />
                   ) : (
                     <span className="muted subtle">-</span>
                   ),

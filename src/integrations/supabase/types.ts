@@ -1,3 +1,4 @@
+Initialising login role...
 export type Json =
   | string
   | number
@@ -1792,6 +1793,45 @@ export type Database = {
           },
         ]
       }
+      vendor_ratings: {
+        Row: {
+          created_at: string
+          rating: number
+          updated_at: string
+          user_id: string
+          vendor_id: string
+        }
+        Insert: {
+          created_at?: string
+          rating: number
+          updated_at?: string
+          user_id: string
+          vendor_id: string
+        }
+        Update: {
+          created_at?: string
+          rating?: number
+          updated_at?: string
+          user_id?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_ratings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_ratings_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendor_subcategories: {
         Row: {
           created_at: string
@@ -1842,7 +1882,6 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
-          internal_rating: number | null
           legacy_notes: string | null
           name: string
           preferred: boolean
@@ -1862,7 +1901,6 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          internal_rating?: number | null
           legacy_notes?: string | null
           name: string
           preferred?: boolean
@@ -1882,7 +1920,6 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          internal_rating?: number | null
           legacy_notes?: string | null
           name?: string
           preferred?: boolean
@@ -2652,3 +2689,6 @@ export const Constants = {
     },
   },
 } as const
+<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
+A new version of Supabase CLI is available: v2.99.0 (currently installed v2.98.1)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

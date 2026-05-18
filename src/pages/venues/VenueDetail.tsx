@@ -282,7 +282,7 @@ export default function VenueDetail() {
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
         <div className="row between" style={{ alignItems: "flex-start", gap: 24 }}>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow">Venue</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
               <InlineEditText
