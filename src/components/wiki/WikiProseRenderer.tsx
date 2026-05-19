@@ -1,7 +1,10 @@
+import DOMPurify from "dompurify";
+
 /**
  * Renders wiki prose pages. Phase 5.4 feedback round switched body storage
  * from markdown to HTML (authored via TipTap). Bodies are admin-authored
- * + trusted, so we render via dangerouslySetInnerHTML. The `.wikipage.prose`
+ * but we still sanitize via DOMPurify before injection (defense-in-depth
+ * against compromised-author / DB-tamper XSS). The `.wikipage.prose`
  * rules in src/index.css handle typography.
  *
  * Empty body renders an empty-state caption instead of a blank panel.
@@ -15,5 +18,5 @@ export function WikiProseRenderer({ body }: { body: string | null }) {
       </p>
     );
   }
-  return <div dangerouslySetInnerHTML={{ __html: trimmed }} />;
+  return <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(trimmed) }} />;
 }

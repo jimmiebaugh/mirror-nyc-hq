@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { NotesModal } from "@/components/venue-scout/NotesModal";
@@ -171,7 +171,7 @@ export default function SourcingReport() {
       .update({ shortlisted: next })
       .eq("id", id);
     if (error) {
-      toast.error(error.message);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       load();
     }
   }
@@ -203,7 +203,7 @@ export default function SourcingReport() {
         .update(normalized)
         .eq("id", id);
       if (error) {
-        toast.error(error.message);
+        toast({ title: "Error", description: error.message, variant: "destructive" });
         load();
       }
     }, 600);
@@ -224,7 +224,7 @@ export default function SourcingReport() {
       })
       .eq("id", scoutId);
     if (error) {
-      toast.error(error.message);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
     nav(`/venue-scout/scouts/${scoutId}/sourcing/shortlist`);

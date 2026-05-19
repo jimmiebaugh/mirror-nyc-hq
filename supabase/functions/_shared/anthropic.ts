@@ -33,6 +33,25 @@ const PRICE_OUT_PER_MTOK = 15;
 const PRICE_CACHE_WRITE_PER_MTOK = 3.75;
 const PRICE_CACHE_READ_PER_MTOK = 0.3;
 
+// Defense-in-depth: if Anthropic ever echoes a credential prefix back in an
+// error body (or one slipped into a header value upstream), scrub it before
+// the error string flows into logs or the function response. Patterns cover
+// Supabase publishable / secret keys, OpenAI-style sk- keys, and bearer
+// tokens. Cheap to apply; safe to extend with future provider prefixes.
+function redactSecrets(s: string): string {
+  return s
+    .replace(/sb_[a-zA-Z0-9_]+/g, "[REDACTED sb token]")
+    .replace(/sk-[a-zA-Z0-9_-]+/g, "[REDACTED sk token]")
+    .replace(/Bearer [a-zA-Z0-9_.-]+/g, "Bearer [REDACTED]");
+}
+
+// Cap Anthropic calls at 60s wall-clock. A hung upstream burns the full
+// Edge Function budget (400s on Pro) and the caller has no signal to give
+// up. AbortSignal.timeout fires a DOMException whose name is either
+// "AbortError" or "TimeoutError" depending on runtime; we map both to a
+// stable "anthropic_timeout_60s" error string.
+const ANTHROPIC_TIMEOUT_MS = 60_000;
+
 export type ClaudeImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 export type ClaudeContentPart =
@@ -284,8 +303,13 @@ export async function callClaude(
         method: "POST",
         headers,
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(ANTHROPIC_TIMEOUT_MS),
       });
     } catch (e) {
+      const name = e instanceof Error ? e.name : "";
+      if (name === "AbortError" || name === "TimeoutError") {
+        return { ok: false, status: 0, error: "anthropic_timeout_60s" };
+      }
       return {
         ok: false,
         status: 0,
@@ -296,9 +320,9 @@ export async function callClaude(
     if (!res.ok) {
       const errText = await res.text();
       console.error(
-        `[callClaude] app=${app} fn=${options.fn_name ?? "?"} status=${res.status} err=${errText.slice(0, 300)}`,
+        `[callClaude] app=${app} fn=${options.fn_name ?? "?"} status=${res.status} err=${redactSecrets(errText.slice(0, 300))}`,
       );
-      return { ok: false, status: res.status, error: errText.slice(0, 500) };
+      return { ok: false, status: res.status, error: redactSecrets(errText.slice(0, 500)) };
     }
 
     const data = await res.json();

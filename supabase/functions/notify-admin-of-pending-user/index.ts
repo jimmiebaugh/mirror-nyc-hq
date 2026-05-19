@@ -56,7 +56,7 @@ function stripMimeControl(s: string): string {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  const authFail = requireInternalSecret(req);
+  const authFail = await requireInternalSecret(req);
   if (authFail) return authFail;
 
   let userId: string;

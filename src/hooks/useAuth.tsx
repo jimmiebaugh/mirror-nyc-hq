@@ -202,13 +202,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // bounced to / for the hidden sign-in, and is now signing in). Falls
     // back to /home (Phase 5.1: replaces the old /talent-scout cold-signin
     // landing). Pending users get redirected to /pending downstream by
-    // ProtectedRoute. Defense-in-depth path validation prevents
-    // open-redirect via a poisoned sessionStorage value.
+    // ProtectedRoute. Defense-in-depth: path validation prevents
+    // open-redirect via a poisoned sessionStorage value, the hash strip
+    // prevents Google rejecting the OAuth flow with HTTP 400 (OAuth 2.0
+    // forbids a `#` fragment in redirect_uri), and the error-laden URL
+    // skip prevents a prior failed callback's `?error=` / `#error=`
+    // residue from bricking the next sign-in attempt (Phase 5.8.8).
     let nextPath = "/home";
     try {
       const stored = sessionStorage.getItem("post_signin_redirect");
-      if (stored && stored.startsWith("/") && !stored.startsWith("//")) {
-        nextPath = stored;
+      if (
+        stored &&
+        stored.startsWith("/") &&
+        !stored.startsWith("//") &&
+        !stored.includes("?error=") &&
+        !stored.includes("&error=") &&
+        !stored.includes("#error=")
+      ) {
+        const hashIdx = stored.indexOf("#");
+        nextPath = hashIdx >= 0 ? stored.slice(0, hashIdx) : stored;
       }
     } catch {
       /* private mode — ignore */

@@ -41,10 +41,6 @@ import { addDays, addMonths, startOfWeek } from "@/lib/hq/dates";
  * from deliverables + shared Outlook entries + Mirror Holidays. Right rail
  * carries master + per-project visibility toggles persisted per user via
  * the `saved_views` row (entity_type='calendar', name='__calendar_default').
- *
- * Filter chips (Lead / Category) stay component-local; the visibility
- * toggles persist. Behavior nuances locked-decisions § 3 + § 4 of the
- * spec.
  */
 
 const MONTH_LABELS = [

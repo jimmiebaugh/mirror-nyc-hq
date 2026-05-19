@@ -50,9 +50,18 @@ export function ProtectedRoute({
     if (location.pathname === "/") return <Landing />;
     // Capture the intended destination so signInWithGoogle can pass it as
     // the OAuth redirectTo. sessionStorage survives the OAuth round-trip
-    // through Google; nav state doesn't.
-    const intended = location.pathname + location.search + location.hash;
-    if (intended.startsWith("/") && !intended.startsWith("//")) {
+    // through Google; nav state doesn't. Phase 5.8.8: skip the write when
+    // the URL is a failed-OAuth callback (carries `error=` in query OR
+    // hash) — re-using that as a future redirect_uri causes Google to
+    // reject the next sign-in with HTTP 400 and bricks the user.
+    const intended = location.pathname + location.search;
+    const looksLikeOAuthError =
+      location.search.includes("error=") || location.hash.includes("error=");
+    if (
+      intended.startsWith("/") &&
+      !intended.startsWith("//") &&
+      !looksLikeOAuthError
+    ) {
       try {
         sessionStorage.setItem(POST_SIGNIN_REDIRECT_KEY, intended);
       } catch {

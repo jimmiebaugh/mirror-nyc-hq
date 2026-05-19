@@ -52,13 +52,6 @@ const MONTHS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-const CONFIDENCE_VALUES: OutlookConfidence[] = [
-  "On Radar",
-  "Likely",
-  "Confirmed",
-  "Complete",
-];
-
 function formatBudget(b: number | null): string {
   if (b == null) return "TBD";
   return `$${b.toLocaleString("en-US")}`;
@@ -571,7 +564,7 @@ export function OutlookEntryPanel({
               value={form.confidence}
               onChange={(e) => set("confidence", e.target.value as OutlookConfidence)}
             >
-              {CONFIDENCE_VALUES.map((c) => (
+              {OUTLOOK_CONFIDENCE_VALUES.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>

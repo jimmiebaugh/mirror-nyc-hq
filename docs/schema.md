@@ -35,11 +35,13 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - Triggers: `updated_at_auto`, `activity_log_writer`.
 - RLS: open SELECT for authenticated; admin INSERT/UPDATE/DELETE.
 
-### credentials (Phase 5.4)
-- `id`, `service_name` (text, not null), `username` (text, nullable), `password` (text, not null, plaintext-at-rest; see `docs/decisions.md` Phase 5.4 for rationale), `url` (text, nullable), `related_note` (text, nullable)
+### credentials (Phase 5.4; encrypted Phase 5.8.5)
+- `id`, `service_name` (text, not null), `username` (text, nullable), `password_encrypted` (bytea, not null; pgsodium AEAD-deterministic via the 4-arg `crypto_aead_det_encrypt(message, additional, key_uuid, nonce)` overload with NULL nonce; key name `credentials`), `url` (text, nullable)
 - `created_by`, `updated_by` (uuid FKs to users, nullable), `created_at`, `updated_at`
+- (`related_note` was created in 5.4 then dropped in `20260516170000_phase_5_4_feedback.sql`; never reintroduced.)
 - Triggers: `updated_at_auto`, `activity_log_writer`.
-- RLS: Freelance blocked entirely. SELECT for `admin` + `standard`. Admin-only INSERT/UPDATE/DELETE.
+- RLS: Freelance blocked entirely. SELECT + INSERT/UPDATE/DELETE for `admin` + `standard` (widened in 5.4 feedback round 2). Policies use the `(select auth.uid())` initplan optimization (Phase 5.8.5).
+- Password access flows through three SECURITY DEFINER RPCs: `credentials_create(service_name, username, password, url) -> uuid` (atomic insert with encryption), `credentials_set_password(id, password)` (re-encrypt + bump `updated_at`/`updated_by`), `credentials_reveal_password(id) -> text` (decrypt). All three gate on the same `permission_role IN ('admin', 'standard')` predicate the RLS uses. Non-password column edits stay on the regular PostgREST UPDATE path.
 
 ### mirror_holidays (Phase 5.4 — replaces 5.3 hardcoded constant)
 - `id`, `name` (text), `date` (date), `created_by` (uuid FK to users, nullable), `created_at`
@@ -48,43 +50,68 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - RLS: open SELECT for authenticated; admin INSERT/UPDATE/DELETE.
 - Seeded from the prior `src/lib/calendar/holidays.ts` `MIRROR_HOLIDAYS` constant; the Calendar now reads via `useMirrorHolidays()` hook.
 
-### organizations (renamed from clients in Phase 5.2.2; split into vendors + clients in Phase 5.2.3)
+### vendors (renamed from `organizations` in Phase 5.2.3.B; canonical shape after the 5.2.3 split + 5.6.2 + 5.7.11 + 5.7.13 additions)
 
-**Doc drift note:** The section below describes the 5.2.2-era unified `organizations` table. Phase 5.2.3 (migrations `20260516130000` through `20260516130004`) split this into `vendors` (renamed from organizations) + `clients` (new table). Phase 5.2 cleanup adds `vendors.primary_address` (text, nullable) and fixes the `vendor_capabilities` GRANT DELETE for the authenticated role. A full rewrite of this section reflecting the split shape is carried forward as a doc-debt item; canonical column lists live in the migration files and in `src/integrations/supabase/types.ts` until then.
+Holds rows that were on the unified `organizations` table pre-5.2.3 (with rows of `type = 'Client'` migrated out to the new `clients` table). Table rename preserved policies + indexes + OID-stable identifiers (some constraint names still read as `clients_*`); column-level identifiers are post-5.2.3.
 
-5.2.3 + cleanup deltas (minimum coverage for the migrations applied here):
-- `vendors`: renamed from `organizations`. Dropped `type` enum + `org_type` type. Added `category_id` (uuid, FK to `vendor_categories`, nullable, ON DELETE SET NULL). Added `primary_address` (text, nullable) in Phase 5.2 cleanup. Added `subcategory_id` (uuid, FK to `vendor_subcategories`, nullable, ON DELETE SET NULL) in Phase 5.6.2 (`20260518100000_phase_5_6_2_vendor_subcategories_project_vendors.sql`); partial btree index `vendors_subcategory_idx WHERE subcategory_id IS NOT NULL`. App-side rule: when `category_id` changes, the UI clears `subcategory_id` since the prior pick may not belong to the new parent. All other columns from the organizations shape carry through.
-- `clients`: new slim table created fresh in 5.2.3.A; columns: id, name, industry, contact_name, contact_email, contact_phone, primary_address, city, website_url, tags[], created_by, created_at, updated_at. Open-auth RLS (SELECT/INSERT/UPDATE) + admin-only DELETE. Existing organizations rows of type=Client migrated preserving UUIDs.
-- `vendor_capabilities`: renamed from `org_capabilities` in 5.2.3.A. GRANT to authenticated extended to include DELETE in Phase 5.2 cleanup so the admin-only DELETE RLS policy is reachable.
-- `vendor_categories`: new lookup table (same shape as `cities`) added in 5.2.3.A.
-- `vendor_subcategories`: new lookup table added in Phase 5.6.2. Columns: id, name, `parent_category_id` (uuid, FK to `vendor_categories` ON DELETE CASCADE), created_by (FK to users, ON DELETE SET NULL), created_at. UNIQUE `(parent_category_id, name)`. Index `vendor_subcategories_parent_idx (parent_category_id)`. RLS: open SELECT/INSERT/UPDATE for authenticated; admin-only DELETE via `is_admin()`. Matches `vendor_capabilities` posture. Inline-add from VendorEdit Subcategory typeahead writes here with `parent_category_id` set to the current Category selection.
-- `project_vendors`: new join table added in Phase 5.6.2 (Phase 5.6.2 deck). Columns: project_id (FK to projects ON DELETE CASCADE), vendor_id (FK to vendors ON DELETE CASCADE), created_by (FK to users, ON DELETE SET NULL), created_at. PRIMARY KEY `(project_id, vendor_id)`. Index `project_vendors_vendor_idx (vendor_id)`. RLS: open SELECT/INSERT/UPDATE/DELETE for authenticated. Matches `project_venues` / `venue_contact_people` posture. No activity-log trigger (project-team roster join tables stay out of the activity feed; matches `project_account_managers` / `project_designers`). Surfaced read paths: VendorsList Projects column, VendorDetail Projects section, VendorEdit Projects section; write path: ProjectEdit Vendors picker (diff-on-save: insert added, delete removed pairs).
-- `vendor_files`: new auxiliary table added in Phase 5.7.11 (`20260527100000_phase_5_7_11_vendor_files.sql`). Columns: id (uuid, PK), vendor_id (FK to vendors ON DELETE CASCADE), title (text not null), url (text not null), created_by (FK to users ON DELETE SET NULL), created_at. Index `vendor_files_vendor_idx (vendor_id, created_at DESC)`. RLS: open-authenticated SELECT/INSERT/DELETE (simplified from plan #22 tier gates per Jimmie 2026-05-18; tier posture revives later if cross-tier access becomes a need). No UPDATE policy (per plan §11.D, delete + re-add only). Any URL accepted (no format validation; producers paste Drive, Dropbox, Figma, vendor websites, etc.). No activity-log trigger (auxiliary to vendors, not a top-level entity; mirrors `project_vendors` posture). Surfaced read + write paths: VendorDetail Files & Assets card, VendorEdit Files & Assets section (gated on `!isCreate`).
-- `vendor_ratings`: new auxiliary table added in Phase 5.7.13 (`20260529100000_phase_5_7_13_vendor_ratings.sql`). Columns: vendor_id (FK to vendors ON DELETE CASCADE), user_id (FK to users ON DELETE CASCADE), rating (int, CHECK BETWEEN 1 AND 5), created_at, updated_at. Composite PK `(vendor_id, user_id)`: one rating per user per vendor; UPSERT pattern when a user changes their rating. Index `vendor_ratings_vendor_idx (vendor_id)`. RLS: open-authenticated SELECT (aggregate needs cross-user reads); self-only INSERT/UPDATE/DELETE (`user_id = auth.uid()` predicate). Per-table `trg_vendor_ratings_updated_at` trigger on `updated_at_auto()`. No activity-log trigger (auxiliary to vendors, mirrors `vendor_files` posture). Replaces the admin-curated `vendors.internal_rating` column dropped in `20260529110000_phase_5_7_13_drop_vendors_internal_rating.sql` (backfilled non-null ratings into the new table owned by `vendors.created_by`; rows with NULL `created_by` skipped). Surfaced read paths: VendorDetail Team Rating card (aggregate + viewer's own rating), VendorsList Rating column (team aggregate, rounded to nearest half), Preferred Vendors wiki embed. Write paths: VendorDetail "Your rating" row (UPSERT + Clear → DELETE).
-- `projects.organization_id` renamed to `client_id` (FK -> clients).
-- `people.organization_id` split into `client_id` + `vendor_id` (mutex CHECK); `affiliations` enum array dropped.
-- `notes_log.parent_type` CHECK widened to `('client', 'vendor', 'person', 'venue')`.
-- `venues.exclusive_vendors_org_ids` renamed to `exclusive_vendor_ids`.
-
-The legacy `organizations` entry below is preserved for historical reference; treat the migration files + `types.ts` as authoritative for the live shape.
-
-- `id` (uuid, PK)
-- `name` (text, not null)
-- `type` (enum `org_type`, default `Client`): `Client`, `Vendor`, `Internal`. Added in Phase 5.2.2 (`20260515140000_phase_5_2_2_organizations.sql`). **DROPPED in Phase 5.2.3.B.** Backfill: every shipped clients row migrated as `type = 'Client'`. Venue Owner is intentionally NOT in the enum per build notes Surface 10 (venues owned by clients live on the venues record).
-- `city` (text, nullable). Added Phase 5.2.2.
-- `capabilities` (text[], default `{}`). Vendor-side free-text capability tags. Added Phase 5.2.2.
-- `website_url` (text, nullable). Added Phase 5.2.2.
-- `tags` (text[], default `{}`). Added Phase 5.2.2.
-- `internal_rating` (int, CHECK 0-5, nullable). Vendor-only Internal Rating. Added Phase 5.2.2. **DROPPED in Phase 5.7.13** (`20260529110000_phase_5_7_13_drop_vendors_internal_rating.sql`) in favor of the per-user `vendor_ratings` table; non-null ratings backfilled to the new table before the column drop.
-- `contact_name`, `contact_email`, `contact_phone` (text). Shipped from initial schema; carried through the rename.
-- `primary_address` (text, nullable). Added in Phase 5.2 cleanup (`20260516140000_phase_5_2_cleanup_primary_address_and_vendor_capabilities_grant.sql`) on the renamed vendors table; matches the `clients.primary_address` shape lifted from the 5.2.3 setup migration. Existing vendor rows receive NULL.
-- `legacy_notes` (text). Renamed from `notes` in Phase 5.2.2. Internal Notes UI uses the polymorphic `notes_log` table instead; `legacy_notes` preserves any pre-rename content for a future backfill into notes_log.
-- `created_by` (uuid, FK to users)
-- `created_at`, `updated_at`
-- Indexes: `organizations_type_idx (type)` **(dropped in 5.2.3.B alongside type column)**, `organizations_city_idx (city) WHERE city IS NOT NULL` (renamed to track the table rename per OID-stable index naming).
-- Triggers: `trg_activity_log_organizations` (AFTER INSERT/UPDATE/DELETE; uses the Phase 5.2.1.B-extended `activity_log_writer`).
-- RLS: SELECT/INSERT/UPDATE all-auth, DELETE admin-only (inherited from the shipped clients RLS; rename preserves policies by table OID, identifiers remain `clients_*`).
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `name` (text, NOT NULL)
+- `category_id` (uuid, FK to `vendor_categories.id` ON DELETE SET NULL, nullable). Phase 5.2.3.A.
+- `subcategory_id` (uuid, FK to `vendor_subcategories.id` ON DELETE SET NULL, nullable). Phase 5.6.2 (`20260518100000_phase_5_6_2_vendor_subcategories_project_vendors.sql`). Partial btree index `vendors_subcategory_idx WHERE subcategory_id IS NOT NULL`. App-side rule: when `category_id` changes, the UI clears `subcategory_id` since the prior pick may not belong to the new parent.
+- `capabilities` (text[], default `{}`). Free-text vendor capability tags. Phase 5.2.2 lineage.
+- `city` (text, nullable). Phase 5.2.2.
+- `primary_address` (text, nullable). Phase 5.2 cleanup (`20260516140000_phase_5_2_cleanup_primary_address_and_vendor_capabilities_grant.sql`).
+- `website_url` (text, nullable). Phase 5.2.2.
+- `tags` (text[], default `{}`). Phase 5.2.2.
+- `preferred` (bool, NOT NULL, default false). Phase 5.4 feedback round 2 (`20260516180000_phase_5_4_feedback_round_2.sql`). Partial index `vendors_preferred_idx WHERE preferred = true`. Drives the Wiki "Preferred Vendors" embed.
+- `contact_name`, `contact_email`, `contact_phone` (text, nullable). Shipped from initial schema; carried through the rename.
+- `legacy_notes` (text, nullable). Renamed from `notes` in Phase 5.2.2. Internal Notes UI uses the polymorphic `notes_log` table instead; `legacy_notes` preserves any pre-rename content for a future backfill into notes_log.
+- `created_by` (uuid, FK to `users.id`)
+- `created_at`, `updated_at` (timestamptz)
+- Indexes: `vendors_city_idx (city) WHERE city IS NOT NULL` (renamed via OID from `organizations_city_idx`); `vendors_subcategory_idx` (5.6.2); `vendors_preferred_idx WHERE preferred = true` (5.4 fb r2). The legacy `organizations_type_idx (type)` was dropped in 5.2.3.B alongside the `type` column.
+- Triggers: `trg_activity_log_vendors` (AFTER INSERT/UPDATE/DELETE → activity_log via `activity_log_writer`; OID-renamed from `trg_activity_log_organizations`); `trg_vendors_updated_at`.
+- RLS: SELECT/INSERT/UPDATE open to authenticated; DELETE admin-only via `is_admin()`. Underlying identifiers stay `clients_*` because the rename preserved policies by table OID.
+- GRANTs: SELECT/INSERT/UPDATE/DELETE to authenticated; ALL to service_role.
 - Internal Notes: surfaced via the shared `notes_log` table with `parent_type = 'vendor'` (renamed from `'organization'` in 5.2.3.D).
+
+**Vendor lookup tables** (Phase 5.2.3.A + 5.6.2):
+- `vendor_categories` (5.2.3.A): id, name, created_at. Lookup for the top-level vendor category.
+- `vendor_subcategories` (5.6.2): id, name, `parent_category_id` (uuid FK to `vendor_categories` ON DELETE CASCADE), created_by (FK to users ON DELETE SET NULL), created_at. UNIQUE `(parent_category_id, name)`. Index `vendor_subcategories_parent_idx (parent_category_id)`. RLS open SELECT/INSERT/UPDATE for authenticated; admin-only DELETE. Inline-add from VendorEdit Subcategory typeahead writes here with `parent_category_id` set to the current Category selection.
+- `vendor_capabilities` (renamed from `org_capabilities` in 5.2.3.A): id, name, created_at. Backs the multi-select `vendors.capabilities` text[] column. Phase 5.2 cleanup extended GRANT to authenticated to include DELETE so the admin-only DELETE RLS policy is reachable.
+
+**Vendor child tables** (auxiliary; no activity-log triggers, all match the `project_vendors` posture):
+- `project_vendors` (Phase 5.6.2): PK `(project_id, vendor_id)`, both FKs ON DELETE CASCADE; created_by FK to users ON DELETE SET NULL; created_at. Index `project_vendors_vendor_idx (vendor_id)`. RLS open SELECT/INSERT/UPDATE/DELETE for authenticated. Surfaced read paths: VendorsList Projects column, VendorDetail Projects section, VendorEdit Projects section; write path: ProjectEdit Vendors picker (diff-on-save).
+- `vendor_files` (Phase 5.7.11, `20260527100000_phase_5_7_11_vendor_files.sql`): id (uuid, PK), vendor_id (FK ON DELETE CASCADE), title (text NOT NULL), url (text NOT NULL), created_by (FK to users ON DELETE SET NULL), created_at. Index `vendor_files_vendor_idx (vendor_id, created_at DESC)`. RLS: open-authenticated SELECT/INSERT/DELETE; no UPDATE policy (delete + re-add only). Any URL accepted (no format validation; producers paste Drive, Dropbox, Figma, vendor websites). Surfaced: VendorDetail Files & Assets card + VendorEdit Files & Assets section (gated on `!isCreate`).
+- `vendor_ratings` (Phase 5.7.13, `20260529100000_phase_5_7_13_vendor_ratings.sql`): vendor_id (FK ON DELETE CASCADE), user_id (FK ON DELETE CASCADE), rating (int, CHECK BETWEEN 1 AND 5), created_at, updated_at. Composite PK `(vendor_id, user_id)`; UPSERT for re-rating. Index `vendor_ratings_vendor_idx`. RLS: open-authenticated SELECT (aggregate needs cross-user reads); self-only INSERT/UPDATE/DELETE via `user_id = auth.uid()`. `trg_vendor_ratings_updated_at` trigger. Replaces the admin-curated `vendors.internal_rating` column dropped in `20260529110000_phase_5_7_13_drop_vendors_internal_rating.sql` (backfill: non-null ratings written to vendor_ratings owned by `vendors.created_by`; rows with NULL `created_by` skipped). Surfaced: VendorDetail Team Rating card (aggregate + viewer's own), VendorsList Rating column (team aggregate, rounded to half-star), Preferred Vendors wiki embed.
+
+### clients (Phase 5.2.3.A, new in this phase)
+
+Created fresh in 5.2.3.A. Holds rows that were `type = 'Client'` on the legacy `organizations` table; UUIDs preserved during the split.
+
+- `id` (uuid, PK, default `gen_random_uuid()`)
+- `name` (text, NOT NULL)
+- `industry` (text, nullable)
+- `contact_name`, `contact_email`, `contact_phone` (text, nullable)
+- `primary_address` (text, nullable)
+- `city` (text, nullable)
+- `website_url` (text, nullable)
+- `tags` (text[], default `{}`)
+- `created_by` (uuid, FK to `users.id`)
+- `created_at`, `updated_at` (timestamptz)
+- Triggers: `trg_clients_updated_at`, `trg_activity_log_clients`.
+- RLS: SELECT/INSERT/UPDATE open to authenticated; DELETE admin-only.
+- Internal Notes: shared `notes_log` with `parent_type = 'client'`.
+
+### organizations table (DROPPED)
+
+The unified `organizations` table that landed in Phase 5.2.2 was split into `vendors` (rename) + `clients` (new) in Phase 5.2.3 (migrations `20260516130000` through `20260516130004`). The `org_type` enum was dropped alongside. Downstream column renames:
+
+- `projects.organization_id` → `projects.client_id` (FK now to clients)
+- `people.organization_id` split into `people.client_id` + `people.vendor_id` (mutex CHECK via `people_affiliation_type_mutex_check`; `affiliations` enum array dropped)
+- `notes_log.parent_type` CHECK widened from `('organization', 'person')` to `('client', 'vendor', 'person', 'venue', 'outlook_entry', 'task', 'deliverable', 'project')` over Phases 5.2.3.D + 5.2.2 + 5.6.4.1 + 5.7.2 + 5.7.3.followup-13
+- `venues.exclusive_vendors_org_ids` renamed to `venues.exclusive_vendor_ids`
+
+The pre-split unified-organizations shape is documented in `OUTPUTS/historical/phase-5-2-2-spec.md` for historical reference.
 
 ### projects
 - `id` (uuid, PK)
@@ -200,7 +227,7 @@ External humans (Client / Vendor / Internal partners / Venue contacts). Internal
 
 ## Talent Scout (siloed from HQ)
 
-Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he can paste on request) and `docs/talent-scout-port-plan.md`.
+Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he can paste on request) and the Phase 3 sub-phase entries in `docs/decisions.md`.
 
 ### ts_roles
 - `id`, `title`, `location`, `type`, `compensation`, `start_date`, `job_description`, `hiring_priorities`
@@ -284,25 +311,25 @@ Source of truth for the user-facing flow is Jimmie's screen-by-screen spec (he c
 
 ## Venue Scout (linked to HQ)
 
-Three-table schema landed in Phase 4.1-port (`20260512200000_phase_4_1_port_schema.sql`). Replaces the failed-attempt Phase 4 shape from main with the 1:1 port from `mirror-nyc-venue-scout-pro`. The earlier `vs_briefs`, `vs_sourcing_rounds`, and `vs_pitch_decks` tables were dropped per the locked decisions in `docs/venue-scout-port-plan.md`:
-- § 8.1 single-round per scout (no `vs_sourcing_rounds`)
-- § 8.2 brief inline on `vs_scouts` (no `vs_briefs`)
-- § 8.5 deck history as `vs_scouts.generated_decks` jsonb array (no `vs_pitch_decks`)
-- § 8.6 RLS open to all authenticated (collaborative agency-wide workflow)
+Three-table schema landed in Phase 4.1-port (`20260512200000_phase_4_1_port_schema.sql`). Replaces the failed-attempt Phase 4 shape from main with the 1:1 port from `mirror-nyc-venue-scout-pro`. The earlier `vs_briefs`, `vs_sourcing_rounds`, and `vs_pitch_decks` tables were dropped per the Phase 4 port locked decisions (now captured in `docs/decisions.md` under "Phase 4 cutover + port plan locked decisions"):
+- Single-round sourcing per scout (no `vs_sourcing_rounds`)
+- Brief fields inline on `vs_scouts` (no `vs_briefs`)
+- Deck history as `vs_scouts.generated_decks` jsonb array (no `vs_pitch_decks`)
+- RLS open to all authenticated users (collaborative agency-wide workflow)
 
 ### vs_scouts
 - `id` (uuid, PK), `name` (text, NOT NULL)
-- Brief fields inline (port plan § 8.2):
+- Brief fields inline (the Phase 4 brief-inline-on-vs_scouts decision (docs/decisions.md "Phase 4 cutover + port plan locked decisions")):
   - `client_name`, `event_name`, `live_dates`, `city` (text)
   - `budget` (numeric)
   - `brief_data` (jsonb, default `{}`): flexible per-scout extras the producer surfaces from the uploaded brief PDF. Canonical keys (locked Phase 4.3-port): `expected_guest_count` (number; consumed by `vs-generate-deck` slide templating), `notes` (string; dumped verbatim into downstream research / compile prompts), `uploaded_files` (string[]; storage paths under `briefs` bucket, append-only, for audit / re-parse). Phase 4.5-port additional key: `research_started_at` (ISO timestamp string; set by `vs-research-venues` at kickoff for idempotency, see 90-second grace window in `docs/decisions.md`). Phase 4.7.2-port additional key: `compile_started_at` (ISO timestamp string; set by `vs-compile-summaries` at kickoff, same 90-second grace window pattern as research). Phase 4.8.2-port additional key: `deck_generation_started_at` (ISO timestamp string; set by `vs-generate-deck` at kickoff, same 90-second grace window). Phase 4 Revision pass 3 additional key: `overview_source_hash` (string; 16-char SHA-256 prefix over the 15 brief fields that drive the Event Overview prompt, written by `vs-generate-brief-overview` whenever it writes `event_overview`, read by Submit Brief in `BriefVenue.tsx` to decide whether the persisted overview is stale; machine metadata, no form field, rides in the `brief_data` passthrough alongside the `*_started_at` flags). **Phase 4 Revision - Intake** added the form-backed intake keys, all optional, hoisted into dedicated form fields by `src/lib/venue-scout/briefForm.ts`: `install_dates` (string), `strike_dates` (string), `activations_count` (number; slider, null = TBD so the key is dropped), `objectives` (string[]), `target_audience` (string), `vibe_aesthetic` (string), `target_neighborhoods` (string[]), `strict_neighborhoods_only` (boolean; always written, false is meaningful), `venue_types` (string[]; arbitrary strings, chip multi-select), `sq_ft_min` / `sq_ft_max` / `sq_ft_minimum` (number; sliders, null = any so the key is dropped), `ideal_features` (string[]), `priority_location` (`'high_foot_traffic' | 'intimate_destination'`), `priority_cost` (`'lower_cost' | 'premium'`). `toUpdate` drops keys whose form field is empty / empty-array / null. The retired `notes` key is no longer written by new scouts but is preserved untouched on existing scouts (backward compat). `vs-research-venues` Phase B + `vs-generate-brief-overview` read these keys; downstream prompts stringify the entire jsonb so any key the producer adds gets seen by the AI.
   - `event_overview` (text): the persisted Event Overview block. **Phase 4 Revision - Intake:** generated by `vs-generate-brief-overview`, then inline-editable. **Pass 3:** the generation trigger is the Submit Brief click in `BriefVenue.tsx`, hash-gated on `brief_data.overview_source_hash` (regenerate only when the overview-driving brief fields changed since the last generation); the report's empty-state Generate button + Regenerate link re-invoke manually. Top-level column (not nested in `brief_data`) because downstream prompts (`vs-research-venues`, `vs-compile-summaries`) stringify it directly.
-- `current_step` (text, NOT NULL, default `brief`, CHECK in 10 values: `brief`, `sheet_prompt`, `sheet_upload`, `researching`, `sourcing_report`, `shortlist`, `review_selects`, `compiling`, `deck_prep`, `completed`): workflow state machine per port plan § 8.4. **Phase 4 Revision - Intake** (migration `20260514110000_phase_4_revision_intake_current_step.sql`) added the `brief` value (the in-flight 3-step intake) and flipped the new-row default from `sheet_prompt` to `brief`; existing rows are untouched. Step 3's Confirm & Continue flips `brief` -> `sheet_prompt`. Drives every page's continue logic via `stepToRoute()` (`src/lib/venue-scout/format.ts`, landed in Phase 4.2-port). Producer-facing label rendered via `currentStepToLabel()` in the same file (`brief` and `sheet_prompt` both render as "Brief" since Phase 4 Revision).
+- `current_step` (text, NOT NULL, default `brief`, CHECK in 10 values: `brief`, `sheet_prompt`, `sheet_upload`, `researching`, `sourcing_report`, `shortlist`, `review_selects`, `compiling`, `deck_prep`, `completed`): workflow state machine per the Phase 4 current_step lock (docs/decisions.md). **Phase 4 Revision - Intake** (migration `20260514110000_phase_4_revision_intake_current_step.sql`) added the `brief` value (the in-flight 3-step intake) and flipped the new-row default from `sheet_prompt` to `brief`; existing rows are untouched. Step 3's Confirm & Continue flips `brief` -> `sheet_prompt`. Drives every page's continue logic via `stepToRoute()` (`src/lib/venue-scout/format.ts`, landed in Phase 4.2-port). Producer-facing label rendered via `currentStepToLabel()` in the same file (`brief` and `sheet_prompt` both render as "Brief" since Phase 4 Revision).
 - `status` (text, NOT NULL, default `draft`): VS Pro carries this independent of `current_step`. Phase 4.5-port locks the AI-pipeline values: `draft` (initial) -> `in_progress` (research complete, in the AI funnel through deck generation) -> `complete` (Phase 4.8.2-port deck generated; first sub-phase that writes this value) or `failed` (any AI pipeline error). The Scout Index status pill reads from this column.
 - `pipeline_error` (text, nullable, Phase 4.5-port; renamed from `research_error` in Phase 4.10.3-port): persisted error message from the most recent AI-pipeline run. NULL when no failure on the latest run. Originally `vs-research-venues`-only; Phase 4.7.2-port extends the same column to `vs-compile-summaries` failures (single AI-pipeline error channel per `docs/decisions.md` Phase 4.7.2-port). Phase 4.8.2-port extends again to `vs-generate-deck` failures with a structured `<CODE>: <message>` format (`CODE ∈ { AUTH_FAILED, TEMPLATE_COPY_FAILED, SLIDES_API_FAILED, NO_VENUES_INCLUDED, UNKNOWN }`) parsed by the Generating page to route to `/deck/error/<code>`. Phase 4.10.3-port renames the column from `research_error` to `pipeline_error` to match actual usage. The Researching page Realtime-subscribes to `vs_scouts` and on non-null `pipeline_error` with `status='failed'`, navigates to `/sourcing/error/research-timeout`. The Compiling page subscribes the same way and navigates to `/sourcing/error/compile-failed`. The Generating page subscribes the same way and parses the code for `/deck/error/<code>`. All three functions clear it at kickoff so a retry from a prior failure starts clean.
 - `sheet_storage_path` (text, nullable): path under `sourcing_sheets` storage bucket
 - `derived_columns` (jsonb, default `[]`): array of `{id, label, criteria}` alignment columns the AI selected for the single sourcing pass (collapsed onto the scout per § 8.1).
-- `generated_decks` (jsonb, default `[]`, port plan § 8.5): deck history as array of `{deck_id, deck_name, version, generated_at, venue_count, slide_count, edit_url, embed_url}`. Replaces the separate `vs_pitch_decks` table.
+- `generated_decks` (jsonb, default `[]`, the Phase 4 deck-history-as-jsonb decision (docs/decisions.md)): deck history as array of `{deck_id, deck_name, version, generated_at, venue_count, slide_count, edit_url, embed_url}`. Replaces the separate `vs_pitch_decks` table.
 - `deck_order` (jsonb, default `[]`): producer-controlled venue order for deck slides
 - HQ-specific operational columns (no VS Pro analog):
   - `project_id` (uuid, FK to `projects`, nullable; standalone scouts allowed)
@@ -310,10 +337,10 @@ Three-table schema landed in Phase 4.1-port (`20260512200000_phase_4_1_port_sche
   - `created_by`, `updated_by` (uuid, FK to users)
   - `last_touched_at` (timestamptz, NOT NULL, default `now()`): tracks meaningful user activity (sourcing kick-off, brief save, deck generated). Drives the Scout Index sort.
 - `created_at`, `updated_at`
-- Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` (port plan § 8.3) so the Researching / Compiling / Generating loading pages can subscribe to `current_step` changes via `postgres_changes`.
+- Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` (the Phase 4 EdgeRuntime.waitUntil + Realtime decision (docs/decisions.md)) so the Researching / Compiling / Generating loading pages can subscribe to `current_step` changes via `postgres_changes`.
 
 ### vs_candidate_venues
-Maps to VS Pro `venues` (renamed because HQ already has a `venues` table for the master venue list). VS Pro's `venue_notes` collapsed inline as `notes` per port plan § 2.
+Maps to VS Pro `venues` (renamed because HQ already has a `venues` table for the master venue list). VS Pro's `venue_notes` collapsed inline as `notes` per the Phase 4 venue_notes-inline decision (docs/decisions.md).
 
 - `id` (uuid, PK)
 - `scout_id` (uuid, FK to `vs_scouts`, ON DELETE CASCADE)
@@ -387,12 +414,13 @@ function falls back to system defaults (see spec § 2b).
 `ts-cron-monthly-spend-reset` (Phase 3.8) resets `anthropic_spend_current_month_usd` to 0 and `cap_alert_sent_this_month` to false on the 1st of each month at 00:01 UTC.
 
 ### activity_log
-- `id`, `entity_type` (text: `project`, `venue`, `task`, etc.)
+- `id`, `entity_type` (text: `project`, `venue`, `task`, `credential`, etc.)
 - `entity_id` (uuid)
-- `action` (text: `created`, `updated`, `status_changed`, `assigned`)
+- `action` (text: `created`, `updated`, `status_changed`, `assigned`, `credential_revealed`)
 - `actor_id` (FK to users)
 - `payload` (jsonb)
 - `created_at`
+- `entity_type` is an open text column (no CHECK constraint). Phase 5.8.7 added `credential` / `credential_revealed` as the audit trail written inside `credentials_reveal_password`.
 
 ### deliverables (Phase 5.2.1)
 Per-project workflow checkpoints surfaced on Surface 14 (Calendar default view) and on the Project detail (Surface 07).

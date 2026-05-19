@@ -282,9 +282,9 @@ export function buildGmailAttachmentUrl(opts: {
 /** Plain-text URL extraction with cleanup, dedupe, and security-wrapper unwrap. */
 export function extractPlainUrls(text: string): string[] {
   if (!text) return [];
-  const matches = text.match(/https?:\/\/[^\s<>"'\]\)]+/g) ?? [];
+  const matches = text.match(/https?:\/\/[^\s<>"'\])]+/g) ?? [];
   const cleaned = matches
-    .map((u) => u.replace(/[.,;:!?\)\]>]+$/g, ""))
+    .map((u) => u.replace(/[.,;:!?)\]>]+$/g, ""))
     .map((u) => unwrapSecurityWrapper(u))
     .filter(filterUrl);
   return Array.from(new Set(cleaned));
@@ -350,7 +350,7 @@ export function buildPortfolioInputs(opts: {
   const plainUrls = extractPlainUrls(`${bodyPlain}\n${attachText}`);
   const anchors = bodyHtml ? extractAnchorsFromHtml(bodyHtml) : [];
   const anchorUrlsRaw = anchors
-    .map((a) => unwrapSecurityWrapper(a.url.replace(/[.,;:!?\)\]>]+$/g, "")))
+    .map((a) => unwrapSecurityWrapper(a.url.replace(/[.,;:!?)\]>]+$/g, "")))
     .filter(filterUrl);
   const bare = [
     ...extractBareDomains(bodyPlain),
@@ -360,7 +360,7 @@ export function buildPortfolioInputs(opts: {
   // Build anchor text map (case-insensitive URL key normalization to original form preferred — keep both raw + unwrapped).
   const anchorTextByUrl: Record<string, string[]> = {};
   for (const a of anchors) {
-    const u = unwrapSecurityWrapper(a.url.replace(/[.,;:!?\)\]>]+$/g, ""));
+    const u = unwrapSecurityWrapper(a.url.replace(/[.,;:!?)\]>]+$/g, ""));
     if (!filterUrl(u)) continue;
     (anchorTextByUrl[u] ||= []).push(a.anchorText);
   }
@@ -375,9 +375,9 @@ export function buildPortfolioInputs(opts: {
   while ((lm = labelRe.exec(labelText)) !== null) {
     const window = lm[2];
     // Try: explicit URL in window
-    const urlMatch = window.match(/https?:\/\/[^\s<>"'\]\)]+/);
+    const urlMatch = window.match(/https?:\/\/[^\s<>"'\])]+/);
     if (urlMatch) {
-      const u = unwrapSecurityWrapper(urlMatch[0].replace(/[.,;:!?\)\]>]+$/g, ""));
+      const u = unwrapSecurityWrapper(urlMatch[0].replace(/[.,;:!?)\]>]+$/g, ""));
       if (filterUrl(u)) labeledUrls.add(u);
       continue;
     }

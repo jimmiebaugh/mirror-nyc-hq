@@ -1,20 +1,23 @@
-// Phase 3.6.18: reverted to env-var pattern now that Netlify + local .env
-// hold the new sb_publishable_* key (Phase 3.6.16 hardcoded fallback was
-// shipped while the env var was still on the dead legacy JWT).
-//
-// Hardcoded fallbacks remain so a missing env var doesn't break the app at
-// runtime; if/when this Supabase project is rotated, update either the env
-// var or the literals below. Publishable keys are safe to expose in the
-// bundle (same security posture the legacy anon JWT had).
+// Phase 5.8.5 (F005): VITE_SUPABASE_URL hardcoded fallback removed.
+// The fallback caused a real Phase 3.6.16 incident where a misconfigured
+// preview build silently pointed at production because the env var was
+// missing. Failing loud on a missing URL forces the env-var contract to
+// be honored at build time. The publishable-key fallback remains since
+// (a) Supabase publishable keys are safe to expose in the bundle (same
+// security posture the legacy anon JWT had) and (b) rotating the URL is
+// an infrastructure event but rotating the publishable key is not.
 //
 // IMPORTANT: never put the secret key (sb_secret_*) here. Server-only.
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL ?? "https://amipjjmphblfxpghjnel.supabase.co";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "sb_publishable_glongs0Rm7PW5HK8XAqwzA_clq7Hw-4";
+
+if (!SUPABASE_URL) {
+  throw new Error("VITE_SUPABASE_URL is required. Set it in .env or the Netlify environment.");
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

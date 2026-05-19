@@ -1,4 +1,3 @@
-Initialising login role...
 export type Json =
   | string
   | number
@@ -168,7 +167,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
-          password: string
+          password_encrypted: string
           service_name: string
           updated_at: string
           updated_by: string | null
@@ -179,7 +178,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          password: string
+          password_encrypted: string
           service_name: string
           updated_at?: string
           updated_by?: string | null
@@ -190,7 +189,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          password?: string
+          password_encrypted?: string
           service_name?: string
           updated_at?: string
           updated_by?: string | null
@@ -921,7 +920,6 @@ export type Database = {
           removal_dates_start?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
-          status_notes?: string | null
           tags?: string[]
           updated_at?: string
         }
@@ -948,7 +946,6 @@ export type Database = {
           removal_dates_start?: string | null
           slack_channel_url?: string | null
           status?: Database["public"]["Enums"]["project_status"]
-          status_notes?: string | null
           tags?: string[]
           updated_at?: string
         }
@@ -2448,6 +2445,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      credentials_create: {
+        Args: {
+          p_password: string
+          p_service_name: string
+          p_url: string
+          p_username: string
+        }
+        Returns: string
+      }
+      credentials_reveal_password: { Args: { p_id: string }; Returns: string }
+      credentials_set_password: {
+        Args: { p_id: string; p_password: string }
+        Returns: undefined
+      }
       current_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["permission_role"]
@@ -2685,6 +2696,3 @@ export const Constants = {
     },
   },
 } as const
-<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
-A new version of Supabase CLI is available: v2.99.0 (currently installed v2.98.1)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

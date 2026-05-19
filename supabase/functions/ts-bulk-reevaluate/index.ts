@@ -112,7 +112,7 @@ async function dispatchNext(roleId: string, attempt = 1): Promise<void> {
 
 function selfInvoke(roleId: string) {
   try {
-    // @ts-ignore EdgeRuntime is provided by Supabase Edge runtime
+    // @ts-expect-error EdgeRuntime.waitUntil is provided by Supabase Edge runtime, not in Deno types
     EdgeRuntime.waitUntil(dispatchNext(roleId));
   } catch {
     dispatchNext(roleId).catch((err) => console.error("[ts-bulk-reevaluate] selfInvoke:", err));

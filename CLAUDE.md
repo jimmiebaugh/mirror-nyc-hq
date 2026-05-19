@@ -32,7 +32,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 | Decisions | `docs/decisions.md` | Architectural decisions with rationale, indexed by phase. Why bulk re-eval overwrites but single re-eval appends, why `promote` → `interview`, etc. |
 | Operations | `docs/operations.md` | Day-to-day commands (migrate, deploy, regen types, tail logs) + common debugging recipes. |
 | Roadmap | `docs/roadmap.md` | Phase-by-phase plan. Finished phases summarize to one line; the active phase has full detail. |
-| Talent Scout port plan | `docs/talent-scout-port-plan.md` | Phase 3.1 inventory: lift/adapt/rewrite/drop, schema diff, sub-phase sequence. Drives Phase 3.2 through 3.8. |
+| HQ v1 changelog | `docs/v1-changelog.md` | Internal release notes covering Phase 5.1 through 5.8.0. Authoritative for post-history-rewrite SHAs. |
 | Living state | `CHECKPOINT.md` | Latest commit, current phase, what's deployed, recent migrations, known drift. **Update every commit to main.** |
 | Session playbook | `docs/working-with-claude.md` | How to set up Cowork + Code sessions effectively for HQ work. Subagent definitions, hook configs, slash commands, anti-patterns to avoid. **Read at the start of any new phase.** |
 
@@ -46,7 +46,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 
 ## Current phase
 
-See `CHECKPOINT.md` for live state. As of this writing: **Phase 4 (Venue Scout port) shipped to production 2026-05-13.** Cutover complete. Main is at `7cd27ed` and contains the full 1:1 port from `mirror-nyc-venue-scout-pro` (Phase 4.1-port through 4.10.6-port) plus two parallel TS commits cherry-picked during the cutover (`6775429` Generate Packet button restore + `7cd27ed` packet email template + layout fixes + email-as-cover-letter fallback). The failed-attempt Phase 4 stack that previously lived on main (Scout Dashboard through Deck Prep + URL-quality hot patches) was intentionally dropped via `--force-with-lease` push. Next: **Phase 5 (HQ Core)**.
+See `CHECKPOINT.md` for live state. As of this writing: **Phase 5.8 (HQ v1 release + audit pass) is active.** Phase 5.7 closed 2026-05-18 at `59a5dac` and Phase 5.8.0 fired the deferred Netlify deploy at `975568f` (annotated tag `v1.0.0`). 5.8.1 wrote `docs/v1-changelog.md` (`beb8914`); 5.8.2 triaged `code-observations.md` (`e061590`). 5.8.3 (this MD doc audit) is in flight; 5.8.4 (close deploy) follows. Phase 4 (Venue Scout port) shipped to production 2026-05-13 at `7cd27ed`. See `docs/v1-changelog.md` for the full Phase 5.1 to 5.8.0 ship table.
 
 ## Working with this repo
 

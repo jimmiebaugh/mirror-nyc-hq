@@ -2,7 +2,7 @@
 
 ## Stack
 
-- **Frontend**: React + Vite + TypeScript + Tailwind + shadcn/ui, scaffolded by Lovable.
+- **Frontend**: React + Vite + TypeScript + Tailwind + shadcn/ui.
 - **Backend**: Supabase (Postgres, Auth, Edge Functions, Realtime, Storage).
 - **Hosting**: Netlify (auto-deploy from GitHub on push to main, preview URLs per branch). Build config in `netlify.toml`.
 - **Repo**: GitHub `mirror-nyc-hq` (private).
@@ -28,8 +28,16 @@ The `/` route serves a stealth coming-soon landing for unauthenticated visitors 
 ## Routing
 
 `src/App.tsx` mounts:
-- `/` → `Dashboard` (auth) or stealth `Landing` (anon, via the `ProtectedRoute` wrapper)
-- `/projects`, `/venues`, `/clients`, `/tasks` → HQ Core (Phase 5 polishes these)
+- `/` (Landing for anon) and `/home` → Dashboard (per-tier variants)
+- `/projects`, `/tasks`, `/deliverables`, `/venues`, `/clients`, `/vendors`, `/people` → HQ Core list / detail / edit per surface (Phase 5.2-5.6)
+- `/calendar` → unified Calendar (Phase 5.3, all tiers)
+- `/outlook` → Outlook 12-month grid (Phase 5.3, admin-only)
+- `/wiki`, `/wiki/:slug`, `/wiki/new`, `/wiki/:slug/edit` → Wiki (Phase 5.4)
+- `/account-logins` → Account Logins (Phase 5.4, admin + standard, freelance blocked)
+- `/users`, `/users/:id`, `/users/new`, `/users/:id/edit` → Team page (5.4) + Profile (5.7.12, all tiers for `/users/:id`)
+- `/settings`, `/settings/profile`, `/notifications/preferences` → Settings (Phase 5.4, 5.7.10, 5.7.12)
+- `/activity` → Activity Feed (Phase 5.5)
+- `/search?q=` → Search (Phase 5.5)
 - `/talent-scout` → Talent Scout index (admin)
 - `/talent-scout/new/{details,search,scorecard}` → role-creation wizard
 - `/talent-scout/roles/:id` → RoleDashboard
@@ -38,7 +46,7 @@ The `/` route serves a stealth coming-soon landing for unauthenticated visitors 
 - `/talent-scout/candidates/:id` → CandidateDetail
 - `*` → 404
 
-`/venue-scout/*` Venue Scout routes (live as of Phase 4, shipped 2026-05-13). See `docs/venue-scout-port-plan.md` for the full route map.
+`/venue-scout/*` Venue Scout routes (live as of Phase 4, shipped 2026-05-13). The 13-route map under `/venue-scout/scouts/:id/*` covers brief → sheet → research → report → shortlist → review → compile → deck → generating with per-step error states. See the `vs-*` edge function entries in `docs/edge-functions.md` for the backend pairings.
 
 ## Realtime
 
@@ -46,16 +54,18 @@ The `supabase_realtime` publication starts empty on this project. Tables that th
 1. Added to the publication: `alter publication supabase_realtime add table <name>;`
 2. `REPLICA IDENTITY FULL` so UPDATE events carry the full new row.
 
-Currently published: `ts_pull_rounds` (PullDetail subscribes for pull-progress UI), `ts_final_reviews` (FinalReviewDetail subscribes for ranking-progress UI), `vs_scouts` (Researching, Compiling, Generating subscribe for pipeline status). Other tables are unpublished by default; add and document in `docs/schema.md`.
+Currently published: `ts_pull_rounds` (PullDetail subscribes for pull-progress UI), `ts_final_reviews` (FinalReviewDetail subscribes for ranking-progress UI), `vs_scouts` (Researching, Compiling, Generating subscribe for pipeline status), `projects` + `tasks` + `deliverables` (Board view cross-tab sync, Phase 5.2.1), `notifications` (bell badge live-update, Phase 5.5; filtered by `user_id=eq.{uid}`), `activity_log` (ProjectActivity rollup, Phase 5.7.14). Other tables are unpublished by default; add and document in `docs/schema.md`.
 
 ## Storage
 
-Six private buckets, all behind RLS:
+Eight private buckets, all behind RLS:
 - `candidate_attachments` (admin only, Talent Scout)
 - `packets` (admin only, Talent Scout; round + final-review packet PDFs, Phase 3.6)
-- `briefs` (producer+, Venue Scout)
-- `sourcing_sheets` (producer+, Venue Scout)
-- `venue_photos` (read auth, write producer+, HQ + Venue Scout)
+- `briefs` (any auth user, Venue Scout)
+- `sourcing_sheets` (any auth user, Venue Scout)
+- `venue_photos` (read auth, write producer+, HQ Core master venues)
+- `vs_venue_photos` (any auth user; private signed URLs at render time; Phase 4.7.1-port; distinct from the public `venue_photos` bucket)
+- `wiki_images` (any auth read, admin-only write; Phase 5.7.10; signed URLs 1-year TTL embedded into wiki body HTML)
 - `profile_avatars` (read auth, write own folder)
 
 URLs are short-TTL signed URLs from `supabase.storage.createSignedUrl`. No public buckets.

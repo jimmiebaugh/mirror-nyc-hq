@@ -9,7 +9,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 
 // Lifted from VS Pro (src/components/sourcing/NotesModal.tsx). Single adapt:
 // the save action UPDATEs the inline `vs_candidate_venues.notes` column
@@ -49,7 +49,7 @@ export function NotesModal({
       .eq("id", venueId);
     setSaving(false);
     if (error) {
-      toast.error(error.message);
+      toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
     onSaved(content);

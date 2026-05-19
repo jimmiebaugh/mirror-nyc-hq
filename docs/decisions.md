@@ -2,6 +2,50 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.8.5 (2026-05-18) — security pass
+
+### Open-authenticated RLS posture (HQ Core baseline)
+
+The Supabase advisor's full scan on 2026-05-18 emitted 54 `rls_policy_always_true` warnings across roughly 5 categories of tables. Reviewed each category; the open-authenticated posture is intentional and matches HQ Core's threat model (a single trusted Google-OAuth-gated tenant). Recording the decision here so future advisor scans can be cross-checked instead of mistaken for drift.
+
+The five categories, and why each opts out of row-level scoping:
+
+- **Lookup tables.** `departments`, `cities`, `project_categories`, `venue_types`, `vendor_capabilities`, `vendor_categories`, `mirror_holidays`. Cross-team reference data; SELECT `(true)` is the entire point. Writes still gate on `is_admin()`.
+- **Top-level domain tables.** `projects`, `clients`, `venues`, `vendors`, `people`, `organizations`, `tasks`, `deliverables`, `outlook_entries`. Open SELECT + open INSERT/UPDATE; DELETE either admin-only or open-authenticated depending on the domain (see Jimmie's 2026-05-18 call on DELETE: open-authenticated is acceptable — the team is small and audit log captures every delete via `activity_log`).
+- **Join tables.** `project_account_managers`, `project_designers`, `project_venues`, `project_members`, `vs_candidate_venues`. Membership data inherits the parent record's openness; per-row scoping would force every screen to JOIN through the parent.
+- **File and history tables.** `notes_log` SELECT, `note_mentions` SELECT, `activity_log` SELECT, `vendor_files` SELECT, `wiki_pages` SELECT (authenticated), `wiki_images` SELECT. Read-only-to-everyone, write-gated.
+- **VS (Venue Scout) tables.** `vs_scouts`, `vs_candidate_venues`, `vs_venue_photos`, `vs_scout_settings`. Producer-driven workflow; open-authenticated SELECT lets any team member observe state. Writes scoped per producer/admin per the existing VS RLS.
+
+The 2 `authenticated_security_definer_function_executable` warnings the advisor emits on `credentials_set_password` and `credentials_reveal_password` are an intentional carve-out: the RPCs are SECURITY DEFINER (to access `pgsodium.key`), gate on the same `permission_role IN ('admin', 'standard')` predicate the existing RLS uses, and have no alternative non-RPC path because the client never sees the encrypted column.
+
+**RLS helper EXECUTE carve-out.** `public.is_admin()`, `public.is_producer_or_admin()`, and `public.current_user_role()` MUST stay EXECUTE-callable by the `authenticated` role. They are invoked inside RLS USING / WITH CHECK predicates on `ts_roles`, `ts_candidates`, `ts_evaluations`, `ts_pull_rounds`, `ts_final_reviews`, `vs_scouts`, the tier-gated DELETE policies on `users` / `clients` / `projects` / `venues` / `venue_types`, and the `users` UPDATE WITH CHECK on admin columns. The 5.8.5 migration #7 (`20260531160000_phase_5_8_5_revoke_from_public.sql`) REVOKE'd from PUBLIC without re-GRANTing on the assumption that SQL-function inlining would skip the permission check; that was wrong (SECURITY DEFINER blocks inlining, and every RLS caller needs EXECUTE), and production TS open-roles went empty within seconds. Hotfix `20260531170000_phase_5_8_5_1_hotfix_grant_rls_helpers.sql` re-GRANTs to `authenticated` and locks the decision: these 3 helpers join `promote_outlook_to_project(uuid)` and the 3 credentials RPCs (`credentials_create`, `credentials_set_password`, `credentials_reveal_password`) as the 7 permanent entries in the `authenticated_security_definer_function_executable` advisor family. Future advisor scans should expect 7 hits in that family and treat additions as drift. Spec-drafting lesson preserved in memory `feedback_revoke_execute_check_rls_callers.md`: before REVOKE'ing EXECUTE on any SECURITY DEFINER function, grep the migration tree for the function name to enumerate RLS callers; never trust function-inlining assumptions.
+
+### React Query partial adoption (tech-debt audit F042 correction)
+
+The 2026-05-18 tech-debt audit's F042 claimed `QueryClient` was instantiated but `useQuery` was never called. Live grep on the same date contradicted this: three files use React Query for roughly 13 call sites. `src/pages/outlook/OutlookPage.tsx` runs the full pattern (queries + mutations + invalidate-on-write); `src/pages/calendar/CalendarPage.tsx` uses three queries; `src/components/home/OutlookCondensedCard.tsx` uses one query. Every other page (around 25 of them) is on the legacy `useState + useEffect + supabase.from()` pattern.
+
+Two options on the table: rip React Query out, or convert the remaining pages to it. Both are valid; both are out of scope for any audit-integration phase. The decision documented here is to defer the commit-or-migrate call to a future refactor phase. F015 (the audit's "data-layer centralization" finding) is the natural home for that conversation; doing it as part of a security pass would balloon the diff and force a hand-on-every-page review without delivering security value. F042 is closed as "audit was wrong; no action this ship."
+
+### Auth: HIBP password leak check N/A
+
+The Supabase advisor flags `auth_leaked_password_protection` as a recommended setting. The toggle integrates with HaveIBeenPwned to reject passwords that appear in known breach corpora. HQ Core does not store passwords. Auth is Google Workspace OAuth restricted to `@mirrornyc.com`; the only "password" in the system is the user's Google account password, which Google itself protects (with HIBP and many other checks). The advisor warning is moot for this project and will remain in scan output indefinitely. Documenting here so future advisor reviews don't relitigate it.
+
+### `rls_auto_enable` defensive event trigger (do not drop)
+
+`public.rls_auto_enable()` is wired to an `ensure_rls` event trigger (`ddl_command_end` on `CREATE TABLE` / `CREATE TABLE AS` / `SELECT INTO`). It iterates the newly-created `public.*` tables and runs `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on each. SECURITY DEFINER, fail-safe (logs instead of raising), owned by `postgres`, not exposed to caller EXECUTE.
+
+This is a load-bearing safety net for the open-authenticated RLS baseline: any future migration that creates a public table without explicitly enabling RLS is caught automatically. The 5.8.5 spec misread the advisor framing and called it Phase 3 cruft; the 5.8.6 DROP attempt failed with a dependency error.
+
+**Do not drop.** The function exists in prod but not in the migration tree; reify in a future schema-baseline ship. Future advisor scans flagging it as `*_security_definer_function_executable` should add it to the existing carve-out paragraph alongside `is_admin`, `is_producer_or_admin`, `current_user_role`, and the credentials RPCs.
+
+### `tmp_5_8_5_probe` pgsodium key (accept-risk, leave in place)
+
+A probe key named `tmp_5_8_5_probe` remains in `pgsodium.valid_key` from the 5.8.5 spec-deviation #3 migration rewrite. The UUID `399d53c0-ebcd-4cad-8c51-57fb6a26dd97` was never used in any `crypto_aead_det_encrypt` call; live encryption uses the `credentials` key (UUID `b5b8bfea-01ce-41e3-a5e2-8fea96c2b9a0`).
+
+pgsodium restricts DELETE on `pgsodium.key` to its own internal role by design, because encryption keys are append-only in the intended workflow ("rotate, don't delete"). Supabase Dashboard SQL editor lacks the required role. The probe key is functionally inert: not referenced by any encrypted data, not exposed via RLS, negligible storage.
+
+**Accept-risk: leave in place.** If pgsodium ever exposes a key-rotate or key-delete primitive at the dashboard level, the probe key is the first candidate for cleanup. Until then it sits.
+
 ## Phase 5.7.10 (2026-05-18)
 
 ### Wiki images: private bucket + 1-year signed URLs (not public bucket)
@@ -354,6 +398,32 @@ Persisted per-user filter / sort / view-kind snapshots for every HQ Core databas
 ### Out of scope for 5.2.1 (lands 5.2.2 or later)
 
 Organizations / People / Venues surfaces (5.2.2). `<InternalNotesEditor />` (5.2.2, since it's the Org / Person / Venue Internal Notes pattern). `<StarRating />` (5.2.2). Quick-add cluster on `/home` flipping placeholders to real "+ New Project / Task / Deliverable" routes (deferred until 5.2.2 lands the People route). Project Detail attachments (storage; future sub-phase). Status Notes uses existing `projects.notes`; Client Notes is rendered as a "lands in 5.2.2" empty-state placeholder. The `notes_log` Realtime publication stays deferred until simultaneous-author UX surfaces. Per-surface Calendar tabs (Projects / Tasks) route to the unified `/calendar?source=...` stub; the unified Calendar surface lands in 5.3.
+
+## Phase 4 cutover + port plan locked decisions (folded in 2026-05-18 from the deleted `docs/venue-scout-port-plan.md`)
+
+The Venue Scout port plan doc was deleted in the Phase 5.8.3 doc audit. The six locked decisions Jimmie confirmed 2026-05-11 (port plan § 8) and the cutover sequence rationale (port plan § "Done when") are captured here as the canonical record.
+
+### Port plan § 8 — six locked decisions
+
+- **§ 8.1 Single-round sourcing per scout.** One scout has one sourcing flow. No `vs_sourcing_rounds` table. Matches VS Pro 1:1. Re-research uses Start Over (Scout Settings; Phase 4.9-port), which wipes the candidate pool and resets `current_step` to `sheet_prompt`. Revisit only if real producers ask for multi-round.
+- **§ 8.2 Brief inline on `vs_scouts`.** No separate `vs_briefs` table. All brief fields live on `vs_scouts`: named columns for `client_name`, `event_name`, `live_dates`, `city`, `budget`, `event_overview`, plus `brief_data jsonb` for flexible additional fields per VS Pro's shape. Simpler queries, fewer joins, matches the state-machine model where the brief belongs to the scout.
+- **§ 8.3 `EdgeRuntime.waitUntil` + Realtime for Researching, Compiling, Generating.** All three loading pages subscribe to `vs_scouts.current_step` via Realtime instead of awaiting the edge function response synchronously. Edge functions return the scout_id immediately and run the AI work in the background. Requires `vs_scouts` in the `supabase_realtime` publication with `REPLICA IDENTITY FULL` (one line in the Phase 4.1-port migration). The only place the port intentionally diverges from VS Pro's exact behavior; consistent with HQ's `ts-final-review` pattern.
+- **§ 8.4 `current_step` state machine as canonical workflow state.** 9 values lifted verbatim from VS Pro: `sheet_prompt`, `sheet_upload`, `researching`, `sourcing_report`, `shortlist`, `review_selects`, `compiling`, `deck_prep`, `completed`. (Phase 4 Revision Intake added `brief` as a 10th value; see the Revision section below.) No `phase` enum concept. `stepToRoute()` helper from `src/lib/venue-scout/format.ts` drives every page's continue logic.
+- **§ 8.5 Deck history as `vs_scouts.generated_decks` jsonb array.** No separate `vs_pitch_decks` table. Each entry: `{deck_id, deck_name, version, generated_at, venue_count, slide_count, edit_url, embed_url}`. Matches VS Pro exactly. Deck history is small (typically 1-3 versions per scout), access pattern is "give me all decks for this scout," no query against deck fields. The jsonb array embeds cleanly in the scout-load query.
+- **§ 8.6 RLS open to all authenticated users.** `FOR ALL TO authenticated USING (true) WITH CHECK (true)` on every `vs_*` table. Collaborative model: any authenticated `@mirrornyc.com` user can read or write any scout, candidate venue, or photo. Venue Scout is an agency-wide workflow, not personal data scoped to a single producer.
+
+### Cutover sequence (executed 2026-05-13)
+
+Main was hard-reset to `vs-port-fresh` HEAD via `git push origin vs-port-fresh:main --force-with-lease`. Sequence:
+
+1. Cherry-picked `6775429` (TS Final Review re-enable Generate Packet) and `f24d3f5` (TS Final Review packet email template + layout fixes + email-as-cover-letter fallback) from origin/main onto `vs-port-fresh`; both diffstats verified byte-equal to source via `git show --stat`.
+2. Considered `4a8a5c6` (TS wizard migrates to canonical Stepper) for cherry-pick but dropped it: it imports from `src/components/ui/Stepper.tsx`, a file introduced by the failed Phase 4.3.1 squash (`564ff9e`) that the cutover discards. Carrying the file standalone was the alternative; chose the cleaner zero-contamination path. The TS wizard pages keep their import of the local `talent-scout/Stepper.tsx`.
+3. `npx tsc --noEmit` and `npm run build` both clean.
+4. Verified `git log --cherry-pick --left-only --no-merges main...vs-port-fresh` listed only the 42 commits we intended to drop (failed Phase 4 squashes 4.1 through 4.6 + URL-quality hot patches + their backfills + `4a8a5c6` + Phase 4.3.1 follow-ups + assorted doc-only commits). Cherry-picked `6775429` and `f24d3f5` were correctly excluded as patch-equivalent.
+5. Push fired Netlify deploy on `hq.mirrornyc.com`. Production VS went live as the build completed.
+6. Post-cutover cleanup: `vs-start-sourcing` orphan edge function deleted via `supabase functions delete`. The 4.1-port migration's DROP TABLE statements for `vs_briefs` / `vs_sourcing_rounds` / `vs_pitch_decks` were already applied (migration `20260512200000` is on the production ledger), so no additional DB cleanup migration was needed.
+
+Main HEAD after cutover: `7cd27ed`. The cutover verification check is `git show --stat <new-sha>` vs `git show --stat <source-sha>` for each cherry-pick, NOT the naive `git log main --not vs-port-fresh --oneline` empty check (which is impossible by design since `vs-port-fresh` branched from `dd38577`, has archived commits on main below it, and cherry-picks produce new SHAs).
 
 ## Phase 4 Revision - Intake (3-step brief stepper)
 
@@ -1303,7 +1373,7 @@ Source's packet shows the candidate's original application email as a white "doc
 
 ## Talent Scout port (Phase 3): locked Q1-Q6
 
-Resolutions to the six open questions in `docs/talent-scout-port-plan.md` § 8.
+Resolutions to the six open questions surfaced during the Phase 3.1 Talent Scout port-plan inventory (plan doc retired in 5.8.3; questions captured below).
 
 ### Q1: re-eval history → keep history
 

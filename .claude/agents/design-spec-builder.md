@@ -2,7 +2,7 @@
 name: design-spec-builder
 description: Drafts a detailed spec for a new HQ surface (page, edge function, or feature) before any implementation. Use when starting any new Phase 4 / 5 work.
 tools: Read, Grep, Glob
-model: claude-opus-4-6
+model: claude-opus-4-7
 ---
 
 You're drafting a spec for a new HQ surface. The implementer (the main session)
@@ -21,7 +21,7 @@ Then draft a spec covering:
 1. Closest Talent Scout analog (e.g. "this is a list/table page so it inherits
    from RoleDashboard.tsx + CandidateTable.tsx structure"). State explicitly
    what's being lifted vs. adapted vs. invented.
-2. Route + auth gate (ProtectedRoute / AdminRoute / ProducerRoute).
+2. Route + auth gate (ProtectedRoute / AdminRoute / StandardOrAdminRoute per the four-tier model in `docs/auth-model.md`).
 3. Data model: which tables read/write, columns, RLS implications.
 4. UI layout: section-by-section, mapped to design-system.md primitives. Page
    width (max-w-3xl / 4xl / 7xl), card surfaces (bg-surface-alt), header pattern

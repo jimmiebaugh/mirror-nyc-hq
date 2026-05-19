@@ -30,7 +30,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { PhotoUploadModal } from "@/components/venue-scout/PhotoUploadModal";
@@ -222,7 +222,7 @@ export default function DeckPrep() {
         .update(patch)
         .eq("id", id);
       if (error) {
-        toast.error(error.message);
+        toast({ title: "Error", description: error.message, variant: "destructive" });
         load();
       }
     }, 600);
