@@ -42,6 +42,9 @@ const VENDOR_FILTER_FIELDS: FilterFieldDef[] = [
   { key: "city", label: "City", type: "text" },
   { key: "capabilities", label: "Capabilities", type: "text" },
   { key: "tags", label: "Tags", type: "text" },
+  // Phase 5.9.3: presence chip. Commits immediately (no value step) and filters
+  // to vendors that carry a bulk_import_session_id.
+  { key: "bulkImportSessionId", label: "Bulk Imported", type: "presence" },
 ];
 
 const FROM_LABEL = "Vendors";
@@ -75,8 +78,13 @@ export default function VendorsList() {
     };
   }, []);
 
-  // Phase 5.6.5: resolve default saved view on mount.
+  // Phase 5.6.5: resolve default saved view on mount. Phase 5.9.5: skip when
+  // arriving from the bulk-import history "Open list" drill-down so the
+  // session seed below isn't clobbered by the async default-view resolve.
   useEffect(() => {
+    if ((location.state as { bulkImportSessionId?: string } | null)?.bulkImportSessionId) {
+      return;
+    }
     let active = true;
     getDefaultSavedView("vendor").then((v) => {
       if (!active || !v) return;
@@ -86,7 +94,20 @@ export default function VendorsList() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [location.state]);
+
+  // Phase 5.9.5: "Open list" from the bulk-import history rail seeds a single
+  // session-scoped chip so the list shows only that import's records.
+  useEffect(() => {
+    const sid = (location.state as { bulkImportSessionId?: string } | null)
+      ?.bulkImportSessionId;
+    if (!sid) return;
+    setFilterState((prev) => ({
+      ...prev,
+      chips: [{ field: "bulkImportSessionId", op: "is", value: sid }],
+    }));
+    setActiveViewName("Custom filter");
+  }, [location.state]);
 
   const handleResetToGlobal = async () => {
     const v = await getDefaultSavedView("vendor");
@@ -105,12 +126,19 @@ export default function VendorsList() {
   };
 
   const filtered = useMemo(() => {
-    let result = applyFilters(rows, filterState, (row, key) => {
-      const val = (row as unknown as Record<string, unknown>)[key];
-      if (val == null) return null;
-      if (Array.isArray(val)) return val.map(String);
-      return typeof val === "string" ? val : String(val);
-    });
+    let result = applyFilters(
+      rows,
+      filterState,
+      (row, key) => {
+        const val = (row as unknown as Record<string, unknown>)[key];
+        if (val == null) return null;
+        if (Array.isArray(val)) return val.map(String);
+        return typeof val === "string" ? val : String(val);
+      },
+      undefined,
+      // Nationwide vendors satisfy any city filter (Phase 5.9.3.1).
+      { city: (row) => row.nationwide },
+    );
 
     // Phase 5.7.8 search bar (scope: name + category + subcategory + capabilities + tags).
     const q = searchQuery.trim().toLowerCase();
@@ -235,6 +263,9 @@ export default function VendorsList() {
                     <span className="lead">{r.name}</span>
                     {isInternalPartner(r.tags) ? (
                       <span className="pill pill-sm p-info">Internal</span>
+                    ) : null}
+                    {r.nationwide ? (
+                      <span className="pill pill-sm p-success">National</span>
                     ) : null}
                   </span>
                 ),

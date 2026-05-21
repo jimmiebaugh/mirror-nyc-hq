@@ -3,10 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Stepper } from "@/components/talent-scout/Stepper";
+import { Stepper } from "@/components/ui/Stepper";
 import { TagInput } from "@/components/talent-scout/TagInput";
 import { CriterionCard } from "@/components/talent-scout/CriterionCard";
-import { wizard, type Criterion } from "@/lib/talent-scout/wizardStore";
+import { TS_WIZARD_STEPS, wizard, type Criterion } from "@/lib/talent-scout/wizardStore";
 import { TIER_META, COMPETITOR_BONUS_POINTS } from "@/lib/talent-scout/scorecard";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -290,7 +290,7 @@ export default function NewRoleScorecard() {
   if (loading) {
     return (
       <div className="mx-auto max-w-3xl">
-        <Stepper active={3} />
+        <Stepper steps={TS_WIZARD_STEPS} active={3} />
         <div className="flex flex-col items-center gap-4 py-24 text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <div>
@@ -307,7 +307,7 @@ export default function NewRoleScorecard() {
   if (error && criteria.length === 0) {
     return (
       <div className="mx-auto max-w-3xl">
-        <Stepper active={3} />
+        <Stepper steps={TS_WIZARD_STEPS} active={3} />
         <Card>
           <CardContent className="space-y-4 p-8 text-center">
             <p className="text-sm">⚠ {error}</p>
@@ -325,7 +325,7 @@ export default function NewRoleScorecard() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Stepper active={3} />
+      <Stepper steps={TS_WIZARD_STEPS} active={3} />
 
       <div className="flex items-end justify-between gap-5">
         <div className="space-y-2">

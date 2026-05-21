@@ -53,6 +53,11 @@ type State = {
 
 const state: State = { step1: null, step2: null, criteria: null };
 
+// Step labels for the 3-step new-role wizard. Consumed by every step page
+// with the shared <Stepper /> primitive (moved to src/components/ui/Stepper
+// in Phase 5.9.1).
+export const TS_WIZARD_STEPS = ["Role Details", "Search Setup", "Scorecard"] as const;
+
 export const wizard = {
   get: () => state,
   setStep1: (s: WizardStep1) => {

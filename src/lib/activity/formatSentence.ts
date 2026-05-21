@@ -155,6 +155,7 @@ function entityWord(entityType: string): string {
     case "wiki_page": return "wiki page";
     case "outlook_entry": return "outlook entry";
     case "credential": return "credential";
+    case "bulk_import_session": return "bulk import";
     default: return entityType.replace(/_/g, " ");
   }
 }
@@ -189,6 +190,39 @@ export function formatActivitySentence(row: ActivityRow): FormattedActivity {
       recordName: name,
       recordHref: href,
       leadingText: ` created ${entityWord(entityType)} `,
+    };
+  }
+
+  // Phase 5.9.1: bulk-import session. Sentence reads "{actor} imported N
+  // {entity}s" where entity comes from payload.entity_type set by the
+  // edge function. No clickable record name in 5.9.1 (the audit page
+  // lands in 5.9.5 with the proper link target).
+  if (row.action === "bulk_import" && entityType === "bulk_import_session") {
+    const payload = row.payload ?? {};
+    const rowCount = typeof payload.row_count === "number" ? payload.row_count : 0;
+    const targetEntity =
+      typeof payload.entity_type === "string" ? payload.entity_type : "record";
+    return {
+      actor,
+      recordName: null,
+      recordHref: null,
+      leadingText: ` imported ${rowCount} ${targetEntity}${rowCount === 1 ? "" : "s"}`,
+    };
+  }
+
+  // Phase 5.9.6: bulk-import undo. Payload is the undo counts shape
+  // ({ entity_type, records, contacts, cascade }). Reads "{actor} undid a
+  // {entity} import (N records removed)". The session is gone, so no link.
+  if (row.action === "bulk_import_undo" && entityType === "bulk_import_session") {
+    const payload = row.payload ?? {};
+    const records = typeof payload.records === "number" ? payload.records : 0;
+    const targetEntity =
+      typeof payload.entity_type === "string" ? payload.entity_type : "record";
+    return {
+      actor,
+      recordName: null,
+      recordHref: null,
+      leadingText: ` undid a ${targetEntity} import (${records} record${records === 1 ? "" : "s"} removed)`,
     };
   }
 

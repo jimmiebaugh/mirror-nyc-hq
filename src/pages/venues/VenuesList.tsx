@@ -88,8 +88,13 @@ export default function VenuesList() {
     };
   }, []);
 
-  // Phase 5.6.5: resolve default saved view on mount.
+  // Phase 5.6.5: resolve default saved view on mount. Phase 5.9.5: skip when
+  // arriving from the bulk-import history "Open list" drill-down so the
+  // session seed below isn't clobbered by the async default-view resolve.
   useEffect(() => {
+    if ((location.state as { bulkImportSessionId?: string } | null)?.bulkImportSessionId) {
+      return;
+    }
     let active = true;
     getDefaultSavedView("venue").then((v) => {
       if (!active || !v) return;
@@ -99,7 +104,20 @@ export default function VenuesList() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [location.state]);
+
+  // Phase 5.9.5: "Open list" from the bulk-import history rail seeds a single
+  // session-scoped chip so the list shows only that import's records.
+  useEffect(() => {
+    const sid = (location.state as { bulkImportSessionId?: string } | null)
+      ?.bulkImportSessionId;
+    if (!sid) return;
+    setFilterState((prev) => ({
+      ...prev,
+      chips: [{ field: "bulkImportSessionId", op: "is", value: sid }],
+    }));
+    setActiveViewName("Custom filter");
+  }, [location.state]);
 
   const handleResetToGlobal = async () => {
     const v = await getDefaultSavedView("venue");
@@ -122,6 +140,9 @@ export default function VenuesList() {
       },
       { key: "city", label: "City", type: "text" },
       { key: "neighborhood", label: "Neighborhood", type: "text" },
+      // Phase 5.9.4: presence chip. Commits immediately (no value step) and
+      // filters to venues that carry a bulk_import_session_id.
+      { key: "bulkImportSessionId", label: "Bulk Imported", type: "presence" },
     ],
     [venueTypesLookup.options],
   );

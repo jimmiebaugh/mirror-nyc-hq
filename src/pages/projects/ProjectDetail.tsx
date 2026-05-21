@@ -611,7 +611,7 @@ export default function ProjectDetail() {
     { label: "Production", url: project.production_folder_url, Icon: IconDrive },
     { label: "Design", url: project.design_decks_folder_url, Icon: IconDrive },
     { label: "Slack", url: project.slack_channel_url, Icon: IconSlack },
-    { label: "Server", url: null, Icon: IconDrive },
+    { label: "Budget", url: project.budget_sheet_url, Icon: IconDrive },
   ];
 
   return (

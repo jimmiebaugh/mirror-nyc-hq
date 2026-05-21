@@ -21,6 +21,7 @@ import {
   type MiniCreateField,
 } from "@/components/ui/MiniCreateModal";
 import { useLookup, type LookupTable } from "@/lib/hq/lookups";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Notion-style typeahead with inline-add (Phase 5.6.1 spec § 4.A).
@@ -72,6 +73,15 @@ type RecordSource = {
   kind: "record";
   loadOptions: () => Promise<Option[]>;
 };
+/**
+ * Phase 5.9.2: active Mirror staff keyed by email. Option `id` is the email
+ * (not the user uuid) because consumers resolve people by email (the bulk
+ * import RPC matches `users.email`). No inline-create path: staff are
+ * pre-provisioned via /users only, so the "+ Add" affordance is suppressed.
+ */
+type UsersByEmailSource = {
+  kind: "users-by-email";
+};
 
 type SingleProps = {
   multi?: false;
@@ -90,7 +100,7 @@ type MultiProps = {
 };
 
 type CommonProps = {
-  source: LookupSource | RecordSource;
+  source: LookupSource | RecordSource | UsersByEmailSource;
   placeholder?: string;
   entityLabel: string;
   disabled?: boolean;
@@ -152,7 +162,62 @@ export function RecordCombobox(props: RecordComboboxProps) {
   if (props.source.kind === "lookup") {
     return <LookupCombobox {...props} source={props.source} />;
   }
+  if (props.source.kind === "users-by-email") {
+    return <UsersByEmailCombobox {...props} source={props.source} />;
+  }
   return <RecordSourceCombobox {...props} source={props.source} />;
+}
+
+async function loadActiveUsersByEmail(): Promise<Option[]> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("email, full_name")
+    .eq("active", true)
+    .order("full_name", { ascending: true });
+  if (error || !data) return [];
+  return data
+    .filter((u) => u.email)
+    .map((u) => ({
+      id: u.email as string,
+      label: u.full_name ? `${u.full_name} <${u.email}>` : (u.email as string),
+    }));
+}
+
+function UsersByEmailCombobox(
+  props: RecordComboboxProps & { source: UsersByEmailSource },
+) {
+  const [options, setOptions] = useState<Option[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // No inline-create for staff; warn + ignore if a caller wires one up.
+  if (props.onMiniCreate) {
+    console.warn(
+      "RecordCombobox: onMiniCreate is ignored for the users-by-email source (staff are pre-provisioned via /users).",
+    );
+  }
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    loadActiveUsersByEmail().then((opts) => {
+      if (!active) return;
+      setOptions(opts);
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <ComboboxView
+      {...props}
+      allowCreate={false}
+      options={options}
+      loading={loading}
+      insertOption={async () => null}
+    />
+  );
 }
 
 function LookupCombobox(

@@ -72,6 +72,9 @@ export type ProjectListRow = {
    * `teamNames` for matching).
    */
   memberNames: string[];
+  /** Phase 5.9.2: set when the project was created/updated via a bulk import.
+   *  Powers the "Bulk Imported" presence filter chip. */
+  bulkImportSessionId: string | null;
 };
 
 function firstName(name: string | null | undefined, email: string | null | undefined): string | null {
@@ -87,7 +90,7 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
       `id, name, status, job_number, category, city, tags,
        install_dates_start, install_dates_end,
        live_dates_start, live_dates_end,
-       removal_dates_start, removal_dates_end, client_id,
+       removal_dates_start, removal_dates_end, client_id, bulk_import_session_id,
        client:clients!projects_client_id_fkey(id, name),
        account_managers:project_account_managers(user:users(full_name, email)),
        designers:project_designers(user:users(full_name, email)),
@@ -114,6 +117,7 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
     removal_dates_start: string | null;
     removal_dates_end: string | null;
     client_id: string | null;
+    bulk_import_session_id: string | null;
     client:
       | { id: string; name: string | null }
       | { id: string; name: string | null }[]
@@ -164,6 +168,7 @@ export async function loadProjects(): Promise<ProjectListRow[]> {
       memberNames: ms
         .map((u) => u?.full_name?.trim() || u?.email?.split("@")[0] || "")
         .filter(Boolean),
+      bulkImportSessionId: p.bulk_import_session_id,
     };
   });
 }

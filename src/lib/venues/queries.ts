@@ -18,6 +18,7 @@ export type VenueListRow = {
   features: string[];
   venueTypes: string[];
   pastProjectCount: number;
+  bulkImportSessionId: string | null;
 };
 
 export async function loadVenues(): Promise<VenueListRow[]> {
@@ -25,7 +26,7 @@ export async function loadVenues(): Promise<VenueListRow[]> {
     supabase
       .from("venues")
       .select(
-        "id, name, city, neighborhood, total_sq_ft, website_url, notes, features",
+        "id, name, city, neighborhood, total_sq_ft, website_url, notes, features, bulk_import_session_id",
       )
       .order("name", { ascending: true }),
     supabase
@@ -67,6 +68,7 @@ export async function loadVenues(): Promise<VenueListRow[]> {
       website_url: string | null;
       notes: string | null;
       features: string[] | null;
+      bulk_import_session_id: string | null;
     };
     return {
       id: row.id,
@@ -79,6 +81,7 @@ export async function loadVenues(): Promise<VenueListRow[]> {
       features: row.features ?? [],
       venueTypes: typesByVenue.get(row.id) ?? [],
       pastProjectCount: counts.get(row.id) ?? 0,
+      bulkImportSessionId: row.bulk_import_session_id,
     };
   });
 }

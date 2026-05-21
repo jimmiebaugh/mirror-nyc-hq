@@ -134,3 +134,12 @@ verify_jwt = false
 
 [functions.hq-cron-event-date-today]
 verify_jwt = false
+
+# Phase 5.9.1: shared cross-cutting bulk-import primitive. User-invoked
+# synchronous from the BulkImportPage commit step; no self-invoke.
+# Default verify_jwt = true is correct here; the explicit block matches
+# the vs-parse-brief / vs-parse-sheet sibling pattern for clarity.
+# Server-side admin re-check inside the function is defense in depth on
+# top of the AdminRoute gate; see spec § 9.
+[functions.bulk-import]
+verify_jwt = true

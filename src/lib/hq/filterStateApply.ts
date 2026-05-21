@@ -39,10 +39,26 @@ export function applyFilters<T>(
   state: FilterState,
   getField: (row: T, key: string) => string | string[] | null,
   context?: ApplyFiltersContext,
+  /**
+   * Per-field "always matches" predicate. When a chip's field has an entry
+   * here and the predicate returns true for a row, that chip auto-passes for
+   * that row regardless of its cell value. Used for nationwide vendors: a
+   * vendor flagged nationwide satisfies any `city` chip (Phase 5.9.3.1), so it
+   * surfaces under every city filter while a non-nationwide vendor still
+   * matches its base city normally.
+   */
+  fieldMatchAll?: Record<string, (row: T) => boolean>,
 ): T[] {
   if (state.chips.length === 0) return rows;
   const check = (row: T, chip: FilterChip): boolean => {
+    if (fieldMatchAll?.[chip.field]?.(row)) return true;
     const val = getField(row, chip.field);
+    // Presence: "yes" => field has a value; "no" => field is empty. Evaluated
+    // before the null guard since a null value is itself a meaningful answer.
+    if (chip.op === "presence") {
+      const want = (Array.isArray(chip.value) ? chip.value[0] : chip.value) !== "no";
+      return want ? val != null : val == null;
+    }
     if (val == null) return false;
     const cell = Array.isArray(val) ? val.join(" · ") : val;
     const cellLow = cell.toLowerCase();

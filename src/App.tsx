@@ -40,6 +40,8 @@ import TeamMemberEdit from "./pages/team/TeamMemberEdit";
 import UserProfile from "./pages/users/UserProfile";
 import ProfileSettings from "./pages/users/ProfileSettings";
 import SettingsPage from "./pages/settings/SettingsPage";
+import BulkImportEntityPage from "./pages/bulk-import/BulkImportEntityPage";
+import BulkImportHistoryPage from "./pages/bulk-import/BulkImportHistoryPage";
 import ActivityFeed from "./pages/activity/ActivityFeed";
 import SearchPage from "./pages/search/SearchPage";
 import NotificationPreferences from "./pages/notifications/NotificationPreferences";
@@ -505,6 +507,28 @@ const App = () => (
                   columns + name + email stay admin-only (gated by the
                   extended users_protect_admin_columns trigger). */}
               <Route path="/settings/profile" element={<ProfileSettings />} />
+              {/* Phase 5.9.1: bulk-import primitive. AdminRoute gates the
+                  per-entity surface; the edge function re-checks admin
+                  server-side. The history audit page (5.9.5) MUST be
+                  declared before the :entity dynamic route, or Router
+                  resolves "history" as :entity and lands on the Unknown
+                  importer empty state. */}
+              <Route
+                path="/settings/bulk-import/history"
+                element={
+                  <AdminRoute>
+                    <BulkImportHistoryPage />
+                  </AdminRoute>
+                }
+              />
+              <Route
+                path="/settings/bulk-import/:entity"
+                element={
+                  <AdminRoute>
+                    <BulkImportEntityPage />
+                  </AdminRoute>
+                }
+              />
               {/* Phase 5.4 feedback round: /team renamed to /users. Keep
                   redirects so old bookmarks + pre-feedback notifications
                   (link_url = '/team') still land on the right surface. */}

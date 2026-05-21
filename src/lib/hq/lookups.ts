@@ -124,6 +124,44 @@ export function getLookupCached(
   return cache.get(cacheKey(table, parentScopeId))?.options ?? [];
 }
 
+/**
+ * Drop cached options so the next read refetches. The cache otherwise never
+ * refetches once populated (see `ensureLoaded`), so a row created OUTSIDE the
+ * `addOption` path — e.g. a `vendor_categories` / `cities` row a bulk-import
+ * RPC creates server-side — would stay invisible to every `useLookup`
+ * consumer until a full page reload. Call this on the import success path.
+ *
+ *   - `invalidateLookup()`            -> clear every cached table + scope
+ *   - `invalidateLookup(table)`       -> clear every scope of one table
+ *   - `invalidateLookup(table, scope)`-> clear one (table, scope) entry
+ *
+ * Live `useLookup` instances (mounted subscribers) are refetched immediately;
+ * dormant entries simply refetch on their next mount.
+ */
+export function invalidateLookup(
+  table?: LookupTable,
+  parentScopeId?: string | null,
+): void {
+  for (const key of [...cache.keys()]) {
+    const matches = !table
+      ? true
+      : parentScopeId !== undefined
+        ? key === cacheKey(table, parentScopeId)
+        : key === `${table}:` || key.startsWith(`${table}:`);
+    if (!matches) continue;
+    const entry = cache.get(key);
+    if (!entry) continue;
+    entry.options = null;
+    entry.loadPromise = null;
+    if (entry.subscribers.size > 0) {
+      const sepIdx = key.indexOf(":");
+      const t = key.slice(0, sepIdx) as LookupTable;
+      const scope = key.slice(sepIdx + 1) || null;
+      void ensureLoaded(t, scope, key);
+    }
+  }
+}
+
 export function useLookup(
   table: LookupTable,
   opts?: { parentScopeId?: string | null },

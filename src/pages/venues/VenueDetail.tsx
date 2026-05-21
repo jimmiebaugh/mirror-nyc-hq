@@ -47,6 +47,7 @@ type Venue = {
   city: string | null;
   capacity: number | null;
   total_sq_ft: number | null;
+  general_email: string | null;
   website_url: string | null;
   venue_slide_url: string | null;
   features: string[];
@@ -81,7 +82,7 @@ export default function VenueDetail() {
       const venueRes = await supabase
         .from("venues")
         .select(
-          "id, name, address, neighborhood, city, capacity, total_sq_ft, website_url, venue_slide_url, features, notes, exclusive_vendor_ids",
+          "id, name, address, neighborhood, city, capacity, total_sq_ft, general_email, website_url, venue_slide_url, features, notes, exclusive_vendor_ids",
         )
         .eq("id", id)
         .single();
@@ -344,243 +345,257 @@ export default function VenueDetail() {
               <span className="h-card">Venue Details</span>
             </div>
             <div className="card-pad">
-              <div className="grid g2" style={{ gap: 28 }}>
-                {/* Phase 5.6.3.1 (round 2) column reorder per Jimmie:
-                    Left = Venue Type, City, Neighborhood, Address, Venue
-                    Slide, Website. Right = Total Sq Ft, Capacity, Event
-                    Day Rate, Prod Day Rate, Exclusive Vendors. */}
-                <dl className="kv" style={{ gridTemplateColumns: "130px 1fr" }}>
-                  <dt>Venue Type</dt>
-                  <dd>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        gap: 8,
-                      }}
-                    >
-                      {venueTypes.length > 0 ? (
-                        <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
-                          {venueTypes.map((t) => (
-                            <VenueTypePill key={t} type={t} small />
-                          ))}
-                        </span>
-                      ) : null}
-                      <RecordCombobox
-                        multi
-                        hideMultiValueChips
-                        source={{ kind: "lookup", table: "venue_types" }}
-                        multiValue={venueTypesLookup.options
-                          .filter((o) => venueTypeIds.includes(o.id))
-                          .map((o) => o.name)}
-                        onMultiChange={(nextNames) => {
-                          // Stale-snapshot fallback to the sync cache:
-                          // freshly-added option is in the cache the same
-                          // tick but not yet in the parent's useLookup
-                          // state, so direct lookup misses without this.
-                          const cached = getLookupCached("venue_types");
-                          const nextIds = nextNames
-                            .map(
-                              (n) =>
-                                venueTypesLookup.options.find((o) => o.name === n)?.id ??
-                                cached.find((o) => o.name === n)?.id,
-                            )
-                            .filter((x): x is string => !!x);
-                          if (nextIds.length !== nextNames.length) return;
-                          void saveVenueTypeIds(nextIds);
-                        }}
-                        entityLabel="Venue type"
-                        placeholder="Select"
-                      />
-                    </div>
-                  </dd>
-                  <dt>City</dt>
-                  <dd>
+              {/* Card field order (per Jimmie 2026-05-21): reads left-to-right,
+                  top-to-bottom. Single 4-column grid (label value label value)
+                  so each visual row is ONE grid row -> the left + right cells
+                  share a row height and stay vertically aligned even when a
+                  tall cell like Venue Type grows (two separate .kv blocks did
+                  NOT align, since each sized its rows independently). Pair order:
+                  City | Venue Type, Neighborhood | Address, Website | General
+                  Email, Total Sq Ft | Capacity, Event Day Rate | Prod Day Rate.
+                  Exclusive Vendors + Features span full width below. Venue Slide
+                  is NOT a field here (the header has a Venue Slide button). */}
+              <dl
+                className="kv"
+                style={{ gridTemplateColumns: "130px minmax(0, 1fr) 130px minmax(0, 1fr)", columnGap: 24 }}
+              >
+                <dt>City</dt>
+                <dd>
+                  <RecordCombobox
+                    source={{ kind: "lookup", table: "cities" }}
+                    value={venue.city || null}
+                    onChange={(next) => void saveField("city", next || null)}
+                    entityLabel="city"
+                    placeholder="Select"
+                  />
+                </dd>
+                <dt>Venue Type</dt>
+                <dd>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                      gap: 8,
+                    }}
+                  >
+                    {venueTypes.length > 0 ? (
+                      <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
+                        {venueTypes.map((t) => (
+                          <VenueTypePill key={t} type={t} small />
+                        ))}
+                      </span>
+                    ) : null}
                     <RecordCombobox
-                      source={{ kind: "lookup", table: "cities" }}
-                      value={venue.city || null}
-                      onChange={(next) => void saveField("city", next || null)}
-                      entityLabel="city"
+                      multi
+                      hideMultiValueChips
+                      source={{ kind: "lookup", table: "venue_types" }}
+                      multiValue={venueTypesLookup.options
+                        .filter((o) => venueTypeIds.includes(o.id))
+                        .map((o) => o.name)}
+                      onMultiChange={(nextNames) => {
+                        // Stale-snapshot fallback to the sync cache:
+                        // freshly-added option is in the cache the same
+                        // tick but not yet in the parent's useLookup
+                        // state, so direct lookup misses without this.
+                        const cached = getLookupCached("venue_types");
+                        const nextIds = nextNames
+                          .map(
+                            (n) =>
+                              venueTypesLookup.options.find((o) => o.name === n)?.id ??
+                              cached.find((o) => o.name === n)?.id,
+                          )
+                          .filter((x): x is string => !!x);
+                        if (nextIds.length !== nextNames.length) return;
+                        void saveVenueTypeIds(nextIds);
+                      }}
+                      entityLabel="Venue type"
                       placeholder="Select"
                     />
-                  </dd>
-                  <dt>Neighborhood</dt>
-                  <dd>
-                    <InlineEditText
-                      value={venue.neighborhood}
-                      placeholder="Neighborhood"
-                      renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
-                      onSave={(next) => saveField("neighborhood", next || null)}
-                    />
-                  </dd>
-                  <dt>Address</dt>
-                  <dd>
-                    <InlineEditText
-                      value={venue.address}
-                      placeholder="Street address"
-                      renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
-                      onSave={(next) => saveField("address", next || null)}
-                    />
-                  </dd>
-                  <dt>Venue Slide</dt>
-                  <dd>
-                    <InlineEditText
-                      value={venue.venue_slide_url}
-                      placeholder="https://docs.google.com/presentation/..."
-                      inputType="url"
-                      renderRead={(v) =>
-                        v ? (
-                          <a
-                            className="tlink"
-                            href={v}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <IconSlides className="ic ic-sm" /> Open
-                          </a>
-                        ) : (
-                          <span className="muted subtle">-</span>
-                        )
-                      }
-                      onSave={(next) => saveField("venue_slide_url", next || null)}
-                    />
-                  </dd>
-                  <dt>Website</dt>
-                  <dd>
-                    <InlineEditText
-                      value={venue.website_url}
-                      placeholder="https://example.com"
-                      inputType="url"
-                      renderRead={(v) =>
-                        v ? (
-                          <a
-                            className="tlink"
-                            href={v}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <IconLink className="ic ic-sm" /> {prettyHost(v)}
-                          </a>
-                        ) : (
-                          <span className="muted subtle">-</span>
-                        )
-                      }
-                      onSave={(next) => saveField("website_url", next || null)}
-                    />
-                  </dd>
-                </dl>
-                <dl className="kv" style={{ gridTemplateColumns: "130px 1fr" }}>
-                  <dt>Total Sq Ft</dt>
-                  <dd>
-                    <InlineEditText
-                      value={venue.total_sq_ft != null ? String(venue.total_sq_ft) : null}
-                      placeholder="Total sq ft"
-                      inputType="number"
-                      renderRead={(v) =>
-                        v ? (
-                          Number(v).toLocaleString("en-US")
-                        ) : (
-                          <span className="muted subtle">-</span>
-                        )
-                      }
-                      onSave={(next) => {
-                        const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
-                        return saveField(
-                          "total_sq_ft",
-                          parsed != null && Number.isFinite(parsed) ? parsed : null,
-                        );
-                      }}
-                    />
-                  </dd>
-                  <dt>Capacity</dt>
-                  <dd>
-                    <InlineEditText
-                      value={venue.capacity != null ? String(venue.capacity) : null}
-                      placeholder="Capacity"
-                      inputType="number"
-                      renderRead={(v) =>
-                        v ? (
-                          Number(v).toLocaleString("en-US")
-                        ) : (
-                          <span className="muted subtle">-</span>
-                        )
-                      }
-                      onSave={(next) => {
-                        const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
-                        return saveField(
-                          "capacity",
-                          parsed != null && Number.isFinite(parsed) ? parsed : null,
-                        );
-                      }}
-                    />
-                  </dd>
-                  <dt>Event Day Rate</dt>
-                  <dd>
-                    <button
-                      type="button"
-                      className="inline-edit-read"
-                      title="Click to add a new rate"
-                      onClick={() => setRateModalKind("event_day")}
-                      style={{ background: "transparent", border: 0, padding: "1px 4px", margin: "-1px -4px", cursor: "text", textAlign: "left", font: "inherit", color: "inherit" }}
-                    >
-                      {eventRate ? (
-                        <>
-                          ${eventRate.amount_usd.toLocaleString("en-US")}{" "}
-                          <span className="cap">as of {formatShortDate(eventRate.effective_from)}</span>
-                        </>
+                  </div>
+                </dd>
+                <dt>Neighborhood</dt>
+                <dd>
+                  <InlineEditText
+                    value={venue.neighborhood}
+                    placeholder="Neighborhood"
+                    renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
+                    onSave={(next) => saveField("neighborhood", next || null)}
+                  />
+                </dd>
+                <dt>Address</dt>
+                <dd>
+                  <InlineEditText
+                    value={venue.address}
+                    placeholder="Street address"
+                    renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
+                    onSave={(next) => saveField("address", next || null)}
+                  />
+                </dd>
+                <dt>Website</dt>
+                <dd>
+                  <InlineEditText
+                    value={venue.website_url}
+                    placeholder="https://example.com"
+                    inputType="url"
+                    renderRead={(v) =>
+                      v ? (
+                        <a
+                          className="tlink"
+                          href={v}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <IconLink className="ic ic-sm" /> {prettyHost(v)}
+                        </a>
                       ) : (
-                        <span className="muted subtle">Click to add</span>
-                      )}
-                    </button>
-                  </dd>
-                  <dt>Prod Day Rate</dt>
-                  <dd>
-                    <button
-                      type="button"
-                      className="inline-edit-read"
-                      title="Click to add a new rate"
-                      onClick={() => setRateModalKind("prod_day")}
-                      style={{ background: "transparent", border: 0, padding: "1px 4px", margin: "-1px -4px", cursor: "text", textAlign: "left", font: "inherit", color: "inherit" }}
-                    >
-                      {prodRate ? (
-                        <>
-                          ${prodRate.amount_usd.toLocaleString("en-US")}{" "}
-                          <span className="cap">as of {formatShortDate(prodRate.effective_from)}</span>
-                        </>
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("website_url", next || null)}
+                  />
+                </dd>
+                <dt>General Email</dt>
+                <dd>
+                  <InlineEditText
+                    value={venue.general_email}
+                    placeholder="bookings@example.com"
+                    inputType="email"
+                    renderRead={(v) =>
+                      v ? (
+                        <a
+                          className="tlink inline-block max-w-full truncate align-bottom"
+                          href={`mailto:${v}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {v}
+                        </a>
                       ) : (
-                        <span className="muted subtle">Click to add</span>
-                      )}
-                    </button>
-                  </dd>
-                  <dt>Exclusive Vendors</dt>
-                  <dd>
-                    <div className="stack-2">
-                      <RecordCombobox
-                        multi
-                        source={{ kind: "record", loadOptions: loadVendorOptions }}
-                        multiValue={venue.exclusive_vendor_ids}
-                        onMultiChange={(next) => void saveExclusiveVendorIds(next)}
-                        entityLabel="Vendor"
-                        placeholder="Add vendor..."
-                      />
-                      {vendors.length > 0 ? (
-                        <span className="row-c wrap" style={{ display: "inline-flex", gap: 8 }}>
-                          {vendors.map((v, i) => (
-                            <span key={v.id}>
-                              <Link to={`/vendors/${v.id}`} className="tlink">
-                                {v.name}
-                              </Link>
-                              {i < vendors.length - 1 ? <span className="muted">, </span> : null}
-                            </span>
-                          ))}
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("general_email", next || null)}
+                  />
+                </dd>
+                <dt>Total Sq Ft</dt>
+                <dd>
+                  <InlineEditText
+                    value={venue.total_sq_ft != null ? String(venue.total_sq_ft) : null}
+                    placeholder="Total sq ft"
+                    inputType="number"
+                    renderRead={(v) =>
+                      v ? (
+                        Number(v).toLocaleString("en-US")
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => {
+                      const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
+                      return saveField(
+                        "total_sq_ft",
+                        parsed != null && Number.isFinite(parsed) ? parsed : null,
+                      );
+                    }}
+                  />
+                </dd>
+                <dt>Capacity</dt>
+                <dd>
+                  <InlineEditText
+                    value={venue.capacity != null ? String(venue.capacity) : null}
+                    placeholder="Capacity"
+                    inputType="number"
+                    renderRead={(v) =>
+                      v ? (
+                        Number(v).toLocaleString("en-US")
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => {
+                      const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
+                      return saveField(
+                        "capacity",
+                        parsed != null && Number.isFinite(parsed) ? parsed : null,
+                      );
+                    }}
+                  />
+                </dd>
+                <dt>Event Day Rate</dt>
+                <dd>
+                  <button
+                    type="button"
+                    className="inline-edit-read"
+                    title="Click to add a new rate"
+                    onClick={() => setRateModalKind("event_day")}
+                    style={{ background: "transparent", border: 0, padding: "1px 4px", margin: "-1px -4px", cursor: "text", textAlign: "left", font: "inherit", color: "inherit" }}
+                  >
+                    {eventRate ? (
+                      <>
+                        ${eventRate.amount_usd.toLocaleString("en-US")}{" "}
+                        <span className="cap">as of {formatShortDate(eventRate.effective_from)}</span>
+                      </>
+                    ) : (
+                      <span className="muted subtle">Click to add</span>
+                    )}
+                  </button>
+                </dd>
+                <dt>Prod Day Rate</dt>
+                <dd>
+                  <button
+                    type="button"
+                    className="inline-edit-read"
+                    title="Click to add a new rate"
+                    onClick={() => setRateModalKind("prod_day")}
+                    style={{ background: "transparent", border: 0, padding: "1px 4px", margin: "-1px -4px", cursor: "text", textAlign: "left", font: "inherit", color: "inherit" }}
+                  >
+                    {prodRate ? (
+                      <>
+                        ${prodRate.amount_usd.toLocaleString("en-US")}{" "}
+                        <span className="cap">as of {formatShortDate(prodRate.effective_from)}</span>
+                      </>
+                    ) : (
+                      <span className="muted subtle">Click to add</span>
+                    )}
+                  </button>
+                </dd>
+              </dl>
+              <div
+                style={{
+                  marginTop: 20,
+                  borderTop: "1px solid hsl(var(--border))",
+                  paddingTop: 16,
+                }}
+              >
+                <div
+                  className="label-form"
+                  style={{ color: "hsl(var(--subtle-foreground))", marginBottom: 9 }}
+                >
+                  Exclusive Vendors
+                </div>
+                <div className="stack-2">
+                  <RecordCombobox
+                    multi
+                    source={{ kind: "record", loadOptions: loadVendorOptions }}
+                    multiValue={venue.exclusive_vendor_ids}
+                    onMultiChange={(next) => void saveExclusiveVendorIds(next)}
+                    entityLabel="Vendor"
+                    placeholder="Add vendor..."
+                  />
+                  {vendors.length > 0 ? (
+                    <span className="row-c wrap" style={{ display: "inline-flex", gap: 8 }}>
+                      {vendors.map((v, i) => (
+                        <span key={v.id}>
+                          <Link to={`/vendors/${v.id}`} className="tlink">
+                            {v.name}
+                          </Link>
+                          {i < vendors.length - 1 ? <span className="muted">, </span> : null}
                         </span>
-                      ) : null}
-                    </div>
-                  </dd>
-                </dl>
+                      ))}
+                    </span>
+                  ) : null}
+                </div>
               </div>
               <div
                 style={{

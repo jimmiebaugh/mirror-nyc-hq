@@ -39,7 +39,9 @@ export type VendorListRow = {
   teamCount: number;
   tags: string[];
   preferred: boolean;
+  nationwide: boolean;
   recentProjects: VendorProjectLink[];
+  bulkImportSessionId: string | null;
 };
 
 export async function loadVendors(): Promise<VendorListRow[]> {
@@ -50,7 +52,7 @@ export async function loadVendors(): Promise<VendorListRow[]> {
     supabase
       .from("vendors")
       .select(
-        "id, name, category_id, subcategory_id, capabilities, city, website_url, tags, preferred, " +
+        "id, name, category_id, subcategory_id, capabilities, city, website_url, tags, preferred, nationwide, bulk_import_session_id, " +
           "category:vendor_categories!vendors_category_id_fkey(id, name), " +
           "subcategory:vendor_subcategories!vendors_subcategory_id_fkey(id, name)",
       )
@@ -105,6 +107,8 @@ export async function loadVendors(): Promise<VendorListRow[]> {
       website_url: string | null;
       tags: string[] | null;
       preferred: boolean | null;
+      nationwide: boolean | null;
+      bulk_import_session_id: string | null;
       category: { id: string; name: string | null } | null;
       subcategory: { id: string; name: string | null } | null;
     };
@@ -125,7 +129,9 @@ export async function loadVendors(): Promise<VendorListRow[]> {
       teamCount,
       tags: row.tags ?? [],
       preferred: row.preferred ?? false,
+      nationwide: row.nationwide ?? false,
       recentProjects: projectsByVendor.get(row.id) ?? [],
+      bulkImportSessionId: row.bulk_import_session_id,
     };
   });
 }

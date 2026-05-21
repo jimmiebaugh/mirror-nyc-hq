@@ -15,6 +15,7 @@ type SurfaceLabel = { title: string; surface: string };
 
 const SURFACE_LABELS: { match: RegExp; data: SurfaceLabel }[] = [
   { match: /^\/outlook/, data: { title: "Outlook is admin-only", surface: "The Outlook database" } },
+  { match: /^\/settings\/bulk-import/, data: { title: "Bulk import is admin-only", surface: "Bulk import" } },
   { match: /^\/settings/, data: { title: "Settings is admin-only", surface: "Settings" } },
   { match: /^\/users/, data: { title: "Team management is admin-only", surface: "Team management" } },
   { match: /^\/team/, data: { title: "Team management is admin-only", surface: "Team management" } },

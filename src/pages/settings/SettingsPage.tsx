@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminsCard } from "@/components/settings/AdminsCard";
+import { BulkImportCard } from "@/components/settings/BulkImportCard";
 import { LookupListEditor } from "@/components/settings/LookupListEditor";
 import { MirrorHolidaysEditor } from "@/components/settings/MirrorHolidaysEditor";
 import type { LookupTable } from "@/lib/hq/lookups";
@@ -125,6 +126,8 @@ export default function SettingsPage() {
           </table>
         </div>
       </div>
+
+      <BulkImportCard />
 
       <div className="card">
         <div className="card-headbar">

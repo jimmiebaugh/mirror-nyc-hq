@@ -40,6 +40,7 @@ type Vendor = {
   city: string | null;
   capabilities: string[];
   website_url: string | null;
+  general_email: string | null;
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
@@ -91,7 +92,7 @@ export default function VendorDetail() {
         supabase
           .from("vendors")
           .select(
-            "id, name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags, " +
+            "id, name, category_id, subcategory_id, city, capabilities, website_url, general_email, contact_name, contact_email, contact_phone, primary_address, tags, " +
               "category:vendor_categories!vendors_category_id_fkey(id, name), " +
               "subcategory:vendor_subcategories!vendors_subcategory_id_fkey(id, name)",
           )
@@ -247,14 +248,27 @@ export default function VendorDetail() {
   // can write the FK. Previously these were wired in `record` mode without
   // an onMiniCreate handler, which produced the "Create failed Please try
   // again." toast on inline-add.
+  // Resolve the display name from the lookup cache, falling back to the
+  // authoritative joined name on the vendor row. The fallback matters for
+  // freshly-created lookups (e.g. a category an import just created): the
+  // module-level lookup cache can be stale and miss the new row, which would
+  // otherwise render "No category" even though category_id is set.
   const selectedCategoryName = useMemo(() => {
     if (!vendor?.category_id) return null;
-    return categories.options.find((o) => o.id === vendor.category_id)?.name ?? null;
-  }, [vendor?.category_id, categories.options]);
+    return (
+      categories.options.find((o) => o.id === vendor.category_id)?.name ??
+      vendor.category_name ??
+      null
+    );
+  }, [vendor?.category_id, vendor?.category_name, categories.options]);
   const selectedSubcategoryName = useMemo(() => {
     if (!vendor?.subcategory_id) return null;
-    return subcategories.options.find((o) => o.id === vendor.subcategory_id)?.name ?? null;
-  }, [vendor?.subcategory_id, subcategories.options]);
+    return (
+      subcategories.options.find((o) => o.id === vendor.subcategory_id)?.name ??
+      vendor.subcategory_name ??
+      null
+    );
+  }, [vendor?.subcategory_id, vendor?.subcategory_name, subcategories.options]);
   // Capabilities live on a lookup table — surface as a multi typeahead
   // that binds option names directly (matches the existing
   // RecordCombobox lookup-mode contract).
@@ -489,64 +503,89 @@ export default function VendorDetail() {
               <span className="h-card">Details</span>
             </div>
             <div className="card-pad">
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: 16,
+                  marginBottom: 22,
+                }}
+              >
+                <dl className="kv kv--pair" style={{ gridTemplateColumns: "1fr" }}>
+                  <dt>Category</dt>
+                  <dd>
+                    <RecordCombobox
+                      source={{ kind: "lookup", table: "vendor_categories" }}
+                      value={selectedCategoryName}
+                      onChange={(name) => {
+                        if (name === null) {
+                          void saveCategoryId(null);
+                          return;
+                        }
+                        // Closure-captured `categories.options` is stale
+                        // right after inline-add (setState hasn't propagated
+                        // yet). Fall back to the synchronous cache reader
+                        // which sees the row addOption just inserted.
+                        const opt =
+                          categories.options.find((o) => o.name === name) ??
+                          getLookupCached("vendor_categories").find((o) => o.name === name);
+                        if (!opt) return;
+                        void saveCategoryId(opt.id);
+                      }}
+                      entityLabel="Category"
+                      placeholder="No category"
+                    />
+                  </dd>
+                </dl>
+                <dl className="kv kv--pair" style={{ gridTemplateColumns: "1fr" }}>
+                  <dt>Subcategory</dt>
+                  <dd>
+                    <RecordCombobox
+                      source={{
+                        kind: "lookup",
+                        table: "vendor_subcategories",
+                        parentScopeId: vendor.category_id || null,
+                        parentScopeLabel:
+                          categories.options.find(
+                            (o) => o.id === vendor.category_id,
+                          )?.name ?? null,
+                        parentScopeLabelKey: "Category",
+                      }}
+                      value={selectedSubcategoryName}
+                      onChange={(name) => {
+                        if (name === null) {
+                          void saveSubcategoryId(null);
+                          return;
+                        }
+                        const opt =
+                          subcategories.options.find((o) => o.name === name) ??
+                          getLookupCached(
+                            "vendor_subcategories",
+                            vendor.category_id || null,
+                          ).find((o) => o.name === name);
+                        if (!opt) return;
+                        void saveSubcategoryId(opt.id);
+                      }}
+                      entityLabel="Subcategory"
+                      placeholder={vendor.category_id ? "No subcategory" : "Pick Category first"}
+                      disabled={!vendor.category_id}
+                    />
+                  </dd>
+                </dl>
+                <dl className="kv kv--pair" style={{ gridTemplateColumns: "1fr" }}>
+                  <dt>City</dt>
+                  <dd>
+                    <RecordCombobox
+                      source={{ kind: "lookup", table: "cities" }}
+                      value={vendor.city || null}
+                      onChange={(next) => void saveField("city", next || null)}
+                      entityLabel="city"
+                      placeholder="Select"
+                    />
+                  </dd>
+                </dl>
+              </div>
               <dl className="kv">
-                <dt>Category</dt>
-                <dd>
-                  <RecordCombobox
-                    source={{ kind: "lookup", table: "vendor_categories" }}
-                    value={selectedCategoryName}
-                    onChange={(name) => {
-                      if (name === null) {
-                        void saveCategoryId(null);
-                        return;
-                      }
-                      // Closure-captured `categories.options` is stale
-                      // right after inline-add (setState hasn't propagated
-                      // yet). Fall back to the synchronous cache reader
-                      // which sees the row addOption just inserted.
-                      const opt =
-                        categories.options.find((o) => o.name === name) ??
-                        getLookupCached("vendor_categories").find((o) => o.name === name);
-                      if (!opt) return;
-                      void saveCategoryId(opt.id);
-                    }}
-                    entityLabel="Category"
-                    placeholder="No category"
-                  />
-                </dd>
-                <dt>Subcategory</dt>
-                <dd>
-                  <RecordCombobox
-                    source={{
-                      kind: "lookup",
-                      table: "vendor_subcategories",
-                      parentScopeId: vendor.category_id || null,
-                      parentScopeLabel:
-                        categories.options.find(
-                          (o) => o.id === vendor.category_id,
-                        )?.name ?? null,
-                      parentScopeLabelKey: "Category",
-                    }}
-                    value={selectedSubcategoryName}
-                    onChange={(name) => {
-                      if (name === null) {
-                        void saveSubcategoryId(null);
-                        return;
-                      }
-                      const opt =
-                        subcategories.options.find((o) => o.name === name) ??
-                        getLookupCached(
-                          "vendor_subcategories",
-                          vendor.category_id || null,
-                        ).find((o) => o.name === name);
-                      if (!opt) return;
-                      void saveSubcategoryId(opt.id);
-                    }}
-                    entityLabel="Subcategory"
-                    placeholder={vendor.category_id ? "No subcategory" : "Pick Category first"}
-                    disabled={!vendor.category_id}
-                  />
-                </dd>
                 <dt>Capabilities</dt>
                 <dd>
                   <RecordCombobox
@@ -584,7 +623,47 @@ export default function VendorDetail() {
                     onSave={(next) => saveField("website_url", next || null)}
                   />
                 </dd>
-                <dt>Email</dt>
+                <dt>General Email</dt>
+                <dd>
+                  <InlineEditText
+                    value={vendor.general_email}
+                    placeholder="info@example.com"
+                    inputType="email"
+                    renderRead={(v) =>
+                      v ? (
+                        <a
+                          className="tlink inline-block max-w-full truncate align-bottom"
+                          href={`mailto:${v}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {v}
+                        </a>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("general_email", next || null)}
+                  />
+                </dd>
+                <div style={{ gridColumn: "1 / -1", borderTop: "1px solid hsl(var(--border))" }} />
+                <dt>Primary Contact</dt>
+                <dd>
+                  <RecordCombobox
+                    source={{ kind: "record", loadOptions: loadVendorContactOptions }}
+                    value={primaryContactPersonId}
+                    onChange={(next) => void savePrimaryContact(next)}
+                    entityLabel="contact"
+                    placeholder="Pick or add a contact..."
+                    getRecordHref={(id) => `/people/${id}`}
+                    miniCreateFields={[
+                      { key: "full_name", label: "Full name", required: true },
+                      { key: "email", label: "Email" },
+                      { key: "role_title", label: "Role / title" },
+                    ]}
+                    onMiniCreate={createVendorContact}
+                  />
+                </dd>
+                <dt>Contact Email</dt>
                 <dd>
                   <InlineEditText
                     value={vendor.contact_email}
@@ -606,7 +685,7 @@ export default function VendorDetail() {
                     onSave={(next) => saveField("contact_email", next || null)}
                   />
                 </dd>
-                <dt>Phone</dt>
+                <dt>Contact Phone</dt>
                 <dd>
                   <InlineEditText
                     value={vendor.contact_phone}
@@ -622,23 +701,7 @@ export default function VendorDetail() {
                     onSave={(next) => saveField("contact_phone", next || null)}
                   />
                 </dd>
-                <dt>Primary Contact</dt>
-                <dd>
-                  <RecordCombobox
-                    source={{ kind: "record", loadOptions: loadVendorContactOptions }}
-                    value={primaryContactPersonId}
-                    onChange={(next) => void savePrimaryContact(next)}
-                    entityLabel="contact"
-                    placeholder="Pick or add a contact..."
-                    getRecordHref={(id) => `/people/${id}`}
-                    miniCreateFields={[
-                      { key: "full_name", label: "Full name", required: true },
-                      { key: "email", label: "Email" },
-                      { key: "role_title", label: "Role / title" },
-                    ]}
-                    onMiniCreate={createVendorContact}
-                  />
-                </dd>
+                <div style={{ gridColumn: "1 / -1", borderTop: "1px solid hsl(var(--border))" }} />
                 <dt>Address</dt>
                 <dd>
                   <InlineEditText
@@ -653,16 +716,6 @@ export default function VendorDetail() {
                       )
                     }
                     onSave={(next) => saveField("primary_address", next || null)}
-                  />
-                </dd>
-                <dt>City</dt>
-                <dd>
-                  <RecordCombobox
-                    source={{ kind: "lookup", table: "cities" }}
-                    value={vendor.city || null}
-                    onChange={(next) => void saveField("city", next || null)}
-                    entityLabel="city"
-                    placeholder="Select"
                   />
                 </dd>
                 <dt>Tags</dt>

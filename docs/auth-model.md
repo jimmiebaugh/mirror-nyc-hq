@@ -103,6 +103,12 @@ Some Edge Functions (`ts-pull-candidates`, `ts-bulk-reevaluate`; the packet-gene
 
 **When to use this pattern:** any Edge Function that POSTs back to itself (chunked pipelines, batch processing). Use the default `verify_jwt = true` for one-shot user-invoked functions like `ts-generate-scorecard`; they don't need the override.
 
+## SECURITY DEFINER RPCs invoked by an edge function (Phase 5.9.2)
+
+`bulk_import_commit_projects` (and the 5.9.3 `bulk_import_commit_vendors` + 5.9.4 `bulk_import_commit_venues` siblings, all now shipped) follow the `promote_outlook_to_project` precedent: a SECURITY DEFINER `plpgsql` function does an atomic cross-table write that would otherwise trip RLS mid-flight, and re-checks the caller is admin in its first statements (raises `42501` on mismatch) as defense in depth on top of the route gate.
+
+One difference from `promote_outlook_to_project`: the bulk-import RPCs are invoked by the `bulk-import` edge function using the **service-role client**, so `auth.uid()` is NULL inside the function. The admin re-check therefore reads `actor_id` from the JSON payload (the edge function sets it from the verified user) rather than `auth.uid()`. The edge function has already verified the JWT + admin role before invoking, so `actor_id` is trustworthy; the in-function check is the third layer. Any future RPC invoked via the service-role client (not the user JWT) must take its actor from the payload, not `auth.uid()`.
+
 ## Phase 5.8.8 hardening notes
 
 Sign-in regressions surfaced in 5.8.5 / 5.8 close-out. The fixes in `20260601100000_phase_5_8_8_auth_pre_provision_hotfix.sql` codify rules that must hold going forward:

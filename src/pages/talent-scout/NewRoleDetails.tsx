@@ -13,8 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Stepper } from "@/components/talent-scout/Stepper";
-import { wizard, type WizardStep1 } from "@/lib/talent-scout/wizardStore";
+import { Stepper } from "@/components/ui/Stepper";
+import { TS_WIZARD_STEPS, wizard, type WizardStep1 } from "@/lib/talent-scout/wizardStore";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -76,7 +76,7 @@ export default function NewRoleDetails() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <Stepper active={1} />
+      <Stepper steps={TS_WIZARD_STEPS} active={1} />
       <header className="space-y-2">
         <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
         <h1 className="h-page">Role details</h1>

@@ -77,6 +77,88 @@ export type Database = {
           },
         ]
       }
+      bulk_import_drafts: {
+        Row: {
+          author: string
+          created_at: string
+          entity_type: string
+          id: string
+          payload: Json
+          updated_at: string
+        }
+        Insert: {
+          author: string
+          created_at?: string
+          entity_type: string
+          id?: string
+          payload: Json
+          updated_at?: string
+        }
+        Update: {
+          author?: string
+          created_at?: string
+          entity_type?: string
+          id?: string
+          payload?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulk_import_drafts_author_fkey"
+            columns: ["author"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bulk_import_sessions: {
+        Row: {
+          actor: string
+          column_set: string[]
+          committed_at: string
+          created_refs: Json
+          entity_type: string
+          id: string
+          imported_person_ids: string[]
+          imported_record_ids: string[]
+          row_count: number
+          status: string
+        }
+        Insert: {
+          actor: string
+          column_set?: string[]
+          committed_at?: string
+          created_refs?: Json
+          entity_type: string
+          id?: string
+          imported_person_ids?: string[]
+          imported_record_ids?: string[]
+          row_count: number
+          status?: string
+        }
+        Update: {
+          actor?: string
+          column_set?: string[]
+          committed_at?: string
+          created_refs?: Json
+          entity_type?: string
+          id?: string
+          imported_person_ids?: string[]
+          imported_record_ids?: string[]
+          row_count?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulk_import_sessions_actor_fkey"
+            columns: ["actor"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cities: {
         Row: {
           created_at: string
@@ -875,6 +957,7 @@ export type Database = {
           archived_at: string | null
           budget: number | null
           budget_sheet_url: string | null
+          bulk_import_session_id: string | null
           category: string | null
           city: string | null
           client_id: string | null
@@ -885,7 +968,6 @@ export type Database = {
           install_dates_end: string | null
           install_dates_start: string | null
           job_number: string | null
-          latest_creative_deck_url: string | null
           live_dates_end: string | null
           live_dates_start: string | null
           name: string
@@ -901,6 +983,7 @@ export type Database = {
           archived_at?: string | null
           budget?: number | null
           budget_sheet_url?: string | null
+          bulk_import_session_id?: string | null
           category?: string | null
           city?: string | null
           client_id?: string | null
@@ -911,7 +994,6 @@ export type Database = {
           install_dates_end?: string | null
           install_dates_start?: string | null
           job_number?: string | null
-          latest_creative_deck_url?: string | null
           live_dates_end?: string | null
           live_dates_start?: string | null
           name: string
@@ -927,6 +1009,7 @@ export type Database = {
           archived_at?: string | null
           budget?: number | null
           budget_sheet_url?: string | null
+          bulk_import_session_id?: string | null
           category?: string | null
           city?: string | null
           client_id?: string | null
@@ -937,7 +1020,6 @@ export type Database = {
           install_dates_end?: string | null
           install_dates_start?: string | null
           job_number?: string | null
-          latest_creative_deck_url?: string | null
           live_dates_end?: string | null
           live_dates_start?: string | null
           name?: string
@@ -950,6 +1032,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "projects_bulk_import_session_id_fkey"
+            columns: ["bulk_import_session_id"]
+            isOneToOne: false
+            referencedRelation: "bulk_import_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "projects_client_id_fkey"
             columns: ["client_id"]
@@ -1866,6 +1955,7 @@ export type Database = {
       }
       vendors: {
         Row: {
+          bulk_import_session_id: string | null
           capabilities: string[]
           category_id: string | null
           city: string | null
@@ -1874,9 +1964,11 @@ export type Database = {
           contact_phone: string | null
           created_at: string
           created_by: string | null
+          general_email: string | null
           id: string
           legacy_notes: string | null
           name: string
+          nationwide: boolean
           preferred: boolean
           primary_address: string | null
           subcategory_id: string | null
@@ -1885,6 +1977,7 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          bulk_import_session_id?: string | null
           capabilities?: string[]
           category_id?: string | null
           city?: string | null
@@ -1893,9 +1986,11 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           created_by?: string | null
+          general_email?: string | null
           id?: string
           legacy_notes?: string | null
           name: string
+          nationwide?: boolean
           preferred?: boolean
           primary_address?: string | null
           subcategory_id?: string | null
@@ -1904,6 +1999,7 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          bulk_import_session_id?: string | null
           capabilities?: string[]
           category_id?: string | null
           city?: string | null
@@ -1912,9 +2008,11 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           created_by?: string | null
+          general_email?: string | null
           id?: string
           legacy_notes?: string | null
           name?: string
+          nationwide?: boolean
           preferred?: boolean
           primary_address?: string | null
           subcategory_id?: string | null
@@ -1928,6 +2026,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendors_bulk_import_session_id_fkey"
+            columns: ["bulk_import_session_id"]
+            isOneToOne: false
+            referencedRelation: "bulk_import_sessions"
             referencedColumns: ["id"]
           },
           {
@@ -2075,6 +2180,7 @@ export type Database = {
       venues: {
         Row: {
           address: string | null
+          bulk_import_session_id: string | null
           capacity: number | null
           city: string | null
           contact_email: string | null
@@ -2084,6 +2190,7 @@ export type Database = {
           created_by: string | null
           exclusive_vendor_ids: string[]
           features: string[]
+          general_email: string | null
           id: string
           name: string
           neighborhood: string | null
@@ -2097,6 +2204,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          bulk_import_session_id?: string | null
           capacity?: number | null
           city?: string | null
           contact_email?: string | null
@@ -2106,6 +2214,7 @@ export type Database = {
           created_by?: string | null
           exclusive_vendor_ids?: string[]
           features?: string[]
+          general_email?: string | null
           id?: string
           name: string
           neighborhood?: string | null
@@ -2119,6 +2228,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          bulk_import_session_id?: string | null
           capacity?: number | null
           city?: string | null
           contact_email?: string | null
@@ -2128,6 +2238,7 @@ export type Database = {
           created_by?: string | null
           exclusive_vendor_ids?: string[]
           features?: string[]
+          general_email?: string | null
           id?: string
           name?: string
           neighborhood?: string | null
@@ -2140,6 +2251,13 @@ export type Database = {
           website_url?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "venues_bulk_import_session_id_fkey"
+            columns: ["bulk_import_session_id"]
+            isOneToOne: false
+            referencedRelation: "bulk_import_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "venues_created_by_fkey"
             columns: ["created_by"]
@@ -2445,6 +2563,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _bulk_import_resolve_client_ref: {
+        Args: { queued: string[]; ref: string }
+        Returns: string
+      }
+      _bulk_import_resolve_vendor_category_ref: {
+        Args: { queued: string[]; ref: string }
+        Returns: string
+      }
+      _bulk_import_resolve_vendor_subcategory_ref: {
+        Args: { parent_category: string; queued: string[]; ref: string }
+        Returns: string
+      }
+      _bulk_import_resolve_venue_ref: {
+        Args: { queued: string[]; ref: string }
+        Returns: string
+      }
+      _bulk_import_resolve_venue_type_ref: {
+        Args: { queued: string[]; ref: string }
+        Returns: string
+      }
+      bulk_import_commit_projects: { Args: { payload: Json }; Returns: Json }
+      bulk_import_commit_vendors: { Args: { payload: Json }; Returns: Json }
+      bulk_import_commit_venues: { Args: { payload: Json }; Returns: Json }
+      bulk_import_undo: {
+        Args: { p_actor_id: string; p_dry_run?: boolean; p_session_id: string }
+        Returns: Json
+      }
       credentials_create: {
         Args: {
           p_password: string

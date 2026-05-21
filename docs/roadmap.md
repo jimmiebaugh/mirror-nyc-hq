@@ -465,20 +465,125 @@ decisions memo (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`).
   - **5.8.4 HQ v1.1 close commit.** Final push fires the second Netlify
     deploy carrying 5.8.1 + 5.8.2 + 5.8.3 together.
     - **Status:** PENDING.
-- **5.9 Talent Scout review.** Jimmie's notes + active bug hunting
+- **5.9 Bulk Import. DONE.** Shared cross-cutting bulk-import primitive
+  plus per-entity wiring. CSV-only across all three entities (Projects,
+  Vendors, Venues); map step for unknown refs; admin-only; dedupe
+  defaults to skip with per-row override; configurable column picker;
+  fresh HQ parser (`_shared/hqSheetParser.ts`, not lifted from
+  `vs-parse-sheet`). Plan doc: `OUTPUTS/phase-5-9-bulk-import-plan.md`.
+  Deploy budget mirrored Phase 5.7: every sub-phase shipped skip-Netlify;
+  the single deploy fired with 5.9.5. Phase 5.9 closed 2026-05-20 at
+  `<5.9.5>` (5.9.5), then re-opened 2026-05-21 for the 5.9.6 undo follow-on
+  (its own single deploy).
+  - **5.9.1 Shared bulk-import primitive.** Two umbrella tables
+    (`bulk_import_sessions`, `bulk_import_drafts`); the `bulk-import`
+    edge function scaffold (admin-gated, transactional shell, smoke
+    handler only); the HQ-side sheet parser; the shared UI components
+    (`UploadStep`, `MapStep`, `DedupeStep`, `ImportGrid`,
+    `ColumnPickerDrawer`, `BulkImportPage`); the `EntityConfig` registry
+    pattern; the Settings card surface; and a smoke-test route. Stepper
+    moved from `talent-scout/` to `ui/`. The three entity buttons +
+    History link render disabled with "Coming in Phase 5.9.X" tooltips.
+    - **Status:** SHIPPING. Spec: `OUTPUTS/phase-5-9-1-spec.md`.
+  - **5.9.2 Project importer.** Registers the Project EntityConfig +
+    edge-function handler; lights up `/settings/bulk-import/project`.
+    Adds the `bulk_import_session_id` column on `projects` + the
+    SECURITY DEFINER `bulk_import_commit_projects` RPC (the source of
+    atomicity), per-kind ImportGrid cell editors, the real MapStep
+    typeahead (`RecordCombobox` + new `users-by-email` source), the
+    `presence` FilterBar field type + "Bulk Imported" chip, and a
+    `venue` column on the projects template. **Status:** DONE
+    (`12c2608`). Spec: `OUTPUTS/phase-5-9-2-spec.md`.
+  - **5.9.3 Vendor importer.** Registers the Vendor EntityConfig +
+    edge-function handler; lights up `/settings/bulk-import/vendor`.
+    Adds the `bulk_import_session_id` column on `vendors` + the
+    SECURITY DEFINER `bulk_import_commit_vendors` RPC. Category +
+    subcategory resolve as FK refs (subcategory's parent is a plain
+    `parent_category` text field on the inline-create form, matched
+    queued-then-existing); capabilities auto-create as a `text[]` of
+    names; `preferred` is an enum cell coerced to bool. "Bulk Imported"
+    presence chip on `/vendors`. **Status:** DONE (`597de69`). Spec:
+    `OUTPUTS/phase-5-9-3-spec.md`.
+  - **5.9.3.1 Vendor nationwide flag.** Follow-on from the 5.9.3 smoke:
+    `vendors.nationwide bool` + VendorEdit checkbox + importer column.
+    VendorsList city filter OR-s in nationwide vendors via the new
+    generic `applyFilters` `fieldMatchAll` hook so they surface under
+    every city chip. **Status:** DONE (`597de69`); follow-up `597de69`
+    surfaced a green "National" pill on VendorsList + added a Preferred
+    checkbox to VendorEdit.
+  - **5.9.3.2 Vendor general email.** `vendors.general_email` (company
+    email, distinct from the primary contact's). VendorEdit + VendorDetail
+    + importer column. VendorDetail contact fields relabeled "Contact
+    Email"/"Contact Phone". **Status:** DONE (`597de69`); follow-ups
+    `9140fb0` (Details reorder), `b02140f` (dividers + category-display
+    fix), `70edb27` (lookup cache `invalidateLookup` + 3-up top row).
+  - **5.9.3.3 Importer creates contact People.** Each vendor row's
+    contact_* now creates/reuses a vendor-affiliated `people` row
+    (Primary Contact), vendor-scoped dedupe. **Status:** DONE
+    (`597de69`).
+  - **5.9.4 Venue importer.** Registers the Venue EntityConfig +
+    handler; lights up `/settings/bulk-import/venue`. Adds the
+    `bulk_import_session_id` column on `venues` + the SECURITY DEFINER
+    `bulk_import_commit_venues` RPC. Deltas vs Vendor: `venue_types`
+    resolves as a multi-value ref written through the `venue_venue_types`
+    JOIN (REPLACE on the dedupe-update path); `features` is plain
+    free-text write-through (no companion lookup); `exclusive_vendor_ids`
+    is NOT importable (set only on VenueEdit — the RPC never touches it,
+    so a dedupe-update can't clobber curated values; corrected in
+    migration `20260602190000` after the first cut shipped it). Each
+    row's contact_* creates (or
+    venue-scoped-dedupe-reuses) a Venue-affiliated `people` row PLUS a
+    `venue_contact_people` JOIN row (the join, not `people.venue_id`, is
+    what surfaces the contact on VenueDetail). "Bulk Imported" presence
+    chip on `/venues`. **Status:** DONE (`cab8d12`). Spec:
+    `OUTPUTS/phase-5-9-4-spec.md`.
+  - **5.9.5 Import history audit page + smoke-route cleanup.** Real
+    audit page at `/settings/bulk-import/history` (AdminRoute) reading
+    `bulk_import_sessions` with a DataTable + FilterBar (entity / actor /
+    date) and a per-session detail rail; "Open list" seeds a
+    session-scoped chip on the entity list. Removes the `_smoke` route +
+    smoke handler + smoke page + the `_smoke` member of the `EntityType`
+    union + the now-dead `_smoke` guards. Flips the BulkImportCard History
+    button on. Fires the single Phase 5.9 Netlify deploy. **Status:** DONE
+    (`<5.9.5>`). Spec: `OUTPUTS/phase-5-9-5-spec.md`.
+  - **5.9.6 Bulk-import undo.** Per-session "Undo import" action in the
+    audit-page detail rail (admin-only, within a 7-day window). One
+    migration adds two `uuid[]` tracking columns on `bulk_import_sessions`
+    (`imported_record_ids` + `imported_person_ids`), updates the three
+    commit RPCs to persist the created-only ids, and adds the SECURITY
+    DEFINER `bulk_import_undo` RPC (dry-run cascade counts → confirm →
+    delete the created records + their import-created contact People,
+    cascade their dependents, hard-delete the session row). Shared lookups
+    + queued clients/venues are never touched; reused contacts survive.
+    Edge fn gains `mode: "undo"` (+ `dry_run`). Its own single Netlify
+    deploy. **Status:** DONE (`1f87039`). Spec:
+    `OUTPUTS/phase-5-9-6-spec.md`.
+  - **5.9.7 Import Event Day Rate + `venues.general_email`.** Venue
+    importer carries Event Day Rate (appends one `event_day`
+    `venue_rate_history` row per venue, dated the import date, only when
+    the amount changed) and a new nullable `venues.general_email` column
+    (mirrors `vendors.general_email`). One migration adds the column +
+    `CREATE OR REPLACE bulk_import_commit_venues` rebased onto the 5.9.6
+    body (rate write + general_email write-through). venueConfig gains
+    `event_day_rate` (money) + `general_email` (text); validator adds the
+    non-neg-int + email-shape checks; both venue template CSVs gain the two
+    columns; VenueEdit/VenueDetail surface General Email. No `general_phone`
+    anywhere. Its own single Netlify deploy. **Status:** DONE (`a710ec7`).
+    Spec: `OUTPUTS/phase-5-9-7-spec.md`.
+- **5.10 Talent Scout review.** Jimmie's notes + active bug hunting
   drive the split. Verifies TS still works correctly after the HQ
   Core schema reshape (5.2.x users-table rewrite, vendors split,
   clients table rebuild). Notes-first pattern: subphase split locked
   when batch arrives.
-- **5.10 Venue Scout review.** Jimmie's notes + active bug hunting +
+- **5.11 Venue Scout review.** Jimmie's notes + active bug hunting +
   HQ data-flow audit. Verifies `vs_candidate_venues_shortlist_sync`
   trigger still produces correct rows in the new HQ schema. Verifies
   deck generation + brief parsing + research pipeline post-HQ
   changes. Notes-first pattern: subphase split locked when batch
   arrives.
-- **5.11 Mobile styling pass.** Cross-cutting responsive sweep
+- **5.12 Mobile styling pass.** Cross-cutting responsive sweep
   across every HQ surface. Scope locked when phase opens.
-- **Post-5.11.** TBD.
+- **Post-5.12.** TBD.
 
 **Convention:** every 5.x sub-phase ship updates `docs/roadmap.md` with
 its **Status:** DONE line in the same commit. Pair with the existing

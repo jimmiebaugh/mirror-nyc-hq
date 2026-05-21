@@ -50,6 +50,9 @@ const FILTER_FIELDS = [
   // string (lead + designer + project_members), broadening the matching
   // scope to the full team roster.
   { key: "leadName", label: "Team", type: "text" as const },
+  // Phase 5.9.2: presence chip. Commits immediately (no value step) and filters
+  // to projects that carry a bulk_import_session_id.
+  { key: "bulkImportSessionId", label: "Bulk Imported", type: "presence" as const },
 ];
 
 const BOARD_ROWS: { label: string; statuses: ProjectStatus[] }[] = [
@@ -88,8 +91,13 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
   }, []);
 
   // Phase 5.6.5: resolve the default saved view on mount (per-user wins,
-  // then global, then leave the empty state alone).
+  // then global, then leave the empty state alone). Phase 5.9.5: skip when
+  // arriving from the bulk-import history "Open list" drill-down so the
+  // session seed below isn't clobbered by the async default-view resolve.
   useEffect(() => {
+    if ((location.state as { bulkImportSessionId?: string } | null)?.bulkImportSessionId) {
+      return;
+    }
     let active = true;
     getDefaultSavedView("project").then((v) => {
       if (!active || !v) return;
@@ -99,7 +107,20 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [location.state]);
+
+  // Phase 5.9.5: "Open list" from the bulk-import history rail seeds a single
+  // session-scoped chip so the list shows only that import's records.
+  useEffect(() => {
+    const sid = (location.state as { bulkImportSessionId?: string } | null)
+      ?.bulkImportSessionId;
+    if (!sid) return;
+    setFilterState((prev) => ({
+      ...prev,
+      chips: [{ field: "bulkImportSessionId", op: "is", value: sid }],
+    }));
+    setActiveViewName("Custom filter");
+  }, [location.state]);
 
   const handleResetToGlobal = async () => {
     const v = await getDefaultSavedView("project");

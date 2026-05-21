@@ -56,7 +56,7 @@ export type FilterLookupOption = {
 export type FilterFieldDef = {
   key: string;
   label: string;
-  type: "text" | "enum" | "user" | "date" | "lookup";
+  type: "text" | "enum" | "user" | "date" | "lookup" | "presence";
   options?: string[];
   /**
    * Required for `type: "lookup"`. The picker shows these as a dropdown;
@@ -225,8 +225,12 @@ export function FilterBar({
         <Fragment key={i}>
           <span className="fchip">
             <span className="k">{fieldLabel(chip.field)}</span>
-            {chip.op !== "is" ? <span className="op">{chip.op}</span> : null}
-            <span className="v">{chipDisplayValue(chip)}</span>
+            {chip.op !== "is" && chip.op !== "presence" ? (
+              <span className="op">{chip.op}</span>
+            ) : null}
+            {chip.op !== "presence" ? (
+              <span className="v">{chipDisplayValue(chip)}</span>
+            ) : null}
             <span
               className="x"
               role="button"
@@ -293,6 +297,17 @@ export function FilterBar({
               value={building.field?.key ?? ""}
               onChange={(e) => {
                 const f = fields.find((x) => x.key === e.target.value);
+                // Presence fields are fixed-meaning: commit a single chip
+                // immediately with no op / value step.
+                if (f?.type === "presence") {
+                  onChange({
+                    ...state,
+                    chips: [...state.chips, { field: f.key, op: "presence", value: "yes" }],
+                  });
+                  setAddOpen(false);
+                  setBuilding({});
+                  return;
+                }
                 setBuilding({ field: f, op: "is", value: "" });
               }}
             >

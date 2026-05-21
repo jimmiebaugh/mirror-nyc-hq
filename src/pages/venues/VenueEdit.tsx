@@ -46,6 +46,7 @@ type FormState = {
   city: string;
   capacity: string;
   total_sq_ft: string;
+  general_email: string;
   website_url: string;
   venue_slide_url: string;
   notes: string;
@@ -59,6 +60,7 @@ const EMPTY: FormState = {
   city: "",
   capacity: "",
   total_sq_ft: "",
+  general_email: "",
   website_url: "",
   venue_slide_url: "",
   notes: "",
@@ -102,7 +104,7 @@ export default function VenueEdit() {
           : supabase
               .from("venues")
               .select(
-                "name, address, neighborhood, city, capacity, total_sq_ft, website_url, venue_slide_url, notes, features, exclusive_vendor_ids",
+                "name, address, neighborhood, city, capacity, total_sq_ft, general_email, website_url, venue_slide_url, notes, features, exclusive_vendor_ids",
               )
               .eq("id", id)
               .single(),
@@ -124,6 +126,7 @@ export default function VenueEdit() {
           city: string | null;
           capacity: number | null;
           total_sq_ft: number | null;
+          general_email: string | null;
           website_url: string | null;
           venue_slide_url: string | null;
           notes: string | null;
@@ -137,6 +140,7 @@ export default function VenueEdit() {
           city: row.city ?? "",
           capacity: row.capacity != null ? String(row.capacity) : "",
           total_sq_ft: row.total_sq_ft != null ? String(row.total_sq_ft) : "",
+          general_email: row.general_email ?? "",
           website_url: row.website_url ?? "",
           venue_slide_url: row.venue_slide_url ?? "",
           notes: row.notes ?? "",
@@ -208,6 +212,7 @@ export default function VenueEdit() {
       city: form.city || null,
       capacity,
       total_sq_ft: totalSqFt,
+      general_email: form.general_email || null,
       website_url: form.website_url || null,
       venue_slide_url: form.venue_slide_url || null,
       notes: form.notes || null,
@@ -410,6 +415,15 @@ export default function VenueEdit() {
               />
             </FormField>
           </div>
+          <FormField label="General Email">
+            <input
+              type="email"
+              className={`input ${form.general_email ? "input--filled" : ""}`}
+              value={form.general_email}
+              onChange={(e) => setForm((f) => ({ ...f, general_email: e.target.value }))}
+              placeholder="bookings@theglasshouse.com"
+            />
+          </FormField>
         </div>
       </section>
 

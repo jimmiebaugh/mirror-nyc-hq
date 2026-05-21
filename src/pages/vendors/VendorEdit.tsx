@@ -50,11 +50,14 @@ type FormState = {
   city: string;
   capabilities: string[];
   website_url: string;
+  general_email: string;
   contact_name: string;
   contact_email: string;
   contact_phone: string;
   primary_address: string;
   tags: string[];
+  preferred: boolean;
+  nationwide: boolean;
 };
 
 const EMPTY: FormState = {
@@ -64,11 +67,14 @@ const EMPTY: FormState = {
   city: "",
   capabilities: [],
   website_url: "",
+  general_email: "",
   contact_name: "",
   contact_email: "",
   contact_phone: "",
   primary_address: "",
   tags: [],
+  preferred: false,
+  nationwide: false,
 };
 
 type ProjectOption = {
@@ -108,7 +114,7 @@ export default function VendorEdit() {
           : supabase
               .from("vendors")
               .select(
-                "name, category_id, subcategory_id, city, capabilities, website_url, contact_name, contact_email, contact_phone, primary_address, tags",
+                "name, category_id, subcategory_id, city, capabilities, website_url, general_email, contact_name, contact_email, contact_phone, primary_address, tags, preferred, nationwide",
               )
               .eq("id", id)
               .single(),
@@ -149,11 +155,14 @@ export default function VendorEdit() {
         city: string | null;
         capabilities: string[] | null;
         website_url: string | null;
+        general_email: string | null;
         contact_name: string | null;
         contact_email: string | null;
         contact_phone: string | null;
         primary_address: string | null;
         tags: string[] | null;
+        preferred: boolean | null;
+        nationwide: boolean | null;
       };
       const next: FormState = {
         name: row.name,
@@ -162,11 +171,14 @@ export default function VendorEdit() {
         city: row.city ?? "",
         capabilities: row.capabilities ?? [],
         website_url: row.website_url ?? "",
+        general_email: row.general_email ?? "",
         contact_name: row.contact_name ?? "",
         contact_email: row.contact_email ?? "",
         contact_phone: row.contact_phone ?? "",
         primary_address: row.primary_address ?? "",
         tags: row.tags ?? [],
+        preferred: row.preferred ?? false,
+        nationwide: row.nationwide ?? false,
       };
       setForm(next);
       setInitial(next);
@@ -222,11 +234,14 @@ export default function VendorEdit() {
       city: form.city || null,
       capabilities: form.capabilities,
       website_url: form.website_url || null,
+      general_email: form.general_email || null,
       contact_name: form.contact_name || null,
       contact_email: form.contact_email || null,
       contact_phone: form.contact_phone || null,
       primary_address: form.primary_address || null,
       tags: form.tags,
+      preferred: form.preferred,
+      nationwide: form.nationwide,
     };
     let vendorId = id ?? null;
     if (isCreate) {
@@ -406,6 +421,15 @@ export default function VendorEdit() {
                 placeholder="https://example.com"
               />
             </FormField>
+            <FormField label="General Email">
+              <input
+                type="email"
+                className={`input ${form.general_email ? "input--filled" : ""}`}
+                value={form.general_email}
+                onChange={(e) => setForm((f) => ({ ...f, general_email: e.target.value }))}
+                placeholder="info@example.com"
+              />
+            </FormField>
           </div>
           <FormField label="Capabilities">
             <RecordCombobox
@@ -429,6 +453,26 @@ export default function VendorEdit() {
               exampleName="Internal Partner"
               placeholder="Add tag..."
             />
+          </FormField>
+          <FormField label="Preferred">
+            <label className="row-c" style={{ fontSize: 13, cursor: "pointer", gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={form.preferred}
+                onChange={(e) => setForm((f) => ({ ...f, preferred: e.target.checked }))}
+              />
+              Preferred vendor (shown in the Wiki Preferred Vendors list)
+            </label>
+          </FormField>
+          <FormField label="Nationwide">
+            <label className="row-c" style={{ fontSize: 13, cursor: "pointer", gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={form.nationwide}
+                onChange={(e) => setForm((f) => ({ ...f, nationwide: e.target.checked }))}
+              />
+              Works nationwide (appears under every city filter)
+            </label>
           </FormField>
         </div>
       </section>
