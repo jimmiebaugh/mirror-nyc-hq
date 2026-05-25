@@ -96,21 +96,21 @@ export default function FinalReviewLoading() {
                 style={{
                   background:
                     status === "done"
-                      ? "rgba(74,222,128,0.15)"
+                      ? "hsl(var(--success) / 0.15)"
                       : status === "active"
-                        ? "rgba(190,78,68,0.15)"
+                        ? "hsl(var(--primary) / 0.15)"
                         : "hsl(var(--surface-alt))",
                   color:
                     status === "done"
-                      ? "#4ade80"
+                      ? "hsl(var(--success))"
                       : status === "active"
                         ? "hsl(var(--primary))"
                         : "hsl(var(--subtle-foreground))",
                   border: `1px solid ${
                     status === "done"
-                      ? "rgba(74,222,128,0.3)"
+                      ? "hsl(var(--success) / 0.3)"
                       : status === "active"
-                        ? "rgba(190,78,68,0.4)"
+                        ? "hsl(var(--primary) / 0.4)"
                         : "hsl(var(--border))"
                   }`,
                 }}

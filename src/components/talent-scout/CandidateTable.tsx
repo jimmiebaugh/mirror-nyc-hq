@@ -524,7 +524,7 @@ export function CandidateTable({
       {/* Active tier */}
       {active.length === 0 && (
         <div className="px-5 py-6 text-center text-sm text-muted-foreground">
-          No active candidates — everyone is in the rejected bucket below.
+          No active candidates. Everyone is in the rejected bucket below.
         </div>
       )}
       {active.map((c) => (
@@ -624,7 +624,7 @@ function Row({
   return (
     <div
       onClick={onRowClick}
-      style={isAuto ? { borderLeft: "1.5px solid #71717a" /* zinc-500 */ } : undefined}
+      style={isAuto ? { borderLeft: "1.5px solid hsl(var(--border-strong))" } : undefined}
       className={cn(
         "grid",
         GRID_COLS,

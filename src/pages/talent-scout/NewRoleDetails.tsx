@@ -124,7 +124,7 @@ export default function NewRoleDetails() {
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Compensation">
               <Input
-                placeholder="e.g. $85k–$110k"
+                placeholder="e.g. $85k to $110k"
                 value={form.compensation}
                 onChange={(e) => update("compensation", e.target.value)}
               />

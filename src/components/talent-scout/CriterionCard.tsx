@@ -69,7 +69,7 @@ export function CriterionCard({
           rows={1}
           value={c.full_points_rubric}
           onChange={(e) => onChange({ full_points_rubric: e.target.value })}
-          placeholder="Describer — what does this criterion measure?"
+          placeholder="Describer: what does this criterion measure?"
           className="w-full resize-none overflow-hidden bg-transparent text-[12px] leading-[1.4] text-muted-foreground outline-none focus:border-b focus:border-primary"
         />
       </div>

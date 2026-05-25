@@ -9,14 +9,15 @@ import {
 import { StarRating } from "@/components/data/StarRating";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { VendorFilesEditor } from "@/components/data/VendorFilesEditor";
-import { isInternalPartner } from "@/lib/vendors/queries";
 import { InlineEditText } from "@/components/hq/InlineEditText";
-import { InlineTagInput } from "@/components/hq/InlineTagInput";
+import { ContactsCard } from "@/components/hq/ContactsCard";
+import { DField } from "@/components/hq/DField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { useBackHref } from "@/lib/hq/useBackHref";
 import { useAuth } from "@/hooks/useAuth";
 import { useLookup, getLookupCached } from "@/lib/hq/lookups";
 import { formatPhone } from "@/lib/hq/phone";
+import { prettyHost } from "@/lib/url";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -437,7 +438,6 @@ export default function VendorDetail() {
     );
   }
 
-  const internalPartner = isInternalPartner(vendor.tags);
 
   return (
     <div className="stack-6">
@@ -449,34 +449,15 @@ export default function VendorDetail() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow" style={{ paddingTop: 8 }}>Vendor</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
-              <InlineEditText
-                value={vendor.name}
-                required
-                placeholder="Vendor name"
-                renderRead={(v) => v ?? "(unnamed)"}
-                onSave={(next) => saveField("name", next)}
-              />
+              {vendor.name || "(unnamed)"}
             </h1>
-            {internalPartner ||
-            vendor.category_name ||
-            vendor.subcategory_name ||
-            vendor.city ? (
-              <div className="row-c" style={{ marginTop: 10 }}>
-                {internalPartner ? (
-                  <span className="pill pill-lg p-info">Internal</span>
-                ) : null}
-                {vendor.category_name || vendor.subcategory_name || vendor.city ? (
-                  <span
-                    style={{
-                      fontSize: 14,
-                      color: "hsl(var(--muted-foreground))",
-                    }}
-                  >
-                    {[vendor.category_name, vendor.subcategory_name, vendor.city]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                ) : null}
+            {vendor.category_name || vendor.subcategory_name || vendor.city ? (
+              <div className="row-c detail-meta" style={{ gap: 12, marginTop: 8 }}>
+                <span>
+                  {[vendor.category_name, vendor.subcategory_name, vendor.city]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
               </div>
             ) : null}
           </div>
@@ -493,114 +474,98 @@ export default function VendorDetail() {
         </div>
       </div>
 
-      <div
-        className="grid"
-        style={{ display: "grid", gridTemplateColumns: "1fr 332px", gap: 24, alignItems: "start" }}
-      >
+      <div className="detail-2col">
         <div className="stack-6">
           <section className="card">
             <div className="card-headbar">
               <span className="h-card">Details</span>
             </div>
-            <div className="card-pad">
+            <div className="card-pad stack-4">
+              <DField label="Vendor">
+                <InlineEditText
+                  value={vendor.name}
+                  required
+                  placeholder="Vendor name"
+                  renderRead={(v) => v ?? "(unnamed)"}
+                  onSave={(next) => saveField("name", next)}
+                />
+              </DField>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
               <div
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr 1fr",
                   gap: 16,
-                  marginBottom: 22,
                 }}
               >
-                <dl className="kv kv--pair" style={{ gridTemplateColumns: "1fr" }}>
-                  <dt>Category</dt>
-                  <dd>
-                    <RecordCombobox
-                      source={{ kind: "lookup", table: "vendor_categories" }}
-                      value={selectedCategoryName}
-                      onChange={(name) => {
-                        if (name === null) {
-                          void saveCategoryId(null);
-                          return;
-                        }
-                        // Closure-captured `categories.options` is stale
-                        // right after inline-add (setState hasn't propagated
-                        // yet). Fall back to the synchronous cache reader
-                        // which sees the row addOption just inserted.
-                        const opt =
-                          categories.options.find((o) => o.name === name) ??
-                          getLookupCached("vendor_categories").find((o) => o.name === name);
-                        if (!opt) return;
-                        void saveCategoryId(opt.id);
-                      }}
-                      entityLabel="Category"
-                      placeholder="No category"
-                    />
-                  </dd>
-                </dl>
-                <dl className="kv kv--pair" style={{ gridTemplateColumns: "1fr" }}>
-                  <dt>Subcategory</dt>
-                  <dd>
-                    <RecordCombobox
-                      source={{
-                        kind: "lookup",
-                        table: "vendor_subcategories",
-                        parentScopeId: vendor.category_id || null,
-                        parentScopeLabel:
-                          categories.options.find(
-                            (o) => o.id === vendor.category_id,
-                          )?.name ?? null,
-                        parentScopeLabelKey: "Category",
-                      }}
-                      value={selectedSubcategoryName}
-                      onChange={(name) => {
-                        if (name === null) {
-                          void saveSubcategoryId(null);
-                          return;
-                        }
-                        const opt =
-                          subcategories.options.find((o) => o.name === name) ??
-                          getLookupCached(
-                            "vendor_subcategories",
-                            vendor.category_id || null,
-                          ).find((o) => o.name === name);
-                        if (!opt) return;
-                        void saveSubcategoryId(opt.id);
-                      }}
-                      entityLabel="Subcategory"
-                      placeholder={vendor.category_id ? "No subcategory" : "Pick Category first"}
-                      disabled={!vendor.category_id}
-                    />
-                  </dd>
-                </dl>
-                <dl className="kv kv--pair" style={{ gridTemplateColumns: "1fr" }}>
-                  <dt>City</dt>
-                  <dd>
-                    <RecordCombobox
-                      source={{ kind: "lookup", table: "cities" }}
-                      value={vendor.city || null}
-                      onChange={(next) => void saveField("city", next || null)}
-                      entityLabel="city"
-                      placeholder="Select"
-                    />
-                  </dd>
-                </dl>
-              </div>
-              <dl className="kv">
-                <dt>Capabilities</dt>
-                <dd>
+                <DField label="Category">
                   <RecordCombobox
-                    multi
-                    source={{ kind: "lookup", table: "vendor_capabilities" }}
-                    multiValue={vendor.capabilities.filter((c) =>
-                      capabilitiesNames.includes(c),
-                    )}
-                    onMultiChange={(next) => void saveField("capabilities", next)}
-                    entityLabel="Capability"
-                    placeholder="Add capability..."
+                    source={{ kind: "lookup", table: "vendor_categories" }}
+                    value={selectedCategoryName}
+                    onChange={(name) => {
+                      if (name === null) {
+                        void saveCategoryId(null);
+                        return;
+                      }
+                      // Closure-captured `categories.options` is stale
+                      // right after inline-add (setState hasn't propagated
+                      // yet). Fall back to the synchronous cache reader
+                      // which sees the row addOption just inserted.
+                      const opt =
+                        categories.options.find((o) => o.name === name) ??
+                        getLookupCached("vendor_categories").find((o) => o.name === name);
+                      if (!opt) return;
+                      void saveCategoryId(opt.id);
+                    }}
+                    entityLabel="Category"
+                    placeholder="No category"
                   />
-                </dd>
-                <dt>Website</dt>
-                <dd>
+                </DField>
+                <DField label="Subcategory">
+                  <RecordCombobox
+                    source={{
+                      kind: "lookup",
+                      table: "vendor_subcategories",
+                      parentScopeId: vendor.category_id || null,
+                      parentScopeLabel:
+                        categories.options.find(
+                          (o) => o.id === vendor.category_id,
+                        )?.name ?? null,
+                      parentScopeLabelKey: "Category",
+                    }}
+                    value={selectedSubcategoryName}
+                    onChange={(name) => {
+                      if (name === null) {
+                        void saveSubcategoryId(null);
+                        return;
+                      }
+                      const opt =
+                        subcategories.options.find((o) => o.name === name) ??
+                        getLookupCached(
+                          "vendor_subcategories",
+                          vendor.category_id || null,
+                        ).find((o) => o.name === name);
+                      if (!opt) return;
+                      void saveSubcategoryId(opt.id);
+                    }}
+                    entityLabel="Subcategory"
+                    placeholder={vendor.category_id ? "No subcategory" : "Pick Category first"}
+                    disabled={!vendor.category_id}
+                  />
+                </DField>
+                <DField label="City">
+                  <RecordCombobox
+                    source={{ kind: "lookup", table: "cities" }}
+                    value={vendor.city || null}
+                    onChange={(next) => void saveField("city", next || null)}
+                    entityLabel="city"
+                    placeholder="Select"
+                  />
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="g2">
+                <DField label="Website">
                   <InlineEditText
                     value={vendor.website_url}
                     placeholder="https://example.com"
@@ -622,9 +587,8 @@ export default function VendorDetail() {
                     }
                     onSave={(next) => saveField("website_url", next || null)}
                   />
-                </dd>
-                <dt>General Email</dt>
-                <dd>
+                </DField>
+                <DField label="General Email">
                   <InlineEditText
                     value={vendor.general_email}
                     placeholder="info@example.com"
@@ -644,10 +608,17 @@ export default function VendorDetail() {
                     }
                     onSave={(next) => saveField("general_email", next || null)}
                   />
-                </dd>
-                <div style={{ gridColumn: "1 / -1", borderTop: "1px solid hsl(var(--border))" }} />
-                <dt>Primary Contact</dt>
-                <dd>
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: 16,
+                }}
+              >
+                <DField label="Primary Contact">
                   <RecordCombobox
                     source={{ kind: "record", loadOptions: loadVendorContactOptions }}
                     value={primaryContactPersonId}
@@ -662,9 +633,8 @@ export default function VendorDetail() {
                     ]}
                     onMiniCreate={createVendorContact}
                   />
-                </dd>
-                <dt>Contact Email</dt>
-                <dd>
+                </DField>
+                <DField label="Email">
                   <InlineEditText
                     value={vendor.contact_email}
                     placeholder="contact@example.com"
@@ -675,6 +645,7 @@ export default function VendorDetail() {
                           className="tlink inline-block max-w-full truncate align-bottom"
                           href={`mailto:${v}`}
                           onClick={(e) => e.stopPropagation()}
+                          style={{ fontSize: 13 }}
                         >
                           {v}
                         </a>
@@ -684,9 +655,8 @@ export default function VendorDetail() {
                     }
                     onSave={(next) => saveField("contact_email", next || null)}
                   />
-                </dd>
-                <dt>Contact Phone</dt>
-                <dd>
+                </DField>
+                <DField label="Phone">
                   <InlineEditText
                     value={vendor.contact_phone}
                     placeholder="(212) 555-0000"
@@ -700,32 +670,39 @@ export default function VendorDetail() {
                     }
                     onSave={(next) => saveField("contact_phone", next || null)}
                   />
-                </dd>
-                <div style={{ gridColumn: "1 / -1", borderTop: "1px solid hsl(var(--border))" }} />
-                <dt>Address</dt>
-                <dd>
-                  <InlineEditText
-                    value={vendor.primary_address}
-                    placeholder="50 W 34th St, New York NY 10001"
-                    multiline
-                    renderRead={(v) =>
-                      v ? (
-                        <span style={{ whiteSpace: "pre-wrap" }}>{v}</span>
-                      ) : (
-                        <span className="muted subtle">-</span>
-                      )
-                    }
-                    onSave={(next) => saveField("primary_address", next || null)}
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <DField label="Address">
+                <InlineEditText
+                  value={vendor.primary_address}
+                  placeholder="50 W 34th St, New York NY 10001"
+                  multiline
+                  renderRead={(v) =>
+                    v ? (
+                      <span style={{ whiteSpace: "pre-wrap" }}>{v}</span>
+                    ) : (
+                      <span className="muted subtle">-</span>
+                    )
+                  }
+                  onSave={(next) => saveField("primary_address", next || null)}
+                />
+              </DField>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="field-chips">
+                <DField label="Capabilities">
+                  <RecordCombobox
+                    multi
+                    source={{ kind: "lookup", table: "vendor_capabilities" }}
+                    multiValue={vendor.capabilities.filter((c) =>
+                      capabilitiesNames.includes(c),
+                    )}
+                    onMultiChange={(next) => void saveField("capabilities", next)}
+                    entityLabel="Capability"
+                    placeholder="Add capability..."
                   />
-                </dd>
-                <dt>Tags</dt>
-                <dd>
-                  <InlineTagInput
-                    values={vendor.tags}
-                    onChange={(next) => void saveField("tags", next)}
-                  />
-                </dd>
-              </dl>
+                </DField>
+              </div>
             </div>
           </section>
 
@@ -733,35 +710,7 @@ export default function VendorDetail() {
         </div>
 
         <aside className="stack-6">
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Contacts</span>
-            </div>
-            <div className="card-pad">
-              {contacts.length === 0 ? (
-                <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
-              ) : (
-                <div className="stack-3">
-                  {contacts.map((c) => (
-                    <Link
-                      key={c.id}
-                      to={`/people/${c.id}`}
-                      className="row-c"
-                      style={{ textDecoration: "none", color: "inherit" }}
-                    >
-                      <span className="av-i">
-                        {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
-                      </span>
-                      <div>
-                        <div style={{ fontSize: 13 }}>{c.full_name}</div>
-                        <div className="cap">{c.role_title ?? "-"}</div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
+          <ContactsCard contacts={contacts} />
 
           <section className="card">
             <div className="card-headbar">
@@ -847,12 +796,4 @@ export default function VendorDetail() {
       </div>
     </div>
   );
-}
-
-function prettyHost(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
 }

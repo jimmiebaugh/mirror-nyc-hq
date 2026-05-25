@@ -23,8 +23,8 @@ All values from `BLANK DECK TEMPLATE (2026).pptx` slide-master XML.
 | --- | --- | --- | --- |
 | `--background` | `#000000` | `0 0% 0%` | Page background, primary surface |
 | `--foreground` | `#FFFFFF` | `0 0% 100%` | Primary text |
-| `--surface` | `#0A0A0A` | `0 0% 4%` | Cards / panels (lifted from black by 4%) |
-| `--surface-alt` | `#141414` | `0 0% 8%` | Inputs, hover-state surfaces |
+| `--surface` | `#0A0A0A` | `0 0% 4%` | Default cards / panels (lifted from black by 4%) |
+| `--surface-alt` | `#141414` | `0 0% 8%` | Inputs, hover-state surfaces, and applied HQ sectioned cards per `docs/design-system.md` |
 | `--surface-raised` | `#1F1F1F` | `0 0% 12%` | Elevated panels, popovers |
 | **`--primary`** | **`#BE4E44`** | `4 47% 51%` | **The Mirror coral.** All CTAs, accent text, brand mark "HQ" suffix, R-round pills |
 | `--primary-hover` | `#CC5C52` | `4 53% 56%` | Hover state on coral CTAs (lift +5% lightness) |
@@ -114,7 +114,7 @@ className="h-9 px-3 text-foreground hover:text-primary
 
 - **Radius:** 4px (`rounded-sm` with current Tailwind base of `0.25rem`).
 - **Height:** 40px primary/secondary, 36px tertiary.
-- **Casing:** ALWAYS uppercase. Done in JSX (e.g. `Pull New Candidates` → `Pull New Candidates` typed sentence-case but `text-transform: uppercase` in CSS) so accessibility tools see real words.
+- **Casing:** Use sentence/title case in source strings and let the component class control uppercase where the system calls for it. Avoid all-caps source labels for working-app commands.
 - **Coral usage:** Only ONE primary coral button per visible viewport. Anything else is secondary or tertiary.
 
 ### Pills (status, tier, R-round)
@@ -177,7 +177,7 @@ className="w-full h-11 px-3 rounded-sm bg-surface-alt border border-border-stron
 ### Cards / panels
 
 - 4px radius. Pure flat: no shadow.
-- Background `--surface` (`#0A0A0A`: barely lifted off black) so cards are visible against `#000` page.
+- Background starts from `--surface` (`#0A0A0A`: barely lifted off black). Applied HQ sectioned content cards use `--surface-alt` per `docs/design-system.md`; use `--surface` for quieter default panels.
 
 For padding + sizing canon, see `docs/design-system.md` § 1 Spacing + radius + Component sizing.
 
@@ -217,34 +217,11 @@ For role names, candidate names, settings titles: same treatment.
 
 The deck's vertical "STRATEGY / DESIGN / PRODUCTION" + "MIRROR NYC" rail with a connector line is a strong brand signal but probably too decorative for a working dashboard. **Recommend NOT adopting** as a system pattern. Reserve for the Coming Soon landing page (where it already lives, kind of) and any future marketing pages.
 
-## 4. What this means for Phase 3.5b's branch
+## 4. Locked decisions (history)
 
-The current `phase-3-5b-visual-brand` branch did most things right but on the WRONG coral and the WRONG font. To land this style guide cleanly:
+The Phase 3.5b application of this guide locked the brand foundation: coral `#BE4E44` (dusty terracotta, not the original `#ef5b5b` bright); Montserrat ExtraBold display + Roboto Mono caption + Roboto body; ALL CAPS page titles + sentence-case button source strings (uppercase via component classes); coral restraint kept at the existing frequency (CTAs + eyebrows + R-round pill). Side-rail pattern explored only on landing pages, not in Talent Scout. For the original application notes + open-question Q&A see commit history.
 
-1. **Update `src/index.css`**: swap `--primary` from coral `0 83% 65%` to dusty coral `4 47% 51%`. Adjust `--primary-hover`. Change Google Fonts import from Inter to Montserrat + Roboto + Roboto Mono. Add `--font-display`, `--font-body`, `--font-mono` variables.
-2. **Update `tailwind.config.ts`**: swap `fontFamily.sans` from Inter to Roboto. Add `fontFamily.display: ['Montserrat', ...]` and `fontFamily.mono: ['Roboto Mono', ...]`.
-3. **Update component-layer utilities** in `src/index.css`: `.btn-primary`, `.input-base`, `.tier-badge`, `.status-pill`, `.h-page`, `.label-section`, `.crumb` all keep their structure but switch to `--font-display` / `--font-mono` as appropriate.
-4. **JSX-level changes** (a couple dozen files):
-    - Page titles → `<h1 className="font-display font-extrabold uppercase ...">` + ALL CAPS labels in code.
-    - Section labels → add `font-mono` to existing `font-bold uppercase tracking-wider` classes.
-    - Button labels uppercase via `text-transform: uppercase` (the global rule already applies if we add it to `.btn-base`).
-    - Eyebrow captions ("TALENT SCOUT", "← BACK TO ROLE", "ROLE / HIRING MANAGER") → already mono-styled visually; just need the Roboto Mono family applied (which happens automatically once `--font-mono` is set and we tag those spans `font-mono`).
-5. **Keep:** all the spacing, density, and structural decisions HQ already has. No layout shifts.
-
-## 5. Open questions for Jimmie before applying
-
-1. **Coral hex confirmed:** `#BE4E44` (dusty terracotta) instead of `#ef5b5b` (bright). Confirm. CONFIRMED.
-2. **Display font confirmed:** Montserrat ExtraBold + Montserrat regular. (Deck uses both as a paired display in "CLIENT NAME / PROJECT NAME"; HQ might only need ExtraBold for now and pull regular when needed.) Confirm. CONFIRMED.
-3. **Caption font confirmed:** Roboto Mono for every uppercase tracked label across HQ. Confirm or push back if Roboto Mono feels too "code-y" outside the deck context. CONFIRMED.
-4. **Body font confirmed:** Roboto for prose paragraphs (recruiter overview, internal notes, etc.). Or keep Inter for body and only use Montserrat + Roboto Mono for display/captions. Lighter touch: fewer fonts loaded: but slightly off-brand. USE ROBOTO FOR PROSE.
-5. **All-caps page titles:** ALL CAPS for "OPEN ROLES" / "TEST EVENTS PRODUCER" / "JOE FAMULARO": feels brand-correct or feels like shouting? The deck does this consistently; comfortable to adopt? YES LET'S TRY IT. 
-6. **All-caps button labels:** "+ NEW ROLE", "PULL NEW CANDIDATES", "GENERATE SCORECARD →": feels strong or feels too presentational for a working app? FEELS TOO STRONG
-7. **Side rail pattern:** keep off the dashboard? OK on the landing page only? WE MIGHT EXPLORE IN THE CORE HQ BUT FINE TO LEAVE OUT OF TALENT SCOUT.
-8. **Coral restraint:** is "max 8% coral coverage per screen" a meaningful constraint, or should coral keep its current frequency (every primary CTA, every eyebrow, every R-round pill)? LET'S LEAVE WHAT WE HAVE FOR NOW. 
-
-These answers determine the actual code changes. Once locked, applying takes maybe 60-90 minutes: most of it is JSX label swaps, not architectural work.
-
-## 6. What this style guide does NOT cover
+## 5. What this style guide does NOT cover
 
 - Accessibility (color contrast against pure black for muted-foreground was checked: 78% white on 0% black hits ~14:1, AAA: fine. Coral `#BE4E44` against black is 4.6:1, AA only. For text >= 18px or 14px-bold, this passes; for smaller body text on coral, use white on coral instead.)
 - Motion / transitions (defer to Phase 5 polish)

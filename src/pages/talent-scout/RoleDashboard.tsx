@@ -192,8 +192,8 @@ export default function RoleDashboard() {
       {/* Top role panel */}
       <Card className="bg-surface-alt">
         <CardContent className="space-y-6 p-6">
-          <div className="flex items-start justify-between gap-6">
-            <div className="min-w-0 space-y-3">
+          <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-3 sm:flex-1">
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="h-page">{role.title}</h1>
                 <RoleStatusPill status={role.status} latestRound={latestRoundNumber} size="lg" />
@@ -225,8 +225,8 @@ export default function RoleDashboard() {
                 </span>
               </div>
             </div>
-            <div className="flex shrink-0 flex-col items-stretch gap-2">
-              <div className="flex items-end gap-2">
+            <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:shrink-0">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                 <div className="flex flex-col gap-2">
                   {/* When a complete final review exists, the button becomes
                        'View Final Review' linking to the latest. Re-generation
@@ -254,20 +254,20 @@ export default function RoleDashboard() {
                   )}
                   {role.status === "open" &&
                     (runningRound ? (
-                      <Button asChild>
+                      <Button asChild className="w-full">
                         <Link to={`/talent-scout/roles/${role.id}/pulls/${runningRound.id}`}>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           View running pull
                         </Link>
                       </Button>
                     ) : (
-                      <Button onClick={startPull} disabled={pulling}>
+                      <Button onClick={startPull} disabled={pulling} className="w-full">
                         <Download className="mr-2 h-4 w-4" />
                         {pulling ? "Starting…" : "+ Pull New Candidates"}
                       </Button>
                     ))}
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex gap-2 sm:flex-col">
                   {/* Top-N only relevant when GENERATING a new review. Hide
                        it once a review exists; FinalReviewDetail's Re-Review
                        reruns with the same scope. */}
@@ -278,11 +278,11 @@ export default function RoleDashboard() {
                       placeholder="N"
                       value={finalTopN}
                       onChange={(e) => setFinalTopN(e.target.value)}
-                      className="w-14 text-center"
+                      className="h-10 min-w-0 flex-1 text-center sm:w-14 sm:flex-none"
                       title="Optional: top N candidates by score for final review (cap 50)."
                     />
                   )}
-                  <Button asChild variant="outline" size="icon" aria-label="Role settings" className="w-14">
+                  <Button asChild variant="outline" size="icon" aria-label="Role settings" className="h-10 flex-1 sm:w-14 sm:flex-none">
                     <Link to={`/talent-scout/roles/${role.id}/settings`}>
                       <SettingsIcon className="h-4 w-4" />
                     </Link>
@@ -306,12 +306,12 @@ export default function RoleDashboard() {
       {rounds.length > 0 && (
         <Card className="bg-surface-alt">
           <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-6">
+            <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
               <div className="shrink-0">
                 <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">Pull Rounds</div>
                 <div className="mt-1 text-xs text-muted-foreground">Each pull is reviewed as its own batch</div>
               </div>
-              <div className="grid min-w-0 flex-1 grid-cols-3 gap-3">
+              <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:flex-1 sm:grid-cols-3">
                 {visibleRounds.map((rd, i) => {
                   const isLatest = i === 0;
                   const isFailed = rd.status === "failed";
@@ -377,7 +377,7 @@ export default function RoleDashboard() {
                   );
                 })}
               </div>
-              <div className="flex shrink-0 flex-col items-center gap-3 self-center text-center">
+              <div className="flex shrink-0 flex-col items-start gap-3 self-start text-left sm:items-center sm:self-center sm:text-center">
                 <div className="text-sm text-muted-foreground">
                   {rounds.length} round{rounds.length === 1 ? "" : "s"} · {candidates.length} candidate{candidates.length === 1 ? "" : "s"}
                 </div>
@@ -409,7 +409,7 @@ export default function RoleDashboard() {
         emptyMessage={
           candidates.length === 0
             ? rounds.length === 0
-              ? "No candidates pulled yet — click Pull candidates to start."
+              ? "No candidates pulled yet. Click Pull candidates to start."
               : "Master pool is empty."
             : `No candidates match "${search}".`
         }

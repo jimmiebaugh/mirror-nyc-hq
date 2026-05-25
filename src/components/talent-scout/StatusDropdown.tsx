@@ -7,14 +7,11 @@ import type { Database } from "@/integrations/supabase/types";
 
 export type CandidateStatus = Database["public"]["Enums"]["ts_candidate_status"];
 
-type Opt = { value: CandidateStatus; label: string; cls: string; colorHex: string };
+type Opt = { value: CandidateStatus; label: string; cls: string };
 
 // Manual options in admin-relevance order. Status labels are past-tense
 // states ("Rejected"); bulk-action buttons in CandidateTable are imperative
 // verbs ("Reject") — distinct affordances.
-//
-// colorHex is the solid 500-shade used for inline styling (row left-border
-// in CandidateTable). cls is the Tailwind compound for the pill itself.
 //
 // Phase 3.7.2.1: auto_rejected dropped. manually_reviewed=false distinguishes
 // AI-decided rejections from human-confirmed ones. AI rejection now writes
@@ -22,10 +19,10 @@ type Opt = { value: CandidateStatus; label: string; cls: string; colorHex: strin
 // the AI's pick). The auto_rejected enum value remains in the DB for safety
 // but new writes never use it.
 const OPTIONS: Opt[] = [
-  { value: "interview",  label: "Interview",  cls: "bg-cyan-500/10 text-cyan-500 border-cyan-500/40",       colorHex: "#06b6d4" },
-  { value: "fast_track", label: "Fast-Track", cls: "bg-purple-500/10 text-purple-500 border-purple-500/40", colorHex: "#a855f7" },
-  { value: "consider",   label: "Consider",   cls: "bg-amber-500/10 text-amber-500 border-amber-500/30",   colorHex: "#f59e0b" },
-  { value: "reject",     label: "Rejected",   cls: "bg-red-500/10 text-red-500 border-red-500/40",         colorHex: "#ef4444" },
+  { value: "interview",  label: "Interview",  cls: "bg-info/10 text-info border-info/40" },
+  { value: "fast_track", label: "Fast-Track", cls: "bg-purple/10 text-purple border-purple/40" },
+  { value: "consider",   label: "Consider",   cls: "bg-warn/10 text-warn border-warn/30" },
+  { value: "reject",     label: "Rejected",   cls: "bg-destructive/10 text-destructive border-destructive/40" },
 ];
 
 // Defensive fallback for any legacy auto_rejected row that the backfill
@@ -34,8 +31,7 @@ const OPTIONS: Opt[] = [
 const LEGACY_AUTO_REJECTED: Opt = {
   value: "auto_rejected",
   label: "Rejected",
-  cls: "bg-red-500/10 text-red-500 border-red-500/40",
-  colorHex: "#ef4444",
+  cls: "bg-destructive/10 text-destructive border-destructive/40",
 };
 
 export function statusStyle(v: string | null | undefined) {

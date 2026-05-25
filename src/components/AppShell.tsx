@@ -19,6 +19,9 @@ export default function AppShell() {
   const { user } = useAuth();
   const { isAdmin, isFreelance } = useUserRole();
   const [tasksOpenCount, setTasksOpenCount] = useState(0);
+  // Mobile nav drawer state. The rail collapses to an off-canvas drawer below
+  // 1024px (CSS-driven); this toggles it. Desktop ignores it (rail is static).
+  const [navOpen, setNavOpen] = useState(false);
 
   // Tasks rail badge count: open tasks assigned to the signed-in user. One
   // query on mount is enough for 5.1; the Tasks list page (5.2) refetches
@@ -61,9 +64,21 @@ export default function AppShell() {
         email={email}
         tier={tier}
         avatarUrl={avatarUrl}
+        open={navOpen}
+        onNavigate={() => setNavOpen(false)}
+      />
+      <div
+        className={`hq-rail-backdrop ${navOpen ? "hq-rail-backdrop--show" : ""}`}
+        onClick={() => setNavOpen(false)}
+        aria-hidden="true"
       />
       <div className="flex flex-col flex-1 min-w-0">
-        <TopBar fullName={fullName} email={email} avatarUrl={avatarUrl} />
+        <TopBar
+          fullName={fullName}
+          email={email}
+          avatarUrl={avatarUrl}
+          onMenuClick={() => setNavOpen(true)}
+        />
         <main className="hq-content">
           <Outlet />
         </main>

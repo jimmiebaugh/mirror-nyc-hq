@@ -347,7 +347,7 @@ export default function NewRoleScorecard() {
 
       {dirty && (
         <div className="rounded-md border border-amber-400/40 bg-amber-400/5 px-4 py-3 text-xs text-amber-200">
-          <span className="font-bold text-amber-300">●</span> Edits pending. Run <strong>Process scorecard</strong> to refine before locking — Claude will retain every concept you added and standardize phrasing for downstream evaluations.
+          <span className="font-bold text-amber-300">●</span> Edits pending. Run <strong>Process scorecard</strong> to refine before locking. Claude will retain every concept you added and standardize phrasing for downstream evaluations.
         </div>
       )}
 
@@ -392,7 +392,7 @@ export default function NewRoleScorecard() {
               {/* Source's tier-badge--bonus uses coral primary (#ef5b5b),
                   not purple. Aligned in Phase 3.5b. */}
               <span className="inline-flex items-center rounded-sm border border-primary/40 bg-primary/15 px-2.5 py-1 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-                Bonus — Competitor Experience
+                Bonus: Competitor Experience
               </span>
               <span className="text-xs text-muted-foreground">Up to +{COMPETITOR_BONUS_POINTS} bonus points</span>
             </div>
@@ -400,7 +400,7 @@ export default function NewRoleScorecard() {
           </div>
           <p className="text-xs text-muted-foreground">
             Candidates with experience at any company below earn the competitor bonus.
-            5 pts: 1–2 years · 10 pts: 3+ years · +2 pts: leadership role at competitor.
+            5 pts: 1 to 2 years · 10 pts: 3+ years · +2 pts: leadership role at competitor.
           </p>
           <TagInput value={competitors} onChange={setCompetitors} placeholder="Add competitor…" />
         </CardContent>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { backState } from "@/lib/hq/useBackHref";
 import { FilterBar, type FilterFieldDef, type FilterState } from "@/components/data/FilterBar";
@@ -45,11 +45,13 @@ type AffiliationFilter = "All" | "Client" | "Vendor" | "Venue";
 // Colors mirror personTypeToken() so the buttons read as the same family
 // as the in-row pills (.p-primary / .p-purple / .p-info). Slightly muted
 // fill is delegated to .fchip--active in src/index.css.
+// Deliberate ListChipRadioGroup variant: People needs per-affiliation color
+// logic, while Venues/Vendors use the shared simple list-radio chrome.
 const AFFILIATION_BUTTONS: { value: AffiliationFilter; label: string; color: string }[] = [
   { value: "All", label: "All", color: "hsl(var(--success))" },
   { value: "Client", label: "Client", color: "hsl(var(--primary))" },
-  { value: "Vendor", label: "Vendor", color: "#B57BF5" },
-  { value: "Venue", label: "Venue", color: "#06B6D4" },
+  { value: "Vendor", label: "Vendor", color: "hsl(var(--purple))" },
+  { value: "Venue", label: "Venue", color: "hsl(var(--info))" },
 ];
 
 type PersonRowWithDerived = PersonListRow & {
@@ -205,18 +207,16 @@ export default function PeopleList() {
 
   return (
     <div className="stack-4">
-      <div className="pagehead">
-        <div className="row between">
-          <h1 className="h-page">People</h1>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/people/new")}
-          >
-            <IconPlus className="ic" />
-            New Person
-          </button>
-        </div>
+      <div className="row between list-head">
+        <h1 className="h-page">People</h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate("/people/new")}
+        >
+          <IconPlus className="ic" />
+          New Person
+        </button>
       </div>
 
       <div className="row-c" style={{ gap: 6 }}>
@@ -325,83 +325,65 @@ export default function PeopleList() {
               },
               {
                 key: "full_name",
-                label: "Name",
+                label: "Name / Affiliation",
                 sort: (a, b) => a.full_name.localeCompare(b.full_name),
-                render: (r) => <span className="lead">{r.full_name}</span>,
-              },
-              {
-                key: "organization_name",
-                label: "Organization",
-                // Sort key mirrors what the cell renders: client/vendor name
-                // when an FK is set; the venue name (single) or "{N} venues"
-                // (multi) for venue-contact people; empty string otherwise.
-                // Keeps sort stable with what the user sees in the column.
-                sort: (a, b) => {
-                  const aKey =
-                    a.organization_name ??
-                    (a.is_venue_contact && a.venues.length > 0
-                      ? a.venues.length === 1
-                        ? a.venues[0].name
-                        : `${a.venues.length} venues`
-                      : "");
-                  const bKey =
-                    b.organization_name ??
-                    (b.is_venue_contact && b.venues.length > 0
-                      ? b.venues.length === 1
-                        ? b.venues[0].name
-                        : `${b.venues.length} venues`
-                      : "");
-                  return aKey.localeCompare(bKey);
-                },
                 render: (r) => {
-                  // 5.7.4 smoke followup: Organization link color matches
-                  // the affiliation pill (coral client / purple vendor /
-                  // cyan venue). Multi-venue cell stays plain text (no
-                  // link) at muted cyan opacity per Jimmie's spec.
+                  // Phase 5.11.3: name + affiliation stacked into one cell,
+                  // matching the Projects list "Project / Client" pattern
+                  // (org rendered above OR below in smaller coral text).
+                  let orgEl: ReactNode = null;
                   if (r.client_id && r.client_name) {
-                    return (
+                    orgEl = (
                       <Link
                         to={`/clients/${r.client_id}`}
-                        className="tlink"
-                        style={{ color: "hsl(var(--primary))" }}
+                        className="sub"
+                        style={{ color: "hsl(var(--primary-hover))", fontSize: 12 }}
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {r.client_name}
                       </Link>
                     );
-                  }
-                  if (r.vendor_id && r.vendor_name) {
-                    return (
+                  } else if (r.vendor_id && r.vendor_name) {
+                    orgEl = (
                       <Link
                         to={`/vendors/${r.vendor_id}`}
-                        className="tlink"
-                        style={{ color: "#B57BF5" }}
+                        className="sub"
+                        style={{ color: "hsl(var(--primary-hover))", fontSize: 12 }}
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {r.vendor_name}
                       </Link>
                     );
-                  }
-                  if (r.is_venue_contact && r.venues.length > 0) {
-                    return r.venues.length === 1 ? (
+                  } else if (r.is_venue_contact && r.venues.length > 0) {
+                    orgEl = r.venues.length === 1 ? (
                       <Link
                         to={`/venues/${r.venues[0].id}`}
-                        className="tlink"
-                        style={{ color: "#06B6D4" }}
+                        className="sub"
+                        style={{ color: "hsl(var(--primary-hover))", fontSize: 12 }}
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {r.venues[0].name}
                       </Link>
                     ) : (
-                      <span style={{ color: "#06B6D4", opacity: 0.6, fontWeight: 400 }}>
+                      <span
+                        className="sub"
+                        style={{ color: "hsl(var(--primary-hover))", fontSize: 12 }}
+                      >
                         {r.venues.length} venues
                       </span>
                     );
                   }
-                  return <span className="muted subtle">-</span>;
+                  return (
+                    <div>
+                      <div>
+                        <span className="lead" style={{ fontSize: 13.5 }}>{r.full_name}</span>
+                      </div>
+                      {orgEl ? <div>{orgEl}</div> : null}
+                    </div>
+                  );
                 },
               },
               {
@@ -422,8 +404,8 @@ export default function PeopleList() {
                 render: (r) =>
                   r.email ? (
                     <a
-                      className="muted mono inline-block max-w-full truncate align-bottom"
-                      style={{ fontSize: 12 }}
+                      className="tlink inline-block max-w-full truncate align-bottom"
+                      style={{ fontWeight: 400 }}
                       href={`mailto:${r.email}`}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -447,7 +429,7 @@ export default function PeopleList() {
               },
             ]}
           />
-          <span className="cap">{filtered.length} contacts shown</span>
+          <span className="cap">{filtered.length} people</span>
         </>
       )}
     </div>

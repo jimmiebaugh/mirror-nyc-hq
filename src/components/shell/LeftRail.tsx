@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { MirrorMark } from "@/components/MirrorMark";
 import {
   IconHome,
@@ -70,11 +70,12 @@ const TOOL_APP_PRIMARY: RailItem[] = [
   { to: "/activity", label: "Activity Feed", icon: IconActivity },
 ];
 
-function RailLink({ item }: { item: RailItem }) {
+function RailLink({ item, onNavigate }: { item: RailItem; onNavigate?: () => void }) {
   const Icon = item.icon;
   return (
     <NavLink
       to={item.to}
+      onClick={onNavigate}
       className={({ isActive }) =>
         `hq-ri ${isActive ? "hq-ri--active" : ""}`
       }
@@ -97,6 +98,8 @@ export function LeftRail({
   email,
   tier,
   avatarUrl,
+  open = false,
+  onNavigate,
 }: {
   isAdmin: boolean;
   tasksOpenCount: number;
@@ -104,6 +107,10 @@ export function LeftRail({
   email: string;
   tier: Tier;
   avatarUrl?: string | null;
+  /** Mobile drawer open state (ignored at >=1024px where the rail is static). */
+  open?: boolean;
+  /** Called when a nav link is tapped, so the parent can close the drawer. */
+  onNavigate?: () => void;
 }) {
   const { pathname } = useLocation();
   const isToolApp =
@@ -118,20 +125,20 @@ export function LeftRail({
   const tools = TOOLS_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   return (
-    <aside className="hq-rail">
-      <div className="hq-brand">
+    <aside className={`hq-rail ${open ? "hq-rail--open" : ""}`}>
+      <Link to="/home" className="hq-brand" aria-label="Mirror HQ home" onClick={onNavigate}>
         <MirrorMark className="h-[33px] w-[23px] flex-none" />
         <span className="hq-brand-txt">
           Mirror <span className="hq-brand-hq">HQ</span>
         </span>
-      </div>
+      </Link>
       <nav className="hq-rail-nav">
         {primary.map((item) => (
-          <RailLink key={item.to} item={item} />
+          <RailLink key={item.to} item={item} onNavigate={onNavigate} />
         ))}
         <div className="hq-rail-grp">Tools</div>
         {tools.map((item) => (
-          <RailLink key={item.to} item={item} />
+          <RailLink key={item.to} item={item} onNavigate={onNavigate} />
         ))}
       </nav>
       <RailFooter fullName={fullName} email={email} tier={tier} avatarUrl={avatarUrl} />

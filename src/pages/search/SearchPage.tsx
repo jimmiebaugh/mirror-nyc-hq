@@ -200,7 +200,7 @@ export default function SearchPage() {
                         style={{
                           fontSize: 13,
                           fontWeight: 500,
-                          color: "hsl(var(--primary))",
+                          color: "hsl(var(--primary-hover))",
                         }}
                       >
                         {result.title}

@@ -21,10 +21,10 @@ type Tile = {
 };
 
 const TILES: Tile[] = [
-  { label: "Quoting", status: "Quoting", caption: "Quote in progress", numClass: "text-[hsl(var(--warn))]" },
-  { label: "Quotes Sent", status: "Quote Sent", caption: "Awaiting client feedback", numClass: "text-[hsl(var(--warn))]" },
-  { label: "Billing", status: "Billing", caption: "Awaiting billing", numClass: "text-[hsl(var(--warn))]" },
-  { label: "In Progress", status: "In Progress", caption: "Active production", numClass: "text-[#06B6D4]" },
+  { label: "Quoting", status: "Quoting", caption: "Quote in progress", numClass: "text-warn" },
+  { label: "Quotes Sent", status: "Quote Sent", caption: "Awaiting client feedback", numClass: "text-warn" },
+  { label: "Billing", status: "Billing", caption: "Awaiting billing", numClass: "text-warn" },
+  { label: "In Progress", status: "In Progress", caption: "Active production", numClass: "text-info" },
 ];
 
 export function PipelineCountsRow() {
@@ -54,10 +54,10 @@ export function PipelineCountsRow() {
   return (
     <div className="grid grid-cols-4 gap-4">
       {TILES.map((t) => (
-        <div key={t.label} className="hq-stat">
-          <div className="hq-stat-lbl">{t.label}</div>
-          <div className={`hq-stat-num ${t.numClass}`}>{counts[t.status] ?? 0}</div>
-          <div className="hq-stat-sub">{t.caption}</div>
+        <div key={t.label} className="stat">
+          <div className="lbl">{t.label}</div>
+          <div className={`num ${t.numClass}`}>{counts[t.status] ?? 0}</div>
+          <div className="sub">{t.caption}</div>
         </div>
       ))}
     </div>

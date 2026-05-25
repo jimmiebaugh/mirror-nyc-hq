@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { IconChevronRight } from "@/components/icons/HQIcons";
-import { hqPillClass } from "@/lib/home/projectStatusToken";
+import { pillClass } from "@/lib/home/projectStatusToken";
 
 /**
  * Phase 5.1 Home `My Projects` card.
@@ -95,14 +95,14 @@ export function MyProjectsCard({
   }, [userId]);
 
   return (
-    <div className="hq-card">
-      <div className="hq-card-headbar">
+    <div className="card">
+      <div className="card-headbar">
         <span className="h-card">My Projects</span>
-        <Link to="/projects" className="hq-tlink">
+        <Link to="/projects" className="tlink">
           View all <IconChevronRight className="h-[14px] w-[14px]" />
         </Link>
       </div>
-      <table className="hq-tbl">
+      <table className="tbl">
         <thead>
           <tr>
             {fullWidth ? <th>Job #</th> : null}
@@ -140,8 +140,8 @@ export function MyProjectsCard({
                   ) : null}
                 </td>
                 <td>
-                  <span className={hqPillClass(r.status)}>
-                    <span className="hq-pill-dt" />
+                  <span className={pillClass(r.status)}>
+                    <span className="dt" />
                     {r.status || "Queued"}
                   </span>
                 </td>

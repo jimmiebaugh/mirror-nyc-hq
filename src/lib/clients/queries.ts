@@ -42,6 +42,10 @@ export type ClientListRow = {
   tags: string[];
   upcomingDeliverables: ClientRollupRef[];
   activeProjects: ClientRollupRef[];
+  // Phase 5.11.3: total project count per client (active + non-active).
+  // Separate from `activeProjects` so a future "On Hold lifecycle" can
+  // re-bucket without re-querying.
+  totalProjectCount: number;
 };
 
 const TERMINAL_DELIVERABLE_STATUSES = ["Complete", "Skipped"];
@@ -78,9 +82,14 @@ export async function loadClients(): Promise<ClientListRow[]> {
   }
 
   const projectsByClient = new Map<string, ClientRollupRef[]>();
+  const totalProjectsByClient = new Map<string, number>();
   for (const r of projectsRes.data ?? []) {
     const row = r as { id: string; name: string | null; client_id: string | null; status: string };
     if (!row.client_id) continue;
+    totalProjectsByClient.set(
+      row.client_id,
+      (totalProjectsByClient.get(row.client_id) ?? 0) + 1,
+    );
     if (NON_ACTIVE_PROJECT_STATUSES.includes(row.status)) continue;
     const list = projectsByClient.get(row.client_id) ?? [];
     list.push({ id: row.id, label: row.name ?? "Untitled" });
@@ -131,6 +140,7 @@ export async function loadClients(): Promise<ClientListRow[]> {
       tags: row.tags ?? [],
       upcomingDeliverables: deliverablesByClient.get(row.id) ?? [],
       activeProjects: projectsByClient.get(row.id) ?? [],
+      totalProjectCount: totalProjectsByClient.get(row.id) ?? 0,
     };
   });
 }

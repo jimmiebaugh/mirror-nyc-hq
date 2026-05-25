@@ -67,7 +67,7 @@ export default function PendingState() {
         <button
           type="button"
           onClick={handleSignOut}
-          className="btn-ghost mt-5"
+          className="btn btn-secondary mt-5"
         >
           Sign out
         </button>

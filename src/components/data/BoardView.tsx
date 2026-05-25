@@ -18,12 +18,12 @@ import type { StatusToken } from "@/lib/home/projectStatusToken";
  */
 
 const TOKEN_COLOR: Record<StatusToken, string> = {
-  info: "#06B6D4",
+  info: "hsl(var(--info))",
   success: "hsl(var(--success))",
   warn: "hsl(var(--warn))",
   destructive: "hsl(var(--destructive))",
   muted: "hsl(var(--border-strong))",
-  purple: "#B57BF5",
+  purple: "hsl(var(--purple))",
 };
 
 export type BoardColumn<T extends { id: string }> = {

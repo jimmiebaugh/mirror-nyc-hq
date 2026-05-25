@@ -8,8 +8,8 @@
  * 20260515130000_phase_5_2_1_project_task_enum_reshape.sql.
  *
  * Returned token is one of `info | success | warn | destructive | muted`,
- * which maps 1:1 to the `.hq-pill--<token>` classes in src/index.css. Use
- * `hqPillClass(status)` for the pill wrapper.
+ * which maps 1:1 to the `.p-<token>` classes in src/index.css. Use
+ * `pillClass(status)` for the pill wrapper.
  */
 
 export type StatusToken = "info" | "success" | "warn" | "destructive" | "muted" | "purple";
@@ -36,8 +36,8 @@ export function projectStatusToken(status: string | null | undefined): StatusTok
   return PROJECT_STATUS_TOKENS[status] ?? "muted";
 }
 
-export function hqPillClass(status: string | null | undefined) {
-  return `hq-pill hq-pill--${projectStatusToken(status)}`;
+export function pillClass(status: string | null | undefined) {
+  return `pill p-${projectStatusToken(status)}`;
 }
 
 const TASK_STATUS_TOKENS: Record<string, StatusToken> = {

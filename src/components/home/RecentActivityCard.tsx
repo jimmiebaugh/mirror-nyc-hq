@@ -289,10 +289,10 @@ export function RecentActivityCard({
   const title = scope === "cross-team" ? "Global Activity Feed" : "Recent Activity";
 
   return (
-    <div className="hq-card hq-card-pad">
+    <div className="card card-pad">
       <div className="flex justify-between items-center mb-2">
         <span className="h-card">{title}</span>
-        <Link to="/activity" className="hq-tlink">
+        <Link to="/activity" className="tlink">
           Open feed <IconChevronRight className="h-[14px] w-[14px]" />
         </Link>
       </div>
@@ -309,12 +309,12 @@ export function RecentActivityCard({
           // (Home cards are read-only summaries; click-through happens in
           // /activity).
           return (
-            <div key={r.id} className="hq-activity-row">
-              <span className="hq-actdot">
+            <div key={r.id} className="activity-row">
+              <span className="actdot">
                 <IconForEntity type={r.entity_type} />
               </span>
               <div>
-                <div className="hq-activity-txt">
+                <div className="txt">
                   <span className="who">{actorDisplay(r.actor)}</span>{" "}
                   {lead}{" "}
                   {record && recordHref ? (
@@ -325,7 +325,7 @@ export function RecentActivityCard({
                     <b>{record}</b>
                   ) : null}
                 </div>
-                <div className="hq-activity-ts">{relativeTime(r.createdAtIso)}</div>
+                <div className="ts">{relativeTime(r.createdAtIso)}</div>
               </div>
             </div>
           );

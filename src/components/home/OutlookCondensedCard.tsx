@@ -54,14 +54,14 @@ export function OutlookCondensedCard() {
   }, [data]);
 
   return (
-    <div className="hq-card">
-      <div className="hq-card-headbar">
+    <div className="card">
+      <div className="card-headbar">
         <span className="h-card">Outlook · {currentYear}</span>
-        <Link to="/outlook" className="hq-tlink">
+        <Link to="/outlook" className="tlink">
           Expand <IconExt className="h-[14px] w-[14px]" />
         </Link>
       </div>
-      <div className="hq-card-pad">
+      <div className="card-pad">
         <div className="grid grid-cols-4 gap-2">
           {MONTH_LABELS.map((label, i) => {
             const monthNum = i + 1;

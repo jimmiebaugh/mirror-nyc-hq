@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import {
@@ -158,6 +159,14 @@ export default function TaskEdit() {
     () => Promise.resolve(userOptions),
     [userOptions],
   );
+  const siblingTaskOptions: Option[] = useMemo(
+    () => siblingTasks.map((t) => ({ id: t.id, label: t.title || "Untitled task" })),
+    [siblingTasks],
+  );
+  const loadSiblingTaskOptions = useCallback(
+    () => Promise.resolve(siblingTaskOptions),
+    [siblingTaskOptions],
+  );
 
   const dirty = useMemo(
     () => JSON.stringify(form) !== JSON.stringify(initial),
@@ -243,7 +252,7 @@ export default function TaskEdit() {
   }
 
   return (
-    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 760 }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/tasks" : `/tasks/${id}`}
         className="tlink"
@@ -259,23 +268,25 @@ export default function TaskEdit() {
       </Link>
 
       <div className="pagehead">
+        <div className="eyebrow">Task</div>
         <h1 className="h-page">{isCreate ? "New Task" : "Edit Task"}</h1>
       </div>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Details</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Task</span>
-          </div>
-          <Field label="Title" required>
+          <HQFormField label="Title" required>
             <input
               className={`input ${form.title ? "input--filled" : ""}`}
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             />
-          </Field>
+          </HQFormField>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
           <div className="g2">
-            <Field label="Project">
+            <HQFormField label="Project">
               <RecordCombobox
                 source={{ kind: "record", loadOptions: loadProjectOptions }}
                 value={form.project_id}
@@ -285,8 +296,8 @@ export default function TaskEdit() {
                 entityLabel="Project"
                 placeholder="Standalone"
               />
-            </Field>
-            <Field label="Assignee">
+            </HQFormField>
+            <HQFormField label="Assignee">
               <RecordCombobox
                 source={{ kind: "record", loadOptions: loadUserOptions }}
                 value={form.assignee_id}
@@ -296,8 +307,11 @@ export default function TaskEdit() {
                 entityLabel="user"
                 placeholder="Unassigned"
               />
-            </Field>
-            <Field label="Status">
+            </HQFormField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <div className="g2">
+            <HQFormField label="Status">
               <select
                 className="input input--filled"
                 value={form.status}
@@ -307,8 +321,8 @@ export default function TaskEdit() {
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-            </Field>
-            <Field label="Priority">
+            </HQFormField>
+            <HQFormField label="Priority">
               <select
                 className="input input--filled"
                 value={form.priority}
@@ -318,54 +332,31 @@ export default function TaskEdit() {
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
-            </Field>
-            <Field label="Due date">
-              <input
-                type="date"
-                className={`input ${form.due_date ? "input--filled" : ""}`}
-                value={form.due_date}
-                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-              />
-            </Field>
+            </HQFormField>
           </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <HQFormField label="Due date">
+            <input
+              type="date"
+              className={`input ${form.due_date ? "input--filled" : ""}`}
+              value={form.due_date}
+              onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+            />
+          </HQFormField>
           {siblingTasks.length > 0 ? (
-            <Field label="Blocked by">
-              <div
-                className="stack-2"
-                style={{
-                  maxHeight: 160,
-                  overflowY: "auto",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "var(--radius)",
-                  padding: 8,
-                }}
-              >
-                {siblingTasks.map((s) => {
-                  const checked = form.blocked_by.includes(s.id);
-                  return (
-                    <label
-                      key={s.id}
-                      className="row-c"
-                      style={{ fontSize: 13, cursor: "pointer" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            blocked_by: e.target.checked
-                              ? [...f.blocked_by, s.id]
-                              : f.blocked_by.filter((bid) => bid !== s.id),
-                          }))
-                        }
-                      />
-                      {s.title}
-                    </label>
-                  );
-                })}
-              </div>
-            </Field>
+            <>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <HQFormField label="Blocked by">
+                <RecordCombobox
+                  multi
+                  source={{ kind: "record", loadOptions: loadSiblingTaskOptions }}
+                  multiValue={form.blocked_by}
+                  onMultiChange={(next) => setForm((f) => ({ ...f, blocked_by: next }))}
+                  entityLabel="task"
+                  placeholder="Add blocker..."
+                />
+              </HQFormField>
+            </>
           ) : null}
         </div>
       </section>
@@ -421,26 +412,6 @@ export default function TaskEdit() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="field">
-      <label className="label-form">
-        {label}
-        {required ? <span className="req">*</span> : null}
-      </label>
-      {children}
     </div>
   );
 }

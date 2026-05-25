@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import {
   CLIENT_MINI_CREATE_FIELDS,
@@ -356,20 +357,20 @@ export default function PersonEdit() {
       </div>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Details</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Details</span>
-          </div>
-          <FormField label="Full Name" required>
+          <HQFormField label="Full Name" required>
             <input
               className={`input ${form.full_name ? "input--filled" : ""}`}
               value={form.full_name}
               onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
               placeholder="Sarah Klein"
             />
-          </FormField>
+          </HQFormField>
 
-          <FormField label="Type">
+          <HQFormField label="Type">
             <div className="row-c wrap" style={{ gap: 12 }}>
               {(["Client", "Vendor", "Venue", "Unaffiliated"] as PersonType[]).map(
                 (t) => (
@@ -389,10 +390,10 @@ export default function PersonEdit() {
                 ),
               )}
             </div>
-          </FormField>
+          </HQFormField>
 
           {showClientPicker ? (
-            <FormField label="Client">
+            <HQFormField label="Client">
               <RecordCombobox
                 source={{ kind: "record", loadOptions: loadClientOptions }}
                 value={form.client_id}
@@ -403,11 +404,11 @@ export default function PersonEdit() {
                 miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
                 onMiniCreate={handleCreateClient}
               />
-            </FormField>
+            </HQFormField>
           ) : null}
 
           {showVendorPicker ? (
-            <FormField label="Vendor">
+            <HQFormField label="Vendor">
               <RecordCombobox
                 source={{ kind: "record", loadOptions: loadVendorOptions }}
                 value={form.vendor_id}
@@ -415,19 +416,19 @@ export default function PersonEdit() {
                 entityLabel="Vendor"
                 placeholder="No vendor"
               />
-            </FormField>
+            </HQFormField>
           ) : null}
 
           <div className="g2">
-            <FormField label="Role / Title">
+            <HQFormField label="Role / Title">
               <input
                 className={`input ${form.role_title ? "input--filled" : ""}`}
                 value={form.role_title}
                 onChange={(e) => setForm((f) => ({ ...f, role_title: e.target.value }))}
                 placeholder="VP Brand Marketing"
               />
-            </FormField>
-            <FormField label="Email">
+            </HQFormField>
+            <HQFormField label="Email">
               <input
                 type="email"
                 className={`input ${form.email ? "input--filled" : ""}`}
@@ -435,8 +436,8 @@ export default function PersonEdit() {
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                 placeholder="sarah@example.com"
               />
-            </FormField>
-            <FormField label="Phone">
+            </HQFormField>
+            <HQFormField label="Phone">
               <input
                 className={`input ${form.phone ? "input--filled" : ""}`}
                 value={form.phone}
@@ -444,33 +445,25 @@ export default function PersonEdit() {
                 onBlur={() => setForm((f) => ({ ...f, phone: formatPhone(f.phone) }))}
                 placeholder="(212) 555-0000"
               />
-            </FormField>
-            <FormField label="LinkedIn URL">
+            </HQFormField>
+            <HQFormField label="LinkedIn URL">
               <input
                 className={`input ${form.linkedin_url ? "input--filled" : ""}`}
                 value={form.linkedin_url}
                 onChange={(e) => setForm((f) => ({ ...f, linkedin_url: e.target.value }))}
                 placeholder="https://linkedin.com/in/sarahklein"
               />
-            </FormField>
-            <FormField label="Tags">
-              <input
-                className={`input ${form.tags ? "input--filled" : ""}`}
-                value={form.tags}
-                onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
-                placeholder="Decision maker, Prefers email"
-              />
-            </FormField>
+            </HQFormField>
           </div>
         </div>
       </section>
 
       {showVenuePicker ? (
         <section className="card">
+          <div className="card-headbar">
+            <span className="h-card">Venues Managed</span>
+          </div>
           <div className="card-pad stack-4">
-            <div className="block-lbl">
-              <span className="label-section">Venues Managed</span>
-            </div>
             <RecordCombobox
               multi
               source={{ kind: "record", loadOptions: loadVenueOptions }}
@@ -536,26 +529,6 @@ export default function PersonEdit() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="field">
-      <label className="label-form">
-        {label}
-        {required ? <span className="req">*</span> : null}
-      </label>
-      {children}
     </div>
   );
 }

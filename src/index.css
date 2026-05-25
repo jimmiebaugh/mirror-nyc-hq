@@ -28,7 +28,13 @@
        numeral and eyebrow caption in the deck. */
     --primary: 4 47% 51%;                 /* #BE4E44 dusty coral */
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 4 53% 56%;           /* #CC5C52 +5% lightness */
+    --primary-hover: 4 53% 56%;           /* #CA5B53 +5% lightness; also serves
+                                             as the in-content link color
+                                             (UX audit F4.1, commit 5a0c129),
+                                             ~4.50:1 on --surface-alt (just-
+                                             passes AA); see code-observations
+                                             Frontend #22 for the --surface-
+                                             raised borderline (4.03:1). */
 
     --secondary: 0 0% 8%;
     --secondary-foreground: 0 0% 100%;
@@ -42,7 +48,8 @@
     --destructive-foreground: 0 0% 100%;
     --success: 142 76% 64%;               /* #4ade80 — Tier 3, Latest, Final */
     --warn: 38 92% 50%;                   /* #f59e0b — Running, Stalled */
-    --info: 187 71% 43%;                  /* #06B6D4 — Likely (Outlook), Deliverable (My Week) */
+    --info: 189 94% 43%;                  /* #06B6D4 — Install, Likely (Outlook), Deliverable (My Week) */
+    --purple: 268 86% 72%;                /* #B57BF5 — Removal, Vendor affiliation, fast-track */
 
     --border: 0 0% 16%;                   /* #2a2a2a hairlines */
     --border-strong: 0 0% 23%;            /* #3a3a3a inputs / dividers */
@@ -101,7 +108,8 @@
     --destructive-foreground: 0 0% 100%;
     --success: 142 76% 64%;
     --warn: 38 92% 50%;
-    --info: 187 71% 43%;
+    --info: 189 94% 43%;
+    --purple: 268 86% 72%;
 
     --border: 0 0% 16%;
     --border-strong: 0 0% 23%;
@@ -158,17 +166,12 @@
   /* Roboto Mono renders ~10% wider than Inter, so caption sizes that read
      "right" in Inter feel undersized in mono. The base label/eyebrow size
      bumped from 11px to 13px in the post-deck-template review pass; small
-     captions (10–11px) are reserved for in-tile sub-labels and pill text. */
-  .label-section {
-    @apply text-[13px] font-bold uppercase text-foreground;
-    font-family: var(--font-mono);
-    letter-spacing: 0.06em;
-  }
-  .label-form {
-    @apply text-[13px] font-bold uppercase text-foreground;
-    font-family: var(--font-mono);
-    letter-spacing: 0.06em;
-  }
+     captions (10–11px) are reserved for in-tile sub-labels and pill text.
+     NOTE: .label-section and .label-form are defined canonically in the
+     Phase 5.2 block below (grey, per the 5.10.1 coral-reservation rule).
+     The earlier duplicate definitions were removed (UX audit F1.3) since
+     they were silently overridden and would have flipped label color
+     app-wide on any file reorder. */
   .crumb {
     @apply text-[12px] font-medium uppercase;
     font-family: var(--font-mono);
@@ -176,50 +179,18 @@
     letter-spacing: 0.08em;
   }
   .eyebrow {
-    @apply text-[12px] font-bold uppercase;
+    @apply text-[14px] font-bold uppercase;
     font-family: var(--font-mono);
     color: hsl(var(--primary));
     letter-spacing: 0.08em;
   }
 
-  /* Buttons — height + spacing match brand template (40px / 4px radius).
-     Casing stays as-typed (NOT uppercased) per Jimmie's review feedback;
-     all-caps buttons read too "presentational" for a working app. */
-  .btn-base {
-    @apply inline-flex items-center justify-center gap-2 h-10 px-5 rounded-[4px] text-[13px] font-medium whitespace-nowrap transition-colors;
-    font-family: var(--font-body);
-  }
-  .btn-primary {
-    @apply btn-base text-primary-foreground;
-    background: hsl(var(--primary));
-  }
-  .btn-primary:hover { background: hsl(var(--primary-hover)); }
-  .btn-ghost {
-    @apply btn-base bg-transparent text-foreground border;
-    border-color: hsl(var(--border-strong));
-  }
-  .btn-ghost:hover {
-    @apply bg-white/5;
-    border-color: hsl(var(--foreground));
-  }
-  .btn-light { @apply btn-base bg-white text-black; }
-  .btn-light:hover { @apply bg-white/85; }
-
-  .input-base {
-    @apply w-full h-11 px-3 rounded-[4px] text-[14px] text-foreground border outline-none transition-shadow;
-    font-family: var(--font-body);
-    background: hsl(var(--surface-alt));
-    border-color: hsl(var(--border-strong));
-  }
-  .input-base:focus {
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
-  }
-  .textarea-base { @apply input-base h-auto py-3 min-h-[80px] resize-y leading-normal; }
-  .input-filled {
-    background: hsl(var(--surface-raised));
-    border-left: 2px solid hsl(var(--primary));
-  }
+  /* Buttons + inputs are the wireframe-canonical `.btn` / `.input` classes
+     in the Phase 5.2 block below. The earlier `.btn-base` / `.btn-primary` /
+     `.btn-ghost` / `.btn-light` / `.input-base` / `.textarea-base` /
+     `.input-filled` set was dead (zero or fully-shadowed consumers; the two
+     `.btn-ghost` usages migrated to `.btn btn-secondary`) and was removed
+     (UX audit F1.2). */
 
   .tier-badge {
     @apply inline-flex items-center gap-[6px] px-[10px] py-[4px] rounded-[3px] text-[10.5px] font-bold uppercase border w-fit;
@@ -234,12 +205,12 @@
     background: currentColor;
     display: inline-block;
   }
-  .tier-badge--1 { background: rgba(239, 68, 68, 0.12); color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
-  .tier-badge--2 { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
-  .tier-badge--3 { background: rgba(74, 222, 128, 0.10); color: #4ade80; border-color: rgba(74, 222, 128, 0.3); }
+  .tier-badge--1 { background: hsl(var(--destructive) / 0.12); color: hsl(var(--destructive)); border-color: hsl(var(--destructive) / 0.3); }
+  .tier-badge--2 { background: hsl(var(--warn) / 0.12); color: hsl(var(--warn)); border-color: hsl(var(--warn) / 0.3); }
+  .tier-badge--3 { background: hsl(var(--success) / 0.10); color: hsl(var(--success)); border-color: hsl(var(--success) / 0.3); }
   /* Bonus tier uses the Mirror coral (deck primary). RGBA derived from
      #BE4E44 = rgb(190, 78, 68). */
-  .tier-badge--bonus { background: rgba(190, 78, 68, 0.15); color: hsl(var(--primary)); border-color: rgba(190, 78, 68, 0.4); }
+  .tier-badge--bonus { background: hsl(var(--primary) / 0.15); color: hsl(var(--primary)); border-color: hsl(var(--primary) / 0.4); }
 
   /* Phase 4.10.2-port: .manual-tag removed. Was used by Shortlist's
      manual-row branch to label rows "Manual" inline; the new
@@ -269,8 +240,8 @@
     background: currentColor;
     display: inline-block;
   }
-  .status-pill--active { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
-  .status-pill--complete { background: rgba(74, 222, 128, 0.10); color: #4ade80; border-color: rgba(74, 222, 128, 0.3); }
+  .status-pill--active { background: hsl(var(--warn) / 0.12); color: hsl(var(--warn)); border-color: hsl(var(--warn) / 0.3); }
+  .status-pill--complete { background: hsl(var(--success) / 0.10); color: hsl(var(--success)); border-color: hsl(var(--success) / 0.3); }
   .status-pill--new { background: hsl(var(--surface-alt)); color: hsl(var(--muted-foreground)); border-color: hsl(var(--border)); }
 
   /* ─── Venue Scout matrix (Phase 4.6-port) ──────────────────────────────
@@ -517,21 +488,6 @@
     border-style: solid;
   }
 
-  /* Block label (eyebrow + horizontal divider) */
-  .hq-block-lbl { @apply flex items-center gap-[9px] mb-3; }
-  .hq-block-lbl > .hq-block-lbl-text {
-    font-family: var(--font-mono);
-    @apply text-[12px] uppercase whitespace-nowrap;
-    color: hsl(var(--foreground));
-    letter-spacing: 0.08em;
-  }
-  .hq-block-lbl::after {
-    content: "";
-    @apply flex-1;
-    height: 1px;
-    background: hsl(var(--border));
-  }
-
   /* My Week strip */
   .hq-weekstrip { @apply flex gap-[10px]; }
   .hq-weekcard {
@@ -571,101 +527,6 @@
     height: 28px;
   }
 
-  /* Pipeline stat tile */
-  .hq-stat {
-    background: hsl(var(--surface-alt));
-    border: 1px solid hsl(var(--border));
-    border-radius: var(--radius);
-    padding: 16px 18px;
-  }
-  .hq-stat-lbl {
-    font-family: var(--font-mono);
-    @apply text-[11px] font-bold uppercase;
-    letter-spacing: 0.08em;
-    color: hsl(var(--subtle-foreground));
-  }
-  .hq-stat-num {
-    font-family: var(--font-display);
-    @apply text-[32px] font-extrabold mt-[6px];
-    line-height: 1.1;
-    font-variant-numeric: tabular-nums;
-  }
-  .hq-stat-sub {
-    font-family: var(--font-mono);
-    @apply text-[10.5px] mt-px;
-    color: hsl(var(--muted-foreground));
-  }
-
-  /* Card + headbar */
-  .hq-card {
-    background: hsl(var(--surface-alt));
-    border: 1px solid hsl(var(--border));
-    border-radius: var(--radius);
-  }
-  .hq-card-pad { padding: 24px; }
-  .hq-card-headbar {
-    @apply flex items-center justify-between gap-3;
-    border-bottom: 1px solid hsl(var(--border));
-    padding: 14px 20px;
-  }
-  .hq-card-headbar .h-card { @apply text-[15px]; }
-
-  /* Flat table (no status-color left border by default) */
-  .hq-tbl { @apply w-full border-collapse; }
-  .hq-tbl thead th {
-    font-family: var(--font-mono);
-    @apply text-[11px] font-bold uppercase text-left;
-    letter-spacing: 0.06em;
-    color: hsl(var(--subtle-foreground));
-    padding: 10px 14px;
-    background: hsl(var(--surface-alt));
-    border-bottom: 1px solid hsl(var(--border));
-  }
-  .hq-tbl thead th.r { text-align: right; }
-  .hq-tbl tbody td {
-    padding: 12px 14px;
-    border-bottom: 1px solid hsl(var(--border));
-    @apply text-[13px] align-middle;
-  }
-  .hq-tbl tbody tr:hover { background: rgba(255, 255, 255, 0.025); }
-  .hq-tbl tbody td.r { text-align: right; font-variant-numeric: tabular-nums; }
-  .hq-tbl tbody .lead { @apply font-medium; color: hsl(var(--foreground)); }
-  .hq-tbl tbody .sub {
-    @apply text-[11.5px];
-    color: hsl(var(--subtle-foreground));
-    font-family: var(--font-mono);
-  }
-  .hq-tlink {
-    font-family: var(--font-mono);
-    @apply text-[12px] font-bold inline-flex items-center gap-[5px];
-    letter-spacing: 0.04em;
-    color: hsl(var(--primary));
-  }
-  .hq-tlink:hover { @apply underline; }
-
-  /* Status pill (extrapolated from wireframe; status → token per spec § 5a) */
-  .hq-pill {
-    @apply inline-flex items-center gap-[6px] uppercase whitespace-nowrap;
-    font-family: var(--font-mono);
-    @apply text-[10.5px] font-bold;
-    letter-spacing: 0.05em;
-    padding: 3px 9px;
-    border-radius: var(--radius);
-    border: 1px solid transparent;
-  }
-  .hq-pill-dt {
-    width: 6px;
-    height: 6px;
-    @apply rounded-full;
-    background: currentColor;
-  }
-  .hq-pill--warn        { background: rgba(245,158,11,0.10);  border-color: rgba(245,158,11,0.30);  color: hsl(var(--warn)); }
-  .hq-pill--success     { background: rgba(74,222,128,0.10);  border-color: rgba(74,222,128,0.30);  color: hsl(var(--success)); }
-  .hq-pill--destructive { background: rgba(239,68,68,0.10);   border-color: rgba(239,68,68,0.30);   color: hsl(var(--destructive)); }
-  .hq-pill--info        { background: rgba(6,182,212,0.12);   border-color: rgba(6,182,212,0.32);   color: #06B6D4; }
-  .hq-pill--muted       { background: rgba(255,255,255,0.05); border-color: hsl(var(--border-strong)); color: hsl(var(--muted-foreground)); }
-  .hq-pill--purple      { background: rgba(168,85,247,0.13);  border-color: rgba(168,85,247,0.36);  color: #B57BF5; }
-
   /* Date-picker calendar icon (native <input type="date">): flip the
      default white WebKit indicator to Mirror coral (#BE4E44). Targets the
      icon button only — input border / focus ring stay on their tokens.
@@ -675,45 +536,6 @@
   input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(45%) sepia(72%) saturate(485%) hue-rotate(326deg) brightness(91%) contrast(86%);
     cursor: pointer;
-  }
-
-  /* Activity row */
-  .hq-activity-row {
-    @apply flex gap-3;
-    padding: 12px 0;
-    border-bottom: 1px solid hsl(var(--border));
-  }
-  .hq-activity-row:last-child { border-bottom: none; }
-  .hq-actdot {
-    width: 28px;
-    height: 28px;
-    @apply rounded-full flex items-center justify-center flex-none;
-    background: hsl(var(--surface-raised));
-    border: 1px solid hsl(var(--border-strong));
-    color: hsl(var(--subtle-foreground));
-  }
-  .hq-activity-txt {
-    @apply text-[13px];
-    line-height: 1.45;
-  }
-  .hq-activity-txt b {
-    @apply font-medium cursor-pointer;
-    color: hsl(var(--primary));
-  }
-  .hq-activity-txt b:hover { @apply underline; }
-  .hq-activity-txt .who {
-    @apply font-medium cursor-pointer;
-    color: rgba(190, 78, 68, 0.78);
-  }
-  .hq-activity-txt .who:hover { @apply underline; }
-  .hq-activity-txt .dlv {
-    @apply font-medium;
-    color: hsl(var(--foreground));
-  }
-  .hq-activity-ts {
-    font-family: var(--font-mono);
-    @apply text-[10.5px] mt-[3px];
-    color: hsl(var(--subtle-foreground));
   }
 
   /* Outlook condensed month cell */
@@ -747,301 +569,16 @@
     color: hsl(var(--subtle-foreground));
   }
 
-  /* ─── Phase 5.2.1: cross-cutting database-list surfaces ─────────────
-     View switcher, filter chip builder, data table extensions, board /
-     timeline / calendar primitives. Lifts the Talent Scout CandidateTable
-     two-tier row pattern and extends with status-color left borders driven
-     by `data-row-token` (`info` / `success` / `warn` / `destructive` /
-     `muted`). */
-
-  .hq-viewswitch {
-    @apply flex items-center gap-1 rounded-md border border-[hsl(var(--border-strong))] bg-[hsl(var(--surface-alt))] p-1;
-  }
-  .hq-viewswitch-tab {
-    @apply text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 rounded;
-    color: hsl(var(--muted-foreground));
-    cursor: pointer;
-  }
-  .hq-viewswitch-tab:hover {
-    color: hsl(var(--foreground));
-  }
-  .hq-viewswitch-tab--active {
-    background: hsl(var(--primary) / 0.18);
-    color: hsl(var(--primary));
-  }
-
-  .hq-filterbar {
-    @apply flex flex-wrap items-center gap-2;
-  }
-  .hq-filterchip {
-    @apply inline-flex items-center gap-1.5 rounded-[3px] px-2 py-1 text-[11px] font-mono;
-    background: hsl(var(--surface-raised));
-    border: 1px solid hsl(var(--border-strong));
-    color: hsl(var(--foreground));
-  }
-  .hq-filterchip-field { color: hsl(var(--subtle-foreground)); }
-  .hq-filterchip-op { color: hsl(var(--muted-foreground)); }
-  .hq-filterchip-x {
-    @apply ml-1 inline-flex h-4 w-4 items-center justify-center;
-    color: hsl(var(--subtle-foreground));
-    cursor: pointer;
-  }
-  .hq-filterchip-x:hover { color: hsl(var(--destructive)); }
-  .hq-filterchip--connector {
-    @apply rounded-[3px] px-2 py-1 text-[10px] font-mono uppercase tracking-wider cursor-pointer;
-    background: hsl(var(--primary) / 0.12);
-    color: hsl(var(--primary));
-    border: 1px solid hsl(var(--primary) / 0.4);
-  }
-  .hq-filterchip--add {
-    @apply inline-flex items-center gap-1 rounded-[3px] border border-dashed px-2 py-1 text-[11px] font-mono;
-    border-color: hsl(var(--border-strong));
-    color: hsl(var(--muted-foreground));
-    cursor: pointer;
-  }
-  .hq-filterchip--add:hover {
-    border-color: hsl(var(--primary));
-    color: hsl(var(--primary));
-  }
-
-  /* DataTable row: status-color left border tied to data-row-token. */
-  .hq-dt {
-    @apply w-full border-collapse;
-  }
-  .hq-dt thead th {
-    @apply text-[11px] font-mono uppercase tracking-wider text-left;
-    color: hsl(var(--subtle-foreground));
-    padding: 12px 14px;
-    border-bottom: 1px solid hsl(var(--border));
-  }
-  .hq-dt thead th.r { text-align: right; }
-  .hq-dt thead th.c { text-align: center; }
-  .hq-dt thead th.sortable { cursor: pointer; }
-  .hq-dt thead th.sortable:hover { color: hsl(var(--foreground)); }
-  .hq-dt tbody td {
-    padding: 12px 14px;
-    border-bottom: 1px solid hsl(var(--border));
-    font-size: 13px;
-    vertical-align: middle;
-  }
-  .hq-dt tbody tr {
-    cursor: pointer;
-    border-left: 3px solid transparent;
-  }
-  .hq-dt tbody tr:hover { background: rgba(255, 255, 255, 0.025); }
-  .hq-dt tbody tr[data-row-token="info"]        { border-left-color: #06B6D4; }
-  .hq-dt tbody tr[data-row-token="success"]     { border-left-color: hsl(var(--success)); }
-  .hq-dt tbody tr[data-row-token="warn"]        { border-left-color: hsl(var(--warn)); }
-  .hq-dt tbody tr[data-row-token="destructive"] { border-left-color: hsl(var(--destructive)); }
-  .hq-dt tbody tr[data-row-token="muted"]       { border-left-color: hsl(var(--border-strong)); }
-  .hq-dt-divider {
-    background: hsl(var(--surface-alt));
-    color: hsl(var(--subtle-foreground));
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .hq-dt-divider td {
-    padding: 8px 14px;
-    border-top: 1px solid hsl(var(--border-strong));
-    border-bottom: 1px solid hsl(var(--border-strong));
-  }
-  .hq-dt-empty {
-    @apply rounded-md border border-dashed py-12 text-center;
-    border-color: hsl(var(--border-strong));
-    color: hsl(var(--subtle-foreground));
-  }
-
-  /* Board (kanban) primitives. */
-  .hq-board {
-    @apply space-y-6;
-  }
-  .hq-board-rowhead {
-    @apply flex items-center justify-between mb-2 px-1;
-  }
-  .hq-board-rowhead-title {
-    @apply text-[11px] font-mono uppercase tracking-widest;
-    color: hsl(var(--muted-foreground));
-  }
-  .hq-board-cols {
-    @apply grid gap-3;
-  }
-  .hq-board-col {
-    background: hsl(var(--surface-alt));
-    border: 1px solid hsl(var(--border));
-    border-radius: 6px;
-    padding: 10px;
-    min-height: 120px;
-  }
-  .hq-board-col-head {
-    @apply flex items-center gap-2 mb-3 px-1;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: hsl(var(--muted-foreground));
-  }
-  .hq-board-col-dot {
-    @apply inline-block h-2 w-2 rounded-full flex-none;
-  }
-  .hq-board-card {
-    background: hsl(var(--surface-raised));
-    border-radius: 4px;
-    padding: 8px 10px;
-    margin-bottom: 6px;
-    cursor: pointer;
-    border: 1px solid transparent;
-    font-size: 12px;
-  }
-  .hq-board-card:hover { border-color: hsl(var(--border-strong)); }
-  .hq-board-card-row {
-    @apply flex items-center justify-between gap-2;
-  }
-  .hq-board-card-row + .hq-board-card-row { @apply mt-1; }
-  .hq-board-card-sub { color: hsl(var(--subtle-foreground)); font-size: 11px; }
-
-  /* Timeline (8-month gantt). */
-  .hq-timeline {
-    background: hsl(var(--surface-alt));
-    border: 1px solid hsl(var(--border));
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .hq-timeline-axis {
-    display: grid;
-    border-bottom: 1px solid hsl(var(--border-strong));
-    color: hsl(var(--subtle-foreground));
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .hq-timeline-axis > div { padding: 8px 6px; border-left: 1px solid hsl(var(--border)); }
-  .hq-timeline-axis > div:first-child { border-left: 0; }
-  .hq-timeline-row {
-    display: grid;
-    align-items: center;
-    border-bottom: 1px solid hsl(var(--border));
-    padding: 8px 0;
-    cursor: pointer;
-    position: relative;
-  }
-  .hq-timeline-row:hover { background: rgba(255, 255, 255, 0.02); }
-  .hq-timeline-rowlbl {
-    grid-column: 1 / span 1;
-    padding: 0 12px;
-    font-size: 12px;
-  }
-  .hq-timeline-bar {
-    position: absolute;
-    height: 18px;
-    top: 50%;
-    transform: translateY(-50%);
-    border-radius: 2px;
-    padding: 0 6px;
-    line-height: 18px;
-    font-size: 10px;
-    color: hsl(var(--background));
-    overflow: hidden;
-    white-space: nowrap;
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .hq-timeline-bar--install     { background: #06B6D4; }
-  .hq-timeline-bar--live        { background: hsl(var(--primary)); color: white; }
-  .hq-timeline-bar--removal     { background: hsl(var(--warn)); }
-
-  /* Calendar grid (Deliverables default view). */
-  .hq-calendar {
-    background: hsl(var(--surface-alt));
-    border: 1px solid hsl(var(--border));
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .hq-calendar-head {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    background: hsl(var(--surface-raised));
-    border-bottom: 1px solid hsl(var(--border-strong));
-  }
-  .hq-calendar-head > div {
-    padding: 8px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: hsl(var(--subtle-foreground));
-    text-align: center;
-  }
-  .hq-calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-  }
-  .hq-calendar-cell {
-    min-height: 140px;
-    padding: 6px;
-    border-right: 1px solid hsl(var(--border));
-    border-bottom: 1px solid hsl(var(--border));
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-  .hq-calendar-cell--out { background: rgba(0, 0, 0, 0.3); color: hsl(var(--subtle-foreground)); }
-  .hq-calendar-daynum {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: hsl(var(--muted-foreground));
-    margin-bottom: 2px;
-  }
-  .hq-calendar-daynum--today {
-    color: hsl(var(--primary));
-    font-weight: 700;
-  }
-  .hq-calendar-event {
-    border-radius: 3px;
-    padding: 3px 5px;
-    font-size: 10.5px;
-    line-height: 1.2;
-    cursor: pointer;
-  }
-  .hq-calendar-event-project { font-weight: 700; }
-  .hq-calendar-event-title { color: hsl(var(--muted-foreground)); }
-  .hq-calendar-event[data-token="info"]        { background: rgba(6,182,212,0.18);   border-left: 2px solid #06B6D4; }
-  .hq-calendar-event[data-token="success"]     { background: rgba(74,222,128,0.18);  border-left: 2px solid hsl(var(--success)); }
-  .hq-calendar-event[data-token="warn"]        { background: rgba(245,158,11,0.18);  border-left: 2px solid hsl(var(--warn)); }
-  .hq-calendar-event[data-token="destructive"] { background: rgba(239,68,68,0.18);   border-left: 2px solid hsl(var(--destructive)); }
-  .hq-calendar-event[data-token="muted"]       { background: rgba(255,255,255,0.04); border-left: 2px solid hsl(var(--border-strong)); }
-  .hq-calendar-event--strike .hq-calendar-event-project,
-  .hq-calendar-event--strike .hq-calendar-event-title {
-    text-decoration: line-through;
-    opacity: 0.6;
-  }
-
-  /* Saved views dropdown trigger. */
-  .hq-savedview-btn {
-    @apply inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[12px] font-mono;
-    border-color: hsl(var(--border-strong));
-    background: hsl(var(--surface-alt));
-    color: hsl(var(--foreground));
-    cursor: pointer;
-  }
-  .hq-savedview-btn:hover { border-color: hsl(var(--primary)); }
-
-  /* Generic toolbar row above tables. */
-  .hq-tbl-toolbar {
-    @apply flex items-center justify-between gap-3 flex-wrap;
-  }
-
-  /* Pill sizes for the locked-decisions large pill in detail-page headers. */
-  .hq-pill-lg {
-    @apply inline-flex items-center justify-center gap-2 h-10 px-4 text-[14px] font-mono;
-    border-radius: 4px;
-    border: 1px solid transparent;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
+  /* The Phase 5.2.1 `.hq-`-prefixed primitives (viewswitch, filterbar /
+     filterchip, hq-dt + variants, board / timeline / calendar, hq-savedview-
+     btn, hq-tbl-toolbar) were superseded by the unprefixed wireframe-canonical
+     family in the Phase 5.2 block below (.viewswitch / .filterbar / .fchip /
+     .tbl / .board / .tl / .calgrid / .savedviews). None had remaining TSX
+     consumers; the duplicate set was removed (UX audit F1.6 / F14.1). */
+  /* Phase 5.11.1 pill sizing convergence: the previous standalone .pill-hero
+     (40px / 14px) was deleted in favor of the .pill-lg modifier so detail-
+     page header status pills, the VendorDetail Internal pill, and VenueDetail
+     type pills all render at the same Internal-pill size. */
 
   /* ===================================================================
      Phase 5.2 HQ Core surfaces (Projects / Tasks / Deliverables et al.)
@@ -1051,10 +588,12 @@
      wireframe HTML exactly so components can be authored against the
      wireframe markup and rendered DOM checks for parity.
 
-     Coexists with the 5.1 chrome classes (.hq-rail, .hq-topbar,
-     .hq-card, etc.) which keep the hq- prefix. No class-name collisions
-     by design; the wireframe chrome used different class names from its
-     surface classes.
+     The 5.1 chrome classes still using the .hq- prefix are the shell-only
+     ones (.hq-rail, .hq-topbar, .hq-iconbtn, .hq-content, .hq-brand,
+     .hq-quickadd / .hq-qa, .hq-weekstrip / .hq-weekcard, .hq-ol-*); the
+     duplicated primitives (.hq-card / .hq-pill / .hq-stat / .hq-tlink /
+     .hq-tbl / .hq-activity-* / .hq-block-lbl) were converged onto these
+     unprefixed equivalents in the chrome-convergence pass.
      ================================================================== */
 
   /* Type utilities (extends 5.1's .h-card / .h-page; adds what 5.2 needs) */
@@ -1064,6 +603,12 @@
      detail-page .kv dt label color. App-wide across every .label-form. */
   .label-form{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--subtle-foreground));}
   .cap{font-family:var(--font-mono);font-size:11px;color:hsl(var(--subtle-foreground));}
+  /* Phase 5.11.1: detail-page caption row (sits under .h-page on Project /
+     Venue / Vendor / Person detail). Roboto Mono 14px with .06em tracking,
+     muted-foreground; the page-side JSX joins fields with " · " bullets and
+     nests base .pill pills (not .pill-lg) so pill height stays close to the
+     14px text line. */
+  .detail-meta{font-family:var(--font-mono);font-size:14px;letter-spacing:.06em;color:hsl(var(--muted-foreground));}
   .mono{font-family:var(--font-mono);}
   .muted{color:hsl(var(--muted-foreground));}
   .subtle{color:hsl(var(--subtle-foreground));}
@@ -1075,7 +620,7 @@
   .pagehead .row{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;}
   .pagehead .desc{margin-top:2px;}
 
-  /* Cards (coexists with .hq-card from 5.1) */
+  /* Cards (wireframe-canonical; primary card primitive app-wide) */
   .card{background:hsl(var(--surface-alt));border:1px solid hsl(var(--border));border-radius:var(--radius);}
   .card-pad{padding:24px;}
   .card-headbar{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid hsl(var(--border));padding:14px 20px;}
@@ -1089,6 +634,7 @@
   .row{display:flex;gap:12px;}
   .row-c{display:flex;align-items:center;gap:12px;}
   .between{justify-content:space-between;}
+  .list-head{align-items:flex-end;}
   .wrap{flex-wrap:wrap;}
   .flex1{flex:1;min-width:0;}
   /* `minmax(0, 1fr)` (vs `1fr`) lets grid items shrink below their
@@ -1118,34 +664,66 @@
   .btn-secondary:hover{background:rgba(255,255,255,.05);border-color:hsl(var(--foreground));}
   .btn-tertiary{height:36px;padding:0 10px;color:hsl(var(--foreground));background:transparent;}
   .btn-tertiary:hover{color:hsl(var(--primary));}
-  .btn-danger{background:transparent;border-color:rgba(239,68,68,.4);color:hsl(var(--destructive));}
-  .btn-danger:hover{background:rgba(239,68,68,.12);}
-  .btn-coral{background:rgba(190,78,68,.15);border-color:rgba(190,78,68,.4);color:hsl(var(--primary));}
-  .btn-coral:hover{background:rgba(190,78,68,.26);}
+  .btn-danger{background:transparent;border-color:hsl(var(--destructive) / .4);color:hsl(var(--destructive));}
+  .btn-danger:hover{background:hsl(var(--destructive) / .12);}
+  .btn-coral{background:hsl(var(--primary) / .15);border-color:hsl(var(--primary) / .4);color:hsl(var(--primary));}
+  .btn-coral:hover{background:hsl(var(--primary) / .26);}
   .btn-sm{height:32px;padding:0 12px;font-size:11px;}
   .btn-icon{width:40px;padding:0;}
   .btn-icon.btn-sm{width:32px;}
   .btn:disabled{opacity:.55;cursor:not-allowed;}
 
+  /* UX audit F6.1: shared keyboard focus ring for the custom control set.
+     shadcn <Button>/<Input> ship their own focus-visible ring; the wireframe
+     `.btn` classes and the bespoke controls below had none, so keyboard users
+     got no focus indication on primary actions, view switchers, filter chips,
+     toggles, checkboxes, saved-views, or rail nav. :focus-visible keeps the
+     ring off mouse clicks. The inner background-colored ring carves a gap so
+     the coral ring reads against any surface. */
+  .btn:focus-visible,
+  .btn-quickadd:focus-visible,
+  .viewswitch button:focus-visible,
+  .tabs button:focus-visible,
+  .toggle:focus-visible,
+  .checkbox:focus-visible,
+  .fchip--btn:focus-visible,
+  .savedviews:focus-visible,
+  .hq-ri:focus-visible,
+  .hq-iconbtn:focus-visible,
+  .hq-avatar:focus-visible,
+  .hq-searchbar:focus-within,
+  .tlink:focus-visible,
+  .combo-picker-btn:focus-visible{
+    outline:none;
+    box-shadow:0 0 0 2px hsl(var(--background)),0 0 0 4px hsl(var(--primary)/.6);
+  }
+
   /* Text-link */
-  .tlink{font-family:var(--font-mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:hsl(var(--primary));display:inline-flex;align-items:center;gap:5px;cursor:pointer;text-decoration:none;}
+  .tlink{font-family:var(--font-mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:hsl(var(--primary-hover));display:inline-flex;align-items:center;gap:5px;cursor:pointer;text-decoration:none;}
   .tlink:hover{text-decoration:underline;}
 
-  /* Pills (wireframe canonical; coexists with .hq-pill from 5.1) */
+  /* Pills (wireframe-canonical; primary pill primitive app-wide) */
   .pill{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-mono);font-weight:700;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:var(--radius);border:1px solid transparent;white-space:nowrap;text-align:center;}
   .pill .dt{width:6px;height:6px;border-radius:999px;background:currentColor;}
   .pill-lg{font-size:13px;padding:6px 13px;}
   .pill-sm{font-size:9.5px;padding:2px 7px;}
-  .p-warn{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3);color:hsl(var(--warn));}
-  .p-success{background:rgba(74,222,128,.1);border-color:rgba(74,222,128,.3);color:hsl(var(--success));}
-  .p-destructive{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);color:hsl(var(--destructive));}
-  .p-info{background:rgba(6,182,212,.12);border-color:rgba(6,182,212,.32);color:#06B6D4;}
-  .p-primary{background:rgba(190,78,68,.15);border-color:rgba(190,78,68,.4);color:hsl(var(--primary));}
+  .p-warn{background:hsl(var(--warn) / .1);border-color:hsl(var(--warn) / .3);color:hsl(var(--warn));}
+  .p-success{background:hsl(var(--success) / .1);border-color:hsl(var(--success) / .3);color:hsl(var(--success));}
+  .p-destructive{background:hsl(var(--destructive) / .1);border-color:hsl(var(--destructive) / .3);color:hsl(var(--destructive));}
+  .p-info{background:hsl(var(--info) / .12);border-color:hsl(var(--info) / .32);color:hsl(var(--info));}
+  .p-primary{background:hsl(var(--primary) / .15);border-color:hsl(var(--primary) / .4);color:hsl(var(--primary));}
   .p-muted{background:rgba(255,255,255,.05);border-color:hsl(var(--border-strong));color:hsl(var(--muted-foreground));}
-  .p-purple{background:rgba(168,85,247,.13);border-color:rgba(168,85,247,.36);color:#B57BF5;}
+  .p-purple{background:hsl(var(--purple) / .13);border-color:hsl(var(--purple) / .36);color:hsl(var(--purple));}
+  /* Phase 5.11.3: affiliation pill variants (Client / Vendor / Venue) that
+     tone down the brightness of the standard `.p-primary` / `.p-purple` /
+     `.p-info` ramp so a dense People list reads as labels not stickers.
+     Used by `personTypeToken()` ("aff-client" / "aff-vendor" / "aff-venue"). */
+  .p-aff-client{background:hsl(var(--primary) / .07);border-color:hsl(var(--primary) / .22);color:hsl(var(--primary-hover));}
+  .p-aff-vendor{background:hsl(var(--purple) / .07);border-color:hsl(var(--purple) / .22);color:hsl(var(--purple));}
+  .p-aff-venue{background:hsl(var(--info) / .06);border-color:hsl(var(--info) / .2);color:hsl(var(--info));}
 
   /* Inputs (wireframe canonical; coexists with shadcn Input) */
-  .input{width:100%;height:44px;padding:0 12px;border-radius:var(--radius);background:hsl(var(--surface-alt));border:1px solid hsl(var(--border-strong));color:hsl(var(--foreground));font-family:var(--font-body);font-size:14px;outline:none;}
+  .input{width:100%;height:44px;padding:0 12px;border-radius:var(--radius);background:hsl(var(--surface-alt));border:1px solid hsl(var(--border-strong));color:hsl(var(--foreground));font-family:var(--font-body);font-size:15px;outline:none;}
   .input::placeholder{color:hsl(var(--subtle-foreground));font-family:var(--font-mono);font-size:13px;}
   .input:focus{border-color:hsl(var(--primary));box-shadow:0 0 0 3px rgba(190,78,68,.15);}
   .input--filled{border-left:2px solid hsl(var(--primary));}
@@ -1200,7 +778,7 @@
      in narrow value columns) and dropped the coral left bar (per
      followup-5 design call). The selected-value coral hyperlink + the
      link icon now carry the "this is a record" affordance instead. */
-  .combobox-trigger{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;max-width:100%;width:auto;padding:0;border-radius:var(--radius);background:transparent;border:1px solid transparent;color:hsl(var(--foreground));font-family:var(--font-body);font-size:14px;outline:none;cursor:pointer;transition:background-color .12s ease;}
+  .combobox-trigger{display:inline-flex;align-items:center;justify-content:space-between;gap:6px;max-width:100%;width:auto;padding:0;border-radius:var(--radius);background:transparent;border:1px solid transparent;color:hsl(var(--foreground));font-family:var(--font-body);font-size:15px;outline:none;cursor:pointer;transition:background-color .12s ease;}
   .combobox-trigger:hover{background:rgba(190,78,68,.06);}
   .combobox-trigger:focus{background:rgba(190,78,68,.08);}
   .combobox-trigger[disabled]{opacity:.5;cursor:not-allowed;}
@@ -1209,9 +787,9 @@
      navigable, the label renders as a coral hyperlink (.combo-link)
      and the chevron is replaced with a Link icon. The picker still
      opens on click of the icon button (.combo-picker-btn). */
-  .combo-link{color:hsl(var(--primary));font-weight:500;text-decoration:none;cursor:pointer;}
+  .combo-link{color:hsl(var(--primary-hover));font-weight:500;text-decoration:none;cursor:pointer;}
   .combo-link:hover{text-decoration:underline;}
-  .combo-picker-btn{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;padding:4px;border-radius:var(--radius);color:hsl(var(--primary));cursor:pointer;transition:background-color .12s ease;}
+  .combo-picker-btn{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;padding:4px;border-radius:var(--radius);color:hsl(var(--primary-hover));cursor:pointer;transition:background-color .12s ease;}
   .combo-picker-btn:hover{background:rgba(190,78,68,.1);}
   .combo-stack{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;width:100%;}
   .combo-stack-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;}
@@ -1236,10 +814,10 @@
   .tbl-wrap{border:1px solid hsl(var(--border));border-radius:var(--radius);overflow:hidden;}
   .rb-warn{border-left-color:hsl(var(--warn))!important;}
   .rb-success{border-left-color:hsl(var(--success))!important;}
-  .rb-info{border-left-color:#06B6D4!important;}
+  .rb-info{border-left-color:hsl(var(--info))!important;}
   .rb-destructive{border-left-color:hsl(var(--destructive))!important;}
   .rb-muted{border-left-color:hsl(var(--border-strong))!important;}
-  .rb-purple{border-left-color:#B57BF5!important;}
+  .rb-purple{border-left-color:hsl(var(--purple))!important;}
   .tbl--flat tbody tr{border-left-color:transparent!important;}
   .checkbox{width:15px;height:15px;border:1px solid hsl(var(--border-strong));border-radius:3px;background:hsl(var(--surface-alt));display:inline-flex;align-items:center;justify-content:center;color:#000;cursor:pointer;}
   .checkbox--on{background:hsl(var(--primary));border-color:hsl(var(--primary));}
@@ -1318,14 +896,82 @@
   .hq-form .inline-edit-read{min-height:44px;display:inline-flex;align-items:center;}
   /* Venue edit Address row: address wide + sq ft / capacity narrow. */
   .venue-addr-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px;}
-  /* VenueDetail address row runs wider on address (65 / 17.5 / 17.5). */
-  .venue-addr-row-d{display:grid;grid-template-columns:26fr 7fr 7fr;gap:16px;}
-  @media (max-width: 640px){ .venue-addr-row,.venue-addr-row-d{grid-template-columns:1fr;} }
+  @media (max-width: 640px){ .venue-addr-row{grid-template-columns:1fr;} }
   /* VenueDetail Details card: give the inline-edit values + combobox triggers a
      uniform height so paired fields (e.g. City combobox vs Neighborhood text)
      line up vertically. */
   .vd-fields .inline-edit-read,
   .vd-fields .combobox-trigger{min-height:30px;display:inline-flex;align-items:center;}
+
+  /* Phase 5.11.1: align field rows in the label-above detail-page cards.
+     `.field` is a flex column so paired fields inside .g2 share their label
+     baseline; this rule pins the inline-edit / combobox read rows to a
+     uniform height so an InlineEditText paired with a RecordCombobox
+     (e.g. ClientDetail Industry|City, Website|Phone) no longer jitters
+     vertically when one resolves to a shorter read-mode element. */
+  .field .inline-edit-read,
+  .field .combobox-trigger{min-height:30px;display:inline-flex;align-items:center;}
+
+  /* Phase 5.11.1: inside label-above fields, bump tlink + combo-link to the
+     unified 15px field-text ramp so linked website / email values match
+     adjacent plain field text. Table-cell and caption tlinks stay at the
+     canonical 12px mono via the unscoped .tlink rule above. */
+  .field .tlink,
+  .field .combo-link{font-size:15px;letter-spacing:.01em;}
+
+  /* Phase 5.11.3 record-tag chips (Project tags, Venue features, Vendor
+     capabilities; any multi-RecordCombobox where the value is a lookup
+     name). Consistent style across all three: no outline, no fill, white
+     text at 13px, coral X button. Scope via the .field-chips wrapper so
+     status / affiliation pills retain their ramp. */
+  .field-chips .pill,
+  .cap-chips .pill /* legacy alias from 5.11.1 — kept until consumers swap */ {
+    font-family:var(--font-mono);
+    font-size:13px;
+    padding:2px 6px;
+    letter-spacing:0;
+    text-transform:none;
+    background:transparent;
+    border:1px solid transparent;
+    color:hsl(var(--foreground));
+  }
+  .field-chips .pill button,
+  .cap-chips .pill button{
+    color:hsl(var(--primary-hover));
+  }
+  .field-chips .pill button:hover,
+  .cap-chips .pill button:hover{
+    color:hsl(var(--primary));
+  }
+
+  /* Phase 5.11.3: dense project-link rows in list tables read better at
+     regular weight. Scoped via a `.list-projects` wrapper around an
+     <OverflowList> so the canonical 700-weight .tlink stays the default
+     everywhere else (status pills, captions, single-link cells). */
+  .list-projects .tlink{font-weight:400;}
+
+  /* Phase 5.11.1: small "+ Add" trigger style for multi-record sections
+     (Venue exclusive vendors, Person associated venues). Hides the chip /
+     placeholder noise of the default combobox trigger and renders it as
+     an inline coral tlink that lives in the card-headbar's right slot.
+     Pair with `hideMultiValueChips` on the combobox to suppress the
+     in-trigger chip render so the consumer can paint a bullet-list below. */
+  .combo-as-link .combobox-trigger{
+    font-family:var(--font-mono);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.04em;
+    color:hsl(var(--primary-hover));
+    background:transparent;
+    border:0;
+    padding:0;
+    min-height:0;
+    height:auto;
+    width:auto;
+  }
+  .combo-as-link .combobox-trigger:hover{text-decoration:underline;background:transparent;}
+  .combo-as-link .combobox-trigger:focus{background:transparent;}
+  .combo-as-link .combobox-trigger > svg{display:none;}
 
   /* Saved views dropdown trigger */
   .savedviews{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border:1px solid hsl(var(--border-strong));border-radius:var(--radius);background:hsl(var(--surface-alt));font-family:var(--font-mono);font-size:11px;font-weight:700;color:hsl(var(--muted-foreground));cursor:pointer;}
@@ -1336,7 +982,12 @@
   .empty .btn{margin-top:16px;}
 
   /* Tag */
-  .tag{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:12px;background:hsl(var(--surface-raised));border:1px solid hsl(var(--border-strong));color:hsl(var(--muted-foreground));border-radius:var(--radius);padding:2px 8px;}
+  /* Phase 5.11.2 tag restyle: drop the chip background + outline so tag
+     rows read as inline text. X icon picks up the coral link color. Size
+     bumped to the 13px detail-page secondary text ramp. */
+  .tag{display:inline-flex;align-items:center;font-family:var(--font-mono);font-size:13px;background:transparent;border:1px solid transparent;color:hsl(var(--muted-foreground));border-radius:var(--radius);padding:2px 4px;}
+  .tag button{color:hsl(var(--primary-hover));}
+  .tag button:hover{color:hsl(var(--primary));}
 
   /* Avatar inline */
   .av-i{width:22px;height:22px;border-radius:999px;background:hsl(var(--surface-raised));border:1px solid hsl(var(--border-strong));display:inline-flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:9px;font-weight:700;flex:none;}
@@ -1346,7 +997,7 @@
   /* KV table */
   /* Phase 5.6.3.1: bumped row gap on .kv from 11px to 22px so inline-edit
      fields breathe (otherwise hover affordances + input borders overlap). */
-  .kv{display:grid;grid-template-columns:152px 1fr;gap:22px 16px;font-size:13px;}
+  .kv{display:grid;grid-template-columns:152px 1fr;gap:22px 16px;font-size:15px;}
   .kv dt{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:hsl(var(--subtle-foreground));padding-top:6px;}
   /* Phase 5.6.3.1 round N: `min-width:0` lets the 1fr value column shrink
      below its intrinsic content width (default grid item min-width is
@@ -1443,12 +1094,12 @@
      amber) · Deliverable: amber (was green) · Tentative: lighter gray
      (was Outlook) · Holiday: muted coral (was amber italic) · My Tasks:
      muted with leading ✓ glyph (new). */
-  .cal-ev.in{background:rgba(6,182,212,.16);color:hsl(var(--info));}
-  .cal-ev.live{background:rgba(74,222,128,.14);color:hsl(var(--success));}
-  .cal-ev.rem{background:rgba(181,123,245,.16);color:#B57BF5;}
-  .cal-ev.del{background:rgba(245,158,11,.16);color:hsl(var(--warn));}
-  .cal-ev.hol{background:rgba(190,78,68,.12);color:hsl(var(--primary));}
-  .cal-ev.task{background:rgba(200,200,200,.10);color:hsl(var(--foreground));border-left:2px solid hsl(var(--muted-foreground));}
+  .cal-ev.in{background:hsl(var(--info) / .16);color:hsl(var(--info));}
+  .cal-ev.live{background:hsl(var(--success) / .14);color:hsl(var(--success));}
+  .cal-ev.rem{background:hsl(var(--purple) / .16);color:hsl(var(--purple));}
+  .cal-ev.del{background:hsl(var(--warn) / .16);color:hsl(var(--warn));}
+  .cal-ev.hol{background:hsl(var(--primary) / .12);color:hsl(var(--primary));}
+  .cal-ev.task{background:hsl(var(--foreground) / .10);color:hsl(var(--foreground));border-left:2px solid hsl(var(--muted-foreground));}
   .cal-ev.task::before{content:"\2713\00a0";opacity:.5;}
   .callegend{display:flex;gap:16px;flex-wrap:wrap;}
   .callegend span{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--muted-foreground));}
@@ -1489,9 +1140,9 @@
   .ol-ev .en{font-weight:600;color:hsl(var(--foreground));display:block;}
   .ol-ev .em{font-family:var(--font-mono);font-size:11px;color:hsl(var(--subtle-foreground));margin-top:2px;display:block;}
   /* Confidence colors per LOCKED DECISIONS § 4 (overrides wireframe CSS). */
-  .ol-rad{background:rgba(245,158,11,.15);border-color:hsl(var(--warn));}
-  .ol-like{background:rgba(6,182,212,.15);border-color:hsl(var(--info));}
-  .ol-conf{background:rgba(74,222,128,.15);border-color:hsl(var(--success));}
+  .ol-rad{background:hsl(var(--warn) / .15);border-color:hsl(var(--warn));}
+  .ol-like{background:hsl(var(--info) / .15);border-color:hsl(var(--info));}
+  .ol-conf{background:hsl(var(--success) / .15);border-color:hsl(var(--success));}
   .ol-comp{background:rgba(255,255,255,.06);border-color:hsl(var(--border-strong));}
   .ol-legend{display:flex;gap:16px;flex-wrap:wrap;}
   .ol-legend span{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:14px;color:hsl(var(--muted-foreground));}
@@ -1510,10 +1161,10 @@
   .actdot{width:28px;height:28px;border-radius:999px;background:hsl(var(--surface-raised));border:1px solid hsl(var(--border-strong));display:flex;align-items:center;justify-content:center;flex:none;color:hsl(var(--subtle-foreground));}
   .actdot .ic{width:14px;height:14px;}
   .activity-row .txt{font-size:13px;line-height:1.45;}
-  .activity-row .txt b{font-weight:500;color:hsl(var(--primary));cursor:pointer;}
+  .activity-row .txt b{font-weight:500;color:hsl(var(--primary-hover));cursor:pointer;}
   .activity-row .txt b:hover{text-decoration:underline;}
   .activity-row .txt .dlv{font-weight:500;color:hsl(var(--foreground));cursor:default;}
-  .activity-row .txt .who{color:rgba(190,78,68,.78);font-weight:500;cursor:pointer;}
+  .activity-row .txt .who{color:hsl(var(--primary-hover));font-weight:500;cursor:pointer;}
   .activity-row .txt .who:hover{text-decoration:underline;}
   .activity-row .ts{font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--subtle-foreground));margin-top:3px;}
 
@@ -1539,7 +1190,7 @@
   .wn.wn--active{color:hsl(var(--foreground));font-weight:500;background:hsl(var(--surface-alt));}
   .wn .lk{width:11px;height:11px;color:hsl(var(--subtle-foreground));margin-left:auto;}
   .wikipage{padding:0 0 0 32px;}
-  .wikipage.prose{max-width:720px;}
+  .wikipage.prose{max-width:680px;}
   .wikipage.prose h1{font-size:22px;font-weight:700;margin-top:24px;}
   .wikipage.prose h2{font-size:18px;font-weight:700;margin-top:28px;}
   .wikipage.prose h3{font-size:15px;font-weight:600;margin-top:20px;}
@@ -1548,7 +1199,7 @@
   .wikipage.prose li{font-size:13.5px;line-height:1.7;color:hsl(var(--muted-foreground));margin-top:6px;}
   .wikipage.prose strong,.wikipage.prose b{color:hsl(var(--foreground));font-weight:600;}
   .wikipage.prose code{font-family:var(--font-mono);font-size:12.5px;background:hsl(var(--surface-alt));padding:1px 5px;border-radius:3px;}
-  .wikipage.prose a{color:hsl(var(--primary));text-decoration:underline;}
+  .wikipage.prose a{color:hsl(var(--primary-hover));text-decoration:underline;}
   /* Wiki body inline images (5.7.10). Used by both edit-mode (TipTap Image
      extension) and read-mode (raw <img> nodes inside .wikipage HTML). */
   .wikipage-img,
@@ -1564,9 +1215,10 @@
 
   /* Toggle (Team Active column, Settings Integrations card). Lifted from
      wireframe lines 398-401. ::after slides on/off via left position. */
-  .toggle{width:34px;height:19px;border-radius:999px;background:hsl(var(--input));position:relative;flex:none;display:inline-block;border:none;cursor:pointer;padding:0;}
+  .toggle{width:34px;height:19px;border-radius:999px;background:transparent;position:relative;flex:none;display:inline-block;border:none;cursor:pointer;padding:0;}
+  .toggle::before{content:"";position:absolute;inset:0;border-radius:999px;background:hsl(var(--input));transition:background 0.15s;}
   .toggle::after{content:"";position:absolute;width:15px;height:15px;border-radius:999px;background:hsl(var(--subtle-foreground));top:2px;left:2px;transition:left 0.15s,background 0.15s;}
-  .toggle.toggle--on{background:rgba(190,78,68,.4);}
+  .toggle.toggle--on::before{background:rgba(190,78,68,.4);}
   .toggle.toggle--on::after{background:hsl(var(--primary));left:17px;}
   .toggle:disabled{cursor:not-allowed;opacity:.7;}
 
@@ -1596,9 +1248,75 @@
   .notif .nico{width:30px;height:30px;border-radius:var(--radius);background:hsl(var(--surface-alt));border:1px solid hsl(var(--border));display:flex;align-items:center;justify-content:center;flex:none;color:hsl(var(--muted-foreground));}
   .notif .nico .ic{width:15px;height:15px;}
   .notif .nbody{font-size:12.5px;line-height:1.45;}
-  .notif .nbody .src{color:hsl(var(--primary));font-weight:500;}
+  .notif .nbody .src{color:hsl(var(--primary-hover));font-weight:500;}
   .notif .nts{font-family:var(--font-mono);font-size:10px;color:hsl(var(--subtle-foreground));margin-top:3px;}
   .notif .udot{width:7px;height:7px;border-radius:999px;background:hsl(var(--primary));flex:none;margin-top:6px;}
+
+  /* Detail-page main + sidebar split. Stacks below 900px (UX audit F11.2).
+     .detail-2col = 1fr / 332px sidebar; --wide = 70/30 percentage split. */
+  .detail-2col{display:grid;grid-template-columns:1fr 332px;gap:24px;align-items:start;}
+  .detail-2col--wide{display:grid;grid-template-columns:minmax(0,70%) minmax(0,30%);gap:24px;align-items:start;}
+  @media (max-width:900px){
+    .detail-2col,.detail-2col--wide{grid-template-columns:1fr;}
+  }
+
+  /* ─── Mobile shell (UX audit F11.1 + F7.1) ────────────────────────────
+     At >=1024px the rail is a static 232px column. Below that it collapses
+     to an off-canvas drawer toggled by the TopBar hamburger; the fixed save
+     bars drop their 232px rail offset; the My Week strip wraps; content
+     padding tightens; and the primary tap targets grow toward 44px. */
+  .hq-menu-btn{display:none;}
+  .hq-rail-backdrop{display:none;}
+  @media (max-width:1023px){
+    .hq-menu-btn{display:inline-flex;align-items:center;justify-content:center;}
+    .hq-rail{
+      position:fixed;top:0;bottom:0;left:0;z-index:60;
+      transform:translateX(-100%);
+      visibility:hidden;
+      transition:transform .2s ease;
+      box-shadow:0 0 40px rgba(0,0,0,.6);
+    }
+    .hq-rail--open{transform:translateX(0);visibility:visible;}
+    .hq-rail-backdrop--show{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:55;}
+    .savebar,.actionbar{left:0;}
+    .btn-tertiary,.btn-sm,.hq-qa{min-height:44px;}
+    .viewswitch button{height:44px;}
+    .savedviews,.fchip{height:40px;}
+    .hq-iconbtn{min-width:44px;min-height:44px;}
+    .hq-avatar{width:44px;height:44px;min-width:44px;flex:none;}
+    .checkbox,.ca{min-width:44px;min-height:44px;justify-content:center;}
+    .wiki-tbtn{min-width:44px;height:44px;}
+    .toggle{width:44px;height:44px;}
+    .toggle::before{inset:auto;width:34px;height:19px;left:5px;top:12.5px;}
+    .toggle::after{top:14.5px;left:7px;}
+    .toggle.toggle--on::after{left:24px;}
+  }
+  @media (max-width:640px){
+    .hq-content{padding:16px;}
+    .hq-topbar{gap:8px;padding-left:10px;padding-right:10px;}
+    .hq-searchbar{flex:1 1 auto;min-width:0;max-width:none;height:44px;}
+    .hq-topbar-spacer{display:none;}
+    .hq-weekstrip{flex-wrap:wrap;}
+    .hq-weekcard{flex:1 1 130px;}
+    .wikilayout{grid-template-columns:1fr;gap:16px;}
+    .wikinav{
+      position:static;
+      max-height:180px;
+      overflow-y:auto;
+      padding:0 0 12px;
+      border-right:0;
+      border-bottom:1px solid hsl(var(--border));
+    }
+    .wn{padding:8px 10px;}
+    .wikipage{min-width:0;padding-left:0;}
+    .wikipage.prose{max-width:100%;}
+    /* Detail/list headers (.row.between: title block + action column) stack
+       so the action buttons drop below the title instead of overlapping it.
+       Toolbars that already opt into wrapping (.row.between.wrap) are left
+       alone. The page title shrinks from 34px so long names don't overflow. */
+    .row.between:not(.wrap){flex-direction:column;align-items:flex-start;gap:12px;}
+    .h-page{font-size:26px;}
+  }
 }
 
 @layer utilities {
@@ -1621,4 +1339,18 @@
   }
   .text-subtle { color: hsl(var(--subtle-foreground)); }
   .text-faint { color: hsl(var(--subtle-foreground) / 0.6); }
+}
+
+/* UX audit F10.1: respect the OS reduced-motion setting. HQ had no
+   reduced-motion handling at all (spinners, accordion, hover/transition
+   easing, the save-bar). Kept outside @layer so the !important reliably
+   wins over layered animation/transition rules. Spinners still rotate but
+   near-instantly, which reads as a static busy state rather than motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

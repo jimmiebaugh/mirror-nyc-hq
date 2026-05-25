@@ -33,7 +33,7 @@ export function StandardOrAdminRoute({ children }: { children: React.ReactNode }
         </p>
         <button
           type="button"
-          className="btn-ghost"
+          className="btn btn-secondary"
           onClick={async () => {
             await signOut();
             navigate("/");

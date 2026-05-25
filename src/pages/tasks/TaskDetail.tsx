@@ -6,9 +6,8 @@ import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   taskPriorityToken,
   taskStatusToken,
-  statusTextDecoration,
 } from "@/lib/home/projectStatusToken";
-import { formatMediumDate } from "@/lib/hq/dates";
+import { formatMediumDate, formatShortDate } from "@/lib/hq/dates";
 import {
   TASK_PRIORITY_VALUES,
   TASK_STATUS_VALUES,
@@ -20,7 +19,8 @@ import {
 import { useBackHref } from "@/lib/hq/useBackHref";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
-import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { DField } from "@/components/hq/DField";
+import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { toast } from "@/hooks/use-toast";
 
@@ -46,12 +46,37 @@ type DbTask = {
   project: { id: string; name: string } | null;
   assignee: { id: string; full_name: string | null; email: string | null } | null;
 };
+type TaskRef = { id: string; title: string };
+
+async function loadTaskRefsByIds(ids: string[]): Promise<TaskRef[]> {
+  if (ids.length === 0) return [];
+  const { data } = await supabase
+    .from("tasks")
+    .select("id, title")
+    .in("id", ids);
+  return (data ?? []) as TaskRef[];
+}
+
+async function loadSiblingTaskRefs(
+  projectId: string | null,
+  currentTaskId: string,
+): Promise<TaskRef[]> {
+  if (!projectId) return [];
+  const { data } = await supabase
+    .from("tasks")
+    .select("id, title")
+    .eq("project_id", projectId)
+    .neq("id", currentTaskId)
+    .order("title", { ascending: true });
+  return (data ?? []) as TaskRef[];
+}
 
 export default function TaskDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [task, setTask] = useState<DbTask | null>(null);
-  const [blockedTasks, setBlockedTasks] = useState<{ id: string; title: string }[]>([]);
+  const [blockedTasks, setBlockedTasks] = useState<TaskRef[]>([]);
+  const [siblingTasks, setSiblingTasks] = useState<TaskRef[]>([]);
   const [projectOptions, setProjectOptions] = useState<{ id: string; label: string }[]>([]);
   const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,7 +113,9 @@ export default function TaskDetail() {
         setLoading(false);
         return;
       }
-      setTask(taskRes.data as unknown as DbTask);
+      const taskRow = taskRes.data as unknown as DbTask;
+      const loadedTask: DbTask = { ...taskRow, blocked_by: taskRow.blocked_by ?? [] };
+      setTask(loadedTask);
       setProjectOptions(
         ((projectsRes.data ?? []) as { id: string; name: string | null }[]).map((p) => ({
           id: p.id,
@@ -100,13 +127,13 @@ export default function TaskDetail() {
           (u) => ({ id: u.id, label: u.full_name?.trim() || u.email }),
         ),
       );
-      if ((taskRes.data.blocked_by ?? []).length > 0) {
-        const { data: rels } = await supabase
-          .from("tasks")
-          .select("id, title")
-          .in("id", taskRes.data.blocked_by);
-        if (active) setBlockedTasks(rels ?? []);
-      }
+      const [selectedBlockers, siblingBlockers] = await Promise.all([
+        loadTaskRefsByIds(loadedTask.blocked_by),
+        loadSiblingTaskRefs(loadedTask.project_id, loadedTask.id),
+      ]);
+      if (!active) return;
+      setBlockedTasks(selectedBlockers);
+      setSiblingTasks(siblingBlockers);
       setLoading(false);
     })();
     return () => {
@@ -116,6 +143,16 @@ export default function TaskDetail() {
 
   const loadProjectOptions = useCallback(async () => projectOptions, [projectOptions]);
   const loadUserOptions = useCallback(async () => userOptions, [userOptions]);
+  const blockedTaskOptions: Option[] = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const t of siblingTasks) byId.set(t.id, t.title || "Untitled task");
+    for (const t of blockedTasks) byId.set(t.id, t.title || "Untitled task");
+    return Array.from(byId, ([optionId, label]) => ({ id: optionId, label }));
+  }, [blockedTasks, siblingTasks]);
+  const loadBlockedTaskOptions = useCallback(
+    async () => blockedTaskOptions,
+    [blockedTaskOptions],
+  );
 
   // Single-field optimistic save. Rolls back + toasts on error. Mirrors
   // the PersonDetail pattern (Phase 5.6.3 prototype).
@@ -156,7 +193,9 @@ export default function TaskDetail() {
     if (error) {
       setTask({ ...task, ...prev });
       toast({ title: "Project save failed", description: error.message, variant: "destructive" });
+      return;
     }
+    setSiblingTasks(await loadSiblingTaskRefs(nextId, task.id));
   };
 
   const saveAssigneeId = async (nextId: string | null) => {
@@ -180,6 +219,29 @@ export default function TaskDetail() {
     }
   };
 
+  const saveBlockedBy = async (nextIds: string[]) => {
+    if (!task) return;
+    const prevTask = task;
+    const prevBlockedTasks = blockedTasks;
+    const labelById = new Map(blockedTaskOptions.map((opt) => [opt.id, opt.label]));
+    setTask({ ...task, blocked_by: nextIds });
+    setBlockedTasks(
+      nextIds.map((blockerId) => ({
+        id: blockerId,
+        title: labelById.get(blockerId) ?? blockerId,
+      })),
+    );
+    const { error } = await supabase
+      .from("tasks")
+      .update({ blocked_by: nextIds })
+      .eq("id", task.id);
+    if (error) {
+      setTask(prevTask);
+      setBlockedTasks(prevBlockedTasks);
+      toast({ title: "Blocked by save failed", description: error.message, variant: "destructive" });
+    }
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -195,48 +257,58 @@ export default function TaskDetail() {
     );
   }
 
+  const assigneeDisplay = task.assignee?.full_name?.trim() || task.assignee?.email || null;
+  const detailMeta = [
+    task.project?.name,
+    assigneeDisplay,
+    task.due_date ? formatShortDate(task.due_date) : null,
+  ].filter(Boolean);
+
   return (
     <div className="stack-4" style={{ maxWidth: 760 }}>
-      <Link to={back.to} className="tlink">
-        <IconArrowLeft className="ic" />
+      <Link to={back.to} className="crumb">
+        <IconArrowLeft className="ic ic-sm" />
         Back to {back.label}
       </Link>
-      <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
-        <h1 className={`h-page ${statusTextDecoration("task", task.status)}`}>
-          {task.title || "(untitled)"}
-        </h1>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          aria-label="Edit Task"
-          title="Edit Task"
-          onClick={() => navigate(`/tasks/${task.id}/edit`)}
-          style={{ padding: "0 10px" }}
-        >
-          <Pencil className="ic" style={{ width: 14, height: 14 }} />
-        </button>
-      </div>
+      <header className="stack-3">
+        <div className="eyebrow" style={{ paddingTop: 8 }}>Task</div>
+        <div className="row between" style={{ alignItems: "center" }}>
+          <div className="row-c" style={{ flex: 1, gap: 16, alignItems: "center", minWidth: 0, flexWrap: "wrap" }}>
+            <h1 className="h-page" style={{ minWidth: 0 }}>{task.title || "(untitled)"}</h1>
+            <ClickPillCell
+              value={task.status}
+              options={TASK_STATUS_VALUES}
+              tokenMap={taskStatusToken}
+              size="lg"
+              onSave={async (next) => {
+                await updateTaskStatus(task.id, next as TaskStatus);
+                setTask({ ...task, status: next as TaskStatus });
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            aria-label="Edit Task"
+            title="Edit Task"
+            onClick={() => navigate(`/tasks/${task.id}/edit`)}
+            style={{ padding: "0 10px" }}
+          >
+            <Pencil className="ic" style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+        <div className="row-c detail-meta" style={{ gap: 12, marginTop: 8, flexWrap: "wrap" }}>
+          {detailMeta.length > 0 ? <span>{detailMeta.join(" · ")}</span> : null}
+        </div>
+      </header>
 
       <section className="card">
         <div className="card-headbar">
           <span className="h-card">Details</span>
         </div>
-        <div className="card-pad">
-          <dl className="kv">
-            <dt>Status</dt>
-            <dd>
-              <ClickPillCell
-                value={task.status}
-                options={TASK_STATUS_VALUES}
-                tokenMap={taskStatusToken}
-                onSave={async (next) => {
-                  await updateTaskStatus(task.id, next as TaskStatus);
-                  setTask({ ...task, status: next as TaskStatus });
-                }}
-              />
-            </dd>
-            <dt>Priority</dt>
-            <dd>
+        <div className="card-pad stack-4">
+          <div className="g2">
+            <DField label="Priority">
               <ClickPillCell
                 value={task.priority}
                 options={TASK_PRIORITY_VALUES}
@@ -246,31 +318,31 @@ export default function TaskDetail() {
                   setTask({ ...task, priority: next as TaskPriority });
                 }}
               />
-            </dd>
-            <dt>Task</dt>
-            <dd>
-              <InlineEditText
-                value={task.title}
-                required
-                placeholder="Task title"
-                renderRead={(v) => v ?? "(untitled)"}
-                onSave={(next) => saveField("title", next)}
-              />
-            </dd>
-            <dt>Due</dt>
-            <dd>
+            </DField>
+            <DField label="Due">
               <InlineEditText
                 value={task.due_date}
                 placeholder="YYYY-MM-DD"
                 inputType="date"
                 renderRead={(v) =>
-                  v ? formatMediumDate(v) : <span className="muted subtle">-</span>
+                  v ? formatShortDate(v) : <span className="muted subtle">-</span>
                 }
                 onSave={(next) => saveField("due_date", next || null)}
               />
-            </dd>
-            <dt>Project</dt>
-            <dd>
+            </DField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <div className="g2">
+            <DField label="Assignee">
+              <RecordCombobox
+                source={{ kind: "record", loadOptions: loadUserOptions }}
+                value={task.assignee_id}
+                onChange={(next) => void saveAssigneeId(next)}
+                entityLabel="user"
+                placeholder="Unassigned"
+              />
+            </DField>
+            <DField label="Project">
               <RecordCombobox
                 source={{ kind: "record", loadOptions: loadProjectOptions }}
                 value={task.project_id}
@@ -279,43 +351,40 @@ export default function TaskDetail() {
                 placeholder="No project"
                 getRecordHref={(id) => `/projects/${id}`}
               />
-            </dd>
-            <dt>Assignee</dt>
-            <dd>
-              <RecordCombobox
-                source={{ kind: "record", loadOptions: loadUserOptions }}
-                value={task.assignee_id}
-                onChange={(next) => void saveAssigneeId(next)}
-                entityLabel="user"
-                placeholder="Unassigned"
-              />
-            </dd>
-            {task.completed_at ? (
-              <>
-                <dt>Completed</dt>
-                <dd>{formatMediumDate(task.completed_at.slice(0, 10))}</dd>
-              </>
-            ) : null}
-          </dl>
+            </DField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <DField label="Task">
+            <InlineEditText
+              value={task.title}
+              required
+              placeholder="Task title"
+              renderRead={(v) => v ?? "(untitled)"}
+              onSave={(next) => saveField("title", next)}
+            />
+          </DField>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <DField label="Blocked by">
+            <RecordCombobox
+              multi
+              source={{ kind: "record", loadOptions: loadBlockedTaskOptions }}
+              multiValue={task.blocked_by}
+              onMultiChange={(next) => void saveBlockedBy(next)}
+              entityLabel="task"
+              placeholder="Add blocker..."
+              getRecordHref={(blockerId) => `/tasks/${blockerId}`}
+            />
+          </DField>
+          {task.completed_at ? (
+            <>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <DField label="Completed">
+                <span>{formatMediumDate(task.completed_at.slice(0, 10))}</span>
+              </DField>
+            </>
+          ) : null}
         </div>
       </section>
-
-      {blockedTasks.length > 0 ? (
-        <section className="card">
-          <div className="card-headbar">
-            <span className="h-card">Blocked by</span>
-          </div>
-          <ul className="card-pad stack-2">
-            {blockedTasks.map((b) => (
-              <li key={b.id}>
-                <Link to={`/tasks/${b.id}`} className="tlink">
-                  {b.title}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
 
       <InternalNotesEditor parentType="task" parentId={task.id} title="Notes" />
     </div>

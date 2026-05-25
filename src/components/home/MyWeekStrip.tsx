@@ -35,7 +35,7 @@ function tokenColor(token: Token): string {
   switch (token) {
     case "success": return "hsl(var(--success))";
     case "warn": return "hsl(var(--warn))";
-    case "info": return "#06B6D4";
+    case "info": return "hsl(var(--info))";
     case "muted": return "hsl(var(--border-strong))";
   }
 }
@@ -156,9 +156,9 @@ export function MyWeekStrip({ userId }: { userId: string | undefined }) {
 
   return (
     <section>
-      <div className="hq-block-lbl">
+      <div className="block-lbl">
         <span
-          className="hq-block-lbl-text"
+          className="label-section"
           style={{ fontSize: 16 }}
         >
           <span style={{ color: "hsl(var(--primary))" }}>My Week</span> · {rangeLabel}

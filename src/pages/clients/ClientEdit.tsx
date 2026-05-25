@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
-import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { formatPhone } from "@/lib/hq/phone";
 import {
@@ -230,73 +230,62 @@ export default function ClientEdit() {
       </div>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Details</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Details</span>
-          </div>
           <div className="g2">
-            <FormField label="Name" required>
+            <HQFormField label="Name" required>
               <input
                 className={`input ${form.name ? "input--filled" : ""}`}
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="Olipop"
               />
-            </FormField>
-            <FormField label="Industry">
+            </HQFormField>
+            <HQFormField label="Industry">
               <input
                 className={`input ${form.industry ? "input--filled" : ""}`}
                 value={form.industry}
                 onChange={(e) => setForm((f) => ({ ...f, industry: e.target.value }))}
                 placeholder="Beverage"
               />
-            </FormField>
-            <FormField label="City">
+            </HQFormField>
+            <HQFormField label="City">
               <RecordCombobox
                 source={{ kind: "lookup", table: "cities" }}
                 value={form.city || null}
                 onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
                 entityLabel="city"
               />
-            </FormField>
-            <FormField label="Website URL">
+            </HQFormField>
+            <HQFormField label="Website URL">
               <input
                 className={`input ${form.website_url ? "input--filled" : ""}`}
                 value={form.website_url}
                 onChange={(e) => setForm((f) => ({ ...f, website_url: e.target.value }))}
                 placeholder="https://example.com"
               />
-            </FormField>
+            </HQFormField>
           </div>
-          <FormField label="Tags">
-            <MultiTagInput
-              options={[]}
-              values={form.tags}
-              onChange={(next) => setForm((f) => ({ ...f, tags: next }))}
-              onAdd={async (name) => ({ id: name, name })}
-              entityLabel="tag"
-              exampleName="Net 30"
-              placeholder="Add tag..."
-            />
-          </FormField>
         </div>
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Primary Contact</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Primary Contact</span>
-          </div>
           <div className="g2">
-            <FormField label="Contact Name">
+            <HQFormField label="Contact Name">
               <input
                 className={`input ${form.contact_name ? "input--filled" : ""}`}
                 value={form.contact_name}
                 onChange={(e) => setForm((f) => ({ ...f, contact_name: e.target.value }))}
                 placeholder="Sarah Klein"
               />
-            </FormField>
-            <FormField label="Contact Email">
+            </HQFormField>
+            <HQFormField label="Contact Email">
               <input
                 type="email"
                 className={`input ${form.contact_email ? "input--filled" : ""}`}
@@ -304,8 +293,8 @@ export default function ClientEdit() {
                 onChange={(e) => setForm((f) => ({ ...f, contact_email: e.target.value }))}
                 placeholder="sarah@example.com"
               />
-            </FormField>
-            <FormField label="Contact Phone">
+            </HQFormField>
+            <HQFormField label="Contact Phone">
               <input
                 className={`input ${form.contact_phone ? "input--filled" : ""}`}
                 value={form.contact_phone}
@@ -315,9 +304,9 @@ export default function ClientEdit() {
                 }
                 placeholder="(212) 555-0000"
               />
-            </FormField>
+            </HQFormField>
           </div>
-          <FormField label="Primary Address">
+          <HQFormField label="Primary Address">
             <textarea
               className={`input textarea ${form.primary_address ? "input--filled" : ""}`}
               value={form.primary_address}
@@ -325,7 +314,7 @@ export default function ClientEdit() {
               placeholder="123 Main St, Brooklyn NY 11201"
               rows={2}
             />
-          </FormField>
+          </HQFormField>
         </div>
       </section>
 
@@ -382,26 +371,6 @@ export default function ClientEdit() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="field">
-      <label className="label-form">
-        {label}
-        {required ? <span className="req">*</span> : null}
-      </label>
-      {children}
     </div>
   );
 }

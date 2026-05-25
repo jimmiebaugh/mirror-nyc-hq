@@ -233,7 +233,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
 
   return (
     <div className="stack-4">
-      <div className="row between" style={{ alignItems: "flex-end" }}>
+      <div className="row between list-head">
         <h1 className="h-page">Projects</h1>
         <button
           type="button"
@@ -328,42 +328,44 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                   return (
                     <div>
                       {clientLabel ? (
-                        r.clientId ? (
-                          <Link
-                            to={`/clients/${r.clientId}`}
-                            className="sub"
-                            style={{
-                              color: "rgba(190,78,68,0.85)",
-                              display: "block",
-                              fontSize: 12,
-                            }}
-                            state={{ from: fromState }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {clientLabel}
-                          </Link>
-                        ) : (
-                          <span
-                            className="sub"
-                            style={{
-                              color: "rgba(190,78,68,0.85)",
-                              display: "block",
-                              fontSize: 12,
-                            }}
-                          >
-                            {clientLabel}
-                          </span>
-                        )
+                        <div>
+                          {r.clientId ? (
+                            <Link
+                              to={`/clients/${r.clientId}`}
+                              className="sub"
+                              style={{
+                                color: "hsl(var(--primary-hover))",
+                                fontSize: 12,
+                              }}
+                              state={{ from: fromState }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {clientLabel}
+                            </Link>
+                          ) : (
+                            <span
+                              className="sub"
+                              style={{
+                                color: "hsl(var(--primary-hover))",
+                                fontSize: 12,
+                              }}
+                            >
+                              {clientLabel}
+                            </span>
+                          )}
+                        </div>
                       ) : null}
-                      <Link
-                        to={`/projects/${r.id}`}
-                        className="lead"
-                        style={{ display: "block", fontSize: 13.5 }}
-                        state={{ from: fromState }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {r.name}
-                      </Link>
+                      <div>
+                        <Link
+                          to={`/projects/${r.id}`}
+                          className="lead"
+                          style={{ fontSize: 13.5 }}
+                          state={{ from: fromState }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {r.name}
+                        </Link>
+                      </div>
                     </div>
                   );
                 },
@@ -513,7 +515,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
         <>
           <div className="callegend" style={{ justifyContent: "flex-end" }}>
             <span>
-              <i style={{ background: "#06B6D4" }} /> Install
+              <i style={{ background: "hsl(var(--info))" }} /> Install
             </span>
             <span>
               <i style={{ background: "hsl(var(--primary))" }} /> Live
@@ -579,4 +581,3 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
     </div>
   );
 }
-

@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { IconArrowLeft, IconLink } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { InlineEditText } from "@/components/hq/InlineEditText";
-import { InlineTagInput } from "@/components/hq/InlineTagInput";
+import { DField } from "@/components/hq/DField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { personType, personTypeToken, type PersonType } from "@/lib/people/queries";
 import { useBackHref } from "@/lib/hq/useBackHref";
@@ -51,12 +51,6 @@ type Person = {
   vendor: { id: string; name: string | null } | null;
 };
 
-type ProjectLink = {
-  id: string;
-  name: string;
-  job_number: string | null;
-};
-
 type VenueLink = {
   id: string;
   name: string;
@@ -66,7 +60,6 @@ export default function PersonDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [person, setPerson] = useState<Person | null>(null);
-  const [projects, setProjects] = useState<ProjectLink[]>([]);
   const [venues, setVenues] = useState<VenueLink[]>([]);
   const [isVenueContact, setIsVenueContact] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -144,21 +137,6 @@ export default function PersonDetail() {
       setVenueIds(venueIdList);
       setIsVenueContact(venueList.length > 0);
 
-      // Projects card: pull projects linked to this person's client (if any).
-      if (row.client_id) {
-        const { data: projData } = await supabase
-          .from("projects")
-          .select("id, name, job_number")
-          .eq("client_id", row.client_id)
-          .order("created_at", { ascending: false })
-          .limit(8);
-        if (active) {
-          setProjects((projData ?? []) as unknown as ProjectLink[]);
-        }
-      } else if (active) {
-        setProjects([]);
-      }
-
       setLoading(false);
     })();
     return () => {
@@ -187,20 +165,6 @@ export default function PersonDetail() {
     }
   };
 
-  // Tags save: array writes through the same UPDATE path. Optimistic.
-  const saveTags = async (nextTags: string[]) => {
-    if (!person) return;
-    const prev = person.tags;
-    setPerson({ ...person, tags: nextTags });
-    const { error } = await supabase
-      .from("people")
-      .update({ tags: nextTags })
-      .eq("id", person.id);
-    if (error) {
-      setPerson({ ...person, tags: prev });
-      toast({ title: "Tag save failed", description: error.message, variant: "destructive" });
-    }
-  };
 
   // Venue-contact-people diff save: insert added, delete removed. The
   // primitive (RecordCombobox multi) calls this on every chip add/remove.
@@ -308,20 +272,27 @@ export default function PersonDetail() {
             </span>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div className="eyebrow" style={{ paddingTop: 8 }}>Person</div>
-              <h1
-                className="h-page"
-                style={{ marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-              >
-                <InlineEditText
-                  value={person.full_name}
-                  required
-                  placeholder="Full name"
-                  renderRead={(v) => v ?? "(unnamed)"}
-                  onSave={(next) => savePersonField("full_name", next)}
-                />
-              </h1>
-              <div className="cap" style={{ marginTop: 6 }}>
-                {[person.role_title, affiliationLabel].filter(Boolean).join(" . ") || "-"}
+              <div className="row-c" style={{ gap: 10, marginTop: 3, minWidth: 0 }}>
+                <h1
+                  className="h-page"
+                  style={{ margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}
+                >
+                  {person.full_name || "(unnamed)"}
+                </h1>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/people/${person.id}/edit`)}
+                  className={`pill pill-lg p-${personTypeToken(t)}`}
+                  title="Edit type / affiliation"
+                  style={{ border: "none", cursor: "pointer" }}
+                >
+                  {t}
+                </button>
+              </div>
+              <div className="row-c detail-meta" style={{ gap: 12, marginTop: 8 }}>
+                <span>
+                  {[person.role_title, affiliationLabel].filter(Boolean).join(" · ") || "-"}
+                </span>
               </div>
             </div>
           </div>
@@ -338,127 +309,104 @@ export default function PersonDetail() {
         </div>
       </div>
 
-      <div
-        className="grid"
-        style={{ display: "grid", gridTemplateColumns: "1fr 332px", gap: 24, alignItems: "start" }}
-      >
-        <section className="card">
-          <div className="card-headbar">
-            <span className="h-card">Details</span>
-          </div>
-          <div className="card-pad">
-            <dl className="kv">
-              <dt>Type</dt>
-              <dd>
-                <span className={`pill pill-sm p-${personTypeToken(t)}`}>{t}</span>
-              </dd>
-              <dt>Organization</dt>
-              <dd>
-                {t === "Client" ? (
-                  <RecordCombobox
-                    source={{ kind: "record", loadOptions: loadClientOptions }}
-                    value={person.client_id}
-                    onChange={(next) => void saveOrgFk("client_id", next)}
-                    entityLabel="Client"
-                    placeholder="Pick a client..."
-                    quickCreate
-                    getRecordHref={(id) => `/clients/${id}`}
-                    miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
-                    onMiniCreate={async (data) => {
-                      const created = await createClientInline(data);
-                      if (created) {
-                        setClientOptions((prev) =>
-                          [...prev, created].sort((a, b) =>
-                            a.label.localeCompare(b.label),
-                          ),
-                        );
-                      }
-                      return created;
-                    }}
-                  />
-                ) : t === "Vendor" ? (
-                  <RecordCombobox
-                    source={{ kind: "record", loadOptions: loadVendorOptions }}
-                    value={person.vendor_id}
-                    onChange={(next) => void saveOrgFk("vendor_id", next)}
-                    entityLabel="Vendor"
-                    placeholder="Pick a vendor..."
-                    getRecordHref={(id) => `/vendors/${id}`}
-                  />
-                ) : t === "Venue" ? (
-                  venues.length > 0 ? (
-                    <span
-                      className="row-c wrap"
-                      style={{ display: "inline-flex", gap: 10, rowGap: 4 }}
-                    >
-                      {venues.map((v) => (
-                        <Link
-                          key={v.id}
-                          to={`/venues/${v.id}`}
-                          className="tlink"
-                        >
-                          {v.name}
-                        </Link>
-                      ))}
-                    </span>
+      <div className="detail-2col">
+        <div className="stack-6">
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Details</span>
+            </div>
+            <div className="card-pad stack-4">
+              <div className="g2">
+                <DField label="Affiliation">
+                  {t === "Client" ? (
+                    <RecordCombobox
+                      source={{ kind: "record", loadOptions: loadClientOptions }}
+                      value={person.client_id}
+                      onChange={(next) => void saveOrgFk("client_id", next)}
+                      entityLabel="Client"
+                      placeholder="Pick a client..."
+                      quickCreate
+                      getRecordHref={(id) => `/clients/${id}`}
+                      miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
+                      onMiniCreate={async (data) => {
+                        const created = await createClientInline(data);
+                        if (created) {
+                          setClientOptions((prev) =>
+                            [...prev, created].sort((a, b) =>
+                              a.label.localeCompare(b.label),
+                            ),
+                          );
+                        }
+                        return created;
+                      }}
+                    />
+                  ) : t === "Vendor" ? (
+                    <RecordCombobox
+                      source={{ kind: "record", loadOptions: loadVendorOptions }}
+                      value={person.vendor_id}
+                      onChange={(next) => void saveOrgFk("vendor_id", next)}
+                      entityLabel="Vendor"
+                      placeholder="Pick a vendor..."
+                      getRecordHref={(id) => `/vendors/${id}`}
+                    />
+                  ) : t === "Venue" ? (
+                    <span className="muted">Venue contact</span>
                   ) : (
-                    <span className="muted subtle">No venues linked yet</span>
-                  )
-                ) : (
-                  <span className="muted subtle">-</span>
-                )}
-              </dd>
-              <dt>Role / Title</dt>
-              <dd>
-                <InlineEditText
-                  value={person.role_title}
-                  placeholder="Role / title"
-                  renderRead={(v) =>
-                    v ? v : <span className="muted subtle">-</span>
-                  }
-                  onSave={(next) => savePersonField("role_title", next || null)}
-                />
-              </dd>
-              <dt>Email</dt>
-              <dd>
-                <InlineEditText
-                  value={person.email}
-                  placeholder="email@example.com"
-                  inputType="email"
-                  renderRead={(v) =>
-                    v ? (
-                      <a
-                        className="tlink inline-block max-w-full truncate align-bottom"
-                        href={`mailto:${v}`}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {v}
-                      </a>
-                    ) : (
-                      <span className="muted subtle">-</span>
-                    )
-                  }
-                  onSave={(next) => savePersonField("email", next || null)}
-                />
-              </dd>
-              <dt>Phone</dt>
-              <dd>
-                <InlineEditText
-                  value={person.phone}
-                  placeholder="(212) 555-0000"
-                  onBlurFormat={formatPhone}
-                  renderRead={(v) =>
-                    v ? (
-                      <span className="muted">{v}</span>
-                    ) : (
-                      <span className="muted subtle">-</span>
-                    )
-                  }
-                  onSave={(next) => savePersonField("phone", next || null)}
-                />
-              </dd>
-              <dt>LinkedIn</dt>
-              <dd>
+                    <span className="muted subtle">-</span>
+                  )}
+                </DField>
+                <DField label="Role Title">
+                  <InlineEditText
+                    value={person.role_title}
+                    placeholder="Role / title"
+                    renderRead={(v) =>
+                      v ? v : <span className="muted subtle">-</span>
+                    }
+                    onSave={(next) => savePersonField("role_title", next || null)}
+                  />
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="g2">
+                <DField label="Email">
+                  <InlineEditText
+                    value={person.email}
+                    placeholder="email@example.com"
+                    inputType="email"
+                    renderRead={(v) =>
+                      v ? (
+                        <a
+                          className="tlink inline-block max-w-full truncate align-bottom"
+                          href={`mailto:${v}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {v}
+                        </a>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => savePersonField("email", next || null)}
+                  />
+                </DField>
+                <DField label="Phone">
+                  <InlineEditText
+                    value={person.phone}
+                    placeholder="(212) 555-0000"
+                    onBlurFormat={formatPhone}
+                    renderRead={(v) =>
+                      v ? (
+                        <span className="muted">{v}</span>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => savePersonField("phone", next || null)}
+                  />
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <DField label="LinkedIn">
                 <InlineEditText
                   value={person.linkedin_url}
                   placeholder="https://linkedin.com/in/..."
@@ -480,77 +428,62 @@ export default function PersonDetail() {
                   }
                   onSave={(next) => savePersonField("linkedin_url", next || null)}
                 />
-              </dd>
-              <dt>Tags</dt>
-              <dd>
-                <InlineTagInput
-                  values={person.tags}
-                  onChange={(next) => void saveTags(next)}
-                />
-              </dd>
-            </dl>
-            {t === "Venue" ? (
-              <div
-                className="stack-3"
-                style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid hsl(var(--border))" }}
-              >
-                <span className="h-card">Add Associated Venues</span>
-                <RecordCombobox
-                  multi
-                  source={{ kind: "record", loadOptions: loadVenueOptions }}
-                  multiValue={venueIds}
-                  onMultiChange={(next) => void saveVenueIds(next)}
-                  entityLabel="venue"
-                  placeholder="Add venue..."
-                  quickCreate
-                  miniCreateFields={VENUE_MINI_CREATE_FIELDS}
-                  onMiniCreate={async (data) => {
-                    const created = await createVenueInline(data);
-                    if (created) {
-                      setVenueOptions((prev) =>
-                        [...prev, created].sort((a, b) =>
-                          a.label.localeCompare(b.label),
-                        ),
-                      );
-                    }
-                    return created;
-                  }}
-                />
-              </div>
-            ) : null}
-          </div>
-        </section>
+              </DField>
+            </div>
+          </section>
 
-        <aside className="stack-6">
-          {person.client_id ? (
+          {t === "Venue" ? (
             <section className="card">
               <div className="card-headbar">
-                <span className="h-card">Projects</span>
+                <span className="h-card">Associated Venues</span>
+                <div className="combo-as-link">
+                  <RecordCombobox
+                    multi
+                    hideMultiValueChips
+                    source={{ kind: "record", loadOptions: loadVenueOptions }}
+                    multiValue={venueIds}
+                    onMultiChange={(next) => void saveVenueIds(next)}
+                    entityLabel="venue"
+                    placeholder="+ Add"
+                    quickCreate
+                    miniCreateFields={VENUE_MINI_CREATE_FIELDS}
+                    onMiniCreate={async (data) => {
+                      const created = await createVenueInline(data);
+                      if (created) {
+                        setVenueOptions((prev) =>
+                          [...prev, created].sort((a, b) =>
+                            a.label.localeCompare(b.label),
+                          ),
+                        );
+                      }
+                      return created;
+                    }}
+                  />
+                </div>
               </div>
               <div className="card-pad">
-                {projects.length === 0 ? (
-                  <p className="subtle" style={{ fontSize: 13 }}>
-                    No projects yet.
-                  </p>
-                ) : (
-                  <div className="stack-2">
-                    {projects.map((p) => (
-                      <Link
-                        key={p.id}
-                        to={`/projects/${p.id}`}
-                        className="tlink"
-                        style={{ fontSize: 12.5 }}
-                      >
-                        {p.job_number ? `#${p.job_number} ` : ""}
-                        {p.name}
-                      </Link>
+                {venues.length > 0 ? (
+                  <span className="row-c wrap" style={{ display: "inline-flex", gap: 6 }}>
+                    {venues.map((v, i) => (
+                      <span key={v.id} className="row-c" style={{ gap: 6 }}>
+                        <Link to={`/venues/${v.id}`} className="tlink">
+                          {v.name}
+                        </Link>
+                        {i < venues.length - 1 ? (
+                          <span className="muted" aria-hidden="true">·</span>
+                        ) : null}
+                      </span>
                     ))}
-                  </div>
+                  </span>
+                ) : (
+                  <span className="muted subtle">No venues linked yet.</span>
                 )}
               </div>
             </section>
           ) : null}
+        </div>
 
+        <aside className="stack-6">
           <InternalNotesEditor parentType="person" parentId={person.id} />
         </aside>
       </div>

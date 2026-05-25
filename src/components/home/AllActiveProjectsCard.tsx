@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { hqPillClass } from "@/lib/home/projectStatusToken";
+import { pillClass } from "@/lib/home/projectStatusToken";
 
 /**
  * Phase 5.1 Home `All Active Projects` card (spec § 7a step 4).
@@ -85,11 +85,11 @@ export function AllActiveProjectsCard() {
   }, []);
 
   return (
-    <div className="hq-card">
-      <div className="hq-card-headbar">
+    <div className="card">
+      <div className="card-headbar">
         <span className="h-card">All Active Projects</span>
       </div>
-      <table className="hq-tbl">
+      <table className="tbl">
         <thead>
           <tr>
             <th>Job #</th>
@@ -121,7 +121,7 @@ export function AllActiveProjectsCard() {
                   {r.clientName ? (
                     <Link
                       to={`/projects/${r.id}`}
-                      className="hq-tlink text-[11.5px]"
+                      className="tlink text-[11.5px]"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {r.clientName}
@@ -129,8 +129,8 @@ export function AllActiveProjectsCard() {
                   ) : null}
                 </td>
                 <td>
-                  <span className={hqPillClass(r.status)}>
-                    <span className="hq-pill-dt" />
+                  <span className={pillClass(r.status)}>
+                    <span className="dt" />
                     {r.status || "Queued"}
                   </span>
                 </td>

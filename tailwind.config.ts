@@ -16,7 +16,7 @@ export default {
     // Pills (Phase 5.2 wireframe-canonical + Phase 5.1 hq- prefix variants)
     "pill", "pill-sm", "pill-lg",
     "p-warn", "p-success", "p-info", "p-destructive", "p-primary", "p-muted", "p-purple",
-    "hq-pill", "hq-pill--warn", "hq-pill--success", "hq-pill--info", "hq-pill--destructive", "hq-pill--muted", "hq-pill--purple",
+    "p-aff-client", "p-aff-vendor", "p-aff-venue",
     // Calendar event banner kind classes (selectors are `.cal-ev.<kind>`)
     "cal-ev", "in", "live", "rem", "del",
     // Phase 5.3 Calendar additions: shared Outlook + Mirror Holiday banners
@@ -105,6 +105,10 @@ export default {
         },
         success: "hsl(var(--success))",
         warn: "hsl(var(--warn))",
+        // Wired from --info / --purple in index.css so component code uses
+        // text-info / bg-purple instead of hardcoding #06B6D4 / #B57BF5.
+        info: "hsl(var(--info))",
+        purple: "hsl(var(--purple))",
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
@@ -126,8 +130,8 @@ export default {
       },
       borderRadius: {
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        md: "var(--radius)",
+        sm: "var(--radius)",
       },
       keyframes: {
         "accordion-down": {

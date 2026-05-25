@@ -337,7 +337,7 @@ export default function PullDetail() {
       {/* Top round panel */}
       <Card>
         <CardContent className="space-y-6 p-6">
-          <div className="flex items-start justify-between gap-6">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
                 {/* Phase 3.7.8.4: RX pill + round status moved to the
@@ -385,7 +385,7 @@ export default function PullDetail() {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-end gap-2">
+            <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:items-end">
               {/* Generate Packet + Top-N input hidden while packet path is
                    broken (Phase 3.6.12). Toggle PACKET_FEATURE_ENABLED to
                    restore. */}
@@ -500,7 +500,7 @@ export default function PullDetail() {
               Re-runs Claude evaluation against the current scorecard and prompt for{" "}
               {poolForReeval.length} pool candidate{poolForReeval.length === 1 ? "" : "s"} in this round
               (rejected and auto-rejected candidates are excluded). Existing scores, recruiter overviews,
-              top strengths, key gaps, and quick overviews will be overwritten — prior evaluations are
+              top strengths, key gaps, and quick overviews will be overwritten. Prior evaluations are
               not retained because this assumes the prompt or scorecard changed. Internal notes will be
               preserved and folded into the new evaluation.
               <br />

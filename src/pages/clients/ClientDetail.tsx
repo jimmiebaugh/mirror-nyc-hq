@@ -8,10 +8,12 @@ import {
 } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { InlineEditText } from "@/components/hq/InlineEditText";
-import { InlineTagInput } from "@/components/hq/InlineTagInput";
+import { ContactsCard } from "@/components/hq/ContactsCard";
+import { DField } from "@/components/hq/DField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { useBackHref } from "@/lib/hq/useBackHref";
 import { formatPhone } from "@/lib/hq/phone";
+import { prettyHost } from "@/lib/url";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -246,18 +248,15 @@ export default function ClientDetail() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow" style={{ paddingTop: 8 }}>Client</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
-              <InlineEditText
-                value={client.name}
-                required
-                placeholder="Client name"
-                renderRead={(v) => v ?? "(unnamed)"}
-                onSave={(next) => saveField("name", next)}
-              />
+              {client.name || "(unnamed)"}
             </h1>
-            <div className="row-c" style={{ marginTop: 10 }}>
-              {client.industry ? <span className="cap">{client.industry}</span> : null}
-              {client.city ? <span className="cap">{client.city}</span> : null}
-            </div>
+            {client.industry || client.city ? (
+              <div className="row-c detail-meta" style={{ gap: 12, marginTop: 8 }}>
+                <span>
+                  {[client.industry, client.city].filter(Boolean).join(" · ")}
+                </span>
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
@@ -272,28 +271,38 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      <div
-        className="grid"
-        style={{ display: "grid", gridTemplateColumns: "1fr 332px", gap: 24, alignItems: "start" }}
-      >
+      <div className="detail-2col">
         <div className="stack-6">
           <section className="card">
             <div className="card-headbar">
               <span className="h-card">Details</span>
             </div>
-            <div className="card-pad">
-              <dl className="kv">
-                <dt>Industry</dt>
-                <dd>
+            <div className="card-pad stack-4">
+              {/* TODO(later): Industry could be a RecordCombobox sourced from a
+                  client_industries lookup table; current free-text field stays
+                  inline-editable for now. */}
+              <div className="g2">
+                <DField label="Industry">
                   <InlineEditText
                     value={client.industry}
                     placeholder="Industry"
                     renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
                     onSave={(next) => saveField("industry", next || null)}
                   />
-                </dd>
-                <dt>Website</dt>
-                <dd>
+                </DField>
+                <DField label="City">
+                  <RecordCombobox
+                    source={{ kind: "lookup", table: "cities" }}
+                    value={client.city || null}
+                    onChange={(next) => void saveField("city", next || null)}
+                    entityLabel="city"
+                    placeholder="Select"
+                  />
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="g2">
+                <DField label="Website">
                   <InlineEditText
                     value={client.website_url}
                     placeholder="https://example.com"
@@ -315,9 +324,32 @@ export default function ClientDetail() {
                     }
                     onSave={(next) => saveField("website_url", next || null)}
                   />
-                </dd>
-                <dt>Primary Contact</dt>
-                <dd>
+                </DField>
+                <DField label="Phone">
+                  <InlineEditText
+                    value={client.contact_phone}
+                    placeholder="(212) 555-0000"
+                    onBlurFormat={formatPhone}
+                    renderRead={(v) =>
+                      v ? (
+                        <span className="mono" style={{ fontSize: 13 }}>{v}</span>
+                      ) : (
+                        <span className="muted subtle">-</span>
+                      )
+                    }
+                    onSave={(next) => saveField("contact_phone", next || null)}
+                  />
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: 16,
+                }}
+              >
+                <DField label="Primary Contact">
                   {primaryContactEditing ? (
                     <RecordCombobox
                       source={{ kind: "record", loadOptions: loadClientContactOptions }}
@@ -373,26 +405,25 @@ export default function ClientDetail() {
                       })()}
                     </span>
                   )}
-                </dd>
-                <dt>Email</dt>
-                <dd>
+                </DField>
+                <DField label="Email">
                   {client.contact_email ? (
                     <a
                       className="tlink inline-block max-w-full truncate align-bottom"
                       href={`mailto:${client.contact_email}`}
                       onClick={(e) => e.stopPropagation()}
+                      style={{ fontSize: 13 }}
                       title="Auto-filled from Primary Contact"
                     >
                       {client.contact_email}
                     </a>
                   ) : (
                     <span className="muted subtle" title="Auto-fills from Primary Contact">
-                      - (set Primary Contact above)
+                      - (set Primary Contact)
                     </span>
                   )}
-                </dd>
-                <dt>Phone</dt>
-                <dd>
+                </DField>
+                <DField label="Phone">
                   <InlineEditText
                     value={client.contact_phone}
                     placeholder="(212) 555-0000"
@@ -406,41 +437,24 @@ export default function ClientDetail() {
                     }
                     onSave={(next) => saveField("contact_phone", next || null)}
                   />
-                </dd>
-                <dt>Primary Address</dt>
-                <dd>
-                  <InlineEditText
-                    value={client.primary_address}
-                    placeholder="50 W 34th St, New York NY 10001"
-                    multiline
-                    renderRead={(v) =>
-                      v ? (
-                        <span style={{ whiteSpace: "pre-wrap" }}>{v}</span>
-                      ) : (
-                        <span className="muted subtle">-</span>
-                      )
-                    }
-                    onSave={(next) => saveField("primary_address", next || null)}
-                  />
-                </dd>
-                <dt>City</dt>
-                <dd>
-                  <RecordCombobox
-                    source={{ kind: "lookup", table: "cities" }}
-                    value={client.city || null}
-                    onChange={(next) => void saveField("city", next || null)}
-                    entityLabel="city"
-                    placeholder="Select"
-                  />
-                </dd>
-                <dt>Tags</dt>
-                <dd>
-                  <InlineTagInput
-                    values={client.tags}
-                    onChange={(next) => void saveField("tags", next)}
-                  />
-                </dd>
-              </dl>
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <DField label="Primary Address">
+                <InlineEditText
+                  value={client.primary_address}
+                  placeholder="50 W 34th St, New York NY 10001"
+                  multiline
+                  renderRead={(v) =>
+                    v ? (
+                      <span style={{ whiteSpace: "pre-wrap" }}>{v}</span>
+                    ) : (
+                      <span className="muted subtle">-</span>
+                    )
+                  }
+                  onSave={(next) => saveField("primary_address", next || null)}
+                />
+              </DField>
             </div>
           </section>
 
@@ -448,35 +462,7 @@ export default function ClientDetail() {
         </div>
 
         <aside className="stack-6">
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Contacts</span>
-            </div>
-            <div className="card-pad">
-              {contacts.length === 0 ? (
-                <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
-              ) : (
-                <div className="stack-3">
-                  {contacts.map((c) => (
-                    <Link
-                      key={c.id}
-                      to={`/people/${c.id}`}
-                      className="row-c"
-                      style={{ textDecoration: "none", color: "inherit" }}
-                    >
-                      <span className="av-i">
-                        {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
-                      </span>
-                      <div>
-                        <div style={{ fontSize: 13 }}>{c.full_name}</div>
-                        <div className="cap">{c.role_title ?? "-"}</div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
+          <ContactsCard contacts={contacts} />
 
           <section className="card">
             <div className="card-headbar">
@@ -506,12 +492,4 @@ export default function ClientDetail() {
       </div>
     </div>
   );
-}
-
-function prettyHost(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
 }

@@ -47,11 +47,11 @@ type DbTaskRow = {
 
 function priorityBadgeClass(p: Row["priority"]): string {
   switch (p) {
-    case "Urgent": return "hq-pill hq-pill--destructive";
-    case "High": return "hq-pill hq-pill--warn";
-    case "Low": return "hq-pill hq-pill--muted";
+    case "Urgent": return "pill p-destructive";
+    case "High": return "pill p-warn";
+    case "Low": return "pill p-muted";
     case "Normal":
-    default: return "hq-pill hq-pill--muted";
+    default: return "pill p-muted";
   }
 }
 
@@ -122,14 +122,14 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
   };
 
   return (
-    <div className="hq-card">
-      <div className="hq-card-headbar">
+    <div className="card">
+      <div className="card-headbar">
         <span className="h-card">My Tasks This Week</span>
-        <Link to="/tasks" className="hq-tlink">
+        <Link to="/tasks" className="tlink">
           View all <IconChevronRight className="h-[14px] w-[14px]" />
         </Link>
       </div>
-      <table className="hq-tbl">
+      <table className="tbl">
         <thead>
           <tr>
             <th style={{ width: 34 }}></th>

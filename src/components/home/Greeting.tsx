@@ -38,7 +38,7 @@ export function Greeting({
   email?: string | null;
 }) {
   return (
-    <div className="flex flex-row items-end justify-between gap-5">
+    <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-5">
       <div>
         <div className="eyebrow">{formatLongDate()}</div>
         <h1

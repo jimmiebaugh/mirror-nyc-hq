@@ -66,10 +66,10 @@ type Cand = {
 };
 
 const tierStyle: Record<FinalRanking["final_tier"], { color: string; bg: string; border: string; label: string }> = {
-  top_recommendation:   { color: "#4ade80", bg: "rgba(74,222,128,0.12)",  border: "rgba(74,222,128,0.4)",  label: "Top Recommendation" },
-  strong_consideration: { color: "#f59e0b", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.3)",  label: "Strong Consideration" },
+  top_recommendation:   { color: "hsl(var(--success))", bg: "hsl(var(--success) / 0.12)",  border: "hsl(var(--success) / 0.4)",  label: "Top Recommendation" },
+  strong_consideration: { color: "hsl(var(--warn))", bg: "hsl(var(--warn) / 0.12)",  border: "hsl(var(--warn) / 0.3)",  label: "Strong Consideration" },
   backup:               { color: "hsl(var(--muted-foreground))", bg: "hsl(var(--surface-alt))", border: "hsl(var(--border))", label: "Backup" },
-  not_recommended:      { color: "#ef4444", bg: "rgba(239,68,68,0.12)",   border: "rgba(239,68,68,0.3)",   label: "Not Recommended" },
+  not_recommended:      { color: "hsl(var(--destructive))", bg: "hsl(var(--destructive) / 0.12)",   border: "hsl(var(--destructive) / 0.3)",   label: "Not Recommended" },
 };
 
 export default function FinalReviewDetail() {
@@ -258,7 +258,7 @@ export default function FinalReviewDetail() {
         ← Back to {roleTitle}
       </Link>
 
-      <div className="mt-4 flex items-start justify-between gap-6">
+      <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="h-page">Final Review</h1>
@@ -278,11 +278,11 @@ export default function FinalReviewDetail() {
         {/* Phase 3.6.3: Generate Packet up top with Re-Review inline left.
              Packet always includes all ranked candidates (include_all: true).
              No top-N input — the Final Review pool is the packet pool. */}
-        <div className="flex flex-col items-end gap-2 flex-shrink-0">
-          <div className="flex items-center gap-2">
+        <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-shrink-0 sm:items-end">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <button
               onClick={() => setShowRegen(true)}
-              className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-sm border border-border-strong bg-transparent text-foreground text-[13px] font-medium hover:bg-white/5 hover:border-foreground transition-colors"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm border border-border-strong bg-transparent px-4 text-[13px] font-medium text-foreground transition-colors hover:border-foreground hover:bg-white/5 sm:w-auto"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Re-Review
@@ -290,7 +290,7 @@ export default function FinalReviewDetail() {
             <button
               onClick={review.packet_url ? () => setShowPacketRegen(true) : downloadPacket}
               disabled={generatingPacket}
-              className="inline-flex items-center justify-center gap-2 h-10 px-4 rounded-sm bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-50 sm:w-auto"
             >
               {generatingPacket ? (
                 <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>

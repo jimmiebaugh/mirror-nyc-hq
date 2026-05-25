@@ -46,7 +46,7 @@ This file is a lean index. Specialized docs in `docs/` are the source of truth f
 
 ## Current phase
 
-See `CHECKPOINT.md` for live state. As of this writing: **Phase 5.8 (HQ v1 release + audit pass) is active.** Phase 5.7 closed 2026-05-18 at `59a5dac` and Phase 5.8.0 fired the deferred Netlify deploy at `975568f` (annotated tag `v1.0.0`). 5.8.1 wrote `docs/v1-changelog.md` (`beb8914`); 5.8.2 triaged `code-observations.md` (`e061590`). 5.8.3 (this MD doc audit) is in flight; 5.8.4 (close deploy) follows. Phase 4 (Venue Scout port) shipped to production 2026-05-13 at `7cd27ed`. See `docs/v1-changelog.md` for the full Phase 5.1 to 5.8.0 ship table.
+See `CHECKPOINT.md` for live state. `docs/v1-changelog.md` carries the full per-phase ship table. `docs/roadmap.md` carries the forward plan.
 
 ## Working with this repo
 

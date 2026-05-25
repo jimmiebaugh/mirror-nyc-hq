@@ -28,6 +28,8 @@ Every new surface uses these. Don't introduce new ones unless approved.
 | `--destructive` | `0 84% 60%` | `#EF4444` | Tier 1 must-haves, Failed pills, errors |
 | `--success` | `142 76% 64%` | `#4ADE80` | Tier 3, Latest pill, Final review complete |
 | `--warn` | `38 92% 50%` | `#F59E0B` | Running, Stalled, dirty-state indicators |
+| `--info` | `189 94% 43%` | `#06B6D4` | Cyan status (In Progress, Install, Likely). Exposed as Tailwind `info` |
+| `--purple` | `268 86% 72%` | `#B57BF5` | Purple status (Removal, Vendor affiliation). Exposed as Tailwind `purple` |
 
 **Gotcha:** slider track + score-bar track must be `bg-input` (not `bg-secondary`). On `bg-surface-alt` cards both share `#141414`, making `bg-secondary` invisible. Phase 3.5/3.7 cost us multiple sessions catching this. See `src/components/ui/slider.tsx` and `src/components/talent-scout/ScoreInline.tsx`.
 
@@ -38,13 +40,17 @@ Three families:
 - **Roboto Mono** (`var(--font-mono)`): labels, captions, status pills, breadcrumb, "TIER 1: MUST-HAVES"
 - **Roboto** (`var(--font-body)`): body text, form inputs, narrative content
 
-Sizes (utility classes in `src/index.css`):
+Sizes (utility classes in `src/index.css`; values below match the shipped CSS, which is canonical):
 - `.h-page`: page title (`text-[34px] font-display font-extrabold uppercase`)
-- `.h-section`: section header inside a card (`text-[20px] font-display`)
-- `.label-section`: section eyebrow (`text-[12px] font-mono uppercase tracking-wider`)
-- `.label-form`: form-field label (`text-[12px] font-mono font-bold uppercase tracking-wider`)
-- `.eyebrow`: coral eyebrow above a title (`text-[14px] font-mono uppercase tracking-widest text-primary`)
-- `.crumb`: back-link breadcrumb (`text-[14px] font-mono uppercase tracking-widest text-primary hover:underline`)
+- `.h-section`: section header inside a card (`text-[22px] font-display font-extrabold uppercase`)
+- `.h-card`: in-card title on dashboards + `card-headbar` headers (`text-[18px] font-display font-extrabold`)
+- `.label-section`: section eyebrow (`text-[13px] font-mono uppercase tracking-[0.08em]`, **grey** `muted-foreground`)
+- `.label-form`: form-field label (`text-[12px] font-mono font-bold uppercase tracking-[0.06em]`, **grey** `subtle-foreground`)
+- `.eyebrow`: coral eyebrow above a title (`text-[14px] font-mono font-bold uppercase tracking-[0.08em] text-primary`)
+- `.crumb`: back-link breadcrumb (`text-[12px] font-mono font-medium uppercase tracking-[0.08em] text-primary hover:underline`)
+- `.detail-meta`: detail-page caption row under the page title (`text-[14px] font-mono tracking-[0.06em] text-muted-foreground`, mixed-case, joined with `·` bullets). Sits between `.h-page` and the card stack with **8px top margin** (consistent across Project / Venue / Vendor / Person). Wraps base `.pill` pills inline in the same `.row-c` container (not `.pill-lg`, so pill height stays close to the 14px text line).
+
+**Form + section labels are grey, not coral** (Phase 5.10.1; coral is reserved for links / CTAs per `feedback_coral_reserved_for_hyperlinks`). The single exception: Talent Scout and Venue Scout page-form Fields keep an inline coral label by deliberate per-module choice.
 
 **Page titles are ALL CAPS** (deck-canonical). Button labels stay sentence/title case (uppercase reads too presentational).
 
@@ -95,6 +101,20 @@ Standard pattern:
 
 Reference: `src/pages/talent-scout/Settings.tsx`, `RoleSettings.tsx`.
 
+### HQ Core detail page canon
+
+HQ Core detail pages use a shared header and field rhythm:
+
+- Back link uses `className="crumb"` with the small arrow icon.
+- Header stack is `.eyebrow`, plain `.h-page` title, optional hero pill next to the title, then `.detail-meta` with 8px top margin.
+- `.detail-meta` values are truthy-only and joined with `·`; do not render placeholder bullets.
+- Card fields use `src/components/hq/DField.tsx`, label above value, and row dividers between logical groups.
+- Schedule dates use `formatShortDate()`. Completion and historical dates keep the year with `formatMediumDate()`.
+- Task and Deliverable are compact-record exceptions: they stay single-column `maxWidth: 760`, but still use eyebrow, plain title, detail-meta, hero status pill, and `DField` rows.
+- ProjectDetail uses `detail-2col--wide` as the deliberate wide-detail exception.
+
+Standalone relationship cards use `combo-as-link` in the card headbar, hide in-trigger multi-value chips, and render the selected records as bullet-separated coral links in the card body. Field-level lookups use inline chips or the normal combobox display. ProjectDetail Vendors is the documented exception because its sidebar add-Popover is more discoverable for that workflow.
+
 ### Card surfaces
 
 Sectioned content always lives in a `bg-surface-alt` Card.
@@ -143,6 +163,8 @@ function Field({ label, required, children }: {
 
 Required marker is a coral asterisk. Always.
 
+**Label color:** the `text-primary` (coral) label above is the Talent Scout / Venue Scout page-form convention. HQ Core form labels use `.label-form` (grey `subtle-foreground`) per the Phase 5.10.1 coral-reservation rule. New HQ Core surfaces use grey; the coral label is the TS/VS exception.
+
 ### Inputs
 
 shadcn/ui primitives first: `Input`, `Textarea`, `Select`, `RadioGroup`, `Checkbox`, `Slider`. No custom inputs unless a real gap.
@@ -177,6 +199,16 @@ Replicated in Venue Scout's brief, research, and deck flow (Phase 4 port; sub-ph
 
 Reference: `RoleSettings.tsx`, `NewRoleScorecard.tsx`.
 
+### HQ Core edit page canon
+
+HQ Core edit pages use `src/components/hq/HQFormField.tsx` for grey `.label-form` labels and the coral required asterisk. `src/components/ui/Field.tsx` remains the Talent Scout / Venue Scout coral-label wrapper.
+
+- Default shell is centered at 880px with `.hq-form`.
+- First editable card is titled `Details`.
+- Field groups are separated by hairline row dividers.
+- TaskEdit and DeliverableEdit use the centered compact shell.
+- ProjectEdit intentionally remains full-width because its Team, Links, Vendors, and notes sections need the extra horizontal room.
+
 ---
 
 ## 4. Tables (CandidateTable is the canonical pattern)
@@ -185,7 +217,7 @@ Two-tier pattern: active rows above, rejected rows below collapsible. With statu
 
 Reference: `src/components/talent-scout/CandidateTable.tsx`. **Read this file before building any tabular surface in Phase 4 / 5.** Project lists, venue lists, task lists all map to this pattern with column shape adjusted.
 
-Talent Scout's CandidateTable carries its own select-row + bulk action bar (used for the round-level Re-evaluate / Reject / Promote flow). HQ Core's shared `<DataTable>` does NOT carry row selection — when extending DataTable, don't pattern-match from CandidateTable's bulk action bar.
+Talent Scout's CandidateTable carries its own select-row + bulk action bar (used for the round-level Re-evaluate / Reject / Promote flow). HQ Core's shared `<DataTable>` does NOT carry row selection; when extending DataTable, don't pattern-match from CandidateTable's bulk action bar.
 
 Column header rules:
 - 12px mono uppercase
@@ -196,6 +228,24 @@ Row rules:
 - Hover: `bg-muted/40`
 - Status-color left border (3px solid) per row to surface status at a glance
 - Click a row → navigate to detail
+
+### List-page table canon (Phase 5.11.2)
+
+ProjectsList is the reference for HQ Core list pages. All non-Talent / non-Venue Scout list tables should match:
+
+- **Wrapper:** `<DataTable<RowType>` with `flat` (`.tbl--flat`) unless the table actually uses status-color left borders (only TasksList does, via `rowBorderToken`).
+- **Primary identifier column:** First (or first major) column renders the entity name with `<Link className="lead">{name}</Link>` so it picks up the canonical 13px-with-foreground-color `.tbl .lead` rule. Use `style={{ fontSize: 13.5 }}` only when the column also carries a stacked secondary line.
+- **Stacked secondary identifiers** (e.g. Project / Client, Name / Affiliation): primary on top in `.lead`, secondary line below in `.sub` styled with `style={{ color: "hsl(var(--primary-hover))", fontSize: 12 }}` so the affiliation reads as a coral hyperlink.
+- **Date columns:** `formatShortDate()` (MON XX, no year) in `<span className="mono">` so columns share the same numeric ramp.
+- **Phone / id columns:** `<span className="muted mono" style={{ fontSize: 12 }}>` to match the size-down on secondary metadata.
+- **Status:** centered (`align: "c"`) `<ClickPillCell>` at `pill-sm`. Affiliation pills (Client / Vendor / Venue on People) use the muted `p-aff-*` variants at `pill-sm` so the dense list doesn't read as candy.
+- **Action / link buttons** (Website, Slack, etc.): centered (`align: "c"`) `<a className="btn btn-coral btn-sm">` matching the Venues + Vendors + Clients Website column.
+- **Empty-state CTA:** `empty={{ message, ctaLabel: "+ New {Entity}", onCta }}`.
+- **Count footer:** `<span className="cap">{N} {plural}</span>` below the table.
+- **Projects footer exception:** Projects keeps its active count plus hidden terminal-count metadata.
+- **Deliverables exception:** Deliverables remains a grouped-list page with no global footer.
+
+When a list table needs to diverge (Talent Scout's CandidateTable two-tier active/rejected; Venue Scout matrices), document the deviation inline near the component with a one-line rationale.
 
 ---
 
@@ -234,7 +284,7 @@ Every status pill, table row left-border, board column dot, and timeline bar in 
 | `--destructive` | `#EF4444` | red |
 | `--border-strong` | `#3A3A3A` | neutral / dormant gray |
 
-Coral (`--primary`) is reserved as an accent (primary CTAs, eyebrows, focus rings, primary record links). It is NEVER a status color.
+Coral (`--primary`) is reserved as an accent (primary CTAs, eyebrows, focus rings, primary record links). It is NEVER a status color. The one sanctioned exception: the Deliverables board uses a coral card background (`.bcard--bg-coral`) for ≤7-day deadline urgency (Phase 5.7.5 decision); this is a deliberate, isolated use, not a precedent for coral status pills.
 
 ### Project status (14 values)
 
@@ -288,7 +338,7 @@ Upcoming and Skipped share the gray token. Skipped differentiates with `text-dec
 
 Reads as a step-up ladder: speculative (amber), looking good (cyan), locked (green), done (gray). This flips the wireframe's drawn mapping for Outlook Confidence; build enforces this version.
 
-Implementation pointer: `src/lib/home/projectStatusToken.ts` is the canonical mapper for the Project + Task enums; `.hq-pill--<token>` classes in `src/index.css` render the resolved color.
+Implementation pointer: `src/lib/home/projectStatusToken.ts` is the canonical mapper for the Project + Task enums; `.pill.p-<token>` classes in `src/index.css` render the resolved color.
 
 ---
 
@@ -413,6 +463,12 @@ Talent Scout uses **explicit save** universally (sticky save bar). Internal Note
 
 Default to server-confirmed: disable button → await response → update state → toast. Optimistic only when the operation is locally safe (e.g. status dropdown change has a rollback path).
 
+### Motion
+
+HQ uses motion sparingly: hover background transitions (~0.12s), the toggle slide (0.15s), the Radix accordion (0.2s), and `Loader2` spinners. These durations are ad hoc literals, not tokens; if motion grows, introduce `--motion-fast` / `--motion-base` tokens and a standard easing.
+
+`prefers-reduced-motion: reduce` is respected app-wide via a global guard in `src/index.css` (collapses animation + transition durations). Any new animation inherits this automatically; do not add an animation that ignores it.
+
 ---
 
 ## 10. Component primitives in this repo
@@ -423,6 +479,16 @@ Worth knowing what's already built before reaching for shadcn/ui:
 - `src/components/ui/*`: shadcn/ui primitives (Button, Card, Input, Select, Checkbox, RadioGroup, Slider, Textarea, Label, AlertDialog, sonner, toast, etc.)
 - `src/components/AppShell.tsx`: top nav + main content wrapper for authenticated pages
 - `src/components/ProtectedRoute.tsx` / `AdminRoute.tsx`: route gates
+- `src/components/hq/DField.tsx`: HQ Core detail field wrapper.
+- `src/components/hq/HQFormField.tsx`: HQ Core edit field wrapper.
+- `src/components/hq/ContactsCard.tsx`: shared Contacts card for Venue, Vendor, and Client detail pages.
+- `src/components/hq/WebsiteActionButton.tsx`: shared list-page Website action button.
+- `src/components/data/ListPageChrome.tsx`: shared list search input and chip-radio group.
+- `src/lib/url.ts`: neutral URL helpers, including `prettyHost`.
+
+**Sanctioned HQ Core exceptions:**
+- Venue Slide stays as a VenueDetail header action and VenueEdit "Master Venue Deck Slide" card. Do not move it into a generic Links card unless more Venue link types appear.
+- Client, Person, and Vendor detail pages do not render raw `tags` arrays. Vendor Capabilities is the visible vendor tag-like surface.
 
 **Talent-Scout-specific (some worth lifting to shared if Phase 4 / 5 want them):**
 - `src/components/talent-scout/Stepper.tsx`: wizard stepper. Genericize for VS wizards.
@@ -431,7 +497,7 @@ Worth knowing what's already built before reaching for shadcn/ui:
 - `src/components/talent-scout/CriterionCard.tsx`: auto-grow textarea pattern. Useful reference for any inline-editable list-row.
 - `src/pages/talent-scout/RoleSettings.tsx`: the canonical 2-column form page. **Read this first** when building Edit-Project, Edit-Venue, Edit-Client pages.
 
-**To extract in Phase 4:** the `Field` helper component currently duplicated in `NewRoleDetails.tsx` and `RoleSettings.tsx`. Move to `src/components/ui/Field.tsx`.
+`src/components/ui/Field.tsx` is already extracted for Talent Scout / Venue Scout page forms. Do not use it for HQ Core edit pages, where grey labels come from `HQFormField`.
 
 ---
 

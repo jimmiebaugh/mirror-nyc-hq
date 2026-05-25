@@ -5,7 +5,9 @@ import { FilterBar, emptyFilterState, type FilterFieldDef, type FilterState } fr
 import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
-import { IconPlus, IconSearch } from "@/components/icons/HQIcons";
+import { ListChipRadioGroup, ListSearchInput } from "@/components/data/ListPageChrome";
+import { WebsiteActionButton } from "@/components/hq/WebsiteActionButton";
+import { IconPlus } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
 import { loadVenues, type VenueListRow } from "@/lib/venues/queries";
 import { useLookup } from "@/lib/hq/lookups";
@@ -232,7 +234,7 @@ export default function VenuesList() {
 
   return (
     <div className="stack-4">
-      <div className="row between" style={{ alignItems: "flex-end" }}>
+      <div className="row between list-head">
         <h1 className="h-page">Venues</h1>
         <button
           type="button"
@@ -244,7 +246,7 @@ export default function VenuesList() {
         </button>
       </div>
 
-      <SearchInput
+      <ListSearchInput
         value={searchQuery}
         onChange={setSearchQuery}
         placeholder="Search venues..."
@@ -254,12 +256,12 @@ export default function VenuesList() {
         className="row-c"
         style={{ gap: 14, flexWrap: "wrap", alignItems: "center" }}
       >
-        <ChipRadioGroup
+        <ListChipRadioGroup
           buttons={CITY_BUTTONS}
           active={activeCityFilter}
           onPick={setActiveCityFilter}
         />
-        <ChipRadioGroup
+        <ListChipRadioGroup
           buttons={SIZE_BUTTONS}
           active={activeSizeFilter}
           onPick={setActiveSizeFilter}
@@ -297,6 +299,7 @@ export default function VenuesList() {
         <>
           <DataTable<VenueListRow>
             rows={filtered}
+            flat
             sort={filterState.sort ?? null}
             onSortChange={(next) =>
               setFilterState((prev) => ({ ...prev, sort: next }))
@@ -375,25 +378,7 @@ export default function VenuesList() {
                 key: "website_url",
                 label: "Website",
                 align: "c",
-                render: (r) => (
-                  <a
-                    className="btn btn-coral btn-sm"
-                    href={r.website_url ?? "#"}
-                    target={r.website_url ? "_blank" : undefined}
-                    rel={r.website_url ? "noopener noreferrer" : undefined}
-                    style={
-                      r.website_url
-                        ? undefined
-                        : { opacity: 0.45, pointerEvents: "none", cursor: "not-allowed" }
-                    }
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!r.website_url) e.preventDefault();
-                    }}
-                  >
-                    Website
-                  </a>
-                ),
+                render: (r) => <WebsiteActionButton url={r.website_url} />,
               },
               {
                 key: "pastProjectCount",
@@ -407,113 +392,6 @@ export default function VenuesList() {
           <span className="cap">{filtered.length} venues</span>
         </>
       )}
-    </div>
-  );
-}
-
-/**
- * Phase 5.7.8 search input chrome. No debounce per the TopBar pattern
- * (src/components/shell/TopBar.tsx:60-64). Coral `tlink` Clear button
- * sits inline; it's clickable text so coral is permitted per
- * feedback_coral_reserved_for_hyperlinks.md.
- */
-function SearchInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-}) {
-  return (
-    <div
-      className="row-c"
-      style={{
-        gap: 8,
-        padding: "8px 12px",
-        border: "1px solid hsl(var(--border))",
-        borderRadius: "var(--radius)",
-        background: "hsl(var(--surface-alt))",
-      }}
-    >
-      <IconSearch className="h-[14px] w-[14px]" />
-      <input
-        style={{
-          height: 30,
-          border: "none",
-          background: "none",
-          padding: 0,
-          flex: 1,
-          outline: "none",
-          color: "hsl(var(--foreground))",
-          fontSize: 13,
-        }}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={placeholder}
-      />
-      {value ? (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className="tlink"
-          style={{ fontSize: 11, background: "none", border: 0, padding: 0, cursor: "pointer" }}
-        >
-          Clear
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Phase 5.7.8 chip radio group — lifts AFFILIATION_BUTTONS shape
- * (src/pages/people/PeopleList.tsx:222-260). Inline color/opacity on
- * inner <span> because .fchip--btn span hard-codes muted-foreground for
- * inactive buttons; the button-level color is consumed by .fchip--active's
- * currentColor mix only. Active selection uses success token when "All"
- * is selected; foreground otherwise. Inactive siblings render in
- * foreground when "All" is active, muted-foreground at opacity 0.5 when
- * a specific value is active.
- */
-function ChipRadioGroup<T extends string>({
-  buttons,
-  active,
-  onPick,
-}: {
-  buttons: { value: T; label: string }[];
-  active: T;
-  onPick: (v: T) => void;
-}) {
-  return (
-    <div className="row-c" style={{ gap: 6, flexWrap: "wrap" }}>
-      {buttons.map((b) => {
-        const isActive = active === b.value;
-        const isAllActive = active === ("All" as T);
-        let color: string;
-        let opacity = 1;
-        if (isActive) {
-          color = b.value === ("All" as T) ? "hsl(var(--success))" : "hsl(var(--foreground))";
-        } else if (isAllActive) {
-          color = "hsl(var(--foreground))";
-        } else {
-          color = "hsl(var(--muted-foreground))";
-          opacity = 0.5;
-        }
-        return (
-          <button
-            key={b.value}
-            type="button"
-            className={`fchip fchip--btn fchip--lg ${isActive ? "fchip--active" : ""}`}
-            style={{ color }}
-            onClick={() => onPick(b.value)}
-          >
-            <span style={{ color, opacity }}>{b.label}</span>
-          </button>
-        );
-      })}
     </div>
   );
 }

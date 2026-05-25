@@ -3,11 +3,11 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
-import { InlineTagInput } from "@/components/hq/InlineTagInput";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { IconArrowLeft, IconLink, IconSlides } from "@/components/icons/HQIcons";
-import { prettyHost } from "@/lib/venue-scout/venueTypes";
+import { prettyHost } from "@/lib/url";
 import { VenueTypePill } from "@/components/venues/VenueTypePill";
 import { Button } from "@/components/ui/button";
 import {
@@ -412,15 +412,15 @@ export default function VenueEdit() {
         </div>
         <div className="card-pad stack-4">
           <div className="g2">
-            <FormField label="Name" required>
+            <HQFormField label="Name" required>
               <input
                 className={`input ${form.name ? "input--filled" : ""}`}
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="The Glasshouse"
               />
-            </FormField>
-            <FormField label="Venue Types">
+            </HQFormField>
+            <HQFormField label="Venue Types">
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
                 {typeNames.length > 0 ? (
                   <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
@@ -446,30 +446,30 @@ export default function VenueEdit() {
                   placeholder="Add venue type..."
                 />
               </div>
-            </FormField>
+            </HQFormField>
           </div>
           <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
           <div className="g2">
-            <FormField label="City">
+            <HQFormField label="City">
               <RecordCombobox
                 source={{ kind: "lookup", table: "cities" }}
                 value={form.city || null}
                 onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
                 entityLabel="city"
               />
-            </FormField>
-            <FormField label="Neighborhood">
+            </HQFormField>
+            <HQFormField label="Neighborhood">
               <input
                 className={`input ${form.neighborhood ? "input--filled" : ""}`}
                 value={form.neighborhood}
                 onChange={(e) => setForm((f) => ({ ...f, neighborhood: e.target.value }))}
                 placeholder="Chelsea"
               />
-            </FormField>
+            </HQFormField>
           </div>
           <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
           <div className="g2">
-            <FormField label="Website URL">
+            <HQFormField label="Website URL">
               <InlineEditText
                 value={form.website_url || null}
                 inputType="url"
@@ -494,8 +494,8 @@ export default function VenueEdit() {
                   return Promise.resolve();
                 }}
               />
-            </FormField>
-            <FormField label="General Email">
+            </HQFormField>
+            <HQFormField label="General Email">
               <input
                 type="email"
                 className={`input ${form.general_email ? "input--filled" : ""}`}
@@ -503,43 +503,48 @@ export default function VenueEdit() {
                 onChange={(e) => setForm((f) => ({ ...f, general_email: e.target.value }))}
                 placeholder="bookings@theglasshouse.com"
               />
-            </FormField>
+            </HQFormField>
           </div>
           <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
           <div className="venue-addr-row">
-            <FormField label="Address">
+            <HQFormField label="Address">
               <input
                 className={`input ${form.address ? "input--filled" : ""}`}
                 value={form.address}
                 onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
                 placeholder="545 W 25th St, New York, NY 10001"
               />
-            </FormField>
-            <FormField label="Total Sq Ft">
+            </HQFormField>
+            <HQFormField label="Total Sq Ft">
               <input
                 className={`input ${form.total_sq_ft ? "input--filled" : ""}`}
                 value={form.total_sq_ft}
                 onChange={(e) => setForm((f) => ({ ...f, total_sq_ft: e.target.value }))}
                 placeholder="75000"
               />
-            </FormField>
-            <FormField label="Capacity">
+            </HQFormField>
+            <HQFormField label="Capacity">
               <input
                 className={`input ${form.capacity ? "input--filled" : ""}`}
                 value={form.capacity}
                 onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))}
                 placeholder="1875"
               />
-            </FormField>
+            </HQFormField>
           </div>
           <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
-          <FormField label="Features">
-            <InlineTagInput
-              values={form.features}
-              onChange={(next) => setForm((f) => ({ ...f, features: next }))}
-              placeholder="Add feature and hit enter..."
-            />
-          </FormField>
+          <HQFormField label="Features">
+            <div className="field-chips">
+              <RecordCombobox
+                multi
+                source={{ kind: "lookup", table: "venue_features" }}
+                multiValue={form.features}
+                onMultiChange={(next) => setForm((f) => ({ ...f, features: next }))}
+                entityLabel="Feature"
+                placeholder="Add feature..."
+              />
+            </div>
+          </HQFormField>
         </div>
       </section>
 
@@ -614,7 +619,7 @@ export default function VenueEdit() {
           )}
         </div>
         <div className="card-pad stack-4">
-          <FormField label="Deck-copy paragraph">
+          <HQFormField label="Deck-copy paragraph">
             <textarea
               className={`input textarea ${form.aboutVenue ? "input--filled" : ""}`}
               value={form.aboutVenue}
@@ -622,7 +627,7 @@ export default function VenueEdit() {
               rows={6}
               placeholder="The Glasshouse is a three-floor Chelsea venue..."
             />
-          </FormField>
+          </HQFormField>
         </div>
       </section>
 
@@ -825,26 +830,6 @@ function RateRow({
       >
         Log new rate
       </button>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="field">
-      <label className="label-form">
-        {label}
-        {required ? <span className="req">*</span> : null}
-      </label>
-      {children}
     </div>
   );
 }

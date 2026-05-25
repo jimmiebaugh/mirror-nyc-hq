@@ -143,11 +143,15 @@ export function personType(p: {
   return "Unaffiliated";
 }
 
+// Phase 5.11.3: switched from p-primary / p-purple / p-info to the muted
+// p-aff-* affiliation variants. Same hues, much lower saturation, so dense
+// People-list pages don't feel candy-bright. `Unaffiliated` still uses the
+// flat muted token.
 export function personTypeToken(
   t: PersonType,
-): "primary" | "purple" | "info" | "muted" {
-  if (t === "Client") return "primary";
-  if (t === "Vendor") return "purple";
-  if (t === "Venue") return "info";
+): "aff-client" | "aff-vendor" | "aff-venue" | "muted" {
+  if (t === "Client") return "aff-client";
+  if (t === "Vendor") return "aff-vendor";
+  if (t === "Venue") return "aff-venue";
   return "muted";
 }

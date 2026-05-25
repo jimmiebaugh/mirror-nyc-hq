@@ -40,7 +40,7 @@ export default function Home() {
       {isAdmin && HOME_ADMIN_STATS_ENABLED ? (
         <MyProjectsCard userId={userId} fullWidth />
       ) : (
-        <div className="grid grid-cols-2 gap-4 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
           <MyProjectsCard userId={userId} />
           <MyTasksThisWeekCard userId={userId} />
         </div>

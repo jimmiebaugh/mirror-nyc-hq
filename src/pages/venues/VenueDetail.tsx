@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Loader2, Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { IconArrowLeft, IconLink, IconSlides } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { InlineEditText } from "@/components/hq/InlineEditText";
-import { InlineTagInput } from "@/components/hq/InlineTagInput";
+import { ContactsCard } from "@/components/hq/ContactsCard";
+import { DField } from "@/components/hq/DField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { formatShortDate } from "@/lib/hq/dates";
 import { loadLatestVenueRates, type VenueRate } from "@/lib/venues/queries";
@@ -22,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { prettyHost } from "@/lib/venue-scout/venueTypes";
+import { prettyHost } from "@/lib/url";
 import { VenueTypePill } from "@/components/venues/VenueTypePill";
 import { toast } from "@/hooks/use-toast";
 
@@ -53,7 +54,7 @@ type Venue = {
   exclusive_vendor_ids: string[];
 };
 
-type Contact = { id: string; full_name: string; role_title: string | null };
+type Contact = { id: string; full_name: string; email: string | null; role_title: string | null };
 type ProjectLink = { id: string; name: string; job_number: string | null };
 type VendorRow = { id: string; name: string };
 
@@ -102,7 +103,7 @@ export default function VenueDetail() {
           .eq("venue_id", id),
         supabase
           .from("venue_contact_people")
-          .select("person:people!venue_contact_people_person_id_fkey(id, full_name, role_title)")
+          .select("person:people!venue_contact_people_person_id_fkey(id, full_name, email, role_title)")
           .eq("venue_id", id),
         supabase
           .from("project_venues")
@@ -309,12 +310,29 @@ export default function VenueDetail() {
         <Link to={back.to} className="crumb">
           <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
         </Link>
-        <div className="row between" style={{ alignItems: "flex-start", gap: 24, paddingTop: 16 }}>
+        <div className="row between" style={{ alignItems: "flex-end", gap: 24, paddingTop: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow" style={{ paddingTop: 8 }}>Venue</div>
-            <h1 className="h-page" style={{ marginTop: 5 }}>
-              {venue.name || "(unnamed)"}
-            </h1>
+            <div
+              className="row-c"
+              style={{ gap: 16, alignItems: "center", flexWrap: "wrap", marginTop: 5, minWidth: 0 }}
+            >
+              <h1 className="h-page" style={{ minWidth: 0 }}>
+                {venue.name || "(unnamed)"}
+              </h1>
+              {venueTypes.map((t) => (
+                <VenueTypePill key={t} type={t} large />
+              ))}
+            </div>
+            {(venue.city || venue.neighborhood) ? (
+              <div className="row-c detail-meta" style={{ gap: 12, marginTop: 8 }}>
+                <span>
+                  {[venue.city, venue.neighborhood ? `(${venue.neighborhood})` : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </div>
+            ) : null}
           </div>
           <div
             style={{ display: "flex", flexDirection: "column", gap: 8, width: 172, flex: "none" }}
@@ -344,33 +362,21 @@ export default function VenueDetail() {
             </button>
           </div>
         </div>
-        <div
-          className="row-c"
-          style={{ gap: 12, fontSize: 15, color: "hsl(var(--muted-foreground))", marginTop: 0 }}
-        >
-          {venueTypes.map((t) => (
-            <VenueTypePill key={t} type={t} />
-          ))}
-          {venue.city ? <span>{venue.city}</span> : null}
-          {venue.neighborhood ? <span>({venue.neighborhood})</span> : null}
-        </div>
       </div>
 
-      <div
-        className="grid"
-        style={{ display: "grid", gridTemplateColumns: "1fr 332px", gap: 24, alignItems: "start" }}
-      >
+      <div className="detail-2col">
         <div className="stack-6">
           <section className="card">
             <div className="card-headbar">
-              <span className="h-card">Venue Details</span>
+              <span className="h-card">Details</span>
             </div>
             <div className="card-pad stack-4 vd-fields">
               {/* Phase 5.10.1: label-above layout matching VenueEdit (Venue
-                  Types full row; City | Neighborhood; Website | General Email;
-                  3-col Address / Total Sq Ft / Capacity; Features), with a
-                  hairline between rows. Rates + Exclusive Vendors are now their
-                  own cards below. Venue Slide stays the header button. */}
+                  Types full row; City | Neighborhood; 3-col Address / Total
+                  Sq Ft / Capacity; Website | General Email; Features), with
+                  a hairline between rows. Rates + Exclusive Vendors are now
+                  their own cards below. Venue Slide stays the header button.
+                  Phase 5.11.1 swapped the Address row above the Website row. */}
               <div className="g2">
                 <DField label="Name">
                   <InlineEditText
@@ -382,7 +388,7 @@ export default function VenueDetail() {
                   />
                 </DField>
                 <DField label="Venue Types">
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ display: "flex", flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                   {venueTypes.length > 0 ? (
                     <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
                       {venueTypes.map((t) => (
@@ -436,6 +442,57 @@ export default function VenueDetail() {
                 </DField>
               </div>
               <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              {/* Address takes the left half (matches the g2 left column above);
+                  the right half nests another g2 to split Total Sq Ft / Capacity
+                  evenly. This keeps Total Sq Ft's left edge aligned with the
+                  right-column labels above (City right, Website right, etc.). */}
+              <div className="g2">
+                <DField label="Address">
+                  <InlineEditText
+                    value={venue.address}
+                    placeholder="Street address"
+                    renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
+                    onSave={(next) => saveField("address", next || null)}
+                  />
+                </DField>
+                <div className="g2">
+                  <DField label="Total Sq Ft">
+                    <InlineEditText
+                      value={venue.total_sq_ft != null ? String(venue.total_sq_ft) : null}
+                      placeholder="Total sq ft"
+                      inputType="number"
+                      renderRead={(v) =>
+                        v ? Number(v).toLocaleString("en-US") : <span className="muted subtle">-</span>
+                      }
+                      onSave={(next) => {
+                        const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
+                        return saveField(
+                          "total_sq_ft",
+                          parsed != null && Number.isFinite(parsed) ? parsed : null,
+                        );
+                      }}
+                    />
+                  </DField>
+                  <DField label="Capacity">
+                    <InlineEditText
+                      value={venue.capacity != null ? String(venue.capacity) : null}
+                      placeholder="Capacity"
+                      inputType="number"
+                      renderRead={(v) =>
+                        v ? Number(v).toLocaleString("en-US") : <span className="muted subtle">-</span>
+                      }
+                      onSave={(next) => {
+                        const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
+                        return saveField(
+                          "capacity",
+                          parsed != null && Number.isFinite(parsed) ? parsed : null,
+                        );
+                      }}
+                    />
+                  </DField>
+                </div>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
               <div className="g2">
                 <DField label="Website">
                   <InlineEditText
@@ -483,58 +540,18 @@ export default function VenueDetail() {
                 </DField>
               </div>
               <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
-              <div className="venue-addr-row-d">
-                <DField label="Address">
-                  <InlineEditText
-                    value={venue.address}
-                    placeholder="Street address"
-                    renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
-                    onSave={(next) => saveField("address", next || null)}
-                  />
-                </DField>
-                <DField label="Total Sq Ft">
-                  <InlineEditText
-                    value={venue.total_sq_ft != null ? String(venue.total_sq_ft) : null}
-                    placeholder="Total sq ft"
-                    inputType="number"
-                    renderRead={(v) =>
-                      v ? Number(v).toLocaleString("en-US") : <span className="muted subtle">-</span>
-                    }
-                    onSave={(next) => {
-                      const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
-                      return saveField(
-                        "total_sq_ft",
-                        parsed != null && Number.isFinite(parsed) ? parsed : null,
-                      );
-                    }}
-                  />
-                </DField>
-                <DField label="Capacity">
-                  <InlineEditText
-                    value={venue.capacity != null ? String(venue.capacity) : null}
-                    placeholder="Capacity"
-                    inputType="number"
-                    renderRead={(v) =>
-                      v ? Number(v).toLocaleString("en-US") : <span className="muted subtle">-</span>
-                    }
-                    onSave={(next) => {
-                      const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
-                      return saveField(
-                        "capacity",
-                        parsed != null && Number.isFinite(parsed) ? parsed : null,
-                      );
-                    }}
+              <div className="field-chips">
+                <DField label="Features">
+                  <RecordCombobox
+                    multi
+                    source={{ kind: "lookup", table: "venue_features" }}
+                    multiValue={venue.features}
+                    onMultiChange={(next) => void saveField("features", next)}
+                    entityLabel="Feature"
+                    placeholder="Add feature..."
                   />
                 </DField>
               </div>
-              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
-              <DField label="Features">
-                <InlineTagInput
-                  values={venue.features}
-                  onChange={(next) => void saveField("features", next)}
-                  placeholder="Add feature and hit enter..."
-                />
-              </DField>
             </div>
           </section>
 
@@ -575,7 +592,7 @@ export default function VenueDetail() {
                   v ? (
                     <p
                       style={{
-                        fontSize: 14,
+                        fontSize: 15,
                         lineHeight: 1.65,
                         color: "hsl(var(--muted-foreground))",
                         whiteSpace: "pre-wrap",
@@ -643,30 +660,35 @@ export default function VenueDetail() {
           <section className="card">
             <div className="card-headbar">
               <span className="h-card">Exclusive Vendors</span>
-            </div>
-            <div className="card-pad">
-              <div className="stack-2">
+              <div className="combo-as-link">
                 <RecordCombobox
                   multi
+                  hideMultiValueChips
                   source={{ kind: "record", loadOptions: loadVendorOptions }}
                   multiValue={venue.exclusive_vendor_ids}
                   onMultiChange={(next) => void saveExclusiveVendorIds(next)}
                   entityLabel="Vendor"
-                  placeholder="Add vendor..."
+                  placeholder="+ Add"
                 />
-                {vendors.length > 0 ? (
-                  <span className="row-c wrap" style={{ display: "inline-flex", gap: 8 }}>
-                    {vendors.map((v, i) => (
-                      <span key={v.id}>
-                        <Link to={`/vendors/${v.id}`} className="tlink">
-                          {v.name}
-                        </Link>
-                        {i < vendors.length - 1 ? <span className="muted">, </span> : null}
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
               </div>
+            </div>
+            <div className="card-pad">
+              {vendors.length > 0 ? (
+                <span className="row-c wrap" style={{ display: "inline-flex", gap: 6 }}>
+                  {vendors.map((v, i) => (
+                    <span key={v.id} className="row-c" style={{ gap: 6 }}>
+                      <Link to={`/vendors/${v.id}`} className="tlink">
+                        {v.name}
+                      </Link>
+                      {i < vendors.length - 1 ? (
+                        <span className="muted" aria-hidden="true">·</span>
+                      ) : null}
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span className="muted subtle">No exclusive vendors yet.</span>
+              )}
             </div>
           </section>
         </div>
@@ -695,35 +717,7 @@ export default function VenueDetail() {
         </AlertDialog>
 
         <aside className="stack-6">
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Contacts</span>
-            </div>
-            <div className="card-pad">
-              {contacts.length === 0 ? (
-                <p className="subtle" style={{ fontSize: 13 }}>No contacts yet.</p>
-              ) : (
-                <div className="stack-3">
-                  {contacts.map((c) => (
-                    <Link
-                      key={c.id}
-                      to={`/people/${c.id}`}
-                      className="row-c"
-                      style={{ textDecoration: "none", color: "inherit" }}
-                    >
-                      <span className="av-i">
-                        {(c.full_name ?? "?").slice(0, 2).toUpperCase()}
-                      </span>
-                      <div>
-                        <div style={{ fontSize: 13 }}>{c.full_name}</div>
-                        <div className="cap">{c.role_title ?? "-"}</div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
+          <ContactsCard contacts={contacts} />
 
           <InternalNotesEditor parentType="venue" parentId={venue.id} />
 
@@ -845,15 +839,3 @@ function AddRateModal({
     </AlertDialog>
   );
 }
-
-// Label-above field wrapper (matches VenueEdit's FormField). Used for the
-// inline-edit fields on the detail page so labels sit above their values.
-function DField({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="field">
-      <div className="label-form">{label}</div>
-      {children}
-    </div>
-  );
-}
-

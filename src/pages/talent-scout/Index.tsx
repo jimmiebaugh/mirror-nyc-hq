@@ -298,7 +298,7 @@ export default function TalentScoutIndex() {
           <div className="px-5 py-10 text-center text-sm text-muted-foreground">Loading…</div>
         ) : open.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-            No open roles yet — click <span className="font-semibold text-foreground">+ New Role</span> to get started.
+            No open roles yet. Click <span className="font-semibold text-foreground">+ New Role</span> to get started.
           </div>
         ) : (
           open.map((r) => <RoleRow key={r.id} r={r} />)

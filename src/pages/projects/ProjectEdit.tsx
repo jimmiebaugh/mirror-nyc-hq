@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
-import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
@@ -25,10 +25,10 @@ import { toast } from "@/hooks/use-toast";
  * LOCKED.html lines 1487-1583.
  *
  *   crumb -> eyebrow "Job #..." -> h-page "Edit Project"
- *   4 .card .card-pad blocks: Details / Team / Event Info / Links &
- *   References. Each card opens with .block-lbl. Each .field has a
- *   .label-form + .input (with .input--filled on populated fields).
- *   .savebar at the bottom.
+ *   .card blocks (Details / Event Info / Team / Links & References /
+ *   Project Vendors), each opening with a .card-headbar + .h-card title to
+ *   match the detail pages. Each .field has a .label-form + .input (with
+ *   .input--filled on populated fields). .savebar at the bottom.
  *
  * Team card (Phase 5.6.1 catch-up): Account Managers + Designers are
  * multi RecordCombobox pickers sourced from `users` (active=true). Save
@@ -565,35 +565,36 @@ export default function ProjectEdit() {
       </Link>
 
       <div className="pagehead">
-        {form.jobNumber ? (
-          <div className="label-form">Job #{form.jobNumber}</div>
-        ) : null}
+        <div className="eyebrow">Project</div>
         <h1 className="h-page">{isCreate ? "New Project" : "Edit Project"}</h1>
       </div>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Details</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Details</span>
-          </div>
           <div className="g2">
-            <FormField label="Project" required>
+            <HQFormField label="Project" required>
               <input
                 className={`input ${form.name ? "input--filled" : ""}`}
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="Untitled"
               />
-            </FormField>
-            <FormField label="Job #">
+            </HQFormField>
+            <HQFormField label="Job #">
               <input
                 className={`input ${form.jobNumber ? "input--filled" : ""}`}
                 value={form.jobNumber}
                 onChange={(e) => setForm((f) => ({ ...f, jobNumber: e.target.value }))}
                 placeholder="2604"
               />
-            </FormField>
-            <FormField label="Client">
+            </HQFormField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <div className="g2">
+            <HQFormField label="Client">
               <RecordCombobox
                 source={{ kind: "record", loadOptions: loadClientOptions }}
                 value={form.clientId}
@@ -607,8 +608,8 @@ export default function ProjectEdit() {
                 ]}
                 onMiniCreate={handleCreateClient}
               />
-            </FormField>
-            <FormField label="Status">
+            </HQFormField>
+            <HQFormField label="Status">
               <select
                 className={`input ${form.status ? "input--filled" : ""}`}
                 value={form.status}
@@ -618,111 +619,118 @@ export default function ProjectEdit() {
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-            </FormField>
-            <FormField label="Category">
+            </HQFormField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <div className="g2">
+            <HQFormField label="Category">
               <RecordCombobox
                 source={{ kind: "lookup", table: "project_categories" }}
                 value={form.category || null}
                 onChange={(v) => setForm((f) => ({ ...f, category: v ?? "" }))}
                 entityLabel="Category"
               />
-            </FormField>
-            <FormField label="City">
+            </HQFormField>
+            <HQFormField label="City">
               <RecordCombobox
                 source={{ kind: "lookup", table: "cities" }}
                 value={form.city || null}
                 onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
                 entityLabel="city"
               />
-            </FormField>
-            <FormField label="Budget">
+            </HQFormField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <div className="g2">
+            <HQFormField label="Budget">
               <input
                 className={`input ${form.budget ? "input--filled" : ""}`}
                 value={form.budget}
                 onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))}
                 placeholder="$185,000"
               />
-            </FormField>
-            <FormField label="Tags">
-              <MultiTagInput
-                options={[]}
-                values={form.tags}
-                onChange={(next) => setForm((f) => ({ ...f, tags: next }))}
-                onAdd={async (name) => ({ id: name, name })}
-                entityLabel="tag"
-                exampleName="Summer 2026"
-                placeholder="Add tag..."
-              />
-            </FormField>
+            </HQFormField>
+            <HQFormField label="Tags">
+              <div className="field-chips">
+                <RecordCombobox
+                  multi
+                  source={{ kind: "lookup", table: "project_tags" }}
+                  multiValue={form.tags}
+                  onMultiChange={(next) => setForm((f) => ({ ...f, tags: next }))}
+                  entityLabel="Tag"
+                  placeholder="Add tag..."
+                />
+              </div>
+            </HQFormField>
           </div>
         </div>
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Event Info</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Event Info</span>
-          </div>
           <div className="g2">
-            <FormField label="Install Date (start)">
+            <HQFormField label="Install Date (start)">
               <input
                 type="date"
                 className={`input ${form.installDatesStart ? "input--filled" : ""}`}
                 value={form.installDatesStart}
                 onChange={(e) => setForm((f) => ({ ...f, installDatesStart: e.target.value }))}
               />
-            </FormField>
-            <FormField label="Install Date (end)">
+            </HQFormField>
+            <HQFormField label="Install Date (end)">
               <input
                 type="date"
                 className={`input ${form.installDatesEnd ? "input--filled" : ""}`}
                 value={form.installDatesEnd}
                 onChange={(e) => setForm((f) => ({ ...f, installDatesEnd: e.target.value }))}
               />
-            </FormField>
-            <FormField label="Live Date (start)">
+            </HQFormField>
+            <HQFormField label="Live Date (start)">
               <input
                 type="date"
                 className={`input ${form.liveDatesStart ? "input--filled" : ""}`}
                 value={form.liveDatesStart}
                 onChange={(e) => setForm((f) => ({ ...f, liveDatesStart: e.target.value }))}
               />
-            </FormField>
-            <FormField label="Live Date (end)">
+            </HQFormField>
+            <HQFormField label="Live Date (end)">
               <input
                 type="date"
                 className={`input ${form.liveDatesEnd ? "input--filled" : ""}`}
                 value={form.liveDatesEnd}
                 onChange={(e) => setForm((f) => ({ ...f, liveDatesEnd: e.target.value }))}
               />
-            </FormField>
-            <FormField label="Removal Date (start)">
+            </HQFormField>
+            <HQFormField label="Removal Date (start)">
               <input
                 type="date"
                 className={`input ${form.removalDatesStart ? "input--filled" : ""}`}
                 value={form.removalDatesStart}
                 onChange={(e) => setForm((f) => ({ ...f, removalDatesStart: e.target.value }))}
               />
-            </FormField>
-            <FormField label="Removal Date (end)">
+            </HQFormField>
+            <HQFormField label="Removal Date (end)">
               <input
                 type="date"
                 className={`input ${form.removalDatesEnd ? "input--filled" : ""}`}
                 value={form.removalDatesEnd}
                 onChange={(e) => setForm((f) => ({ ...f, removalDatesEnd: e.target.value }))}
               />
-            </FormField>
+            </HQFormField>
           </div>
         </div>
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Team</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Team</span>
-          </div>
           <div className="g3">
-            <FormField label="Account">
+            <HQFormField label="Account">
               <RecordCombobox
                 multi
                 source={{ kind: "record", loadOptions: loadUserOptions }}
@@ -731,8 +739,8 @@ export default function ProjectEdit() {
                 entityLabel="user"
                 placeholder="Add account manager..."
               />
-            </FormField>
-            <FormField label="Design">
+            </HQFormField>
+            <HQFormField label="Design">
               <RecordCombobox
                 multi
                 source={{ kind: "record", loadOptions: loadUserOptions }}
@@ -741,8 +749,8 @@ export default function ProjectEdit() {
                 entityLabel="user"
                 placeholder="Add designer..."
               />
-            </FormField>
-            <FormField label="Team">
+            </HQFormField>
+            <HQFormField label="Team">
               <RecordCombobox
                 multi
                 source={{ kind: "record", loadOptions: loadUserOptions }}
@@ -751,49 +759,49 @@ export default function ProjectEdit() {
                 entityLabel="user"
                 placeholder="Add team member..."
               />
-            </FormField>
+            </HQFormField>
           </div>
         </div>
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Links &amp; References</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Links &amp; References</span>
-          </div>
           <div className="g2">
-            <FormField label="Production Folder URL">
+            <HQFormField label="Production Folder URL">
               <input
                 className={`input ${form.productionFolderUrl ? "input--filled" : ""}`}
                 value={form.productionFolderUrl}
                 onChange={(e) => setForm((f) => ({ ...f, productionFolderUrl: e.target.value }))}
                 placeholder="https://drive.google.com/..."
               />
-            </FormField>
-            <FormField label="Design Folder URL">
+            </HQFormField>
+            <HQFormField label="Design Folder URL">
               <input
                 className={`input ${form.designDecksFolderUrl ? "input--filled" : ""}`}
                 value={form.designDecksFolderUrl}
                 onChange={(e) => setForm((f) => ({ ...f, designDecksFolderUrl: e.target.value }))}
                 placeholder="https://drive.google.com/..."
               />
-            </FormField>
-            <FormField label="Budget Sheet URL">
+            </HQFormField>
+            <HQFormField label="Budget Sheet URL">
               <input
                 className={`input ${form.budgetSheetUrl ? "input--filled" : ""}`}
                 value={form.budgetSheetUrl}
                 onChange={(e) => setForm((f) => ({ ...f, budgetSheetUrl: e.target.value }))}
                 placeholder="https://docs.google.com/spreadsheets/..."
               />
-            </FormField>
-            <FormField label="Slack Channel URL">
+            </HQFormField>
+            <HQFormField label="Slack Channel URL">
               <input
                 className={`input ${form.slackChannelUrl ? "input--filled" : ""}`}
                 value={form.slackChannelUrl}
                 onChange={(e) => setForm((f) => ({ ...f, slackChannelUrl: e.target.value }))}
                 placeholder="https://mirrornyc.slack.com/..."
               />
-            </FormField>
+            </HQFormField>
           </div>
         </div>
       </section>
@@ -808,11 +816,11 @@ export default function ProjectEdit() {
       ) : null}
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Project Vendors</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Project Vendors</span>
-          </div>
-          <FormField label="Vendors">
+          <HQFormField label="Vendors">
             <RecordCombobox
               multi
               source={{ kind: "record", loadOptions: loadVendorOptions }}
@@ -830,7 +838,7 @@ export default function ProjectEdit() {
               ]}
               onMiniCreate={handleCreateVendor}
             />
-          </FormField>
+          </HQFormField>
         </div>
       </section>
 
@@ -902,26 +910,6 @@ export default function ProjectEdit() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="field">
-      <label className="label-form">
-        {label}
-        {required ? <span className="req">*</span> : null}
-      </label>
-      {children}
     </div>
   );
 }

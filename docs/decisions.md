@@ -2,6 +2,28 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.11.2 (2026-05-23) — HQ Core structural consistency
+
+Frontend-only structural pass after the parallel 5.11.2 audits. The goal was chrome convergence and shared primitives, not a redesign. Product-call items were limited to the Wave 3 changes Jimmie approved during local smoke.
+
+**Project "Status Notes" title override stays.** ProjectDetail uses the shared `<InternalNotesEditor />`, but its card title remains "Status Notes" instead of generic "Notes." That editor is the successor to the old project status-notes field, and the title tells producers these notes are about current project state, not arbitrary attachments or project history.
+
+**Inline detail editing and pencil-to-edit form both stay.** Detail pages keep inline edits for the high-frequency fields producers tweak while reading a record. The pencil button remains the escape hatch to the full edit form for broader edits, grouped fields, deletes, and relationship rewrites. This dual path is intentional, not a transition state.
+
+**FilterBar `allowIsNot` remains opt-in.** The global FilterBar default is "is" only to keep chips simple and consistent. Surfaces that genuinely need a negative lifecycle filter opt in with `allowIsNot` (Tasks and Deliverables today). New surfaces should not expose "is not" unless a real workflow needs it.
+
+**VendorEdit Tags dropped, Capabilities is the vendor tag-like surface.** Vendor raw `tags` stays in the database for now, but VendorEdit no longer exposes it. Producers manage vendor classification through Capabilities, which is backed by the managed lookup pattern and appears consistently on vendor surfaces.
+
+**Client, Person, and Vendor detail tags remain hidden.** The audit noted that those rows are loaded but not rendered. Jimmie's call for this pass was to document the divergence rather than reintroduce tag chips on these detail pages. Project Tags and Venue Features stay visible because they are active managed-lookup fields.
+
+**PersonDetail title-row pill routes to edit.** A person's type is derived from affiliation state (`client_id`, `vendor_id`, or venue-contact joins). Changing it inline would need a purpose-built reassignment UI that clears and sets the right relationship atomically. Until that exists, the title-row pill sends producers to the edit form.
+
+**PersonDetail Associated Venues uses the standalone relationship-card pattern.** Venue-contact people now get a sibling Associated Venues card with `combo-as-link`, hidden in-trigger chips, and bullet-separated coral venue links. The Affiliation field reads "Venue contact" so the venue list appears once.
+
+**ProjectDetail Vendors sidebar stays as an exception.** Standalone relationship cards normally use the headbar `combo-as-link` pattern, but the ProjectDetail Vendors sidebar keeps its add-Popover flow because vendor add/discoverability is better there and the sidebar already carries vendor-specific detail. Documented exception, not a precedent for new relationship cards.
+
+**Venue Slide stays a header action.** VenueDetail keeps the Venue Slide button in the title-row action cluster and VenueEdit keeps the Master Venue Deck Slide card. Do not move Venue Slide into a generic Links card unless Venue gains enough distinct link types to justify a card.
+
 ## Phase 5.10.0 (2026-05-21) — venues.about_venue rename + AI About-paragraph generator
 
 Standalone follow-on after the Phase 5.9 close, opening Phase 5.10. Two related venue-side additions ship in **one squash, one Netlify deploy** (rename + generator + buttons together; the edge function targets `about_venue` from day one). NOT a `[skip netlify]` ship.

@@ -6,7 +6,7 @@ import type { StatusToken } from "@/lib/home/projectStatusToken";
 /**
  * Click-to-edit status pill for DataTable rows (Phase 5.6.1 spec § 4.C).
  *
- * Renders an `.hq-pill .hq-pill--<token>` trigger that, when clicked,
+ * Renders an `.pill .p-<token>` trigger that, when clicked,
  * opens a popover listing every valid value for the column with a
  * token-coloured dot per row. Picking an option fires an optimistic UI
  * update, awaits the parent's `onSave`, toasts on success, and reverts
@@ -35,7 +35,7 @@ type ClickPillCellProps = {
 function tokenColor(token: StatusToken): string {
   switch (token) {
     case "info":
-      return "#06B6D4";
+      return "hsl(var(--info))";
     case "success":
       return "hsl(var(--success))";
     case "warn":
@@ -43,7 +43,7 @@ function tokenColor(token: StatusToken): string {
     case "destructive":
       return "hsl(var(--destructive))";
     case "purple":
-      return "#B57BF5";
+      return "hsl(var(--purple))";
     case "muted":
     default:
       return "hsl(var(--muted-foreground))";
@@ -82,10 +82,10 @@ export function ClickPillCell({ value, options, tokenMap, onSave, size = "defaul
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`hq-pill hq-pill--${currentToken} ${size === "lg" ? "hq-pill-lg" : ""} cursor-pointer`}
+          className={`pill p-${currentToken} ${size === "lg" ? "pill-lg" : ""} cursor-pointer`}
           onClick={(e) => e.stopPropagation()}
         >
-          <span className="hq-pill-dt" />
+          <span className="dt" />
           {localValue}
         </button>
       </PopoverTrigger>

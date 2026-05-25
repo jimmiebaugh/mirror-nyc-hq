@@ -41,6 +41,9 @@ supabase/.temp/
 # Claude Code per-user settings (don't share across the team)
 .claude/settings.local.json
 
+# Local audit captures and auth state
+.audit/
+
 # Secrets / credentials. Never commit these. `/*.json` is too broad (would
 # block package.json etc.), so list specific patterns + a local-only stash.
 .local/

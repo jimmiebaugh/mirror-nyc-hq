@@ -6,6 +6,7 @@ import { SavedViewsDropdown } from "@/components/data/SavedViewsDropdown";
 import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { OverflowList, type OverflowItem } from "@/components/hq/OverflowList";
+import { WebsiteActionButton } from "@/components/hq/WebsiteActionButton";
 import {
   Popover,
   PopoverContent,
@@ -114,18 +115,16 @@ export default function ClientsList() {
 
   return (
     <div className="stack-4">
-      <div className="pagehead">
-        <div className="row between">
-          <h1 className="h-page">Clients</h1>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/clients/new")}
-          >
-            <IconPlus className="ic" />
-            New Client
-          </button>
-        </div>
+      <div className="row between list-head">
+        <h1 className="h-page">Clients</h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate("/clients/new")}
+        >
+          <IconPlus className="ic" />
+          New Client
+        </button>
       </div>
 
       <div className="row between wrap" style={{ alignItems: "center" }}>
@@ -188,16 +187,18 @@ export default function ClientsList() {
               },
               {
                 key: "projects",
-                label: "Projects",
+                label: "Active Projects",
                 render: (r) => (
-                  <OverflowList
-                    fromLabel={FROM_LABEL}
-                    items={r.activeProjects.map<OverflowItem>((p) => ({
-                      id: p.id,
-                      label: p.label,
-                      href: `/projects/${p.id}`,
-                    }))}
-                  />
+                  <span className="list-projects">
+                    <OverflowList
+                      fromLabel={FROM_LABEL}
+                      items={r.activeProjects.map<OverflowItem>((p) => ({
+                        id: p.id,
+                        label: p.label,
+                        href: `/projects/${p.id}`,
+                      }))}
+                    />
+                  </span>
                 ),
               },
               {
@@ -217,22 +218,21 @@ export default function ClientsList() {
                 ),
               },
               {
-                key: "primary_contact",
-                label: "Primary Contact",
-                sort: (a, b) =>
-                  (a.contact_name ?? "").localeCompare(b.contact_name ?? ""),
-                render: (r) =>
-                  r.contact_name ? (
-                    <span>{r.contact_name}</span>
-                  ) : (
-                    <span className="muted subtle">-</span>
-                  ),
+                key: "website_url",
+                label: "Website",
+                align: "c",
+                render: (r) => <WebsiteActionButton url={r.website_url} />,
+              },
+              {
+                key: "total_projects",
+                label: "Total Projects",
+                align: "c",
+                sort: (a, b) => a.totalProjectCount - b.totalProjectCount,
+                render: (r) => <span className="muted">{r.totalProjectCount}</span>,
               },
             ]}
           />
-          <span className="cap">
-            Showing {filtered.length} clients &middot; sorted by name
-          </span>
+          <span className="cap">{filtered.length} clients</span>
         </>
       )}
     </div>

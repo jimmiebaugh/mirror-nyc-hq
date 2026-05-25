@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import {
@@ -125,6 +126,14 @@ export default function DeliverableEdit() {
     () => Promise.resolve(projectOptions),
     [projectOptions],
   );
+  const userOptions: Option[] = useMemo(
+    () => users.map((u) => ({ id: u.id, label: u.full_name ?? u.email })),
+    [users],
+  );
+  const loadUserOptions = useCallback(
+    () => Promise.resolve(userOptions),
+    [userOptions],
+  );
 
   const dirty = useMemo(
     () => JSON.stringify(form) !== JSON.stringify(initial),
@@ -247,7 +256,7 @@ export default function DeliverableEdit() {
   }
 
   return (
-    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 760 }}>
+    <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
       <Link
         to={isCreate ? "/deliverables" : `/deliverables/${id}`}
         className="tlink"
@@ -263,24 +272,26 @@ export default function DeliverableEdit() {
       </Link>
 
       <div className="pagehead">
+        <div className="eyebrow">Deliverable</div>
         <h1 className="h-page">{isCreate ? "New Deliverable" : "Edit Deliverable"}</h1>
       </div>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Details</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Deliverable</span>
-          </div>
-          <Field label="Title" required>
+          <HQFormField label="Title" required>
             <input
               className={`input ${form.title ? "input--filled" : ""}`}
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
               placeholder="Venues Deck, Design R1 Deck..."
             />
-          </Field>
+          </HQFormField>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
           <div className="g2">
-            <Field label="Status">
+            <HQFormField label="Status">
               <select
                 className="input input--filled"
                 value={form.status}
@@ -290,16 +301,19 @@ export default function DeliverableEdit() {
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-            </Field>
-            <Field label="Due date">
+            </HQFormField>
+            <HQFormField label="Due date">
               <input
                 type="date"
                 className={`input ${form.due_date ? "input--filled" : ""}`}
                 value={form.due_date}
                 onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
               />
-            </Field>
-            <Field label="Project" required>
+            </HQFormField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <div className="g2">
+            <HQFormField label="Project" required>
               <RecordCombobox
                 source={{ kind: "record", loadOptions: loadProjectOptions }}
                 value={form.project_id}
@@ -307,45 +321,21 @@ export default function DeliverableEdit() {
                 entityLabel="Project"
                 placeholder="Choose a project"
               />
-            </Field>
+            </HQFormField>
           </div>
-          <Field label="Assignees">
-            <div
-              className="stack-2"
-              style={{
-                maxHeight: 180,
-                overflowY: "auto",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: "var(--radius)",
-                padding: 8,
-              }}
-            >
-              {users.map((u) => {
-                const checked = form.assigned_user_ids.includes(u.id);
-                return (
-                  <label
-                    key={u.id}
-                    className="row-c"
-                    style={{ fontSize: 13, cursor: "pointer" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          assigned_user_ids: e.target.checked
-                            ? [...f.assigned_user_ids, u.id]
-                            : f.assigned_user_ids.filter((uid) => uid !== u.id),
-                        }))
-                      }
-                    />
-                    {u.full_name ?? u.email}
-                  </label>
-                );
-              })}
-            </div>
-          </Field>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <HQFormField label="Assignees">
+            <RecordCombobox
+              multi
+              source={{ kind: "record", loadOptions: loadUserOptions }}
+              multiValue={form.assigned_user_ids}
+              onMultiChange={(next) =>
+                setForm((f) => ({ ...f, assigned_user_ids: next }))
+              }
+              entityLabel="user"
+              placeholder="Add assignee..."
+            />
+          </HQFormField>
         </div>
       </section>
 
@@ -400,26 +390,6 @@ export default function DeliverableEdit() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="field">
-      <label className="label-form">
-        {label}
-        {required ? <span className="req">*</span> : null}
-      </label>
-      {children}
     </div>
   );
 }

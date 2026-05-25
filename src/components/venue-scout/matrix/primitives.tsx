@@ -41,16 +41,16 @@ export function rankBucket(score: number | null): RankTier {
   return "red";
 }
 export const RANK_TEXT: Record<RankTier, string> = {
-  green: "text-[#4ade80]",
-  yellow: "text-[#f59e0b]",
-  red: "text-[#ef4444]",
-  gray: "text-[#555]",
+  green: "text-success",
+  yellow: "text-warn",
+  red: "text-destructive",
+  gray: "text-subtle-foreground",
 };
 export const RANK_BAR: Record<RankTier, string> = {
-  green: "bg-[#4ade80]",
-  yellow: "bg-[#f59e0b]",
-  red: "bg-[#ef4444]",
-  gray: "bg-[#555]",
+  green: "bg-success",
+  yellow: "bg-warn",
+  red: "bg-destructive",
+  gray: "bg-border-strong",
 };
 
 export function Pill({
@@ -92,7 +92,7 @@ export function VStack({
       >
         {top}
       </div>
-      <div className="relative w-1/2 mx-auto h-px bg-[#333]">
+      <div className="relative w-1/2 mx-auto h-px bg-border-strong">
         {dividerRight ? (
           <div className="absolute left-full top-1/2 -translate-y-1/2 pl-1 flex items-center">
             {dividerRight}
@@ -482,7 +482,7 @@ export function VenueIdentityStack({
 }
 
 function StackDivider() {
-  return <div className="w-1/2 mx-auto h-px bg-[#333]" />;
+  return <div className="w-1/2 mx-auto h-px bg-border-strong" />;
 }
 
 export function WebsiteArrow({ url }: { url: string | null }) {

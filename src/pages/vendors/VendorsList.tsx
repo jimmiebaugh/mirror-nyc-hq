@@ -7,10 +7,11 @@ import { getDefaultSavedView } from "@/lib/hq/savedViews";
 import { DataTable } from "@/components/data/DataTable";
 import { StarRating } from "@/components/data/StarRating";
 import { OverflowList, type OverflowItem } from "@/components/hq/OverflowList";
-import { IconPlus, IconSearch } from "@/components/icons/HQIcons";
+import { ListChipRadioGroup, ListSearchInput } from "@/components/data/ListPageChrome";
+import { WebsiteActionButton } from "@/components/hq/WebsiteActionButton";
+import { IconPlus } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
 import {
-  isInternalPartner,
   loadVendors,
   type VendorListRow,
 } from "@/lib/vendors/queries";
@@ -49,8 +50,17 @@ const VENDOR_FILTER_FIELDS: FilterFieldDef[] = [
 
 const FROM_LABEL = "Vendors";
 
+type CityFilter = "All" | "NYC" | "LA";
+
+const CITY_BUTTONS: { value: CityFilter; label: string }[] = [
+  { value: "All", label: "All" },
+  { value: "NYC", label: "NYC" },
+  { value: "LA", label: "LA" },
+];
+
 type VendorFilterState = FilterState & {
   searchQuery?: string;
+  cityFilter?: CityFilter;
 };
 
 export default function VendorsList() {
@@ -63,6 +73,7 @@ export default function VendorsList() {
   const [activeViewName, setActiveViewName] = useState("All vendors");
 
   const searchQuery = filterState.searchQuery ?? "";
+  const activeCityFilter: CityFilter = filterState.cityFilter ?? "All";
 
   useEffect(() => {
     let active = true;
@@ -125,6 +136,11 @@ export default function VendorsList() {
     setActiveViewName("Custom filter");
   };
 
+  const setActiveCityFilter = (next: CityFilter) => {
+    setFilterState((prev) => ({ ...prev, cityFilter: next }));
+    setActiveViewName("Custom filter");
+  };
+
   const filtered = useMemo(() => {
     let result = applyFilters(
       rows,
@@ -140,6 +156,15 @@ export default function VendorsList() {
       { city: (row) => row.nationwide },
     );
 
+    // Phase 5.11.3: NYC / LA preset radio. vendors.city stores literal
+    // "NYC" / "LA" (mirrors VenuesList). Nationwide vendors pass any city
+    // preset for the same reason as the chip filter.
+    if (activeCityFilter !== "All") {
+      result = result.filter(
+        (r) => r.nationwide || r.city === activeCityFilter,
+      );
+    }
+
     // Phase 5.7.8 search bar (scope: name + category + subcategory + capabilities + tags).
     const q = searchQuery.trim().toLowerCase();
     if (q) {
@@ -154,7 +179,7 @@ export default function VendorsList() {
     }
 
     return result;
-  }, [rows, filterState, searchQuery]);
+  }, [rows, filterState, searchQuery, activeCityFilter]);
 
   // Phase 5.7.6: distinct values per text/enum filter field. Some
   // vendor fields are arrays (capabilities, tags) — flatten before
@@ -188,31 +213,44 @@ export default function VendorsList() {
 
   return (
     <div className="stack-4">
-      <div className="pagehead">
-        <div className="row between">
-          <h1 className="h-page">Vendors</h1>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/vendors/new")}
-          >
-            <IconPlus className="ic" />
-            New Vendor
-          </button>
-        </div>
+      <div className="row between list-head">
+        <h1 className="h-page">Vendors</h1>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => navigate("/vendors/new")}
+        >
+          <IconPlus className="ic" />
+          New Vendor
+        </button>
       </div>
 
-      <SearchInput
+      <ListSearchInput
         value={searchQuery}
         onChange={setSearchQuery}
         placeholder="Search vendors..."
       />
 
+      <div
+        className="row-c"
+        style={{ gap: 14, flexWrap: "wrap", alignItems: "center" }}
+      >
+        <ListChipRadioGroup
+          buttons={CITY_BUTTONS}
+          active={activeCityFilter}
+          onPick={setActiveCityFilter}
+        />
+      </div>
+
       <div className="row between wrap" style={{ alignItems: "center" }}>
         <FilterBar
           state={filterState}
           onChange={(next) => {
-            setFilterState((prev) => ({ ...next, searchQuery: prev.searchQuery }));
+            setFilterState((prev) => ({
+              ...next,
+              searchQuery: prev.searchQuery,
+              cityFilter: prev.cityFilter,
+            }));
             setActiveViewName("Custom filter");
           }}
           fields={VENDOR_FILTER_FIELDS}
@@ -259,15 +297,7 @@ export default function VendorsList() {
                 label: "Vendor",
                 sort: (a, b) => a.name.localeCompare(b.name),
                 render: (r) => (
-                  <span className="row-c" style={{ display: "inline-flex", gap: 6 }}>
-                    <span className="lead">{r.name}</span>
-                    {isInternalPartner(r.tags) ? (
-                      <span className="pill pill-sm p-info">Internal</span>
-                    ) : null}
-                    {r.nationwide ? (
-                      <span className="pill pill-sm p-success">National</span>
-                    ) : null}
-                  </span>
+                  <span className="lead">{r.name}</span>
                 ),
               },
               {
@@ -318,7 +348,12 @@ export default function VendorsList() {
                   />
                 ),
               },
-              // (Rating column below)
+              {
+                key: "website_url",
+                label: "Website",
+                align: "c",
+                render: (r) => <WebsiteActionButton url={r.website_url} />,
+              },
               {
                 key: "team_rating",
                 label: "Rating",
@@ -338,81 +373,23 @@ export default function VendorsList() {
                 key: "projects",
                 label: "Projects",
                 render: (r) => (
-                  <OverflowList
-                    fromLabel={FROM_LABEL}
-                    items={r.recentProjects.map<OverflowItem>((p) => ({
-                      id: p.id,
-                      label: p.name,
-                      href: `/projects/${p.id}`,
-                    }))}
-                  />
+                  <span className="list-projects">
+                    <OverflowList
+                      fromLabel={FROM_LABEL}
+                      items={r.recentProjects.map<OverflowItem>((p) => ({
+                        id: p.id,
+                        label: p.name,
+                        href: `/projects/${p.id}`,
+                      }))}
+                    />
+                  </span>
                 ),
               },
             ]}
           />
-          <span className="cap">
-            Showing {filtered.length} vendors &middot; grouped views available in the Wiki "Vendors at a Glance" page
-          </span>
+          <span className="cap">{filtered.length} vendors</span>
         </>
       )}
-    </div>
-  );
-}
-
-/**
- * Phase 5.7.8 search input chrome. No debounce per the TopBar pattern
- * (src/components/shell/TopBar.tsx:60-64). Coral `tlink` Clear button is
- * permitted by feedback_coral_reserved_for_hyperlinks.md (clickable text).
- * Duplicated from VenuesList per spec § 1 (page-local until a third
- * consumer arrives, then lift to a shared <ListPageChrome>).
- */
-function SearchInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-}) {
-  return (
-    <div
-      className="row-c"
-      style={{
-        gap: 8,
-        padding: "8px 12px",
-        border: "1px solid hsl(var(--border))",
-        borderRadius: "var(--radius)",
-        background: "hsl(var(--surface-alt))",
-      }}
-    >
-      <IconSearch className="h-[14px] w-[14px]" />
-      <input
-        style={{
-          height: 30,
-          border: "none",
-          background: "none",
-          padding: 0,
-          flex: 1,
-          outline: "none",
-          color: "hsl(var(--foreground))",
-          fontSize: 13,
-        }}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={placeholder}
-      />
-      {value ? (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className="tlink"
-          style={{ fontSize: 11, background: "none", border: 0, padding: 0, cursor: "pointer" }}
-        >
-          Clear
-        </button>
-      ) : null}
     </div>
   );
 }

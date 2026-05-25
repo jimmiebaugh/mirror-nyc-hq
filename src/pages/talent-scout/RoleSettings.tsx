@@ -415,7 +415,7 @@ export default function RoleSettings() {
       });
       if (rrErr) {
         toast({
-          title: "Saved — re-eval kickoff failed",
+          title: "Saved, but re-eval kickoff failed",
           description: rrErr.message,
           variant: "destructive",
         });
@@ -676,7 +676,7 @@ export default function RoleSettings() {
               </div>
               <p className="text-xs text-muted-foreground">
                 Candidates with experience at any company below earn the competitor bonus.
-                3 pts: 1–2 yrs · 5 pts: 3–4 yrs · 8 pts: 5+ yrs · +2 pts: leadership at competitor.
+                3 pts: 1 to 2 yrs · 5 pts: 3 to 4 yrs · 8 pts: 5+ yrs · +2 pts: leadership at competitor.
                 Max +{COMPETITOR_BONUS_POINTS} bonus.
               </p>
               {/* Phase 3.7.6.7: when a role has no role-level list saved

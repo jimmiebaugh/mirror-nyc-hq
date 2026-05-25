@@ -23,10 +23,13 @@ export function TopBar({
   fullName,
   email,
   avatarUrl,
+  onMenuClick,
 }: {
   fullName?: string | null;
   email: string;
   avatarUrl?: string | null;
+  /** Opens the mobile nav drawer. Button is hidden at >=1024px via CSS. */
+  onMenuClick?: () => void;
 }) {
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
@@ -57,17 +60,29 @@ export function TopBar({
 
   return (
     <div className="hq-topbar">
+      <button
+        type="button"
+        className="hq-iconbtn hq-menu-btn"
+        onClick={onMenuClick}
+        aria-label="Open navigation"
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
       <form className="hq-searchbar" onSubmit={onSubmit}>
         <IconSearch className="h-[14px] w-[14px]" />
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search projects, venues, people, wiki..."
+          placeholder="Search"
           aria-label="Global search"
         />
       </form>
-      <div className="flex-1" />
+      <div className="hq-topbar-spacer flex-1" />
       <MentionBellPanel />
       <NotificationBellPanel />
       <DropdownMenu>

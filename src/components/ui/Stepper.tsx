@@ -20,7 +20,7 @@ export function Stepper({
   active: number;
 }) {
   return (
-    <div className="mb-8 flex items-center gap-3 py-2">
+    <div className="mb-8 flex flex-wrap items-center gap-x-3 gap-y-3 py-2">
       {steps.map((label, i) => {
         const num = i + 1;
         const done = num < active;
@@ -48,7 +48,7 @@ export function Stepper({
               <span>{label}</span>
             </div>
             {i < steps.length - 1 && (
-              <div className={cn("h-px w-12", num < active ? "bg-primary" : "bg-border")} />
+              <div className={cn("hidden h-px w-12 sm:block", num < active ? "bg-primary" : "bg-border")} />
             )}
           </div>
         );

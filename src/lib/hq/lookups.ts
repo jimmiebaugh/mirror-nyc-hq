@@ -29,9 +29,11 @@ import { supabase } from "@/integrations/supabase/client";
 export type LookupTable =
   | "cities"
   | "project_categories"
+  | "project_tags"
   | "vendor_capabilities"
   | "vendor_categories"
   | "vendor_subcategories"
+  | "venue_features"
   | "venue_types"
   | "departments";
 

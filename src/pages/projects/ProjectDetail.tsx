@@ -52,7 +52,6 @@ import {
 import {
   formatMediumDate,
   formatShortDate,
-  daysUntil,
   relativeDay,
 } from "@/lib/hq/dates";
 import {
@@ -62,8 +61,8 @@ import {
 } from "@/lib/projects/queries";
 import { useBackHref } from "@/lib/hq/useBackHref";
 import { InlineEditText } from "@/components/hq/InlineEditText";
+import { DField } from "@/components/hq/DField";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
-import { InlineTagInput } from "@/components/hq/InlineTagInput";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import {
@@ -583,47 +582,28 @@ export default function ProjectDetail() {
     .filter((d) => d.due_date && d.status === "Upcoming")
     .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))[0];
 
-  const thisWeekDeliverable = (() => {
-    const today = new Date();
-    const day = today.getDay();
-    const mondayOffset = day === 0 ? -6 : 1 - day;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + mondayOffset);
-    monday.setHours(0, 0, 0, 0);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const mondayIso = monday.toISOString().slice(0, 10);
-    const sundayIso = sunday.toISOString().slice(0, 10);
-    return deliverables.find(
-      (d) =>
-        d.due_date &&
-        d.due_date >= mondayIso &&
-        d.due_date <= sundayIso &&
-        d.status === "Upcoming",
-    );
-  })();
-
-  const installCountdownIso =
-    project.install_dates_start ?? project.live_dates_start;
-  const installDays = installCountdownIso ? daysUntil(installCountdownIso) : null;
-
+  // Phase 5.11.2: order for the 2x2 folder-links grid (Production | Design,
+  // Budget | Slack). Renders left-to-right, top-to-bottom.
   const folderButtons = [
     { label: "Production", url: project.production_folder_url, Icon: IconDrive },
     { label: "Design", url: project.design_decks_folder_url, Icon: IconDrive },
-    { label: "Slack", url: project.slack_channel_url, Icon: IconSlack },
     { label: "Budget", url: project.budget_sheet_url, Icon: IconDrive },
+    { label: "Slack", url: project.slack_channel_url, Icon: IconSlack },
   ];
 
   return (
     <div className="stack-4">
-      <Link to={back.to} className="tlink">
-        <IconArrowLeft className="ic" />
+      <Link to={back.to} className="crumb">
+        <IconArrowLeft className="ic ic-sm" />
         Back to {back.label}
       </Link>
 
       <header className="stack-3">
-        <div className="row between" style={{ alignItems: "center", paddingTop: 16 }}>
-          <div className="row-c" style={{ gap: 16, alignItems: "center", flex: 1, minWidth: 0 }}>
+        {project.job_number ? (
+          <div className="eyebrow" style={{ paddingTop: 8 }}>Job #{project.job_number}</div>
+        ) : null}
+        <div className="row between" style={{ alignItems: "center" }}>
+          <div className="row-c" style={{ flex: 1, gap: 16, alignItems: "center", minWidth: 0, flexWrap: "wrap" }}>
             <h1 className="h-page" style={{ minWidth: 0 }}>{project.name || "(untitled)"}</h1>
             <ClickPillCell
               value={project.status}
@@ -647,156 +627,199 @@ export default function ProjectDetail() {
             <Pencil className="ic" style={{ width: 14, height: 14 }} />
           </button>
         </div>
-        <div className="row-c" style={{ gap: 24 }}>
-          <span
-            className="cap"
-            style={{ fontSize: 16, letterSpacing: ".06em" }}
-          >
-            {project.job_number ? (
-              <>
-                <span style={{ color: "hsl(var(--primary) / 0.6)" }}>
-                  #{project.job_number}
-                </span>
-                {project.category || project.city ? " · " : null}
-              </>
-            ) : null}
-            {[project.category, project.city].filter(Boolean).join(" · ")}
-          </span>
-        </div>
         <div
-          className="row between"
-          style={{ alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}
+          className="row-c detail-meta"
+          style={{ gap: 12, marginTop: 8, flexWrap: "wrap" }}
         >
-          <div className="row-c" style={{ gap: 0, flexWrap: "wrap" }}>
-            <div>
-              <div className="label-form">Install</div>
-              <div className="mono" style={{ marginTop: 4 }}>
-                {project.install_dates_start
-                  ? `${formatShortDate(project.install_dates_start)}${
-                      project.install_dates_end
-                        ? ` to ${formatShortDate(project.install_dates_end)}`
-                        : ""
-                    }`
-                  : "-"}
-              </div>
-            </div>
-            <div
-              style={{
-                marginLeft: 24,
-                paddingLeft: 24,
-                borderLeft: "1px solid hsl(var(--border))",
-              }}
-            >
-              <div className="label-form">Live</div>
-              <div className="mono" style={{ marginTop: 4 }}>
-                {project.live_dates_start
-                  ? `${formatShortDate(project.live_dates_start)}${
-                      project.live_dates_end ? ` to ${formatShortDate(project.live_dates_end)}` : ""
-                    }`
-                  : "-"}
-              </div>
-            </div>
-            <div
-              style={{
-                marginLeft: 24,
-                paddingLeft: 24,
-                borderLeft: "1px solid hsl(var(--border))",
-              }}
-            >
-              <div className="label-form">Removal</div>
-              <div className="mono" style={{ marginTop: 4 }}>
-                {project.removal_dates_start
-                  ? `${formatShortDate(project.removal_dates_start)}${
-                      project.removal_dates_end
-                        ? ` to ${formatShortDate(project.removal_dates_end)}`
-                        : ""
-                    }`
-                  : "-"}
-              </div>
-            </div>
-          </div>
-          <div className="row-c wrap">
-            {folderButtons.map((b) => (
-              <a
-                key={b.label}
-                href={b.url ?? "#"}
-                target={b.url ? "_blank" : undefined}
-                rel={b.url ? "noopener noreferrer" : undefined}
-                className={`btn ${b.url ? "btn-secondary" : "btn-secondary"} btn-sm`}
-                style={
-                  b.url
-                    ? { height: 36, fontSize: 13 }
-                    : {
-                        height: 36,
-                        fontSize: 13,
-                        opacity: 0.45,
-                        pointerEvents: "none",
-                        cursor: "not-allowed",
-                      }
-                }
-                onClick={(e) => {
-                  if (!b.url) e.preventDefault();
-                }}
-              >
-                <b.Icon className="ic" />
-                {b.label}
-              </a>
-            ))}
-          </div>
+          {[project.client?.name, project.category, project.city].filter(Boolean).length > 0 ? (
+            <span>
+              {[project.client?.name, project.category, project.city]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          ) : null}
         </div>
       </header>
 
-      {/* Top 3-stat row mirrors the Overview/Team 70/30 grid below so
-          the stat tiles' left + right edges line up with the cards
-          underneath: Next Deliverable left = Overview left, This Week
-          right = Overview right, Days Until Install spans the Team
-          column. Cards land near-equal width at typical viewport
-          (~33% / 33% / 30%); exact equality + alignment would need a
-          ~9% gap which doesn't read clean. */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 70%) minmax(0, 30%)", gap: 24, alignItems: "start" }}>
-        <div className="g2" style={{ gap: 24 }}>
-          <div className="stat">
-            <div className="lbl">Next Deliverable</div>
-            <div className="num">{nextDeliverable?.title ?? "-"}</div>
-            <div className="sub">
-              {nextDeliverable?.due_date
-                ? `${relativeDay(nextDeliverable.due_date)} · ${formatMediumDate(nextDeliverable.due_date)}`
-                : "Nothing dated"}
+      {/* Phase 5.11.3: dates + Next Deliverable on the left (Schedule
+          card); folder links on the right (Links card). Both surfaces are
+          .card with a card-headbar so the row stretches them to a shared
+          height (via align-items:stretch on the row + h-100 on the cards). */}
+      <div className="detail-2col--wide" style={{ alignItems: "stretch" }}>
+        <section className="card" style={{ display: "flex", flexDirection: "column" }}>
+          <div className="card-pad" style={{ flex: 1, display: "flex", alignItems: "center" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "auto auto auto 1px 1fr",
+                gap: 0,
+                alignItems: "center",
+                width: "100%",
+              }}
+            >
+              <div>
+                <div className="label-form">Install</div>
+                <div className="mono" style={{ marginTop: 4 }}>
+                  {project.install_dates_start
+                    ? `${formatShortDate(project.install_dates_start)}${
+                        project.install_dates_end
+                          ? ` to ${formatShortDate(project.install_dates_end)}`
+                          : ""
+                      }`
+                    : "-"}
+                </div>
+              </div>
+              <div
+                style={{
+                  marginLeft: 24,
+                  paddingLeft: 24,
+                  borderLeft: "1px solid hsl(var(--border))",
+                }}
+              >
+                <div className="label-form">Live</div>
+                <div className="mono" style={{ marginTop: 4 }}>
+                  {project.live_dates_start
+                    ? `${formatShortDate(project.live_dates_start)}${
+                        project.live_dates_end ? ` to ${formatShortDate(project.live_dates_end)}` : ""
+                      }`
+                    : "-"}
+                </div>
+              </div>
+              <div
+                style={{
+                  marginLeft: 24,
+                  paddingRight: 24,
+                  paddingLeft: 24,
+                  borderLeft: "1px solid hsl(var(--border))",
+                }}
+              >
+                <div className="label-form">Removal</div>
+                <div className="mono" style={{ marginTop: 4 }}>
+                  {project.removal_dates_start
+                    ? `${formatShortDate(project.removal_dates_start)}${
+                        project.removal_dates_end
+                          ? ` to ${formatShortDate(project.removal_dates_end)}`
+                          : ""
+                      }`
+                    : "-"}
+                </div>
+              </div>
+              <div style={{ borderLeft: "1px solid hsl(var(--border-strong))", alignSelf: "stretch" }} />
+              <div style={{ paddingLeft: 24, minWidth: 0 }}>
+                <div className="row between" style={{ alignItems: "center" }}>
+                  <span className="label-form">Next Deliverable</span>
+                  {nextDeliverable?.due_date ? (
+                    <span
+                      className="label-form"
+                      style={{ color: "hsl(var(--foreground))" }}
+                    >
+                      {relativeDay(nextDeliverable.due_date)}
+                    </span>
+                  ) : null}
+                </div>
+                <div
+                  className="row between"
+                  style={{ alignItems: "baseline", marginTop: 4, gap: 12 }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 700,
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {nextDeliverable?.title ?? "-"}
+                  </span>
+                  <span
+                    className="mono"
+                    style={{
+                      color: "hsl(var(--primary-hover))",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {nextDeliverable?.due_date
+                      ? formatShortDate(nextDeliverable.due_date)
+                      : "Nothing dated"}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="stat">
-            <div className="lbl">This Week</div>
-            <div className="num">{thisWeekDeliverable?.title ?? "-"}</div>
-            <div className="sub">
-              {thisWeekDeliverable?.due_date
-                ? formatMediumDate(thisWeekDeliverable.due_date)
-                : nextDeliverable?.due_date
-                  ? `Next: ${relativeDay(nextDeliverable.due_date)}`
-                  : "Nothing dated this week"}
+        </section>
+        {/* Links card: 2x2 coral hyperlink grid. Production | Design (row 1),
+            Budget | Slack (row 2). Disabled links render muted. */}
+        <section className="card" style={{ display: "flex", flexDirection: "column" }}>
+          <div className="card-headbar">
+            <span className="h-card">Links</span>
+          </div>
+          <div className="card-pad" style={{ flex: 1, display: "flex", alignItems: "center" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "12px 24px",
+                alignItems: "center",
+                width: "100%",
+              }}
+            >
+              {folderButtons.map((b) =>
+                b.url ? (
+                  <a
+                    key={b.label}
+                    href={b.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="tlink"
+                    style={{ fontSize: 13 }}
+                  >
+                    <b.Icon className="ic ic-sm" /> {b.label}
+                  </a>
+                ) : (
+                  <span
+                    key={b.label}
+                    className="muted subtle"
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      letterSpacing: ".04em",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                    }}
+                    title={`${b.label} not linked yet`}
+                  >
+                    <b.Icon className="ic ic-sm" /> {b.label}
+                  </span>
+                ),
+              )}
             </div>
           </div>
-        </div>
-        <div className="stat stat--accent">
-          <div className="lbl">Days Until Install</div>
-          <div className="num">{installDays != null ? `${installDays}` : "-"}</div>
-          <div className="sub">
-            {installCountdownIso ? formatMediumDate(installCountdownIso) : "No install date"}
-          </div>
-        </div>
+        </section>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 70%) minmax(0, 30%)", gap: 24, alignItems: "start" }}>
+      <div className="detail-2col--wide">
         <div className="stack-6" style={{ minWidth: 0 }}>
           <section className="card">
             <div className="card-headbar">
-              <span className="h-card">Overview</span>
+              <span className="h-card">Details</span>
             </div>
-            <div className="card-pad g2" style={{ gap: 24 }}>
-              {/* Left column: Job # → Client → Title → City → Budget (per
-                  Phase 5.6.3.1 reorder request). */}
-              <dl className="kv">
-                <dt>Job #</dt>
-                <dd>
+            <div className="card-pad stack-4">
+              {/* Phase 5.11.3: Job# | Category | Budget (3-col), Title |
+                  Client, City | Venue, then the Live / Install / Removal
+                  date trio. Tags moved to its own full-width row at the
+                  bottom under a divider. */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: 16,
+                }}
+              >
+                <DField label="Job #">
                   <InlineEditText
                     value={project.job_number}
                     placeholder="Job number"
@@ -805,9 +828,45 @@ export default function ProjectDetail() {
                     }
                     onSave={(next) => saveField("job_number", next || null)}
                   />
-                </dd>
-                <dt>Client</dt>
-                <dd>
+                </DField>
+                <DField label="Category">
+                  <RecordCombobox
+                    source={{ kind: "lookup", table: "project_categories" }}
+                    value={project.category || null}
+                    onChange={(next) => void saveField("category", next || null)}
+                    entityLabel="Category"
+                    placeholder="Select"
+                  />
+                </DField>
+                <DField label="Budget">
+                  <InlineEditText
+                    value={project.budget != null ? String(project.budget) : null}
+                    placeholder="$185,000"
+                    renderRead={(v) =>
+                      v ? formatBudget(Number(v)) : <span className="muted subtle">-</span>
+                    }
+                    onSave={(next) => {
+                      const parsed = next ? Number(next.replace(/[$,\s]/g, "")) : null;
+                      return saveField(
+                        "budget",
+                        parsed != null && Number.isFinite(parsed) ? parsed : null,
+                      );
+                    }}
+                  />
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="g2">
+                <DField label="Title">
+                  <InlineEditText
+                    value={project.name}
+                    required
+                    placeholder="Project name"
+                    renderRead={(v) => v ?? "(untitled)"}
+                    onSave={(next) => saveField("name", next)}
+                  />
+                </DField>
+                <DField label="Client">
                   <RecordCombobox
                     source={{ kind: "record", loadOptions: loadClientOptions }}
                     value={project.client_id}
@@ -829,19 +888,11 @@ export default function ProjectDetail() {
                       return created;
                     }}
                   />
-                </dd>
-                <dt>Title</dt>
-                <dd>
-                  <InlineEditText
-                    value={project.name}
-                    required
-                    placeholder="Project name"
-                    renderRead={(v) => v ?? "(untitled)"}
-                    onSave={(next) => saveField("name", next)}
-                  />
-                </dd>
-                <dt>City</dt>
-                <dd>
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="g2">
+                <DField label="City">
                   <RecordCombobox
                     source={{ kind: "lookup", table: "cities" }}
                     value={project.city || null}
@@ -849,80 +900,41 @@ export default function ProjectDetail() {
                     entityLabel="city"
                     placeholder="Select"
                   />
-                </dd>
-                <dt>Budget</dt>
-                <dd>
-                  <InlineEditText
-                    value={project.budget != null ? String(project.budget) : null}
-                    placeholder="$185,000"
-                    renderRead={(v) =>
-                      v ? formatBudget(Number(v)) : <span className="muted subtle">-</span>
-                    }
-                    onSave={(next) => {
-                      const parsed = next ? Number(next.replace(/[$,\s]/g, "")) : null;
-                      return saveField(
-                        "budget",
-                        parsed != null && Number.isFinite(parsed) ? parsed : null,
-                      );
+                </DField>
+                <DField label="Venue">
+                  <RecordCombobox
+                    multi
+                    source={{ kind: "record", loadOptions: loadVenueOptions }}
+                    multiValue={venueIds}
+                    onMultiChange={(next) => void saveVenueIds(next)}
+                    entityLabel="Venue"
+                    placeholder="Add venue..."
+                    quickCreate
+                    getRecordHref={(id) => `/venues/${id}`}
+                    displayAs="stack"
+                    miniCreateFields={VENUE_MINI_CREATE_FIELDS}
+                    onMiniCreate={async (data) => {
+                      const created = await createVenueInline(data);
+                      if (created) {
+                        setVenueOptions((prev) =>
+                          [...prev, created].sort((a, b) =>
+                            a.label.localeCompare(b.label),
+                          ),
+                        );
+                      }
+                      return created;
                     }}
                   />
-                </dd>
-                <dt>Category</dt>
-                <dd>
-                  <InlineEditText
-                    value={project.category}
-                    placeholder="Category"
-                    renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
-                    onSave={(next) => saveField("category", next || null)}
-                  />
-                </dd>
-              </dl>
-              {/* Right column: Venue → Live (start/end pair, tight) → Install
-                  (start/end pair, tight) → Removal (start/end pair, tight) →
-                  Tags. Phase 5.7.3 followup-3: the three date pairs sit
-                  inside a single bordered container with internal dividers
-                  so the date trio reads as a grouped section. */}
-              <div className="stack-4">
-                <dl className="kv">
-                  <dt>Venue</dt>
-                  <dd>
-                    <RecordCombobox
-                      multi
-                      source={{ kind: "record", loadOptions: loadVenueOptions }}
-                      multiValue={venueIds}
-                      onMultiChange={(next) => void saveVenueIds(next)}
-                      entityLabel="Venue"
-                      placeholder="Add venue..."
-                      quickCreate
-                      getRecordHref={(id) => `/venues/${id}`}
-                      displayAs="stack"
-                      miniCreateFields={VENUE_MINI_CREATE_FIELDS}
-                      onMiniCreate={async (data) => {
-                        const created = await createVenueInline(data);
-                        if (created) {
-                          setVenueOptions((prev) =>
-                            [...prev, created].sort((a, b) =>
-                              a.label.localeCompare(b.label),
-                            ),
-                          );
-                        }
-                        return created;
-                      }}
-                    />
-                  </dd>
-                </dl>
-                <div
-                  style={{
-                    borderTop: "1px solid hsl(var(--border))",
-                    borderBottom: "1px solid hsl(var(--border))",
-                  }}
-                >
-                <dl
-                  className="kv kv--pair"
-                  style={{ paddingTop: 14, paddingBottom: 14 }}
-                >
-                  <dt>Live start</dt>
-                  <dd>
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              {/* Combined dates row: Live | Install | Removal with vertical
+                  dividers. Tight 4px label-to-input gap so the date pairs
+                  read as compact columns. */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div className="field" style={{ gap: 4 }}>
+                    <div className="label-form">Live start</div>
                     <InlineEditText
                       value={project.live_dates_start}
                       placeholder="YYYY-MM-DD"
@@ -932,9 +944,9 @@ export default function ProjectDetail() {
                       }
                       onSave={(next) => saveField("live_dates_start", next || null)}
                     />
-                  </dd>
-                  <dt>Live end</dt>
-                  <dd>
+                  </div>
+                  <div className="field" style={{ gap: 4 }}>
+                    <div className="label-form">Live end</div>
                     <InlineEditText
                       value={project.live_dates_end}
                       placeholder="YYYY-MM-DD"
@@ -944,18 +956,20 @@ export default function ProjectDetail() {
                       }
                       onSave={(next) => saveField("live_dates_end", next || null)}
                     />
-                  </dd>
-                </dl>
-                <dl
-                  className="kv kv--pair"
+                  </div>
+                </div>
+                <div
                   style={{
-                    paddingTop: 14,
-                    paddingBottom: 14,
-                    borderTop: "1px solid hsl(var(--border))",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                    borderLeft: "1px solid hsl(var(--border))",
+                    paddingLeft: 16,
+                    marginLeft: 16,
                   }}
                 >
-                  <dt>Install start</dt>
-                  <dd>
+                  <div className="field" style={{ gap: 4 }}>
+                    <div className="label-form">Install start</div>
                     <InlineEditText
                       value={project.install_dates_start}
                       placeholder="YYYY-MM-DD"
@@ -965,9 +979,9 @@ export default function ProjectDetail() {
                       }
                       onSave={(next) => saveField("install_dates_start", next || null)}
                     />
-                  </dd>
-                  <dt>Install end</dt>
-                  <dd>
+                  </div>
+                  <div className="field" style={{ gap: 4 }}>
+                    <div className="label-form">Install end</div>
                     <InlineEditText
                       value={project.install_dates_end}
                       placeholder="YYYY-MM-DD"
@@ -977,18 +991,20 @@ export default function ProjectDetail() {
                       }
                       onSave={(next) => saveField("install_dates_end", next || null)}
                     />
-                  </dd>
-                </dl>
-                <dl
-                  className="kv kv--pair"
+                  </div>
+                </div>
+                <div
                   style={{
-                    paddingTop: 14,
-                    paddingBottom: 14,
-                    borderTop: "1px solid hsl(var(--border))",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                    borderLeft: "1px solid hsl(var(--border))",
+                    paddingLeft: 16,
+                    marginLeft: 16,
                   }}
                 >
-                  <dt>Removal start</dt>
-                  <dd>
+                  <div className="field" style={{ gap: 4 }}>
+                    <div className="label-form">Removal start</div>
                     <InlineEditText
                       value={project.removal_dates_start}
                       placeholder="YYYY-MM-DD"
@@ -998,9 +1014,9 @@ export default function ProjectDetail() {
                       }
                       onSave={(next) => saveField("removal_dates_start", next || null)}
                     />
-                  </dd>
-                  <dt>Removal end</dt>
-                  <dd>
+                  </div>
+                  <div className="field" style={{ gap: 4 }}>
+                    <div className="label-form">Removal end</div>
                     <InlineEditText
                       value={project.removal_dates_end}
                       placeholder="YYYY-MM-DD"
@@ -1010,18 +1026,21 @@ export default function ProjectDetail() {
                       }
                       onSave={(next) => saveField("removal_dates_end", next || null)}
                     />
-                  </dd>
-                </dl>
+                  </div>
                 </div>
-                <dl className="kv">
-                  <dt>Tags</dt>
-                  <dd>
-                    <InlineTagInput
-                      values={project.tags}
-                      onChange={(next) => void saveField("tags", next)}
-                    />
-                  </dd>
-                </dl>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="field-chips">
+                <DField label="Tags">
+                  <RecordCombobox
+                    multi
+                    source={{ kind: "lookup", table: "project_tags" }}
+                    multiValue={project.tags}
+                    onMultiChange={(next) => void saveField("tags", next)}
+                    entityLabel="Tag"
+                    placeholder="Add tag..."
+                  />
+                </DField>
               </div>
             </div>
           </section>

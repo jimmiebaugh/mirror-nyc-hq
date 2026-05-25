@@ -138,7 +138,7 @@ export default function TalentScoutSettings() {
           <div className="space-y-1">
             <div className="label-section">Global Competitor List</div>
             <p className="text-xs text-muted-foreground">
-              Used as the default competitor pool for newly created roles. Hit Enter or Tab to add a tag. Changes here apply to future roles only — existing roles keep their saved competitor list until you edit it on Role Settings.
+              Used as the default competitor pool for newly created roles. Hit Enter or Tab to add a tag. Changes here apply to future roles only. Existing roles keep their saved competitor list until you edit it on Role Settings.
             </p>
           </div>
           <TagInput

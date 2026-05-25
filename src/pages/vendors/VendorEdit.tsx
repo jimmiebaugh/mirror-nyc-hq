@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
-import { MultiTagInput } from "@/components/data/MultiTagInput";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { VendorFilesEditor } from "@/components/data/VendorFilesEditor";
 import { useLookup } from "@/lib/hq/lookups";
@@ -28,10 +28,10 @@ import { toast } from "@/hooks/use-toast";
  * to the Vendor fieldset. Surface 10 was drawn as a unified
  * Organization Edit; per the 2026-05-16 locked decisions split (spec
  * § 0c Q3), this is the Vendors half. Cards: Details (name / category
- * / city / website / capabilities / tags) and Primary Contact (name /
- * email / phone / address) and Internal Rating (always shown). Tags
- * carry the literal 'Internal Partner' string when the vendor is
- * Mirror-internal (locked Q1). Wireframe-v2 redraw deferred to a
+ * / city / website / capabilities), Primary Contact (name / email /
+ * phone / address), and Projects. Capabilities are the visible vendor
+ * tag-like set; the raw tags column stays in the database but is no
+ * longer exposed here. Wireframe-v2 redraw deferred to a
  * future polish pass; see design-system § 11.
  *
  * 5.2 cleanup: Primary Address textarea added below the contact
@@ -55,7 +55,6 @@ type FormState = {
   contact_email: string;
   contact_phone: string;
   primary_address: string;
-  tags: string[];
   preferred: boolean;
   nationwide: boolean;
 };
@@ -72,7 +71,6 @@ const EMPTY: FormState = {
   contact_email: "",
   contact_phone: "",
   primary_address: "",
-  tags: [],
   preferred: false,
   nationwide: false,
 };
@@ -114,7 +112,7 @@ export default function VendorEdit() {
           : supabase
               .from("vendors")
               .select(
-                "name, category_id, subcategory_id, city, capabilities, website_url, general_email, contact_name, contact_email, contact_phone, primary_address, tags, preferred, nationwide",
+                "name, category_id, subcategory_id, city, capabilities, website_url, general_email, contact_name, contact_email, contact_phone, primary_address, preferred, nationwide",
               )
               .eq("id", id)
               .single(),
@@ -160,7 +158,6 @@ export default function VendorEdit() {
         contact_email: string | null;
         contact_phone: string | null;
         primary_address: string | null;
-        tags: string[] | null;
         preferred: boolean | null;
         nationwide: boolean | null;
       };
@@ -176,7 +173,6 @@ export default function VendorEdit() {
         contact_email: row.contact_email ?? "",
         contact_phone: row.contact_phone ?? "",
         primary_address: row.primary_address ?? "",
-        tags: row.tags ?? [],
         preferred: row.preferred ?? false,
         nationwide: row.nationwide ?? false,
       };
@@ -239,7 +235,6 @@ export default function VendorEdit() {
       contact_email: form.contact_email || null,
       contact_phone: form.contact_phone || null,
       primary_address: form.primary_address || null,
-      tags: form.tags,
       preferred: form.preferred,
       nationwide: form.nationwide,
     };
@@ -355,20 +350,20 @@ export default function VendorEdit() {
       </div>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Details</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Details</span>
-          </div>
           <div className="g2">
-            <FormField label="Name" required>
+            <HQFormField label="Name" required>
               <input
                 className={`input ${form.name ? "input--filled" : ""}`}
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="Testrite"
               />
-            </FormField>
-            <FormField label="Category">
+            </HQFormField>
+            <HQFormField label="Category">
               <RecordCombobox
                 source={{ kind: "lookup", table: "vendor_categories" }}
                 value={selectedCategoryName}
@@ -384,8 +379,8 @@ export default function VendorEdit() {
                 }}
                 entityLabel="Category"
               />
-            </FormField>
-            <FormField label="Subcategory">
+            </HQFormField>
+            <HQFormField label="Subcategory">
               <RecordCombobox
                 source={{
                   kind: "lookup",
@@ -404,24 +399,24 @@ export default function VendorEdit() {
                 entityLabel="Subcategory"
                 disabled={!form.category_id}
               />
-            </FormField>
-            <FormField label="City">
+            </HQFormField>
+            <HQFormField label="City">
               <RecordCombobox
                 source={{ kind: "lookup", table: "cities" }}
                 value={form.city || null}
                 onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
                 entityLabel="city"
               />
-            </FormField>
-            <FormField label="Website URL">
+            </HQFormField>
+            <HQFormField label="Website URL">
               <input
                 className={`input ${form.website_url ? "input--filled" : ""}`}
                 value={form.website_url}
                 onChange={(e) => setForm((f) => ({ ...f, website_url: e.target.value }))}
                 placeholder="https://example.com"
               />
-            </FormField>
-            <FormField label="General Email">
+            </HQFormField>
+            <HQFormField label="General Email">
               <input
                 type="email"
                 className={`input ${form.general_email ? "input--filled" : ""}`}
@@ -429,9 +424,9 @@ export default function VendorEdit() {
                 onChange={(e) => setForm((f) => ({ ...f, general_email: e.target.value }))}
                 placeholder="info@example.com"
               />
-            </FormField>
+            </HQFormField>
           </div>
-          <FormField label="Capabilities">
+          <HQFormField label="Capabilities">
             <RecordCombobox
               multi
               source={{ kind: "lookup", table: "vendor_capabilities" }}
@@ -442,19 +437,8 @@ export default function VendorEdit() {
               entityLabel="Capability"
               placeholder="Add capability..."
             />
-          </FormField>
-          <FormField label="Tags">
-            <MultiTagInput
-              options={[]}
-              values={form.tags}
-              onChange={(next) => setForm((f) => ({ ...f, tags: next }))}
-              onAdd={async (name) => ({ id: name, name })}
-              entityLabel="tag"
-              exampleName="Internal Partner"
-              placeholder="Add tag..."
-            />
-          </FormField>
-          <FormField label="Preferred">
+          </HQFormField>
+          <HQFormField label="Preferred">
             <label className="row-c" style={{ fontSize: 13, cursor: "pointer", gap: 8 }}>
               <input
                 type="checkbox"
@@ -463,8 +447,8 @@ export default function VendorEdit() {
               />
               Preferred vendor (shown in the Wiki Preferred Vendors list)
             </label>
-          </FormField>
-          <FormField label="Nationwide">
+          </HQFormField>
+          <HQFormField label="Nationwide">
             <label className="row-c" style={{ fontSize: 13, cursor: "pointer", gap: 8 }}>
               <input
                 type="checkbox"
@@ -473,25 +457,25 @@ export default function VendorEdit() {
               />
               Works nationwide (appears under every city filter)
             </label>
-          </FormField>
+          </HQFormField>
         </div>
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Primary Contact</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Primary Contact</span>
-          </div>
           <div className="g2">
-            <FormField label="Contact Name">
+            <HQFormField label="Contact Name">
               <input
                 className={`input ${form.contact_name ? "input--filled" : ""}`}
                 value={form.contact_name}
                 onChange={(e) => setForm((f) => ({ ...f, contact_name: e.target.value }))}
                 placeholder="Priya Nair"
               />
-            </FormField>
-            <FormField label="Contact Email">
+            </HQFormField>
+            <HQFormField label="Contact Email">
               <input
                 type="email"
                 className={`input ${form.contact_email ? "input--filled" : ""}`}
@@ -499,8 +483,8 @@ export default function VendorEdit() {
                 onChange={(e) => setForm((f) => ({ ...f, contact_email: e.target.value }))}
                 placeholder="priya@example.com"
               />
-            </FormField>
-            <FormField label="Contact Phone">
+            </HQFormField>
+            <HQFormField label="Contact Phone">
               <input
                 className={`input ${form.contact_phone ? "input--filled" : ""}`}
                 value={form.contact_phone}
@@ -510,9 +494,9 @@ export default function VendorEdit() {
                 }
                 placeholder="(212) 555-0000"
               />
-            </FormField>
+            </HQFormField>
           </div>
-          <FormField label="Primary Address">
+          <HQFormField label="Primary Address">
             <textarea
               className={`input textarea ${form.primary_address ? "input--filled" : ""}`}
               value={form.primary_address}
@@ -520,20 +504,20 @@ export default function VendorEdit() {
               placeholder="50 W 34th St, New York NY 10001"
               rows={2}
             />
-          </FormField>
+          </HQFormField>
         </div>
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Projects</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Projects</span>
-          </div>
           <p className="cap" style={{ lineHeight: 1.5 }}>
             Projects this vendor has worked on. Add or remove links here, or
             from the project's edit page.
           </p>
-          <FormField label="Linked Projects">
+          <HQFormField label="Linked Projects">
             <RecordCombobox
               multi
               source={{ kind: "record", loadOptions: loadProjectOptions }}
@@ -542,7 +526,7 @@ export default function VendorEdit() {
               entityLabel="Project"
               placeholder="Add project..."
             />
-          </FormField>
+          </HQFormField>
         </div>
       </section>
 
@@ -601,26 +585,6 @@ export default function VendorEdit() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="field">
-      <label className="label-form">
-        {label}
-        {required ? <span className="req">*</span> : null}
-      </label>
-      {children}
     </div>
   );
 }

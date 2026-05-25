@@ -168,7 +168,7 @@ export default function DeliverablesList({ view }: { view: ViewKind }) {
 
   return (
     <div className="stack-4">
-      <div className="row between" style={{ alignItems: "flex-end" }}>
+      <div className="row between list-head">
         <h1 className="h-page">Deliverables</h1>
         <button
           type="button"
@@ -339,7 +339,7 @@ function DeliverablesByProjectBoard({
         <Link
           to={`/clients/${client.id}`}
           className="tlink"
-          style={{ color: "rgba(190,78,68,.85)", fontSize: 11 }}
+          style={{ color: "hsl(var(--primary-hover))", fontSize: 11 }}
           onClick={(e) => e.stopPropagation()}
         >
           {client.name}
@@ -546,7 +546,7 @@ function DeliverablesGroupedList({
                 <Link
                   to={`/clients/${group.project.client.id}`}
                   className="tlink"
-                  style={{ color: "rgba(190,78,68,.85)", fontSize: 11.5 }}
+                  style={{ color: "hsl(var(--primary-hover))", fontSize: 11.5 }}
                 >
                   {group.project.client.name}
                 </Link>

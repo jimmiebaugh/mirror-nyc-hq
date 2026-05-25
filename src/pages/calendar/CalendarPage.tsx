@@ -393,7 +393,7 @@ export default function CalendarPage() {
       const right = sameMonth
         ? `${we.getDate()}`
         : `${MONTH_LABELS[we.getMonth()]} ${we.getDate()}`;
-      return `${left} – ${right}, ${we.getFullYear()}`;
+      return `${left} to ${right}, ${we.getFullYear()}`;
     }
     return formatMonthYear(activeFocus);
   }, [activeView, activeFocus]);
@@ -409,10 +409,7 @@ export default function CalendarPage() {
       <div className="pagehead">
         <div className="stack-2">
           <div>
-            <div className="eyebrow">HQ</div>
-            <h1 className="h-page" style={{ marginTop: 4 }}>
-              Calendar
-            </h1>
+            <h1 className="h-page">Calendar</h1>
           </div>
           {/* Row beneath the title. Mirrors the calendar grid's column
               structure (1fr 232px / gap 16) so the legend's right edge
@@ -495,7 +492,7 @@ export default function CalendarPage() {
                   <i style={{ background: "hsl(var(--success))" }} /> Live
                 </span>
                 <span>
-                  <i style={{ background: "#B57BF5" }} /> Removal
+                  <i style={{ background: "hsl(var(--purple))" }} /> Removal
                 </span>
                 <span>
                   <i style={{ background: "hsl(var(--warn))" }} /> Deliverable
@@ -582,4 +579,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-

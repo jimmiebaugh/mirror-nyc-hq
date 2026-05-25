@@ -35,13 +35,13 @@ const MONTHS = [
 ];
 
 const BAR_COLOR: Record<TimelineBar["kind"], string> = {
-  install: "#06B6D4",
+  install: "hsl(var(--info))",
   live: "hsl(var(--primary))",
   removal: "hsl(var(--warn))",
 };
 
 const TOKEN_BORDER: Record<StatusToken, string> = {
-  info: "#06B6D4",
+  info: "hsl(var(--info))",
   success: "hsl(var(--success))",
   warn: "hsl(var(--warn))",
   destructive: "hsl(var(--destructive))",

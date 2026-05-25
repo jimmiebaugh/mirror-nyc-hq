@@ -291,7 +291,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
 
   return (
     <div className="stack-4">
-      <div className="row between" style={{ alignItems: "flex-end" }}>
+      <div className="row between list-head">
         <h1 className="h-page">Tasks</h1>
         <button
           type="button"
@@ -339,7 +339,8 @@ export default function TasksList({ view }: { view: ViewKind }) {
           <p>Loading...</p>
         </div>
       ) : view === "list" ? (
-        <DataTable<typeof filtered[number]>
+        <>
+          <DataTable<typeof filtered[number]>
           rows={filtered}
           flat
           sort={filterState.sort ?? null}
@@ -396,25 +397,29 @@ export default function TasksList({ view }: { view: ViewKind }) {
                 r.project ? (
                   <div>
                     {r.project.client ? (
+                      <div>
+                        <Link
+                          to={`/clients/${r.project.client.id}`}
+                          className="sub"
+                          style={{ color: "hsl(var(--primary-hover))", fontSize: 12 }}
+                          state={{ from: fromState }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {r.project.client.name ?? "View client"}
+                        </Link>
+                      </div>
+                    ) : null}
+                    <div>
                       <Link
-                        to={`/clients/${r.project.client.id}`}
-                        className="sub"
-                        style={{ color: "rgba(190,78,68,0.85)", display: "block" }}
+                        to={`/projects/${r.project.id}`}
+                        className="lead"
+                        style={{ fontSize: 13.5 }}
                         state={{ from: fromState }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {r.project.client.name ?? "View client"}
+                        {r.project.name}
                       </Link>
-                    ) : null}
-                    <Link
-                      to={`/projects/${r.project.id}`}
-                      className="lead"
-                      style={{ display: "block" }}
-                      state={{ from: fromState }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {r.project.name}
-                    </Link>
+                    </div>
                   </div>
                 ) : (
                   <span className="subtle">-</span>
@@ -517,7 +522,9 @@ export default function TasksList({ view }: { view: ViewKind }) {
                 ),
             },
           ]}
-        />
+          />
+          <span className="cap">{filtered.length} tasks</span>
+        </>
       ) : view === "board" ? (
         <BoardView<TaskListRow>
           layout="horizontal"

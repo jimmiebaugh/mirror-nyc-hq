@@ -35,9 +35,9 @@ type DetectedLink = { url: string; type?: string };
 // HQ pre-3.5b used emerald-500/400 for T3 — replaced with green-400 to match
 // source's #4ade80 success hue exactly.
 const TIER_META = {
-  1: { label: "Tier 1 — Must-Haves", color: "bg-red-500/10 border-red-500/30 text-red-500" },
-  2: { label: "Tier 2 — Strong Differentiators", color: "bg-amber-500/10 border-amber-500/30 text-amber-500" },
-  3: { label: "Tier 3 — Nice-to-Haves", color: "bg-green-400/10 border-green-400/30 text-green-400" },
+  1: { label: "Tier 1: Must-Haves", color: "bg-destructive/10 border-destructive/30 text-destructive" },
+  2: { label: "Tier 2: Strong Differentiators", color: "bg-warn/10 border-warn/30 text-warn" },
+  3: { label: "Tier 3: Nice-to-Haves", color: "bg-success/10 border-success/30 text-success" },
 } as const;
 
 // Phase 3.7.8.11: RECOMMENDATION_TIER_STYLE removed. The tier pill it
@@ -189,7 +189,7 @@ export default function CandidateDetail() {
         ← Back to {role?.title ?? "role"}
       </Link>
 
-      <header className="flex items-start justify-between gap-6">
+      <header className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0 space-y-2">
           <h1 className="h-page">{cand.name ?? "Unnamed candidate"}</h1>
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -233,20 +233,20 @@ export default function CandidateDetail() {
             button now occupies the full height of the right-column
             stack, matching the visual weight of the controls beside
             it (was h-10 in 3.7.3.6). */}
-        <div className="flex flex-shrink-0 items-stretch gap-1.5">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-shrink-0 sm:items-stretch sm:gap-1.5">
           {/* LEFT: Re-evaluate button, full height. */}
           <Button
             variant="outline"
             onClick={reevaluate}
             disabled={reevaluating}
-            className="h-auto self-stretch w-[160px]"
+            className="h-10 w-full sm:h-auto sm:w-[160px] sm:self-stretch"
           >
             <RefreshCw className={cn("mr-2 h-4 w-4", reevaluating && "animate-spin")} />
             {reevaluating ? "Re-evaluating…" : "Re-evaluate"}
           </Button>
           {/* RIGHT: 2-row stack — pills above, Status dropdown below. */}
-          <div className="flex flex-col items-stretch gap-1.5">
-            <div className="flex items-stretch gap-1.5">
+          <div className="flex w-full flex-col items-stretch gap-1.5 sm:w-auto">
+            <div className="flex flex-wrap items-stretch gap-1.5">
               <ReviewedPill
                 manuallyReviewed={cand.manually_reviewed === true}
                 candidateId={cand.id}
