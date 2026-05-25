@@ -14,12 +14,14 @@ import {
   IconActivity,
   IconSearch,
   IconScout,
+  IconPlus,
   IconWiki,
   IconTeam,
   IconOutlook,
   IconSettings,
 } from "@/components/icons/HQIcons";
 import { RailFooter } from "@/components/shell/RailFooter";
+import { resolveSettingsHref } from "@/lib/shell/resolveSettingsHref";
 
 // Phase 5.2.1 rail amendment (OUTPUTS/phase-5-2-rail-amendment.md):
 // - Single ordered Tools group with per-item adminOnly flag (no second
@@ -35,6 +37,11 @@ type RailItem = {
   count?: number;
   /** Hide for non-admin users when true. */
   adminOnly?: boolean;
+  /** Phase 5.12.12: indent the item one level (for grouped sub-items). */
+  indent?: boolean;
+  /** Phase 5.12.12: force active styling regardless of NavLink's isActive match
+   * (used for VS group rows so all three stay coral throughout /venue-scout/*). */
+  forceActive?: boolean;
 };
 
 // Phase 5.2.3 rail order (locked Q2 of phase-5-2-3-spec.md § 0c): high-
@@ -70,6 +77,18 @@ const TOOL_APP_PRIMARY: RailItem[] = [
   { to: "/activity", label: "Activity Feed", icon: IconActivity },
 ];
 
+// Phase 5.12.12: VS-specific tool-items group rendered when on
+// /venue-scout/*. Replaces the standard Tools group in that context.
+// R7 amendment v1 § 4 → R7 amendment v2 § 4: sidebar label drops the
+// literal `+` prefix (the IconPlus already conveys the affordance);
+// ScoutIndex's page header CTA keeps the `+` text for primary-CTA
+// emphasis.
+const VS_TOOL_ITEMS: RailItem[] = [
+  { to: "/venue-scout", label: "Venue Scout", icon: IconScout },
+  { to: "/venue-scout/overview", label: "New Scout", icon: IconPlus, indent: true },
+  { to: "/venue-scout/settings", label: "Settings", icon: IconSettings, indent: true, adminOnly: true },
+];
+
 function RailLink({ item, onNavigate }: { item: RailItem; onNavigate?: () => void }) {
   const Icon = item.icon;
   return (
@@ -77,7 +96,7 @@ function RailLink({ item, onNavigate }: { item: RailItem; onNavigate?: () => voi
       to={item.to}
       onClick={onNavigate}
       className={({ isActive }) =>
-        `hq-ri ${isActive ? "hq-ri--active" : ""}`
+        `hq-ri ${isActive || item.forceActive ? "hq-ri--active" : ""} ${item.indent ? "hq-ri--indent" : ""}`
       }
     >
       <Icon className="h-4 w-4" />
@@ -86,6 +105,28 @@ function RailLink({ item, onNavigate }: { item: RailItem; onNavigate?: () => voi
         <span className="hq-ri-count">{item.count}</span>
       ) : null}
     </NavLink>
+  );
+}
+
+function BrandHQ({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <Link to="/home" className="hq-brand" aria-label="Mirror HQ home" onClick={onNavigate}>
+      <MirrorMark className="h-[33px] w-[23px] flex-none" />
+      <span className="hq-brand-txt">
+        Mirror <span className="hq-brand-hq">HQ</span>
+      </span>
+    </Link>
+  );
+}
+
+function BrandVS({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <Link to="/venue-scout" className="hq-brand" aria-label="Mirror Venue Scout home" onClick={onNavigate}>
+      <MirrorMark className="h-[33px] w-[23px] flex-none" />
+      <span className="hq-brand-txt">
+        Venue <span className="hq-brand-vs">Scout</span>
+      </span>
+    </Link>
   );
 }
 
@@ -115,6 +156,7 @@ export function LeftRail({
   const { pathname } = useLocation();
   const isToolApp =
     pathname.startsWith("/talent-scout") || pathname.startsWith("/venue-scout");
+  const isVS = pathname.startsWith("/venue-scout");
 
   const primary = isToolApp
     ? TOOL_APP_PRIMARY
@@ -122,22 +164,33 @@ export function LeftRail({
         item.to === "/tasks" ? { ...item, count: tasksOpenCount } : item,
       );
 
-  const tools = TOOLS_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  // Phase 5.12.12: pick the second nav group based on context.
+  // VS context: hide the Tools group, render the VS_TOOL_ITEMS rows
+  // directly under Activity Feed with no group heading; force coral
+  // active styling on all three so they stay highlighted throughout
+  // /venue-scout/*.
+  // HQ / TS context: keep the Tools group (with resolveSettingsHref
+  // applied to the Settings entry so TS routes to /talent-scout/settings).
+  const groupItems: RailItem[] = isVS
+    ? VS_TOOL_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => ({
+        ...item,
+        forceActive: true,
+      }))
+    : TOOLS_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) =>
+        item.label === "Settings"
+          ? { ...item, to: resolveSettingsHref(pathname) }
+          : item,
+      );
 
   return (
     <aside className={`hq-rail ${open ? "hq-rail--open" : ""}`}>
-      <Link to="/home" className="hq-brand" aria-label="Mirror HQ home" onClick={onNavigate}>
-        <MirrorMark className="h-[33px] w-[23px] flex-none" />
-        <span className="hq-brand-txt">
-          Mirror <span className="hq-brand-hq">HQ</span>
-        </span>
-      </Link>
+      {isVS ? <BrandVS onNavigate={onNavigate} /> : <BrandHQ onNavigate={onNavigate} />}
       <nav className="hq-rail-nav">
         {primary.map((item) => (
           <RailLink key={item.to} item={item} onNavigate={onNavigate} />
         ))}
-        <div className="hq-rail-grp">Tools</div>
-        {tools.map((item) => (
+        {!isVS && <div className="hq-rail-grp">Tools</div>}
+        {groupItems.map((item) => (
           <RailLink key={item.to} item={item} onNavigate={onNavigate} />
         ))}
       </nav>

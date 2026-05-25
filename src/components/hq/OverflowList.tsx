@@ -5,7 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { backState } from "@/lib/hq/useBackHref";
+import { backState } from "@/hooks/useReferrerCrumb";
 
 /**
  * Inline hyperlink list with "+N more" overflow popover (Phase 5.6.2

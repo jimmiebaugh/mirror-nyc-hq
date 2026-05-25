@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Loader2, Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { IconArrowLeft, IconLink, IconSlides } from "@/components/icons/HQIcons";
+import { IconLink, IconSlides } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { ContactsCard } from "@/components/hq/ContactsCard";
@@ -11,8 +11,7 @@ import { DField } from "@/components/hq/DField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { formatShortDate } from "@/lib/hq/dates";
 import { loadLatestVenueRates, type VenueRate } from "@/lib/venues/queries";
-import { useBackHref } from "@/lib/hq/useBackHref";
-import { useLookup, getLookupCached } from "@/lib/hq/lookups";
+import { getLookupCached, useCityIdForName, useLookup } from "@/lib/hq/lookups";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,8 +72,11 @@ export default function VenueDetail() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
-  const back = useBackHref({ to: "/venues", label: "Venues" });
   const venueTypesLookup = useLookup("venue_types");
+  // Phase 5.12.9: resolve venue.city -> canonical cities.id so the
+  // neighborhoods picker can parent-scope. Returns null while loading or
+  // when city is blank / not a canonical lookup name.
+  const cityId = useCityIdForName(venue?.city ?? null);
 
   useEffect(() => {
     if (!id) return;
@@ -163,6 +165,28 @@ export default function VenueDetail() {
     if (error) {
       setVenue({ ...venue, [field]: prev });
       throw error;
+    }
+  };
+
+  // Phase 5.12.9: city change clears neighborhood (prior pick may not
+  // exist under the new city). Mirrors VendorDetail.saveCategoryId:
+  // optimistically updates both fields, issues a single PostgREST UPDATE
+  // for atomicity, rolls both back on error.
+  const saveCityName = async (nextCity: string | null) => {
+    if (!venue) return;
+    const prev = { city: venue.city, neighborhood: venue.neighborhood };
+    setVenue({ ...venue, city: nextCity, neighborhood: null });
+    const { error } = await supabase
+      .from("venues")
+      .update({ city: nextCity, neighborhood: null })
+      .eq("id", venue.id);
+    if (error) {
+      setVenue({ ...venue, ...prev });
+      toast({
+        title: "City save failed",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -307,9 +331,7 @@ export default function VenueDetail() {
   return (
     <div className="stack-6">
       <div className="stack-2">
-        <Link to={back.to} className="crumb">
-          <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
-        </Link>
+        {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
         <div className="row between" style={{ alignItems: "flex-end", gap: 24, paddingTop: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow" style={{ paddingTop: 8 }}>Venue</div>
@@ -427,17 +449,25 @@ export default function VenueDetail() {
                   <RecordCombobox
                     source={{ kind: "lookup", table: "cities" }}
                     value={venue.city || null}
-                    onChange={(next) => void saveField("city", next || null)}
+                    onChange={(next) => void saveCityName(next || null)}
                     entityLabel="city"
                     placeholder="Select"
                   />
                 </DField>
                 <DField label="Neighborhood">
-                  <InlineEditText
-                    value={venue.neighborhood}
-                    placeholder="Neighborhood"
-                    renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
-                    onSave={(next) => saveField("neighborhood", next || null)}
+                  <RecordCombobox
+                    source={{
+                      kind: "lookup",
+                      table: "neighborhoods",
+                      parentScopeId: cityId,
+                      parentScopeLabel: venue.city || null,
+                      parentScopeLabelKey: "City",
+                    }}
+                    value={venue.neighborhood || null}
+                    onChange={(next) => void saveField("neighborhood", next || null)}
+                    entityLabel="neighborhood"
+                    placeholder={cityId ? "Select" : "Pick a city first"}
+                    disabled={!cityId}
                   />
                 </DField>
               </div>

@@ -10,13 +10,11 @@
 // persists everything via toUpdate and navigates to /brief/venue. current_step
 // is NOT touched here -- only Step 3's Confirm & Continue advances it.
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { DropZone } from "@/components/ui/DropZone";
 import {
@@ -32,12 +30,11 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
-import {
-  ScoutSettingsLink,
-  ScoutStepThroughNav,
-} from "@/components/venue-scout/ScoutChrome";
+import { ScoutPageHeader } from "@/components/venue-scout/ScoutPageHeader";
+import { VSPageField } from "@/components/venue-scout/VSPageField";
 import { Stepper } from "@/components/venue-scout/Stepper";
 import { TagInput } from "@/components/venue-scout/TagInput";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
 import {
   appendUploadedFile,
   applyParsedFields,
@@ -47,6 +44,7 @@ import {
   type ParsedBriefFields,
 } from "@/lib/venue-scout/briefForm";
 import { briefIntake } from "@/lib/venue-scout/briefIntakeStore";
+import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
 type VsScoutRow = Database["public"]["Tables"]["vs_scouts"]["Row"];
@@ -245,9 +243,9 @@ export default function BriefEvent() {
     }
   };
 
-  const onApplyParsed = () => {
+  const onApplyParsed = (filteredParsed: ParsedBriefFields) => {
     if (uploadState.kind !== "parsed") return;
-    const merged = applyParsedFields(form, uploadState.parsed);
+    const merged = applyParsedFields(form, filteredParsed);
     const withFile = appendUploadedFile(merged, uploadState.storage_path);
     applyForm(withFile);
     setUploadState({ kind: "idle" });
@@ -268,234 +266,235 @@ export default function BriefEvent() {
         : String(form.activations_count);
 
   // ------------------------------- Render -------------------------------
+  // Phase 5.12.14.3 Round 4 § 7.A: outer drops `mx-auto max-w-3xl` and goes
+  // full-width inside the AppShell chrome. `stack-6` (24px gap) replaces the
+  // legacy `space-y-6` so vertical rhythm matches BriefReport.
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-24">
-      <Link to="/venue-scout" className="crumb">
-        ← Back to Venue Scout
-      </Link>
-      <header className="flex items-end justify-between gap-5">
-        <div className="space-y-2">
-          <h1 className="h-page">Event Details</h1>
-          <p className="text-sm text-muted-foreground">
-            Drop a brief PDF and we'll pre-fill what we find. Edit anything
-            before continuing.
-          </p>
+    <div className="stack-6 pb-32">
+      <header className="space-y-2">
+        {/* R7 amendment v3 § 2: BriefEvent migrated to ScoutPageHeader
+            matching BriefVenue (R7 amendment v2 § 5 producer-call). The
+            intake Stepper (Event vs Venue intake sub-step indicator)
+            stays inline with the Brief title below; it's a separate
+            concern from the multi-page ScoutPhaseBreadcrumb. */}
+        <ScoutPageHeader scoutId={scout.id} scout={scout} />
+        {/* Item 5 revision round 2: intake Stepper inline with Brief title.
+            No coral border / connector. The "→" arrow on the title cues
+            forward motion into the sub-step. Stepper renders informational
+            (smaller, no hover) — see Stepper.tsx for treatment. */}
+        <div className="flex items-center gap-5">
+          <h1 className="h-page">Brief →</h1>
+          <Stepper active={1} />
         </div>
-        <ScoutSettingsLink scoutId={scout.id} />
       </header>
-      <ScoutStepThroughNav scoutId={scout.id} scout={scout} />
-      <Stepper active={1} />
 
       {isArchived && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <div className="rounded-md border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
           This scout is archived. Restore it from the Venue Scout index to edit the brief.
         </div>
       )}
 
-      <Card className="bg-surface-alt">
-        <CardContent className="space-y-8 p-8">
-          {/* Upload affordance: hidden when archived (producer can't save the
-              result anyway, so burning an Anthropic call + storage write makes
-              no sense). */}
+      {/* Phase 5.12.14.3 Round 4 amendment: VS card-canon. Outer "Event" card
+          hosts two nested cards (Upload Brief + Details). Sub-section eyebrows
+          + section wrappers retired; .card-headbar + .h-card chrome replaces
+          them. Vibe + Aesthetic migrated to BriefVenue Row 4 (state shape
+          unchanged -- brief_data is flat jsonb, so only the JSX moves). */}
+      <section className="card">
+        <div className="card-headbar">
+          <h2 className="h-card">Event</h2>
+        </div>
+        <div className="card-pad space-y-6">
+
+          {/* Upload Brief (nested card; hidden when archived because the
+              parser write + Anthropic call would be wasted). */}
           {!isArchived && (
-            <section className="space-y-3">
-              <div className="space-y-1">
-                <div className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
-                  Upload brief
+            <section className="card">
+              <div className="card-headbar">
+                <div className="flex items-baseline gap-2">
+                  <h3 className="h-card">Upload Brief</h3>
+                  <span className="text-xs text-muted-foreground">
+                    · Drop a PDF and we'll pre-fill the form
+                  </span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Drop a PDF and we'll pre-fill the form. You can edit anything before saving.
-                </p>
               </div>
+              <div className="card-pad space-y-3">
+                {uploadState.kind === "idle" && (
+                  <DropZone
+                    accept="application/pdf"
+                    maxSizeMb={MAX_PDF_SIZE_MB}
+                    hint={`PDF up to ${MAX_PDF_SIZE_MB} MB`}
+                    files={[]}
+                    onAdd={(files) => void handleDropFiles(files)}
+                    onRemove={() => {
+                      /* idle state has no files; noop */
+                    }}
+                  />
+                )}
 
-              {uploadState.kind === "idle" && (
-                <DropZone
-                  accept="application/pdf"
-                  maxSizeMb={MAX_PDF_SIZE_MB}
-                  hint={`PDF up to ${MAX_PDF_SIZE_MB} MB`}
-                  files={[]}
-                  onAdd={(files) => void handleDropFiles(files)}
-                  onRemove={() => {
-                    /* idle state has no files; noop */
-                  }}
-                />
-              )}
+                {(uploadState.kind === "uploading" || uploadState.kind === "parsing") && (
+                  <div className="flex items-center gap-3 rounded-md border border-border bg-input px-4 py-3 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-foreground">
+                      {uploadState.kind === "uploading" ? "Uploading" : "Reading the brief"}…
+                    </span>
+                    <span className="truncate font-mono text-xs text-muted-foreground">
+                      {uploadState.fileName}
+                    </span>
+                  </div>
+                )}
 
-              {(uploadState.kind === "uploading" || uploadState.kind === "parsing") && (
-                <div className="flex items-center gap-3 rounded-md border border-border bg-input px-4 py-3 text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-foreground">
-                    {uploadState.kind === "uploading" ? "Uploading" : "Reading the brief"}…
-                  </span>
-                  <span className="truncate font-mono text-xs text-muted-foreground">
-                    {uploadState.fileName}
-                  </span>
-                </div>
-              )}
+                {uploadState.kind === "parsed" && (
+                  <ParsedPreview
+                    fileName={uploadState.fileName}
+                    parsed={uploadState.parsed}
+                    onApply={onApplyParsed}
+                    onDiscard={onDiscardParsed}
+                  />
+                )}
 
-              {uploadState.kind === "parsed" && (
-                <ParsedPreview
-                  fileName={uploadState.fileName}
-                  parsed={uploadState.parsed}
-                  onApply={onApplyParsed}
-                  onDiscard={onDiscardParsed}
-                />
-              )}
-
-              {uploadState.kind === "error" && (
-                <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                  <span className="min-w-0 truncate">{uploadState.message}</span>
-                  <button
-                    type="button"
-                    onClick={onRetryUpload}
-                    className="shrink-0 font-mono uppercase tracking-wider text-primary hover:underline"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
+                {uploadState.kind === "error" && (
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    <span className="min-w-0 truncate">{uploadState.message}</span>
+                    <button
+                      type="button"
+                      onClick={onRetryUpload}
+                      className="shrink-0 font-mono uppercase tracking-wider text-primary hover:underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+              </div>
             </section>
           )}
 
-          {/* ---- Project ---- */}
-          <section className="space-y-4">
-            <div className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
-              Project
+          {/* Details (nested card; 3 grid rows). */}
+          <section className="card">
+            <div className="card-headbar">
+              <h3 className="h-card">Details</h3>
             </div>
-            <Field label="Client name" required>
-              <Input
-                value={form.client_name}
-                onChange={(e) => update("client_name", e.target.value)}
-                placeholder="e.g. Hennessy"
-                disabled={isArchived}
-              />
-            </Field>
-            <Field label="Event name" required>
-              <Input
-                value={form.event_name}
-                onChange={(e) => update("event_name", e.target.value)}
-                placeholder="e.g. Hennessy V.S Launch"
-                disabled={isArchived}
-              />
-            </Field>
-          </section>
-
-          {/* ---- Logistics ---- */}
-          <section className="space-y-4">
-            <div className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
-              Logistics
-            </div>
-            <Field label="Live dates">
-              <Input
-                value={form.live_dates}
-                onChange={(e) => update("live_dates", e.target.value)}
-                placeholder="e.g. October 15-17, 2026"
-                disabled={isArchived}
-              />
-            </Field>
-            <Field label="Install dates">
-              <Input
-                value={form.install_dates}
-                onChange={(e) => update("install_dates", e.target.value)}
-                placeholder="e.g. October 13-14, 2026"
-                disabled={isArchived}
-              />
-            </Field>
-            <Field label="Strike dates">
-              <Input
-                value={form.strike_dates}
-                onChange={(e) => update("strike_dates", e.target.value)}
-                placeholder="e.g. October 18, 2026"
-                disabled={isArchived}
-              />
-            </Field>
-          </section>
-
-          {/* ---- Budget + Activations ---- */}
-          <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <Field label="Budget">
-              <Input
-                value={form.budget_text}
-                onChange={(e) => update("budget_text", e.target.value)}
-                placeholder="e.g. $50,000"
-                disabled={isArchived}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Stored as a number. Format with $ / commas as you like.
-              </p>
-            </Field>
-            <Field label="Number of activations / spaces">
-              <div className="flex items-center gap-4 pt-2">
-                <Slider
-                  value={[activationsPos]}
-                  min={0}
-                  max={10}
-                  step={1}
-                  onValueChange={([v]) =>
-                    update("activations_count", v === 0 ? null : v)
-                  }
-                  disabled={isArchived}
-                  className="flex-1"
-                />
-                <span className="w-12 shrink-0 text-right font-mono text-sm font-bold text-foreground">
-                  {activationsLabel}
-                </span>
+            <div className="card-pad space-y-6">
+              {/* Row 1: Client Name | Event Name */}
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <VSPageField label="Client Name" required>
+                  <Input
+                    value={form.client_name}
+                    onChange={(e) => update("client_name", e.target.value)}
+                    placeholder="e.g. Hennessy"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
+                <VSPageField label="Event Name" required>
+                  <Input
+                    value={form.event_name}
+                    onChange={(e) => update("event_name", e.target.value)}
+                    placeholder="e.g. Hennessy V.S Launch"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Slide to the bottom for TBD.
-              </p>
-            </Field>
+
+              {/* Row 2: Live Date(s) | Budget | # of Spaces */}
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <VSPageField label="Live Date(s)">
+                  <DateRangePicker
+                    value={form.live_dates}
+                    onChange={(v) => update("live_dates", v)}
+                    placeholder="Select live dates"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
+                <VSPageField label="Budget">
+                  <Input
+                    value={form.budget_text}
+                    onChange={(e) => {
+                      // R6 § D.2: auto-format as `$X,XXX` (no decimals)
+                      // on every keystroke. Strip non-digits, reformat with
+                      // en-US thousands separator. Empty input passes through
+                      // as empty so the field can clear. Cursor may jump to
+                      // end mid-edit; tolerated for now (flag for v2 if
+                      // smoke catches it).
+                      const digits = e.target.value.replace(/[^0-9]/g, "");
+                      if (!digits) {
+                        update("budget_text", "");
+                        return;
+                      }
+                      const n = parseInt(digits, 10);
+                      update(
+                        "budget_text",
+                        Number.isFinite(n)
+                          ? `$${n.toLocaleString("en-US")}`
+                          : "",
+                      );
+                    }}
+                    placeholder="$0"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
+                <VSPageField
+                  label={
+                    <span className="flex items-baseline justify-between">
+                      <span># of Spaces</span>
+                      <span className="font-mono text-xs normal-case tracking-normal text-muted-foreground">
+                        · {activationsLabel}
+                      </span>
+                    </span>
+                  }
+                >
+                  {/* R4 amendment v3 § 3: flex h-10 items-center aligns the
+                      slider thumb with the vertical centers of the other Row 2
+                      controls (DateRangePicker + Budget Input ~40px). `pt-2`
+                      retired; `w-full` on the Slider preserves full-width. */}
+                  <div className="flex h-10 items-center">
+                    <Slider
+                      value={[activationsPos]}
+                      min={0}
+                      max={10}
+                      step={1}
+                      onValueChange={([v]) =>
+                        update("activations_count", v === 0 ? null : v)
+                      }
+                      disabled={isArchived}
+                      className="w-full"
+                    />
+                  </div>
+                </VSPageField>
+              </div>
+
+              {/* Row 3: Event Objectives | Target Audience */}
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <VSPageField label="Event Objectives">
+                  <TagInput
+                    value={form.objectives}
+                    onChange={(v) => update("objectives", v)}
+                    placeholder="e.g. Brand awareness, then Enter"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
+                <VSPageField label="Target Audience">
+                  <TagInput
+                    value={form.target_audience}
+                    onChange={(v) => update("target_audience", v)}
+                    placeholder="e.g. Runners, Basketball Fans, then Enter"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
+              </div>
+            </div>
           </section>
 
-          {/* ---- Objectives ---- */}
-          <section className="space-y-4">
-            <Field label="Objectives">
-              <TagInput
-                value={form.objectives}
-                onChange={(v) => update("objectives", v)}
-                placeholder="e.g. Brand awareness, then Enter"
-                disabled={isArchived}
-              />
-            </Field>
-          </section>
-
-          {/* ---- Target Audience ---- */}
-          <section className="space-y-4">
-            <Field label="Target audience">
-              <Textarea
-                value={form.target_audience}
-                onChange={(e) => update("target_audience", e.target.value)}
-                rows={4}
-                placeholder="Who the activation is for: demographics, mindset, the people you want in the room."
-                disabled={isArchived}
-              />
-            </Field>
-          </section>
-
-          {/* ---- Vibe / Aesthetic ---- */}
-          <section className="space-y-4">
-            <Field label="Target venue vibe / aesthetic">
-              <Textarea
-                value={form.vibe_aesthetic}
-                onChange={(e) => update("vibe_aesthetic", e.target.value)}
-                rows={4}
-                placeholder="The look and feel the venue should carry: raw and industrial, polished, intimate, etc."
-                disabled={isArchived}
-              />
-            </Field>
-          </section>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* ---- Sticky footer ---- */}
-      <div className="sticky bottom-0 z-10 -mx-6 mt-6 border-t-2 border-primary/40 bg-background/90 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+      <div className="actionbar">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
           <Button variant="ghost" onClick={requestCancel}>
             ← Cancel
           </Button>
           <div className="flex items-center gap-3">
             {dirty && (
-              <span className="text-xs font-mono uppercase tracking-wider text-amber-400">
+              <span className="text-xs font-mono uppercase tracking-wider text-warn">
                 Unsaved changes
               </span>
             )}
@@ -538,8 +537,28 @@ export default function BriefEvent() {
 // ---------------------------------------------------------------------------
 // Inline ParsedPreview -- read-only display of the fields vs-parse-brief
 // returned, with Apply / Discard actions. Lifted from the old Brief.tsx and
-// extended to surface the Phase 4 Revision parsed fields.
+// extended to surface the Phase 4 Revision parsed fields. Phase 5.12.13.6:
+// each row is opt-out via a per-row checkbox; the parent receives only the
+// keys the producer left checked. Phase 5.12.13.7: live_dates can arrive as
+// a multi-option array (multi-city briefs, multi-date offers); that row
+// renders as an inline radio group with the first option pre-selected and
+// writes the chosen string into the form via the singular key. (Install /
+// strike dates retired in 5.12.14.3; only live_dates carries multi-option.)
 // ---------------------------------------------------------------------------
+type SingleRow = {
+  kind: "single";
+  key: keyof ParsedBriefFields;
+  label: string;
+  value: string;
+};
+type OptionsRow = {
+  kind: "options";
+  key: "live_dates";
+  label: string;
+  options: string[];
+};
+type ParsedRow = SingleRow | OptionsRow;
+
 function ParsedPreview({
   fileName,
   parsed,
@@ -548,25 +567,61 @@ function ParsedPreview({
 }: {
   fileName: string;
   parsed: ParsedBriefFields;
-  onApply: () => void;
+  onApply: (filteredParsed: ParsedBriefFields) => void;
   onDiscard: () => void;
 }) {
-  const rows: { label: string; value: string }[] = [];
-  const pushStr = (label: string, v: string | null | undefined) => {
-    if (v && v.trim()) rows.push({ label, value: v.trim() });
+  const rows: ParsedRow[] = [];
+  const pushStr = (
+    key: keyof ParsedBriefFields,
+    label: string,
+    v: string | null | undefined,
+  ) => {
+    if (v && v.trim()) rows.push({ kind: "single", key, label, value: v.trim() });
   };
-  const pushArr = (label: string, v: string[] | null | undefined) => {
-    if (Array.isArray(v) && v.length > 0) rows.push({ label, value: v.join(", ") });
+  const pushArr = (
+    key: keyof ParsedBriefFields,
+    label: string,
+    v: string[] | null | undefined,
+  ) => {
+    if (Array.isArray(v) && v.length > 0) {
+      rows.push({ kind: "single", key, label, value: v.join(", ") });
+    }
+  };
+  // Date row builder: multi-option array (≥2 distinct items) renders as a
+  // radio group; otherwise falls back to the singular string. The server-side
+  // sanitizer already collapses a one-item options array into the singular
+  // field, but defending against a future schema shift or a hand-built
+  // request is cheap.
+  const pushDate = (
+    key: "live_dates",
+    label: string,
+    single: string | null | undefined,
+    options: string[] | null | undefined,
+  ) => {
+    const cleaned: string[] = [];
+    if (Array.isArray(options)) {
+      for (const o of options) {
+        if (typeof o !== "string") continue;
+        const t = o.trim();
+        if (t && !cleaned.includes(t)) cleaned.push(t);
+      }
+    }
+    if (cleaned.length >= 2) {
+      rows.push({ kind: "options", key, label, options: cleaned });
+      return;
+    }
+    const fallback = single?.trim() || cleaned[0] || "";
+    if (fallback) rows.push({ kind: "single", key, label, value: fallback });
   };
 
-  pushStr("Client name", parsed.client_name);
-  pushStr("Event name", parsed.event_name);
-  pushStr("Live dates", parsed.live_dates);
-  pushStr("Install dates", parsed.install_dates);
-  pushStr("Strike dates", parsed.strike_dates);
-  pushStr("City", parsed.city);
+  pushStr("client_name", "Client name", parsed.client_name);
+  pushStr("event_name", "Event name", parsed.event_name);
+  pushDate("live_dates", "Live dates", parsed.live_dates, parsed.live_dates_options);
+  pushStr("city", "City", parsed.city);
   if (typeof parsed.budget === "number" && Number.isFinite(parsed.budget)) {
     rows.push({
+      kind: "single",
+      key: "budget",
       label: "Budget",
       value: `$${parsed.budget.toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
     });
@@ -576,6 +631,8 @@ function ParsedPreview({
     Number.isFinite(parsed.expected_guest_count)
   ) {
     rows.push({
+      kind: "single",
+      key: "expected_guest_count",
       label: "Expected guest count",
       value: String(Math.round(parsed.expected_guest_count)),
     });
@@ -585,17 +642,76 @@ function ParsedPreview({
     Number.isFinite(parsed.activations_count)
   ) {
     rows.push({
+      kind: "single",
+      key: "activations_count",
       label: "Activations / spaces",
       value: String(Math.round(parsed.activations_count)),
     });
   }
-  pushArr("Objectives", parsed.objectives);
-  pushStr("Target audience", parsed.target_audience);
-  pushStr("Vibe / aesthetic", parsed.vibe_aesthetic);
-  pushArr("Target neighborhoods", parsed.target_neighborhoods);
-  pushArr("Venue types", parsed.venue_types);
-  pushArr("Ideal features", parsed.ideal_features);
-  pushStr("Event overview", parsed.event_overview);
+  pushArr("objectives", "Objectives", parsed.objectives);
+  pushArr("target_audience", "Target audience", parsed.target_audience);
+  // R6 § M.12: vibe_aesthetic state lives on the BriefVenue page now, but
+  // the parser still extracts it from the brief PDF on the BriefEvent
+  // upload step. Surface a small inline indicator so producers know where
+  // the field will render after Apply (the value still lands on the same
+  // form key; only the visual home of the field is on a different page).
+  pushArr(
+    "vibe_aesthetic",
+    "Vibe / aesthetic (→ shows on Venue page)",
+    parsed.vibe_aesthetic,
+  );
+  pushArr("target_neighborhoods", "Target neighborhoods", parsed.target_neighborhoods);
+  pushArr("venue_types", "Venue types", parsed.venue_types);
+  pushArr("ideal_features", "Ideal features", parsed.ideal_features);
+  // event_overview is intentionally NOT surfaced in the preview card: it's
+  // generated downstream by vs-generate-brief-overview (Submit Brief step)
+  // and editable inline there. Producers see a single source of truth for
+  // the overview at the point they're reviewing it, not duplicated here.
+
+  // Default-checked: every parsed row starts selected. The parsed prop is
+  // stable across re-renders (ParsedPreview unmounts on any uploadState
+  // transition away from "parsed"), so the lazy initializer captures the full
+  // row set once and toggles drive state thereafter.
+  const [selected, setSelected] = useState<Set<keyof ParsedBriefFields>>(
+    () => new Set(rows.map((r) => r.key)),
+  );
+
+  // Phase 5.12.13.7: for "options" rows the chosen string lives here. First
+  // option pre-selected; producer can flip between alternatives, and the
+  // selected value flows back through filtered[singleKey] on Apply.
+  const [optionPick, setOptionPick] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const r of rows) {
+      if (r.kind === "options") init[r.key] = r.options[0];
+    }
+    return init;
+  });
+
+  const toggle = (key: keyof ParsedBriefFields) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelected(new Set(rows.map((r) => r.key)));
+  const selectNone = () => setSelected(new Set());
+
+  const handleApply = () => {
+    const filtered: ParsedBriefFields = {};
+    for (const r of rows) {
+      if (!selected.has(r.key)) continue;
+      if (r.kind === "options") {
+        const chosen = optionPick[r.key];
+        if (chosen) (filtered as Record<string, unknown>)[r.key] = chosen;
+      } else {
+        (filtered as Record<string, unknown>)[r.key] = parsed[r.key];
+      }
+    }
+    onApply(filtered);
+  };
 
   return (
     <div className="space-y-3 rounded-md border border-primary/30 bg-primary/5 px-4 py-4">
@@ -606,6 +722,25 @@ function ParsedPreview({
           </div>
           <p className="truncate font-mono text-xs text-muted-foreground">{fileName}</p>
         </div>
+        {rows.length > 0 && (
+          <div className="flex shrink-0 items-center gap-2 text-[11px] font-mono uppercase tracking-wider">
+            <button
+              type="button"
+              onClick={selectAll}
+              className="text-primary hover:underline"
+            >
+              Select all
+            </button>
+            <span className="text-muted-foreground">·</span>
+            <button
+              type="button"
+              onClick={selectNone}
+              className="text-primary hover:underline"
+            >
+              Select none
+            </button>
+          </div>
+        )}
       </div>
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -613,46 +748,94 @@ function ParsedPreview({
         </p>
       ) : (
         <dl className="space-y-2">
-          {rows.map((r) => (
-            <div key={r.label} className="grid grid-cols-[160px_1fr] gap-3 text-sm">
-              <dt className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                {r.label}
-              </dt>
-              <dd className="whitespace-pre-wrap text-foreground">{r.value}</dd>
-            </div>
-          ))}
+          {rows.map((r) => {
+            const isChecked = selected.has(r.key);
+            return (
+              <div
+                key={r.key}
+                className="grid grid-cols-[24px_160px_1fr] items-start gap-3 text-sm"
+              >
+                <div className="pt-0.5">
+                  <Checkbox
+                    checked={isChecked}
+                    onCheckedChange={() => toggle(r.key)}
+                    aria-label={`Apply ${r.label}`}
+                  />
+                </div>
+                <dt
+                  className={cn(
+                    "font-mono text-xs uppercase tracking-wider",
+                    isChecked ? "text-muted-foreground" : "text-muted-foreground/50",
+                  )}
+                >
+                  {r.label}
+                </dt>
+                <dd>
+                  {r.kind === "single" ? (
+                    <span
+                      className={cn(
+                        "whitespace-pre-wrap",
+                        isChecked
+                          ? "text-foreground"
+                          : "text-muted-foreground/60 line-through",
+                      )}
+                    >
+                      {r.value}
+                    </span>
+                  ) : (
+                    <div
+                      role="radiogroup"
+                      aria-label={r.label}
+                      className="flex flex-col gap-1"
+                    >
+                      {r.options.map((opt) => (
+                        <label
+                          key={opt}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center gap-2",
+                            !isChecked && "cursor-not-allowed",
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name={`parsed-${r.key}`}
+                            value={opt}
+                            checked={optionPick[r.key] === opt}
+                            disabled={!isChecked}
+                            onChange={() =>
+                              setOptionPick((prev) => ({ ...prev, [r.key]: opt }))
+                            }
+                            className="h-3.5 w-3.5 shrink-0 accent-primary"
+                          />
+                          <span
+                            className={cn(
+                              "whitespace-pre-wrap",
+                              isChecked
+                                ? "text-foreground"
+                                : "text-muted-foreground/60 line-through",
+                            )}
+                          >
+                            {opt}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </dd>
+              </div>
+            );
+          })}
         </dl>
       )}
       <div className="flex items-center justify-end gap-2 pt-2">
         <Button variant="ghost" size="sm" onClick={onDiscard}>
           Discard
         </Button>
-        <Button size="sm" onClick={onApply} disabled={rows.length === 0}>
-          Apply
+        <Button size="sm" onClick={handleApply} disabled={selected.size === 0}>
+          Apply ({selected.size} selected)
         </Button>
       </div>
     </div>
   );
 }
 
-// Inline Field -- label + content wrapper. 13px font-mono text-primary label,
-// matches the old Brief.tsx / NewScout.tsx page-form Field shape.
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label className="text-xs font-mono font-bold uppercase tracking-wider text-primary">
-        {label}
-        {required && <span className="ml-1 text-primary">*</span>}
-      </Label>
-      {children}
-    </div>
-  );
-}

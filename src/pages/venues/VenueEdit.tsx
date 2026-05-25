@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
-import { useLookup } from "@/lib/hq/lookups";
+import { useCityIdForName, useLookup } from "@/lib/hq/lookups";
 import { formatShortDate } from "@/lib/hq/dates";
 import { loadLatestVenueRates, type VenueRate } from "@/lib/venues/queries";
 
@@ -106,6 +106,11 @@ export default function VenueEdit() {
   const [newRateAmount, setNewRateAmount] = useState("");
   const [newRateDate, setNewRateDate] = useState(new Date().toISOString().slice(0, 10));
   const venueTypes = useLookup("venue_types");
+  // Phase 5.12.9: resolve form.city -> canonical cities.id so the
+  // neighborhoods picker can parent-scope. Returns null while loading or
+  // when city is blank / not a canonical lookup name; picker stays
+  // disabled until a real city is chosen.
+  const cityId = useCityIdForName(form?.city ?? null);
 
   useEffect(() => {
     let active = true;
@@ -454,16 +459,28 @@ export default function VenueEdit() {
               <RecordCombobox
                 source={{ kind: "lookup", table: "cities" }}
                 value={form.city || null}
-                onChange={(v) => setForm((f) => ({ ...f, city: v ?? "" }))}
+                onChange={(v) =>
+                  // Phase 5.12.9: city change clears neighborhood
+                  // (prior pick may not exist under the new city).
+                  setForm((f) => ({ ...f, city: v ?? "", neighborhood: "" }))
+                }
                 entityLabel="city"
               />
             </HQFormField>
             <HQFormField label="Neighborhood">
-              <input
-                className={`input ${form.neighborhood ? "input--filled" : ""}`}
-                value={form.neighborhood}
-                onChange={(e) => setForm((f) => ({ ...f, neighborhood: e.target.value }))}
-                placeholder="Chelsea"
+              <RecordCombobox
+                source={{
+                  kind: "lookup",
+                  table: "neighborhoods",
+                  parentScopeId: cityId,
+                  parentScopeLabel: form.city || null,
+                  parentScopeLabelKey: "City",
+                }}
+                value={form.neighborhood || null}
+                onChange={(v) => setForm((f) => ({ ...f, neighborhood: v ?? "" }))}
+                entityLabel="neighborhood"
+                placeholder={cityId ? "Select" : "Pick a city first"}
+                disabled={!cityId}
               />
             </HQFormField>
           </div>

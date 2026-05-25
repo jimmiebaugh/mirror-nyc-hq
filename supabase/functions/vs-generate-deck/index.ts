@@ -42,6 +42,18 @@
 // template had 5. Per-venue templates therefore live at slides 7 + 8 in
 // Mirror's template instead of slides 6 + 7.
 //
+// Phase 5.12.0: gains an HQ Venues push at the top of `generateWork()`,
+// before any Slides API call. The push runs the name-with-cross-field /
+// address / website dedupe ladder against existing HQ `venues`, INSERTs
+// new rows for non-matches (carrying the producer-edited venue_overview
+// into `venues.about_venue`), UPDATEs `about_venue` on matched rows only
+// when the existing value is blank (producer-edited paragraphs are
+// preserved), and writes `linked_venue_id` on every candidate. Replaces
+// the retired `vs_candidate_venues_shortlist_sync` trigger. Push failures
+// fail the deck run via the new HQ_PUSH_FAILED code so the producer sees
+// a meaningful error and can retry; `venue_venue_types` join failures are
+// decorative and warn-and-continue.
+//
 // Memory rules in force:
 //   - feedback_port_fidelity: match VS Pro layout/data exactly except for
 //     the locked deltas above. The slide-population code stays 1:1 with VS Pro.
@@ -50,6 +62,12 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { getGoogleAccessToken } from "../_shared/googleServiceAccount.ts";
+import {
+  getVenueTypesCanonicalSet,
+  sanitizeMultiAgainst,
+  type VenueTypesCanonical,
+} from "../_shared/venueTypes.ts";
+import { findVenueDedupeMatch } from "../_shared/venueDedupe.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,12 +80,27 @@ type ErrCode =
   | "TEMPLATE_COPY_FAILED"
   | "SLIDES_API_FAILED"
   | "NO_VENUES_INCLUDED"
+  | "HQ_PUSH_FAILED"
   | "UNKNOWN";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Skip-the-kickoff window. Matches 4.5 / 4.7.2.
-const IN_FLIGHT_GRACE_MS = 90_000;
+// Skip-the-kickoff window. MUST exceed WORK_TIMEOUT_MS so a refresh-during-
+// in-flight invocation can't reacquire the kickoff while the first run is
+// still mutating state.
+//
+// Phase 5.12.4.2 bump 90_000 -> 240_000 (Codex adversarial review round 2,
+// finding 1). Pre-fix: grace 90s + work 180s = a 90s window where the
+// kickoff RPC's grace check expired BUT the first work() invocation was
+// still mid-Slides-API, so a producer refresh at 100s would acquire a
+// fresh kickoff and start a SECOND deck run, re-opening the duplicate-HQ-
+// venue race the 5.12.4.1 kickoff RPC was meant to close. 240s = 180s
+// work ceiling + 60s buffer for the failWithCode UPDATE to land before
+// any refresh-triggered reacquisition can proceed. The producer's
+// explicit Re-Generate path still works without delay because it goes
+// through `reset_scout_for_deck_regenerate` which atomically clears the
+// timestamp.
+const IN_FLIGHT_GRACE_MS = 240_000;
 
 // Hard ceiling on Drive + Slides work. Typical runs are 1-2 minutes
 // (template copy + per-venue duplicates + per-venue token replacements +
@@ -226,6 +259,335 @@ function findTextElementsByContent(
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 5.12.0 HQ Venues push helpers.
+//
+// The retired `vs_candidate_venues_shortlist_sync` trigger matched HQ venues
+// by `website_url` first, then by `LOWER(TRIM(name))+LOWER(TRIM(neighborhood))`.
+// Phase 5.12.0 ladder is name-first (flexible normalization) with a
+// cross-field conflict check on address/city, then address, then website.
+// Name-first prioritizes the human-meaningful identifier; the cross-field
+// check on the name step is what makes flexible matching safe across cities
+// (a "The Plaza" name match between NYC and LA loses to the address or city
+// conflict). The recipe trades typo-tolerance for explainability: it catches
+// case / articles / suffixes / punctuation / "&" vs "and" / diacritics, but
+// not single-character typos. A typo'd VS candidate falls through to address
+// or website match, and absent both, lands as a new HQ venue. The cost of an
+// occasional duplicate is low (admin merges manually); the cost of a
+// false-positive merge is high (silently overwriting the wrong venue's link).
+// Errs toward false-negatives.
+//
+// Phase 5.12.1: helpers extracted to `_shared/venueDedupe.ts` (second consumer
+// is `vs-research-venues` Phase B cross-rail dedupe). `findVenueDedupeMatch`
+// runs the full ladder in one call; this file imports it and the normalizers
+// it needs locally (address + website for the post-INSERT pool push, below).
+
+// HQ venue rows kept in memory for the dedupe scan. About-venue is read so
+// the write-when-blank rule can compare against the existing string;
+// newly-inserted rows are pushed back into the pool so a second VS candidate
+// in the same batch can match against the just-created venue.
+//
+// Phase 5.12.13.1 amendment: features + total_sq_ft + capacity + website_url
+// also read here so the matched-path UPDATE can extend the about_venue
+// write-when-blank posture to these four canonical fields. The pool-side
+// state is updated in-loop so a second candidate in the same batch
+// matching against the same HQ row sees the most-recent value.
+type HqVenueRow = {
+  id: string;
+  name: string;
+  address: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  website_url: string | null;
+  about_venue: string | null;
+  features: string[] | null;
+  total_sq_ft: number | null;
+  capacity: number | null;
+};
+
+// Sequential HQ Venues push. Loops the pitched + include_in_deck candidate
+// set, runs the name -> address -> website cascade against an in-memory pool
+// of every HQ venue, INSERTs new rows for non-matches (carrying the
+// producer-edited venue_overview into `venues.about_venue`), UPDATEs
+// `about_venue` on matched rows only when the existing value is blank, and
+// writes `linked_venue_id` on every candidate. Returns `{ failedVenueId,
+// error }`; a non-null `failedVenueId` means the caller should fail the deck
+// run via HQ_PUSH_FAILED. `venue_venue_types` join INSERT failures are
+// decorative and warn-and-continue (do NOT populate `failedVenueId`).
+async function pushVenuesToHq(
+  sb: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  candidates: any[],
+  // deno-lint-ignore no-explicit-any
+  scout: any,
+  venueTypesCanonical: VenueTypesCanonical,
+): Promise<{ failedVenueId: string | null; error: string | null }> {
+  // 1. Load HQ venue pool. Small enough to scan in memory; cheaper than
+  //    per-row normalized-LIKE queries against a few thousand rows.
+  const { data: hqVenues, error: hqErr } = await sb
+    .from("venues")
+    .select(
+      "id, name, address, neighborhood, city, website_url, about_venue, features, total_sq_ft, capacity",
+    );
+  if (hqErr) {
+    return {
+      failedVenueId: (candidates[0]?.id as string) ?? null,
+      error: `venues SELECT failed: ${hqErr.message}`,
+    };
+  }
+  const pool: HqVenueRow[] = ((hqVenues ?? []) as HqVenueRow[]).slice();
+
+  // Phase 5.12.10: venueTypesCanonical comes from the consolidated
+  // getVenueTypesCanonicalSet read at handler entry (per OQ #3). The
+  // pre-5.12.10 ensureVenueTypesLoaded helper + lazy venueTypesLoaded
+  // flag retired; .names feeds sanitizeMultiAgainst and .idByName feeds
+  // the join inserts below.
+
+  const scoutCity = (scout.city as string | null) ?? null;
+  const scoutCreatedBy = (scout.created_by as string | null) ?? null;
+
+  for (const cand of candidates) {
+    const candId = cand.id as string;
+    let linkedId: string | null = (cand.linked_venue_id as string | null) ?? null;
+    let didLinkThisRun = false; // distinguishes match (or pre-link) from fresh insert
+
+    if (!linkedId) {
+      // Phase 5.12.3: points-based ladder via the shared helper (5.12.1
+      // extraction). Cross-field VETO preserved on name FULL match +
+      // (city differ OR address differ); locked website normalizer
+      // contract; threshold 60. The candidate's city is the scout city
+      // (`vs_candidate_venues` has no city column); the pool side already
+      // carries its own `city` from the venues SELECT.
+      const result = findVenueDedupeMatch(
+        {
+          name: cand.name as string | null,
+          address: cand.address as string | null,
+          city: scoutCity,
+          website_url: cand.website_url as string | null,
+        },
+        pool,
+      );
+      const matchedId = result?.match.id ?? null;
+
+      if (result && matchedId) {
+        // Phase 5.12.3: write dedupe_meta alongside linked_venue_id on a
+        // FRESH ladder-resolved match. Explicit NOT-written set: pre-linked
+        // candidates (else branch below skips this block), hq_pool rows
+        // (linked at insert time in vs-research-venues; never reach this
+        // path), fresh-INSERT no-match rows (no match round happened).
+        const dedupeMeta = {
+          matched_venue_id: matchedId,
+          matched_venue_name: (result.match.name as string | null) ?? "",
+          score: result.score,
+          reason: result.reason,
+          matched_at: new Date().toISOString(),
+        };
+        const { error: linkErr } = await sb
+          .from("vs_candidate_venues")
+          .update({ linked_venue_id: matchedId, dedupe_meta: dedupeMeta })
+          .eq("id", candId);
+        if (linkErr) {
+          return {
+            failedVenueId: candId,
+            error: `vs_candidate_venues link UPDATE failed: ${linkErr.message}`,
+          };
+        }
+        linkedId = matchedId;
+        didLinkThisRun = true;
+      } else {
+        // No match: INSERT new venues row carrying the producer's reviewed +
+        // possibly edited paragraph into `about_venue`, the canonicalized
+        // type tokens via venue_venue_types, and scout.created_by for
+        // attribution. The INSERT-then-update-link split is one extra
+        // statement per new venue but keeps the venues row complete on
+        // first sight (activity_log trigger sees the full row).
+        const features = Array.isArray(cand.key_features)
+          ? (cand.key_features as string[])
+          : [];
+        const aboutValue = (cand.venue_overview as string | null) ?? null;
+        const { data: ins, error: insErr } = await sb
+          .from("venues")
+          .insert({
+            name: cand.name as string,
+            address: (cand.address as string | null) ?? null,
+            neighborhood: (cand.neighborhood as string | null) ?? null,
+            city: scoutCity,
+            website_url: (cand.website_url as string | null) ?? null,
+            features,
+            total_sq_ft: (cand.size_sq_ft as number | null) ?? null,
+            capacity: (cand.capacity as number | null) ?? null,
+            about_venue: aboutValue,
+            created_by: scoutCreatedBy,
+          })
+          .select("id")
+          .maybeSingle();
+        if (insErr || !ins) {
+          return {
+            failedVenueId: candId,
+            error: `venues INSERT failed: ${insErr?.message ?? "no row returned"}`,
+          };
+        }
+        const newId = (ins as { id: string }).id;
+
+        // venue_venue_types joins (Phase 5.12.10): sanitizeMultiAgainst
+        // rejects tokens not in the runtime canonical set (returns null
+        // when nothing resolves). On a non-null result, split back on
+        // " / " and resolve each canonical name to its venue_types.id
+        // via the consolidated idByName map from getVenueTypesCanonicalSet.
+        // Tokens that don't resolve in idByName (only possible if the
+        // canonical set changed between request entry and now; rare) are
+        // silently skipped per the prior decorative posture.
+        const rawType = (cand.venue_type as string | null) ?? "";
+        const cleaned = sanitizeMultiAgainst(
+          rawType,
+          venueTypesCanonical.names,
+        );
+        if (cleaned) {
+          for (const tn of cleaned.split(" / ")) {
+            const vtId = venueTypesCanonical.idByName.get(tn.toLowerCase());
+            if (!vtId) continue;
+            const { error: joinErr } = await sb
+              .from("venue_venue_types")
+              .insert({ venue_id: newId, venue_type_id: vtId });
+            if (joinErr) {
+              // Decorative: warn-and-continue per § 8.2 / § 9.4.
+              console.warn(
+                `[vs-generate-deck] scout=${scout.id} venue=${candId} venue_venue_types insert skip for "${tn}": ${joinErr.message}`,
+              );
+            }
+          }
+        }
+
+        // Push the new row into the in-memory pool so a second VS candidate
+        // in this same batch can match against it (two VS rows pointing at
+        // the same not-yet-existing HQ venue).
+        pool.push({
+          id: newId,
+          name: cand.name as string,
+          address: (cand.address as string | null) ?? null,
+          neighborhood: (cand.neighborhood as string | null) ?? null,
+          city: scoutCity,
+          website_url: (cand.website_url as string | null) ?? null,
+          about_venue: aboutValue,
+          features,
+          total_sq_ft: (cand.size_sq_ft as number | null) ?? null,
+          capacity: (cand.capacity as number | null) ?? null,
+        });
+
+        // Link the candidate.
+        const { error: linkErr } = await sb
+          .from("vs_candidate_venues")
+          .update({ linked_venue_id: newId })
+          .eq("id", candId);
+        if (linkErr) {
+          return {
+            failedVenueId: candId,
+            error: `vs_candidate_venues link UPDATE after INSERT failed: ${linkErr.message}`,
+          };
+        }
+        linkedId = newId;
+        // Newly inserted: about_venue was populated in the INSERT, so no
+        // additional UPDATE is needed below.
+        didLinkThisRun = false;
+      }
+    } else {
+      // linked_venue_id already set (a pre-5.12.0 shortlist-trigger run, or
+      // a manual link). Still run the about_venue write-when-blank check
+      // against the linked venue.
+      didLinkThisRun = true;
+    }
+
+    // Write-when-blank rules (matched + pre-linked paths only; fresh INSERT
+    // already populated every field). Producer-edited HQ values are
+    // preserved; only HQ-side gaps get backfilled from VS enrichment.
+    //
+    // Pre-5.12.13.1 covered `about_venue` only. Phase 5.12.13.1 extends the
+    // posture to `features`, `total_sq_ft`, `capacity`, `website_url` so
+    // VS enrichment (Phase A, Phase B, Pass 1 backfill, vs-research-single-
+    // venue) flows back to HQ when the canonical row was sparse. The pool-
+    // side state is updated in-loop so a second candidate in the same batch
+    // matching the same HQ row sees the most-recent value.
+    if (linkedId && didLinkThisRun) {
+      const linkedRow = pool.find((p) => p.id === linkedId);
+      if (linkedRow) {
+        const patch: {
+          about_venue?: string;
+          features?: string[];
+          total_sq_ft?: number;
+          capacity?: number;
+          website_url?: string;
+        } = {};
+
+        const existingAbout = (linkedRow.about_venue ?? "").trim();
+        if (existingAbout.length === 0) {
+          const aboutNew =
+            ((cand.venue_overview as string | null) ?? "").trim();
+          if (aboutNew.length > 0) patch.about_venue = aboutNew;
+        }
+
+        const existingFeatures = Array.isArray(linkedRow.features)
+          ? linkedRow.features
+          : [];
+        if (existingFeatures.length === 0) {
+          const candFeatures = Array.isArray(cand.key_features)
+            ? (cand.key_features as string[])
+            : [];
+          if (candFeatures.length > 0) patch.features = candFeatures;
+        }
+
+        if (linkedRow.total_sq_ft == null) {
+          const candSqFt = (cand.size_sq_ft as number | null) ?? null;
+          if (typeof candSqFt === "number") patch.total_sq_ft = candSqFt;
+        }
+
+        if (linkedRow.capacity == null) {
+          const candCapacity = (cand.capacity as number | null) ?? null;
+          if (typeof candCapacity === "number") patch.capacity = candCapacity;
+        }
+
+        const existingWebsite = (linkedRow.website_url ?? "").trim();
+        if (existingWebsite.length === 0) {
+          const candWebsite =
+            ((cand.website_url as string | null) ?? "").trim();
+          if (candWebsite.length > 0) patch.website_url = candWebsite;
+        }
+
+        if (Object.keys(patch).length > 0) {
+          const { error: updErr } = await sb
+            .from("venues")
+            .update(patch)
+            .eq("id", linkedId);
+          if (updErr) {
+            return {
+              failedVenueId: candId,
+              error: `venues write-when-blank UPDATE failed: ${updErr.message}`,
+            };
+          }
+          if (patch.about_venue !== undefined) {
+            linkedRow.about_venue = patch.about_venue;
+          }
+          if (patch.features !== undefined) {
+            linkedRow.features = patch.features;
+          }
+          if (patch.total_sq_ft !== undefined) {
+            linkedRow.total_sq_ft = patch.total_sq_ft;
+          }
+          if (patch.capacity !== undefined) {
+            linkedRow.capacity = patch.capacity;
+          }
+          if (patch.website_url !== undefined) {
+            linkedRow.website_url = patch.website_url;
+          }
+        }
+      }
+    }
+  }
+
+  return { failedVenueId: null, error: null };
+}
+
+// ---------------------------------------------------------------------------
+
 // Main handler
 
 Deno.serve(async (req) => {
@@ -286,11 +648,12 @@ Deno.serve(async (req) => {
 
   // Load scout. Need brief fields for slide population, current_step +
   // brief_data for idempotency, generated_decks for version counter,
-  // deck_order for venue sort.
+  // deck_order for venue sort, created_by for HQ push attribution
+  // (Phase 5.12.0; populates `venues.created_by` on inserted rows).
   const { data: scout, error: scoutErr } = await sb
     .from("vs_scouts")
     .select(
-      "id, client_name, event_name, city, live_dates, event_overview, brief_data, current_step, generated_decks, deck_order",
+      "id, client_name, event_name, city, live_dates, event_overview, brief_data, current_step, generated_decks, deck_order, created_by",
     )
     .eq("id", scout_id)
     .maybeSingle();
@@ -303,10 +666,10 @@ Deno.serve(async (req) => {
   }
 
   // Idempotency: skip if already past the deck_prep step (page already
-  // navigated away to /brief) or if a kickoff fired recently and is still
-  // running. Note: a successful prior generation flips current_step to
-  // 'completed'; a failed one leaves it at 'deck_prep'. So a Re-generate
-  // from a failed run sees current_step='deck_prep' and proceeds normally.
+  // navigated away to /brief). Note: a successful prior generation flips
+  // current_step to 'completed'; a failed one leaves it at 'deck_prep'.
+  // So a Re-generate from a failed run sees current_step='deck_prep' and
+  // proceeds normally.
   if (scout.current_step !== "deck_prep") {
     return jsonResponse({
       ok: true,
@@ -314,27 +677,44 @@ Deno.serve(async (req) => {
       skipped: "not_in_deck_prep_state",
     });
   }
-  const briefData = (scout.brief_data ?? {}) as Record<string, unknown>;
-  const startedAtRaw = briefData.deck_generation_started_at;
-  if (typeof startedAtRaw === "string") {
-    const ageMs = Date.now() - new Date(startedAtRaw).getTime();
-    if (Number.isFinite(ageMs) && ageMs < IN_FLIGHT_GRACE_MS) {
-      return jsonResponse({ ok: true, scout_id, skipped: "in_flight" });
-    }
-  }
 
-  // Record kickoff timestamp + clear prior error so a retry from a failed
-  // run starts clean.
-  await sb
-    .from("vs_scouts")
-    .update({
-      brief_data: {
-        ...briefData,
-        deck_generation_started_at: new Date().toISOString(),
+  // Phase 5.12.4.1: atomic kickoff acquisition via the new
+  // `vs_deck_try_acquire_kickoff` RPC. The pre-5.12.4.1 inline path
+  // (check `brief_data.deck_generation_started_at` against
+  // IN_FLIGHT_GRACE_MS, then non-atomically UPDATE the timestamp) had the
+  // same TOCTOU race Codex flagged on this surface: two near-simultaneous
+  // invocations (producer double-clicking Generate) could both pass the
+  // grace-window check before either committed its timestamp, then both
+  // call pushVenuesToHq + INSERT duplicate `venues` rows (no UNIQUE
+  // constraint on venue identity columns). Mirrors the Phase 5.12.1 fix
+  // on vs-research-venues. The RPC uses pg_try_advisory_xact_lock + a
+  // same-transaction read-and-write of brief_data.deck_generation_started_at
+  // so the check + stamp are atomic. See the migration
+  // `20260604120000_phase_5_12_4_1_deck_kickoff_lock.sql` for the RPC body.
+  //
+  // Grace seconds matches IN_FLIGHT_GRACE_MS / 1000 so the RPC's age check
+  // matches the prior window's behavior (subsequent boots within the grace
+  // window still no-op).
+  const { data: acquired, error: kickoffErr } = await sb.rpc(
+    "vs_deck_try_acquire_kickoff",
+    {
+      target_scout_id: scout_id,
+      grace_seconds: Math.round(IN_FLIGHT_GRACE_MS / 1000),
+    },
+  );
+  if (kickoffErr) {
+    return jsonResponse(
+      {
+        error: `Could not acquire deck-generate kickoff: ${kickoffErr.message}`,
       },
-      pipeline_error: null,
-    })
-    .eq("id", scout_id);
+      500,
+    );
+  }
+  if (!acquired) {
+    return jsonResponse({ ok: true, scout_id, skipped: "in_flight" });
+  }
+  // We hold the kickoff; the RPC stamped `brief_data.deck_generation_started_at`
+  // and cleared `pipeline_error` in its own transaction.
 
   // Background work. Returns nothing; writes success / failure straight to
   // vs_scouts so the Generating page picks them up via Realtime.
@@ -351,6 +731,38 @@ Deno.serve(async (req) => {
     });
 
     const generateWork = async () => {
+      // Audit pass 2 item 3: re-SELECT brief_data right at the top of
+      // generateWork so the local copy reflects the kickoff RPC's
+      // server-side stamp of deck_generation_started_at (the handler's
+      // scout.brief_data was captured BEFORE the RPC ran and is missing
+      // that field). Every progress_step write below merges against the
+      // latest in-memory liveBriefData, then writes back, so the kickoff
+      // timestamp + any other ad-hoc state survive intact.
+      const { data: refreshedScout } = await sb
+        .from("vs_scouts")
+        .select("brief_data")
+        .eq("id", scout_id)
+        .maybeSingle();
+      let liveBriefData =
+        (refreshedScout?.brief_data ??
+          (scout.brief_data ?? {})) as Record<string, unknown>;
+      // Progress-step writer. UX-only signal driving the Generating page's
+      // step list via Realtime. Failure warn-and-continues so a misbehaving
+      // progress write can never sink the pipeline. CAS-guarded columns
+      // (current_step + pipeline_error) are NOT touched.
+      const writeProgress = async (key: string) => {
+        liveBriefData = { ...liveBriefData, progress_step: key };
+        const { error: progressErr } = await sb
+          .from("vs_scouts")
+          .update({ brief_data: liveBriefData })
+          .eq("id", scout_id);
+        if (progressErr) {
+          console.warn(
+            `[vs-generate-deck] scout=${scout_id} progress_step=${key} write failed: ${progressErr.message}`,
+          );
+        }
+      };
+
       // 1. Auth.
       let token: string;
       try {
@@ -405,6 +817,69 @@ Deno.serve(async (req) => {
         return ai - bi;
       });
 
+      // 2.5. Validate non-mutating prerequisites BEFORE the HQ Venues
+      // push (Phase 5.12.4.2, Codex round 2 finding 3). Pre-5.12.4.2
+      // pushVenuesToHq ran immediately after the venues load + sort, which
+      // meant a TEMPLATE_COPY_FAILED (env-var-missing) failure later in the
+      // flow would leave HQ state mutated (new `venues` rows + linked_venue_
+      // id writes) for a deck the producer was told was NOT generated.
+      // Pulling the env-var existence check up here ensures the function
+      // bails BEFORE any HQ writes if the Drive config is missing.
+      // (The actual copyTemplate Drive call stays at step 4; only the env-
+      // var presence check moves here.)
+      const templateId = Deno.env.get("GOOGLE_TEMPLATE_FILE_ID");
+      const folderId = Deno.env.get("GOOGLE_OUTPUT_FOLDER_ID");
+      if (!templateId || !folderId) {
+        await failWithCode(
+          "TEMPLATE_COPY_FAILED",
+          "GOOGLE_TEMPLATE_FILE_ID or GOOGLE_OUTPUT_FOLDER_ID is not configured.",
+        );
+        return;
+      }
+
+      // 2.6. HQ Venues push (Phase 5.12.0; reordered in 5.12.4.2).
+      //
+      // Runs after auth + venues load + config check but before any Drive /
+      // Slides API mutation, so HQ state only mutates when all non-mutating
+      // prerequisites have passed. Replaces the retired
+      // `vs_candidate_venues_shortlist_sync` shortlist-time trigger; this is
+      // the producer's confirmation moment (they have reviewed + edited the
+      // venue_overview on DeckPrep and explicitly confirmed via the modal).
+      //
+      // Remaining HQ-mutated-but-deck-failed window (5.12.4.2 carry-forward
+      // (a) in COWORK_SYNC): copyTemplate Drive API throw or Slides API
+      // mutations throw AFTER this push. Both fail the deck via the
+      // appropriate code; pushVenuesToHq is idempotent on linked_venue_id
+      // so the producer's Re-Generate path re-runs without re-INSERTing.
+      // A stronger guarantee (move HQ push after Slides success) is the
+      // carry-forward.
+      //
+      // Error posture: per-venue link or insert failures fail the deck via
+      // HQ_PUSH_FAILED. The Generating page parses the code and routes to
+      // /deck/error/HQ_PUSH_FAILED. Only venue_venue_types join INSERT
+      // failures are warn-and-continue (decorative).
+      // Phase 5.12.10: consolidated runtime canonical venue-types set
+      // (per OQ #3). Feeds both the sanitizeMultiAgainst guard AND the
+      // idByName resolution for venue_venue_types join inserts in
+      // pushVenuesToHq. Single SELECT per request.
+      const venueTypesCanonical = await getVenueTypesCanonicalSet(
+        sb,
+        "vs-generate-deck",
+      );
+      const pushResult = await pushVenuesToHq(
+        sb,
+        venues,
+        scout,
+        venueTypesCanonical,
+      );
+      if (pushResult.failedVenueId) {
+        await failWithCode(
+          "HQ_PUSH_FAILED",
+          `Could not link or insert HQ venue for candidate ${pushResult.failedVenueId}: ${pushResult.error}`,
+        );
+        return;
+      }
+
       // 3. Load photos + build signed URLs (private bucket, 1-hour TTL).
       //    Signed-URL mint is parallel via Promise.all (~50-100ms per call;
       //    sequential against 8x4=32 photos would add real wall-clock).
@@ -437,16 +912,11 @@ Deno.serve(async (req) => {
         });
       });
 
-      // 4. Copy template into output folder.
-      const templateId = Deno.env.get("GOOGLE_TEMPLATE_FILE_ID");
-      const folderId = Deno.env.get("GOOGLE_OUTPUT_FOLDER_ID");
-      if (!templateId || !folderId) {
-        await failWithCode(
-          "TEMPLATE_COPY_FAILED",
-          "GOOGLE_TEMPLATE_FILE_ID or GOOGLE_OUTPUT_FOLDER_ID is not configured.",
-        );
-        return;
-      }
+      await writeProgress("copying_template");
+
+      // 4. Copy template into output folder. (Env-var existence check
+      // moved up to step 2.5 in Phase 5.12.4.2 so HQ state doesn't mutate
+      // on missing-config.)
       const existing = Array.isArray(scout.generated_decks)
         ? scout.generated_decks
         : [];
@@ -466,6 +936,8 @@ Deno.serve(async (req) => {
         );
         return;
       }
+
+      await writeProgress("populating_slides");
 
       // 5. Slide population. The entire block lifts from VS Pro verbatim;
       //    any throw here gets caught and reported as SLIDES_API_FAILED.
@@ -574,6 +1046,15 @@ Deno.serve(async (req) => {
           if (i % 2 === 0) slide7Ids.push(id);
           else slide8Ids.push(id);
         });
+
+        // Audit pass 2 item 3: gate the inserting_photos progress write to
+        // the first iteration's photo-insert block. Photos are inserted
+        // per-venue within this loop (not a separate batch); emitting on
+        // the first venue that has photos keeps the producer's step list
+        // honest without spamming Realtime with one write per venue. If
+        // no venue has photos the step stays on populating_slides through
+        // to handoff, which is the truthful state.
+        let emittedPhotos = false;
 
         // Per-venue scoped replacements + Website hyperlink + photo
         // replacement. {{venue_name}} gets ALL-CAPS treatment per producer
@@ -699,6 +1180,10 @@ Deno.serve(async (req) => {
           // (per-venue detail).
           const venuePhotos = photosByVenue[v.id as string] ?? [];
           if (venuePhotos.length) {
+            if (!emittedPhotos) {
+              emittedPhotos = true;
+              await writeProgress("inserting_photos");
+            }
             // deno-lint-ignore no-explicit-any
             const dupPres: any = await getPresentation(deckId, token);
             const imgMap = findImagesByAltText(dupPres, s7);
@@ -711,7 +1196,8 @@ Deno.serve(async (req) => {
                   replaceImage: {
                     imageObjectId: target,
                     url: ph.url,
-                    imageReplaceMethod: "CENTER_INSIDE",
+                    // Phase 5.12.11: CENTER_CROP fills the cell; CENTER_INSIDE letterboxed photos that did not match the cell aspect ratio.
+                    imageReplaceMethod: "CENTER_CROP",
                   },
                 });
               }
@@ -788,6 +1274,8 @@ Deno.serve(async (req) => {
         const finalPres: any = await getPresentation(deckId, token);
         const slideCount = (finalPres.slides ?? []).length;
 
+        await writeProgress("finalizing");
+
         // 6. Append metadata + flip current_step='completed' + status='complete'.
         //    Final write triggers the Generating page's Realtime nav effect.
         const meta = {
@@ -825,6 +1313,17 @@ Deno.serve(async (req) => {
         // UPDATE a CAS that no-ops when another invocation has already
         // advanced current_step to 'completed' -- only the first-to-
         // complete wins the append.
+        //
+        // Phase 5.12.4.2 (Codex round 2 finding 2): added
+        // `.is("pipeline_error", null)` so a late-resolving generateWork
+        // can't overwrite a failWithCode stamp. failWithCode stamps a
+        // non-null pipeline_error but leaves current_step='deck_prep'
+        // (so Re-Generate from the failed run sees the expected step);
+        // the pre-5.12.4.2 success CAS on current_step alone would
+        // therefore PASS even after a failure landed, overwriting it
+        // with current_step='completed'. The new pipeline_error CAS
+        // closes that gap. Kickoff RPC clears pipeline_error at
+        // acquisition so the happy path always sees NULL here.
         const { error: scoutUpdErr, count: scoutUpdCount } = await sb
           .from("vs_scouts")
           .update({
@@ -835,7 +1334,8 @@ Deno.serve(async (req) => {
             last_touched_at: new Date().toISOString(),
           }, { count: "exact" })
           .eq("id", scout_id)
-          .eq("current_step", "deck_prep");
+          .eq("current_step", "deck_prep")
+          .is("pipeline_error", null);
 
         if (scoutUpdErr) {
           // Final write failed AFTER the deck landed in Drive. Surface as
@@ -846,12 +1346,15 @@ Deno.serve(async (req) => {
           );
         }
         if (scoutUpdCount === 0) {
-          // CAS lost: another invocation completed first. The in-Drive
-          // deck is orphaned; the producer-facing state reflects the
-          // other invocation's deck. Log but don't fail (not a real
-          // error from the producer's POV; they get a working deck).
+          // CAS lost. Either (a) another invocation completed first +
+          // advanced current_step to 'completed', or (b) Phase 5.12.4.2
+          // failure-stamp race: failWithCode already stamped a non-null
+          // pipeline_error from a timeout / Slides error path while this
+          // path was still building meta. Either way the in-Drive deck
+          // for THIS invocation is orphaned; the producer-facing state
+          // reflects the winning state. Log but don't fail.
           console.warn(
-            `[vs-generate-deck] scout=${scout_id} success CAS lost; another invocation already completed. deck_id=${deckId} orphaned.`,
+            `[vs-generate-deck] scout=${scout_id} success CAS lost (either parallel-success race or failWithCode already stamped failure). deck_id=${deckId} orphaned.`,
           );
         }
 

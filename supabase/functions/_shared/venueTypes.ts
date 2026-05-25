@@ -1,16 +1,26 @@
-// Server-side mirror of src/lib/venue-scout/venueTypes.ts (canonical types +
-// canonicalize logic only; UI styles stay client-side). Primed in Phase
-// 4.1-port ahead of consumers: vs-parse-sheet (Phase 4.4-port) and
-// vs-research-venues (Phase 4.5-port) will both import canonicalizeType +
-// sanitizeWebsiteUrl so AI-research output and uploaded sheet rows
-// canonicalize identically. The frontend mirror lands when the matrix
-// surfaces port (Phase 4.6-port). Drift between this file and the eventual
-// frontend mirror will produce mismatched venue type pills between the
-// matrix and the source data; keep them in lock-step.
+// Server-side venue-type helpers.
+//
+// Phase 5.12.10 narrowed the lockstep contract: CANONICAL_TYPES is now
+// the palette-key set (the keys TYPE_STYLES is indexed by on the
+// frontend mirror); the runtime canonical set is whatever rows currently
+// sit in `public.venue_types`, fetched per-request via
+// getVenueTypesCanonicalSet. Producer-added types in HQ Settings flow
+// through to every VS write path without a code change. Schema
+// descriptions + system prompts stay static for prompt-cache stability
+// (feedback_tool_choice_collapse); the live canonical list rides in the
+// per-call user message.
+//
+// Legacy canonicalizeType + canonicalizeMultiType regex helpers were
+// deleted in 5.12.10 (per OQ #1 + #2; existing VS data is testing
+// records). Every write-path caller resolves against the runtime set via
+// canonicalizeAgainst / canonicalizeMultiAgainst / sanitizeMultiAgainst.
+
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 export const CANONICAL_TYPES = [
   "Retail",
   "Event Venue",
+  "White Box",
   "Industrial",
   "Warehouse",
   "Gallery",
@@ -21,42 +31,115 @@ export const CANONICAL_TYPES = [
 
 export type CanonicalType = (typeof CANONICAL_TYPES)[number];
 
-export function canonicalizeType(raw: string): CanonicalType | null {
+export type VenueTypesCanonical = {
+  names: readonly string[];
+  /** Lowercased canonical name -> venue_types.id; used by deck push. */
+  idByName: Map<string, string>;
+};
+
+/**
+ * Phase 5.12.10: fetch the runtime canonical venue-types set from
+ * public.venue_types ONCE per request. Returns BOTH the sorted names
+ * array (for canonicalize callers) AND the id-by-lowercased-name map
+ * (for vs-generate-deck's join inserts; consolidates the pre-5.12.10
+ * ensureVenueTypesLoaded() helper per OQ #3).
+ *
+ * On error, returns the legacy CANONICAL_TYPES names + an empty
+ * idByName map so a transient query failure doesn't collapse Claude's
+ * prompt-building into an empty constraint. Deck push that hits the
+ * fallback path silently skips join inserts (idByName empty); the
+ * fresh-INSERT venues row still lands.
+ */
+export async function getVenueTypesCanonicalSet(
+  sb: SupabaseClient,
+  callerPrefix: string,
+): Promise<VenueTypesCanonical> {
+  const { data, error } = await sb
+    .from("venue_types")
+    .select("id, name")
+    .order("name", { ascending: true });
+  if (error || !data) {
+    console.warn(
+      `[${callerPrefix}] venue_types load failed, falling back to legacy CANONICAL_TYPES`,
+      error,
+    );
+    return { names: CANONICAL_TYPES, idByName: new Map() };
+  }
+  const names: string[] = [];
+  const idByName = new Map<string, string>();
+  for (const row of data) {
+    const nm = typeof row.name === "string" ? row.name.trim() : "";
+    const id = typeof row.id === "string" ? row.id : "";
+    if (!nm || !id) continue;
+    names.push(nm);
+    idByName.set(nm.toLowerCase(), id);
+  }
+  if (names.length === 0) {
+    return { names: CANONICAL_TYPES, idByName };
+  }
+  return { names, idByName };
+}
+
+/**
+ * Phase 5.12.10: case-insensitive canonicalize against a runtime set.
+ * Returns the canonical-cased name on match, null otherwise.
+ */
+export function canonicalizeAgainst(
+  raw: string,
+  canonicalSet: readonly string[],
+): string | null {
   const t = raw.trim().toLowerCase();
   if (!t) return null;
-  for (const c of CANONICAL_TYPES) if (t === c.toLowerCase()) return c;
-  if (/(industrial)/.test(t) && /(warehouse)/.test(t)) return null;
-  if (/storefront|retail|commercial|ground[- ]?floor|vacancy|pop[- ]?up/.test(t)) {
-    return "Retail";
+  for (const c of canonicalSet) {
+    if (c.toLowerCase() === t) return c;
   }
-  if (/warehouse/.test(t)) return "Warehouse";
-  if (/industrial/.test(t)) return "Industrial";
-  if (/gallery/.test(t)) return "Gallery";
-  if (/studio|soundstage/.test(t)) return "Studio";
-  if (/theater|ballroom|event|club|music venue/.test(t)) return "Event Venue";
-  if (/outdoor|park|plaza|rooftop|courtyard/.test(t)) return "Outdoor";
-  if (/mobile|truck|vehicle|cart/.test(t)) return "Mobile";
   return null;
 }
 
 /**
- * For multi-type strings ("Warehouse / Gallery"), canonicalize each segment
- * and return the joined result. If nothing canonicalizes, return the original
- * trimmed input so the matrix's TYPE_FALLBACK_STYLE picks it up.
+ * Phase 5.12.10: DISPLAY-only multi-type runtime canonicalize. Splits
+ * on `/` and `,`, canonicalizes each part against the runtime set,
+ * joins with " / ". Returns the raw trimmed input when nothing
+ * canonicalizes (the matrix's TYPE_FALLBACK_STYLE picks it up via
+ * parseTypes). NEVER use on AI write paths -- the unknown-token
+ * fallback would persist garbage. For write paths, see
+ * sanitizeMultiAgainst below.
  */
-export function canonicalizeMultiType(raw: string): string {
+export function canonicalizeMultiAgainst(
+  raw: string,
+  canonicalSet: readonly string[],
+): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
-  const parts = trimmed
-    .split(/[/,]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const parts = trimmed.split(/[/,]/).map((s) => s.trim()).filter(Boolean);
   const out: string[] = [];
   for (const p of parts) {
-    const c = canonicalizeType(p);
+    const c = canonicalizeAgainst(p, canonicalSet);
     if (c && !out.includes(c)) out.push(c);
   }
   return out.length > 0 ? out.join(" / ") : trimmed;
+}
+
+/**
+ * Phase 5.12.10: SERVER WRITE multi-type sanitizer. Same split + per-
+ * token canonicalize + dedupe as canonicalizeMultiAgainst, but
+ * returns NULL when nothing canonicalizes (matching the legacy Phase
+ * A helper at vs-research-venues line 97-103 which was deleted; this
+ * is its drop-in replacement).
+ */
+export function sanitizeMultiAgainst(
+  raw: string,
+  canonicalSet: readonly string[],
+): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(/[/,]/).map((s) => s.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const p of parts) {
+    const c = canonicalizeAgainst(p, canonicalSet);
+    if (c && !out.includes(c)) out.push(c);
+  }
+  return out.length > 0 ? out.join(" / ") : null;
 }
 
 const LISTING_DATABASE_HOSTS = new Set([
@@ -179,6 +262,58 @@ export function stripPlaceholders(items: unknown): string[] {
     .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
     .filter((s) => !isPlaceholderString(s))
     .map((s) => s.trim());
+}
+
+/**
+ * Post-emission tag-shape sanitizer. Composes with `stripPlaceholders`:
+ *   sanitizeTagShape(stripPlaceholders(claudeOutput))
+ *
+ * Drops items that violate the evergreen-tag shape locked Phase 5.12.13.1:
+ *   - non-strings, empty strings (defense in depth; `stripPlaceholders`
+ *     already filters)
+ *   - any digit anywhere in the string (catches "24,806 sq ft",
+ *     "Walk Score of 96", "1957 corner building", "100+ year-old", year
+ *     ranges like "1917-1923")
+ *   - more than 4 whitespace-separated words (catches narrative items
+ *     like "Garden-industrial hybrid space with greenhouse, showroom,
+ *     and outdoor deck")
+ *   - more than 35 characters (defense in depth: schema enforces
+ *     `items.maxLength: 35`, but Claude occasionally ignores it under
+ *     forced-tool conditions)
+ *   - case-insensitive duplicates (preserves the first occurrence's
+ *     casing)
+ *
+ * Trims surrounding whitespace before length/word checks. Returns an
+ * empty array when nothing usable remains; the caller's existing
+ * `if (cleaned.length > 0) patch.key_features = cleaned` gate handles
+ * the missing-field case.
+ *
+ * Deliberately does NOT strip items matching a CANONICAL_TYPES token
+ * even though "don't double-encode venue types" is in the schema
+ * description. Reason: "Outdoor" is both a canonical venue type AND a
+ * legitimate evergreen feature tag in Jimmie's locked tag list, so
+ * strict exact-match would strip a valid tag. Substring-match would
+ * over-trigger on legitimate tags ("Industrial Brick"). The narrative
+ * cases this rule would catch all fail the > 4 words check anyway, so
+ * the word-count rule covers them.
+ */
+export function sanitizeTagShape(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of items) {
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (t.length === 0 || t.length > 35) continue;
+    if (/\d/.test(t)) continue;
+    const wordCount = t.split(/\s+/).filter(Boolean).length;
+    if (wordCount > 4) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
 }
 
 // Post-4.10.4 hot patch round 13: pick a URL from web_search results

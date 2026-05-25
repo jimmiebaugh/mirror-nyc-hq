@@ -1,28 +1,32 @@
+// Phase 4.8.2-port + audit pass 2 item 3: Generating loading screen.
+//
+// Audit pass 2 swap-out:
+//   - Shell rendered through `VSLoadingShell` (icon-as-spinner hammer; the
+//     icon itself swings in a strike-and-return motion, no separate
+//     spinning circle). Eyebrow + h-page duplication dropped; h-page lives
+//     inside the shell.
+//   - First-class step list added (per the plan; Generating previously
+//     shipped without a step list). Keys match the backend's
+//     `brief_data.progress_step` contract from item 3 (copying_template /
+//     populating_slides / inserting_photos / finalizing). setInterval timer
+//     stays for now and walks the keys at the prior 12-second cadence;
+//     item 3b swaps the timer for a derived read of
+//     `scout?.brief_data?.progress_step` after the edge function deploys.
+//   - Description last sentence updated to "This typically takes 2 minutes."
+//     per the plan; the prior 2-5 minute range overstated the median run.
+//
+// Original 4.8.2-port docblock kept below for context.
+// -----------------------------------------------------------------------
 // Phase 4.8.2-port: Generating loading screen + Realtime subscription on
 // vs_scouts.generated_decks. Closes the 404 window 4.8.1-port opened at
-// /venue-scout/scouts/:id/deck/generating. VS Pro is the layout authority
-// (port plan § 3, Lift; Realtime + EdgeRuntime.waitUntil pattern adapted
-// per port plan § 8.3 to match 4.5 / 4.7.2).
+// /venue-scout/scouts/:id/deck/generating.
 //
-// VS Pro source: src/pages/sourcing/Generating.tsx (~36 lines).
-//
-// Substitutions:
-//   projectId            -> scoutId
-//   projects table       -> vs_scouts
-//   project-${id}-decks  -> vs_scout_deck_${id} channel
-//   /projects/:id/brief  -> /venue-scout/scouts/:id/brief
-//   "1-2 minutes"        -> spelled out as "1 to 2 minutes" per voice rule
-//
-// Adaptations (per spec § 6 + § 4a):
-//   - Page wrapper swapped from VS Pro min-h-[70vh] px-8 to AppShell parent
-//     + inner flex centered min-h-[60vh] (matches 4.5 / 4.7.2 loading pages).
-//   - Initial scout fetch + 3-second polling fallback (belt-and-suspenders;
-//     same posture as Researching / Compiling).
-//   - Kickoff invokes vs-generate-deck fire-and-forget. Function returns 200
-//     immediately; AI work runs inside EdgeRuntime.waitUntil. Page learns
-//     about completion via Realtime, not the response.
-//   - Server-side idempotency on vs-generate-deck means dev-mode double-mount
-//     and refresh-mid-flight are both safe (no double Slides API calls).
+// Adaptations:
+//   - Initial scout fetch + 3-second polling fallback (Realtime publication
+//     can hiccup).
+//   - Kickoff invokes vs-generate-deck fire-and-forget. Function returns
+//     200 immediately; AI work runs inside EdgeRuntime.waitUntil. Page
+//     learns about completion via Realtime, not the response.
 //   - Failure path: vs-generate-deck writes status='failed' + pipeline_error
 //     formatted as `<CODE>: <message>`. Page parses the code with a regex,
 //     falls back to UNKNOWN, and navigates to /deck/error/<code>.
@@ -30,6 +34,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  VSLoadingShell,
+  type LoadingShellStep,
+} from "@/components/venue-scout/VSLoadingShell";
+
+const STEPS: readonly LoadingShellStep[] = [
+  { key: "copying_template", label: "Copying deck template" },
+  { key: "populating_slides", label: "Populating venue slides" },
+  { key: "inserting_photos", label: "Inserting venue photos" },
+  { key: "finalizing", label: "Finalizing deck" },
+];
 
 type ScoutRow = {
   id: string;
@@ -37,6 +52,7 @@ type ScoutRow = {
   status: string | null;
   pipeline_error: string | null;
   generated_decks: unknown;
+  brief_data: Record<string, unknown> | null;
 };
 
 const ERROR_CODE_RE = /^([A-Z_]+):/;
@@ -59,8 +75,7 @@ export default function Generating() {
   // Snapshot the prior deck count on first scout state. The success
   // effect only fires when the count INCREASES past this baseline --
   // otherwise a regenerate where DeckPrep didn't fully reset the scout
-  // state would race and re-open the prior deck. DeckPrep's reset
-  // (round 18) should make this redundant; this is belt-and-suspenders.
+  // state would race and re-open the prior deck.
   const initialDeckCountRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -72,7 +87,9 @@ export default function Generating() {
     const fetchScout = async () => {
       const { data } = await supabase
         .from("vs_scouts")
-        .select("id, current_step, status, pipeline_error, generated_decks")
+        .select(
+          "id, current_step, status, pipeline_error, generated_decks, brief_data",
+        )
         .eq("id", scoutId)
         .maybeSingle();
       if (!cancelled && data) setScout(data as unknown as ScoutRow);
@@ -109,20 +126,17 @@ export default function Generating() {
         .update({ status: "in_progress", pipeline_error: null })
         .eq("id", scoutId);
 
-      // 3. Initial fetch (now reads the cleared state).
       if (cancelled) return;
       await fetchScout();
 
-      // 4. 3-second polling fallback (Realtime publication can hiccup;
-      //    same pattern as Researching / Compiling).
       if (cancelled) return;
       pollId = setInterval(fetchScout, 3000);
 
-      // 5. Kick off the edge function. Fire-and-forget; the function
-      //    returns a 200 immediately and runs the Slides work inside
-      //    EdgeRuntime.waitUntil. Server-side idempotency
-      //    (brief_data.deck_generation_started_at within 90s grace) makes
-      //    dev-mode double-mount and refresh-mid-flight both safe.
+      // Kick off the edge function. Fire-and-forget; the function returns
+      // a 200 immediately and runs the Slides work inside
+      // EdgeRuntime.waitUntil. Server-side idempotency on
+      // brief_data.deck_generation_started_at within 90s grace makes
+      // dev-mode double-mount and refresh-mid-flight both safe.
       if (cancelled) return;
       void supabase.functions.invoke("vs-generate-deck", {
         body: { scout_id: scoutId },
@@ -142,9 +156,6 @@ export default function Generating() {
     if (handledTerminalRef.current) return;
 
     // Snapshot the prior deck count on the first scout state we see.
-    // Used by the success branch below to detect a fresh deck (count
-    // strictly greater than the baseline) vs a stale one (count
-    // unchanged from baseline).
     if (initialDeckCountRef.current === null) {
       const initialDecks = Array.isArray(scout.generated_decks)
         ? scout.generated_decks
@@ -155,21 +166,18 @@ export default function Generating() {
     // Success: vs-generate-deck appended to generated_decks AND flipped
     // current_step to 'completed'.
     //
-    // Post-4.10.4 hot patch round 16: changed the post-success flow.
-    // Instead of navigating to /brief (the completed-scout home), we
-    // now (1) open the freshly-generated deck's edit_url in a new tab
-    // so the producer can review it immediately, and (2) navigate back
-    // to /deck/prep so they're returned to the deck-prep matrix
-    // (regenerate, re-order, edit photos all in one place). `replace:
-    // true` keeps /generating out of history so browser-back from
-    // /deck/prep doesn't re-mount this page.
+    // Post-success flow: (1) open the freshly-generated deck's edit_url
+    // in a new tab so the producer can review it immediately, and (2)
+    // navigate back to the consolidated brief/report surface with the
+    // just-generated toast. `replace: true` keeps /generating out of
+    // history.
     //
     // Popup-blocker note: window.open after a Realtime event has no
     // immediate user gesture, so some browsers may block the new tab.
-    // The deck URL is also visible on /brief (and surfaced via Scout
-    // Settings) for manual retrieval if the popup is blocked. We use
-    // `noopener,noreferrer` so the opened tab can't navigate this
-    // window via window.opener.
+    // The deck URL is also visible on /brief and via Scout Settings for
+    // manual retrieval if the popup is blocked. `noopener,noreferrer`
+    // prevents the opened tab from navigating this window via
+    // window.opener.
     const decks = Array.isArray(scout.generated_decks)
       ? scout.generated_decks
       : [];
@@ -186,7 +194,10 @@ export default function Generating() {
           window.open(editUrl, "_blank", "noopener,noreferrer");
         }
       }
-      navigate(`/venue-scout/scouts/${scoutId}/deck/prep`, { replace: true });
+      navigate(
+        `/venue-scout/scouts/${scoutId}/brief/report?just-generated=true`,
+        { replace: true },
+      );
       return;
     }
 
@@ -203,16 +214,28 @@ export default function Generating() {
     }
   }, [scout, scoutId, navigate]);
 
+  if (!scoutId) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+
+  // Audit pass 2 item 3b: derive active step from server-emitted
+  // brief_data.progress_step (Realtime channel triggers re-render on
+  // UPDATE). Fallback to STEPS[0].key when the field is absent (scout
+  // created mid-pipeline at deploy time, or older scouts).
+  const progressStep =
+    typeof scout?.brief_data?.progress_step === "string"
+      ? (scout.brief_data.progress_step as string)
+      : null;
+  const active = progressStep ?? STEPS[0].key;
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-      {/* VS Pro spinner verbatim (single ring, no border-border underlay). */}
-      <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin mb-8" />
-      <h1 className="h-page">Generating Venue Deck</h1>
-      <p className="text-sm text-muted-foreground mt-3 max-w-xl">
-        Copying the deck template into the Drive output folder, populating
-        slides with project + venue data, and inserting your photos. This
-        typically takes 2-5 minutes.
-      </p>
-    </div>
+    <VSLoadingShell
+      scoutId={scoutId}
+      icon="hammer"
+      title="Generating Deck"
+      description="Copying the deck template into the Drive output folder, populating slides with project + venue data, and inserting your photos. This typically takes 2 minutes."
+      steps={STEPS}
+      activeStepKey={active}
+    />
   );
 }

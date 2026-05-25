@@ -153,6 +153,9 @@
      per Phase 3.5b decision — uppercase buttons read too presentational
      for a working dashboard. */
 
+  /* R7 § B → R7 amendment v1 § 1: sans flip REVERTED. Title-tier classes
+     back on Montserrat (var(--font-display)) + extrabold (800). The
+     post-R7 Roboto + black combo was rejected at producer smoke. */
   .h-page {
     @apply text-[34px] font-extrabold uppercase leading-none;
     font-family: var(--font-display);
@@ -173,10 +176,20 @@
      they were silently overridden and would have flipped label color
      app-wide on any file reorder. */
   .crumb {
+    /* R6 § A.1 → R6 amendment v1 § 2: inline-flex + gap is the proper fix.
+       The earlier `white-space: nowrap` reduced wrap risk but didn't fully
+       eliminate the icon-on-its-own-line case at narrow widths, because
+       the literal space char between icon + label still offered a break
+       opportunity. Flex children carry no break opportunity between them;
+       gap:6px replaces the whitespace char. */
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     @apply text-[12px] font-medium uppercase;
     font-family: var(--font-mono);
     color: hsl(var(--primary));
     letter-spacing: 0.08em;
+    white-space: nowrap;
   }
   .eyebrow {
     @apply text-[14px] font-bold uppercase;
@@ -319,7 +332,9 @@
      § 5b. */
 
   /* Card title (canonical, in-card headers on dashboards + table headbars).
-     Distinct from .h-section (22px); use .h-card inside cards. */
+     Distinct from .h-section (22px); use .h-card inside cards.
+     R7 amendment v1 § 1: family reverted to var(--font-display); weight
+     reverted to extrabold (the R7 sans flip was rejected). */
   .h-card {
     font-family: var(--font-display);
     @apply text-[18px] font-extrabold;
@@ -343,6 +358,9 @@
     @apply text-[21px] font-extrabold uppercase tracking-[-0.01em];
   }
   .hq-brand-hq { color: hsl(var(--primary)); }
+  /* Phase 5.12.12: coral accent for the VS brand's "Scout" line
+     (parallel to .hq-brand-hq for "HQ" on the HQ brand). */
+  .hq-brand-vs { color: hsl(var(--primary)); }
   .hq-rail-nav {
     @apply flex flex-col gap-px overflow-y-auto;
     padding: 10px 0;
@@ -371,6 +389,21 @@
     color: hsl(var(--primary));
     border-left-color: hsl(var(--primary));
     background: rgba(190, 78, 68, 0.08);
+  }
+  /* Phase 5.12.12: hover affordance for an active row (HQ Tools current-
+     route match OR any VS forceActive row). Swaps to a white-tinted
+     background so the producer gets clear feedback on the row they're
+     about to click; without this rule the default .hq-ri:hover styling
+     gets fully overridden by .hq-ri--active (later rule + same specificity)
+     and hovering an active row would look identical to its rest state.
+     Text stays coral. */
+  .hq-ri--active:hover {
+    color: hsl(var(--primary));
+    background: rgba(255, 255, 255, 0.10);
+  }
+  /* Phase 5.12.12: indent modifier for grouped sub-items (e.g., VS rail). */
+  .hq-ri--indent {
+    padding-left: 34px;
   }
   .hq-ri-count {
     margin-left: auto;
@@ -412,6 +445,20 @@
     @apply flex items-center gap-[14px] px-[22px];
     background: hsl(var(--background));
   }
+  /* R7 § E → R7 amendment v1 § 1: TopBar center-zone Client + Event
+     label. Family + weight reverted to Montserrat (var(--font-display)) +
+     extrabold to match the .hq-brand-txt wordmark as a peer. Size kept
+     at 15px (smaller than the 21px brand wordmark so the center line
+     defers visually to the brand mark in the left zone). */
+  .hq-scout-label {
+    font-family: var(--font-display);
+    @apply text-[15px] font-extrabold uppercase tracking-[-0.01em];
+    color: hsl(var(--foreground));
+    max-width: 100%;
+  }
+  /* R7 amendment v4 § 1 → R7 amendment v5 § 1: `.hq-topbar-divider`
+     reverted; the LeftRail's right border was the intended visual
+     divider between the rail's wordmark and the TopBar's back-crumb. */
   .hq-searchbar {
     @apply flex-1 flex items-center gap-2 px-[11px];
     max-width: 420px;
@@ -795,7 +842,11 @@
   .combo-stack-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;}
   .combo-stack-row .combo-link{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
-  /* Tables. Wrap in .tbl-wrap. Use .tbl--flat to strip row left borders. */
+  /* Tables. Wrap in .tbl-wrap. Use .tbl--flat to strip row left borders.
+     R7 amendment v1 § 2: thead default stays text-align:left for HQ Core
+     consumers (Settings, Wiki, ProjectDetail, etc. — they ship that
+     contract). .tbl--matrix overrides below center the matrix's headers
+     per producer call. `.tbl thead th.l/.c/.r` opt-in classes preserved. */
   .tbl{width:100%;border-collapse:collapse;}
   .tbl thead th{font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--subtle-foreground));text-align:left;padding:10px 14px;background:hsl(var(--surface-alt));border-bottom:1px solid hsl(var(--border));}
   .tbl thead th.r{text-align:right;}
@@ -819,6 +870,65 @@
   .rb-muted{border-left-color:hsl(var(--border-strong))!important;}
   .rb-purple{border-left-color:hsl(var(--purple))!important;}
   .tbl--flat tbody tr{border-left-color:transparent!important;}
+
+  /* R7 § A → R7 amendment v1 § 2: `.tbl--matrix` is the VS-matrix canon for
+     Sourcing + Shortlist. The matrix bypasses `.tbl` entirely — the
+     bespoke <Th>/<Td>/tr primitives carry Tailwind utility classes that
+     handle alignment + padding + hover + cell dividers, and composing
+     with `.tbl` would lose every one of those utilities to higher-
+     specificity .tbl base rules. So matrix tables use ONLY `.tbl--matrix`
+     (not `.tbl .tbl--matrix`).
+       - `width:100%` + `border-collapse: collapse` matches the .tbl
+         baseline so col widths from <colgroup> + cell borders render
+         normally.
+       - `min-width: 1280px` so single chips like "Floor-to-Ceiling
+         Windows" don't bump against col dividers.
+       - `table-layout: fixed` so explicit <col> widths are honored.
+     The matrix primitive components in
+     `src/components/venue-scout/matrix/primitives.tsx` carry the rest. */
+  .tbl--matrix{width:100%;border-collapse:collapse;min-width:1280px;table-layout:fixed;}
+
+  /* R7 amendment v2 § 2 → R7 amendment v3 § 1: `.scout-list-tbl` wrapper
+     aligns ScoutIndex DataTable visuals with Sourcing/Shortlist matrix
+     contract (header bg + centering, body row bg, archived-row treatment,
+     column dividers, no canon `::after` pseudo bar) WITHOUT matrix-
+     specific deltas (sticky col, 1280 min-width, table-fixed). HQ Core
+     `.tbl` consumers (Settings, Wiki, ProjectDetail, etc.) stay
+     unchanged because all rules are scoped through `.scout-list-tbl`. */
+  .scout-list-tbl .tbl thead th{
+    background:hsl(var(--surface));
+    text-align:center;
+  }
+  .scout-list-tbl .tbl thead th, .scout-list-tbl .tbl tbody td{
+    border-right:1px solid hsl(var(--border));
+  }
+  .scout-list-tbl .tbl thead th:last-child,
+  .scout-list-tbl .tbl tbody td:last-child{
+    border-right:0;
+  }
+  /* Drop the canon `::after` cell-divider pseudo bar; the per-cell
+     border-r above takes its place (mirrors how matrix `[&>td]:border-r`
+     replaces the pseudo). */
+  .scout-list-tbl .tbl thead th::after,
+  .scout-list-tbl .tbl tbody td::after{
+    display:none;
+  }
+  /* R7 amendment v3 § 1.1: body row bg matches matrix tables' `bg-surface-
+     alt` (Sourcing/Shortlist wrap the matrix table in
+     `<div className="tbl-wrap bg-surface-alt">`). ScoutIndex consumes
+     DataTable which renders a `.tbl-wrap` with no bg, so painting
+     `bg-surface-alt` on every tbody td closes the visual gap. */
+  .scout-list-tbl .tbl tbody td{
+    background:hsl(var(--surface-alt));
+  }
+  /* R7 amendment v3 § 1.2: archived (terminal-tier) rows match the
+     header's bg + text color. DataTable applies `opacity: 0.6` inline
+     to terminal rows — that's the selector hook. Subtle-foreground
+     matches what the .tbl thead th uses. */
+  .scout-list-tbl .tbl tbody tr[style*="opacity"] td{
+    background:hsl(var(--surface));
+    color:hsl(var(--subtle-foreground));
+  }
   .checkbox{width:15px;height:15px;border:1px solid hsl(var(--border-strong));border-radius:3px;background:hsl(var(--surface-alt));display:inline-flex;align-items:center;justify-content:center;color:#000;cursor:pointer;}
   .checkbox--on{background:hsl(var(--primary));border-color:hsl(var(--primary));}
   .checkbox .ic{width:11px;height:11px;stroke-width:3;}
@@ -1028,6 +1138,27 @@
      bars). Same shell as .savebar but without the cancel/save flex
      layout — the consumer owns the inner content layout. */
   .actionbar{position:fixed;left:232px;right:0;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:linear-gradient(rgba(190,78,68,.18),rgba(190,78,68,.18)),hsl(var(--background));box-shadow:0 -12px 28px rgba(0,0,0,.6);}
+
+  /* Phase 5.12.14 HQ Core surfaces */
+  /* R7 § C: .hq-explainer flipped to flex-sibling layout. Label sits left
+     of the prose (was stacked above), separated by a 12px gap. The
+     surrounding border + padding stays so the explainer still reads as
+     its own block; producers can scan label-tag → body inline without
+     two-row stacking. `margin-bottom` retained for backward-compat with
+     the consumer pattern (page wrappers don't always stack via
+     stack-* rhythm yet). */
+  .hq-explainer{display:flex;align-items:flex-start;gap:12px;border:1px solid hsl(var(--border));background:hsl(var(--surface-alt));border-radius:var(--radius);padding:16px 20px;margin-bottom:24px;}
+  /* Phase 5.12.14.3 Round 3 amendment v1 § 3 (supersedes Round 3 § B):
+     `.hq-explainer-label` canonical = Montserrat ExtraBold + coral +
+     13px. Round 3 § B's grey/mono lock reversed by producer review;
+     this is the new explainer-label canonical for app-wide reuse. */
+  /* R7 § C: label-row sibling — flex-shrink:0 + line-height match the
+     body's first line so the chip baselines align with the prose. The
+     old `margin-bottom:6px` (stacked spacing) is retired; the flex gap
+     handles label → body separation. `padding-top:2px` nudges the chip's
+     visual midline up to match the prose's cap-height. */
+  .hq-explainer-label{flex-shrink:0;padding-top:2px;font-family:var(--font-display);font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:hsl(var(--primary));}
+  .hq-explainer-body{font-size:14px;line-height:1.5;color:hsl(var(--foreground));}
 
   /* Board / kanban. Standard = horizontal scroll; stacked = vertical row groups. */
   .board{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding-bottom:6px;}
@@ -1339,6 +1470,59 @@
   }
   .text-subtle { color: hsl(var(--subtle-foreground)); }
   .text-faint { color: hsl(var(--subtle-foreground) / 0.6); }
+
+  /* Audit pass 2 item 3: VS loading shell icon-as-spinner keyframes.
+     The icon IS the spinner; no separate spinning circle. Three icons
+     each get their own motion. Global @media (prefers-reduced-motion: reduce)
+     guard at the bottom of this file collapses animation-duration to 0.01ms
+     so the icon reads static for producers who opt out of motion.
+     Hammer + magnifier keyframes deliberately omitted until prototype on
+     pencil is approved -- the classes ship referenced by VSLoadingShell so
+     a pre-approval Generating / Researching render falls through to a static
+     icon rather than throwing. */
+  /* Diagonal swipe: pencil sweeps from upper-left to lower-right and back,
+     like a writing stroke. Asymmetric 0-45% sweep + 45-100% reset so the
+     return reads slower, which gives the "stroke + lift" pulse. Rotation
+     range tightened to -10deg -> -24deg (steeper arc per producer feedback). */
+  @keyframes vs-loading-pencil {
+    0%   { transform: translate(-5px, -2px) rotate(-10deg); }
+    45%  { transform: translate(6px,  3px)  rotate(-24deg); }
+    100% { transform: translate(-5px, -2px) rotate(-10deg); }
+  }
+  .vs-loading-icon--pencil {
+    transform-origin: bottom right;
+    animation: vs-loading-pencil 1.4s ease-in-out infinite;
+  }
+
+  /* Hammer (Generating): strike-swing about the grip. Lucide's hammer
+     has the head at upper-right and the handle running diagonally to the
+     bottom-LEFT (the grip end). Pivot must therefore be `bottom left`,
+     not `bottom right` (rotating around an empty corner was producing
+     the wrong arc). Rest position is `rotate(-30deg)` (head raised, near
+     vertical); 50% swings clockwise 90deg to `rotate(60deg)` (head
+     sweeps DOWN to the right, handle near-horizontal). Smooth ease-in-out
+     back-and-forth, no Y translation (a Y bob reads as "jumping"). */
+  @keyframes vs-loading-hammer {
+    0%, 100% { transform: rotate(-30deg); }
+    50%      { transform: rotate(60deg); }
+  }
+  .vs-loading-icon--hammer {
+    transform-origin: bottom left;
+    animation: vs-loading-hammer 1.4s ease-in-out infinite;
+  }
+
+  /* Magnifying glass (Researching): slow scan sweep. Rotates -18deg ->
+     +18deg while drifting left-right, suggesting the producer is looking
+     across a page. Slower duration (2.4s) so the motion reads as deliberate
+     scanning, not spinning. */
+  @keyframes vs-loading-magnifier {
+    0%, 100% { transform: translate(-4px, 0) rotate(-18deg); }
+    50%      { transform: translate(4px,  0) rotate(18deg); }
+  }
+  .vs-loading-icon--magnifier {
+    transform-origin: center;
+    animation: vs-loading-magnifier 2.4s ease-in-out infinite;
+  }
 }
 
 /* UX audit F10.1: respect the OS reduced-motion setting. HQ had no

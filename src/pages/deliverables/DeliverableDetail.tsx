@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { deliverableStatusToken } from "@/lib/home/projectStatusToken";
 import { formatMediumDate, formatShortDate } from "@/lib/hq/dates";
 import {
@@ -10,7 +9,6 @@ import {
   updateDeliverableStatus,
   type DeliverableStatus,
 } from "@/lib/deliverables/queries";
-import { useBackHref } from "@/lib/hq/useBackHref";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
 import { DField } from "@/components/hq/DField";
@@ -49,7 +47,6 @@ export default function DeliverableDetail() {
   const [projectOptions, setProjectOptions] = useState<{ id: string; label: string }[]>([]);
   const [userOptions, setUserOptions] = useState<{ id: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const back = useBackHref({ to: "/deliverables", label: "Deliverables" });
 
   useEffect(() => {
     if (!id) return;
@@ -212,10 +209,7 @@ export default function DeliverableDetail() {
 
   return (
     <div className="stack-4" style={{ maxWidth: 760 }}>
-      <Link to={back.to} className="crumb">
-        <IconArrowLeft className="ic ic-sm" />
-        Back to {back.label}
-      </Link>
+      {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
       <header className="stack-3">
         <div className="eyebrow" style={{ paddingTop: 8 }}>Deliverable</div>
         <div className="row between" style={{ alignItems: "center" }}>

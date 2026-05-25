@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -415,9 +415,7 @@ export function BulkImportPage({
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
       <header className="space-y-2">
-        <Link to="/settings" className="crumb">
-          ← Back to Settings
-        </Link>
+        {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
         <h1 className="h-page">Bulk Import · {config.displayName}</h1>
         <p className="text-sm text-muted-foreground">{config.shortDescription}</p>
       </header>

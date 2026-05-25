@@ -45,10 +45,6 @@ Otherwise the expanded keyword lists are mutually exclusive: no other collision 
 
 ## Template file
 
-`venue-scout-sheet-template.csv` (next to this README): three sample rows:
-
-1. Fully filled (every column populated)
-2. Minimal (name + address + neighborhood only); AI fills the rest from web search
-3. URL-only (name + Website); AI uses the URL as the primary research source
+`public/templates/venue-scout-sheet-template.csv` (served at `/templates/venue-scout-sheet-template.csv` and surfaced as the "Download sheet template (CSV)" affordance on `/venue-scout/overview` since Phase 5.12.14.3 R5 § B1): a single fully-populated example row (Phase 5.12.14.3 R5 amendment v1 trimmed the minimal + URL-only sample rows; the canonical shape is the fully-filled row, partial-row tolerance is documented above in the per-column table).
 
 Open in Numbers / Excel / Google Sheets; save back as XLSX if you prefer. The parser handles XLSX, CSV, and (naively) PDF.

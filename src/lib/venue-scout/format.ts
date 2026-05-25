@@ -68,7 +68,11 @@ export function stepToRoute(scoutId: string, step: string | null | undefined): s
       // /brief/report once the scout is past intake.
       return `/venue-scout/scouts/${scoutId}/brief`;
     case "sheet_upload":
-      return `/venue-scout/scouts/${scoutId}/sourcing/sheet-upload`;
+      // Phase 5.12.14.1 Stage 2C: /sourcing/sheet-upload merged into
+      // /sourcing/sheet-prompt with an expanding upload card. The
+      // sheet_upload enum value still routes here; the ?upload=1 flag
+      // auto-expands the upload section on landing.
+      return `/venue-scout/scouts/${scoutId}/sourcing/sheet-prompt?upload=1`;
     case "researching":
       return `/venue-scout/scouts/${scoutId}/sourcing/researching`;
     case "sourcing_report":
@@ -76,11 +80,13 @@ export function stepToRoute(scoutId: string, step: string | null | undefined): s
     case "shortlist":
       return `/venue-scout/scouts/${scoutId}/sourcing/shortlist`;
     case "review_selects":
-      return `/venue-scout/scouts/${scoutId}/sourcing/review`;
+      // Phase 5.12.15: legacy enum value; routes forward to the
+      // consolidated Review surface. No backfill migration.
+      return `/venue-scout/scouts/${scoutId}/review`;
     case "compiling":
       return `/venue-scout/scouts/${scoutId}/sourcing/compiling`;
     case "deck_prep":
-      return `/venue-scout/scouts/${scoutId}/deck/prep`;
+      return `/venue-scout/scouts/${scoutId}/review`;
     case "completed":
       return `/venue-scout/scouts/${scoutId}/brief`;
     case "sheet_prompt":
@@ -93,19 +99,23 @@ export function isInProgress(step: string | null | undefined): boolean {
   return !!step && step !== "sheet_prompt" && step !== "completed";
 }
 
-// Phase 4.10.3-port: 3-tier source priority for the matrix sort.
-// Manual venues pin to the top (producer-added are always visible), then
-// uploaded sheet rows, then AI-research rows. Within each tier, rank desc.
-// Used by SourcingReport + Shortlist; DeckPrep stays on producer-controlled
-// dnd-kit order (port plan § 9 4.6-port lock).
+// Phase 4.10.3-port: source priority for the matrix sort. Phase 5.12.1
+// extends to 4 tiers: manual venues pin to the top (producer-added are
+// always visible), then uploaded sheet rows (producer-curated), then HQ
+// pool rows (admin-curated, auto-loaded by vs-research-venues), then AI
+// research rows. Within each tier, rank desc. Used by SourcingReport +
+// Shortlist; DeckPrep stays on producer-controlled dnd-kit order (port
+// plan § 9 4.6-port lock).
 //
-// `source` column values are 'manual' | 'sheet' | 'research' per the
-// vs_candidate_venues constraint (port plan § 4.1-port migration). Unknown
-// or null values fall back to lowest priority so they sort to the bottom.
+// `source` column values are 'manual' | 'sheet' | 'hq_pool' | 'research'
+// per the vs_candidate_venues CHECK constraint (widened from 3 values to 4
+// in the Phase 5.12.1 migration). Unknown or null values fall back to
+// lowest priority so they sort to the bottom.
 export const SOURCE_PRIORITY: Record<string, number> = {
   manual: 0,
   sheet: 1,
-  research: 2,
+  hq_pool: 2,
+  research: 3,
 };
 
 // Producer-facing label for the Phase column on Scout Index. Tweak in one

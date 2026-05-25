@@ -189,6 +189,45 @@ export type Database = {
           },
         ]
       }
+      city_aliases: {
+        Row: {
+          alias: string
+          city_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+        }
+        Insert: {
+          alias: string
+          city_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Update: {
+          alias?: string
+          city_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "city_aliases_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "city_aliases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           city: string | null
@@ -452,6 +491,45 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "mirror_holidays_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      neighborhoods: {
+        Row: {
+          city_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          city_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          city_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "neighborhoods_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "neighborhoods_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
@@ -2332,6 +2410,7 @@ export type Database = {
           capacity: number | null
           considerations: string[]
           created_at: string
+          dedupe_meta: Json | null
           derived_attrs: Json
           id: string
           include_in_deck: boolean
@@ -2358,6 +2437,7 @@ export type Database = {
           capacity?: number | null
           considerations?: string[]
           created_at?: string
+          dedupe_meta?: Json | null
           derived_attrs?: Json
           id?: string
           include_in_deck?: boolean
@@ -2384,6 +2464,7 @@ export type Database = {
           capacity?: number | null
           considerations?: string[]
           created_at?: string
+          dedupe_meta?: Json | null
           derived_attrs?: Json
           id?: string
           include_in_deck?: boolean
@@ -2682,6 +2763,14 @@ export type Database = {
         Returns: undefined
       }
       start_over_scout: { Args: { target_scout_id: string }; Returns: Json }
+      vs_deck_try_acquire_kickoff: {
+        Args: { grace_seconds?: number; target_scout_id: string }
+        Returns: boolean
+      }
+      vs_research_try_acquire_kickoff: {
+        Args: { grace_seconds?: number; target_scout_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       deliverable_status: "Upcoming" | "Complete" | "Skipped"

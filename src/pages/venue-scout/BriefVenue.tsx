@@ -10,9 +10,8 @@
 // generation, gated on a hash stored in brief_data.overview_source_hash), and
 // navigates to /brief/report. current_step is NOT touched here.
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -21,13 +20,13 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
-import {
-  ScoutSettingsLink,
-  ScoutStepThroughNav,
-} from "@/components/venue-scout/ScoutChrome";
+import { ScoutPageHeader } from "@/components/venue-scout/ScoutPageHeader";
+import { VSPageField } from "@/components/venue-scout/VSPageField";
 import { Stepper } from "@/components/venue-scout/Stepper";
 import { TagInput } from "@/components/venue-scout/TagInput";
 import { ChipMultiSelect } from "@/components/venue-scout/ChipMultiSelect";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { useCityIdForName } from "@/lib/hq/lookups";
 import {
   buildOverviewStub,
   computeOverviewSourceHash,
@@ -113,6 +112,12 @@ export default function BriefVenue() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
+
+  // Phase 5.12.9: resolve form.city -> canonical cities.id so the
+  // target_neighborhoods picker can parent-scope. Hook lives ABOVE the
+  // early return below (design-system § 12 rule 2). Null-safe input keeps
+  // the hook ordering stable while the scout row is loading.
+  const cityId = useCityIdForName(form?.city ?? null);
 
   if (!scout || !form || !initial || !scoutId) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
@@ -247,213 +252,241 @@ export default function BriefVenue() {
     navigate(`/venue-scout/scouts/${scout.id}/brief/report`);
   };
 
-  // Square-footage slider <-> form-value mapping.
-  const rangeLo = form.sq_ft_min ?? 0;
-  const rangeHi = form.sq_ft_max ?? SQ_FT_MAX;
-  const rangeLabel = `${
-    form.sq_ft_min === null ? "TBD" : form.sq_ft_min.toLocaleString()
-  } to ${
-    form.sq_ft_max === null ? "10,000+" : form.sq_ft_max.toLocaleString()
-  } sq ft`;
+  // Square-footage slider <-> form-value mapping. Round 4 amendment v2 § D
+  // retired the sq_ft_min/sq_ft_max range pair; sq_ft_minimum is the sole
+  // intake control now.
   const minPos = form.sq_ft_minimum ?? 0;
   const minLabel =
     form.sq_ft_minimum === null
       ? "Any"
       : `${form.sq_ft_minimum.toLocaleString()} sq ft`;
 
+  // Phase 5.12.14.3 Round 4 § 7.B: outer drops `mx-auto max-w-3xl` and goes
+  // full-width inside the AppShell chrome. `stack-6` (24px gap) replaces the
+  // legacy `space-y-6` so vertical rhythm matches BriefReport + BriefEvent.
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-24">
-      <Link to="/venue-scout" className="crumb">
-        ← Back to Venue Scout
-      </Link>
-      <header className="flex items-end justify-between gap-5">
-        <div className="space-y-2">
-          <h1 className="h-page">Venue Details</h1>
-          <p className="text-sm text-muted-foreground">
-            Tell us where the event lives and what kind of space we're hunting for.
-          </p>
+    <div className="stack-6 pb-32">
+      <header className="space-y-2">
+        {/* R7 amendment v2 § 5: shared ScoutPageHeader (crumb left, phase
+            stepper centered, gear right). */}
+        <ScoutPageHeader scoutId={scout.id} scout={scout} />
+        {/* Intake Stepper inline with Brief title — see BriefEvent for rationale. */}
+        <div className="flex items-center gap-5">
+          <h1 className="h-page">Brief →</h1>
+          <Stepper active={2} />
         </div>
-        <ScoutSettingsLink scoutId={scout.id} />
       </header>
-      <ScoutStepThroughNav scoutId={scout.id} scout={scout} />
-      <Stepper active={2} />
 
       {isArchived && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <div className="rounded-md border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
           This scout is archived. Restore it from the Venue Scout index to edit the brief.
         </div>
       )}
 
-      <Card className="bg-surface-alt">
-        <CardContent className="space-y-8 p-8">
-          {/* ---- City + Expected Guest Count ---- */}
-          <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <Field label="City" required>
-              <Input
-                value={form.city}
-                onChange={(e) => update("city", e.target.value)}
-                placeholder="e.g. New York, NY"
-                disabled={isArchived}
-              />
-            </Field>
-            <Field label="Expected guest count">
-              <Input
-                inputMode="numeric"
-                value={form.expected_guest_count}
-                onChange={(e) => update("expected_guest_count", e.target.value)}
-                placeholder="e.g. 150"
-                disabled={isArchived}
-              />
-            </Field>
-          </section>
+      {/* Phase 5.12.14.3 Round 4 amendment: VS card-canon. Outer "Venue" card
+          hosts one nested Details card with five grid rows. Sub-section
+          eyebrows + section wrappers retired; .card-headbar + .h-card chrome
+          replaces them. Strict checkbox folded into the Target Neighborhoods
+          cell. Vibe + Aesthetic migrated from BriefEvent (state shape
+          unchanged -- brief_data is flat jsonb). Min. Square Footage now
+          renders before Sq. Footage Range. */}
+      <section className="card">
+        <div className="card-headbar">
+          <h2 className="h-card">Venue</h2>
+        </div>
+        <div className="card-pad">
 
-          {/* ---- Target Neighborhoods + strict toggle ---- */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <Label className="text-xs font-mono font-bold uppercase tracking-wider text-primary">
-                Target neighborhoods
-              </Label>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Checkbox
-                  checked={form.strict_neighborhoods_only}
-                  onCheckedChange={(c) =>
-                    update("strict_neighborhoods_only", c === true)
-                  }
-                  disabled={isArchived}
-                />
-                Search strictly these neighborhoods only?
-              </label>
+          <section className="card">
+            <div className="card-headbar">
+              <h3 className="h-card">Details</h3>
             </div>
-            <TagInput
-              value={form.target_neighborhoods}
-              onChange={(v) => update("target_neighborhoods", v)}
-              placeholder="e.g. SoHo, then Enter"
-              disabled={isArchived}
-            />
-          </section>
+            <div className="card-pad space-y-6">
 
-          {/* ---- Venue Type ---- */}
-          <section className="space-y-4">
-            <Field label="Venue type">
-              <ChipMultiSelect
-                value={form.venue_types}
-                onChange={(v) => update("venue_types", v)}
-                disabled={isArchived}
-              />
-            </Field>
-          </section>
+              {/* Row 1 (3-col): City | Neighborhood(s) + Strict-in-label
+                  composite | Expected Guest Count.
 
-          {/* ---- Square Footage Range + Minimum ---- */}
-          <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <Field label="Square footage range">
-              <div className="pt-2">
-                <Slider
-                  value={[rangeLo, rangeHi]}
-                  min={0}
-                  max={SQ_FT_MAX}
-                  step={SQ_FT_STEP}
-                  onValueChange={([lo, hi]) =>
-                    patch({
-                      sq_ft_min: lo === 0 ? null : lo,
-                      sq_ft_max: hi === SQ_FT_MAX ? null : hi,
-                    })
+                  R6 amendment v1 § 1: in-label composite restored. The
+                  nested-<label> HTML bug is fixed at the VSPageField
+                  primitive level — composite ReactNode labels now render
+                  inside a <div> wrapper instead of <Label>, so the
+                  click-on-text-toggles-checkbox bug doesn't re-appear. The
+                  inner Checkbox's own <Label htmlFor> keeps explicit
+                  single-association for the checkbox toggle. */}
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <VSPageField label="City" required>
+                  <RecordCombobox
+                    source={{ kind: "lookup", table: "cities" }}
+                    value={form.city || null}
+                    onChange={(v) =>
+                      // Phase 5.12.9: city change clears target_neighborhoods
+                      // (prior picks may not exist under the new city).
+                      patch({ city: v ?? "", target_neighborhoods: [] })
+                    }
+                    entityLabel="city"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
+                <VSPageField
+                  label={
+                    <span className="flex items-center gap-2">
+                      <span>Neighborhood(s)</span>
+                      <span className="ml-2 inline-flex items-center gap-1.5 normal-case font-normal tracking-normal">
+                        <Checkbox
+                          id="strict_neighborhoods_only"
+                          checked={form.strict_neighborhoods_only}
+                          onCheckedChange={(c) =>
+                            update("strict_neighborhoods_only", c === true)
+                          }
+                          disabled={isArchived}
+                        />
+                        <Label
+                          htmlFor="strict_neighborhoods_only"
+                          className="text-xs text-muted-foreground"
+                        >
+                          Strict?
+                        </Label>
+                      </span>
+                    </span>
                   }
-                  disabled={isArchived}
-                />
-                <p className="mt-2 font-mono text-sm font-bold text-foreground">
-                  {rangeLabel}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Slide the ends to TBD / 10,000+ for an open range.
-                </p>
+                >
+                  <RecordCombobox
+                    multi
+                    multiValue={form.target_neighborhoods}
+                    onMultiChange={(v) => update("target_neighborhoods", v)}
+                    source={{
+                      kind: "lookup",
+                      table: "neighborhoods",
+                      parentScopeId: cityId,
+                      parentScopeLabel: form.city || null,
+                      parentScopeLabelKey: "City",
+                    }}
+                    entityLabel="neighborhood"
+                    placeholder={cityId ? "Pick neighborhoods" : "Pick a city first"}
+                    disabled={isArchived || !cityId}
+                  />
+                </VSPageField>
+                <VSPageField label="Expected Guest Count">
+                  <Input
+                    inputMode="numeric"
+                    value={form.expected_guest_count}
+                    onChange={(e) => update("expected_guest_count", e.target.value)}
+                    placeholder="e.g. 150"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
               </div>
-            </Field>
-            <Field label="Minimum square footage">
-              <div className="pt-2">
-                <Slider
-                  value={[minPos]}
-                  min={0}
-                  max={SQ_FT_MAX}
-                  step={SQ_FT_STEP}
-                  onValueChange={([v]) =>
-                    update("sq_ft_minimum", v === 0 ? null : v)
-                  }
-                  disabled={isArchived}
-                />
-                <p className="mt-2 font-mono text-sm font-bold text-foreground">
-                  {minLabel}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Hard floor the search shouldn't go below.
-                </p>
+
+              {/* Row 2: Venue Type full-width */}
+              <div>
+                <VSPageField label="Venue Type">
+                  <ChipMultiSelect
+                    value={form.venue_types}
+                    onChange={(v) => update("venue_types", v)}
+                    disabled={isArchived}
+                  />
+                </VSPageField>
               </div>
-            </Field>
+
+              {/* Row 3: Min. Square Footage full-width (Sq. Footage Range field
+                  retired in Round 4 amendment v2 § D). */}
+              <div>
+                <VSPageField label="Min. Square Footage">
+                  <div className="pt-2">
+                    <Slider
+                      value={[minPos]}
+                      min={0}
+                      max={SQ_FT_MAX}
+                      step={SQ_FT_STEP}
+                      onValueChange={([v]) =>
+                        update("sq_ft_minimum", v === 0 ? null : v)
+                      }
+                      disabled={isArchived}
+                    />
+                    <p className="mt-2 font-mono text-sm font-bold text-foreground">
+                      {minLabel}
+                    </p>
+                  </div>
+                </VSPageField>
+              </div>
+
+              {/* Row 4: Ideal Features | Vibe + Aesthetic (migrated from BriefEvent;
+                  binds to the same form.vibe_aesthetic flat key). */}
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <VSPageField label="Ideal Features">
+                  <TagInput
+                    value={form.ideal_features}
+                    onChange={(v) => update("ideal_features", v)}
+                    placeholder="catering kitchen, parking, projection mapping…"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
+                <VSPageField label="Vibe + Aesthetic">
+                  <TagInput
+                    value={form.vibe_aesthetic}
+                    onChange={(v) => update("vibe_aesthetic", v)}
+                    placeholder="e.g. Warm, Premium, then Enter"
+                    disabled={isArchived}
+                  />
+                </VSPageField>
+              </div>
+
+              {/* Row 5: Location Priority | Cost Priority (literal "(optional)"
+                  suffix in label text per amendment). */}
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <VSPageField label="Location Priority (optional)">
+                  <ToggleGroup
+                    type="single"
+                    value={form.priority_location ?? ""}
+                    onValueChange={(v) =>
+                      update(
+                        "priority_location",
+                        v ? (v as PriorityLocation) : null,
+                      )
+                    }
+                    disabled={isArchived}
+                    className="justify-start"
+                  >
+                    <ToggleGroupItem value="high_foot_traffic">
+                      High Foot Traffic
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="intimate_destination">
+                      Intimate / Destination
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </VSPageField>
+                <VSPageField label="Cost Priority (optional)">
+                  <ToggleGroup
+                    type="single"
+                    value={form.priority_cost ?? ""}
+                    onValueChange={(v) =>
+                      update("priority_cost", v ? (v as PriorityCost) : null)
+                    }
+                    disabled={isArchived}
+                    className="justify-start"
+                  >
+                    <ToggleGroupItem value="lower_cost">
+                      Lower Venue Costs
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="premium">Premium Venue</ToggleGroupItem>
+                  </ToggleGroup>
+                </VSPageField>
+              </div>
+
+            </div>
           </section>
 
-          {/* ---- Ideal Features ---- */}
-          <section className="space-y-4">
-            <Field label="Ideal features">
-              <TagInput
-                value={form.ideal_features}
-                onChange={(v) => update("ideal_features", v)}
-                placeholder="catering kitchen, parking, projection mapping…"
-                disabled={isArchived}
-              />
-            </Field>
-          </section>
-
-          {/* ---- Event Priorities ---- */}
-          <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <Field label="Event priority · location">
-              <ToggleGroup
-                type="single"
-                value={form.priority_location ?? ""}
-                onValueChange={(v) =>
-                  update(
-                    "priority_location",
-                    v ? (v as PriorityLocation) : null,
-                  )
-                }
-                disabled={isArchived}
-                className="justify-start"
-              >
-                <ToggleGroupItem value="high_foot_traffic">
-                  High Foot Traffic
-                </ToggleGroupItem>
-                <ToggleGroupItem value="intimate_destination">
-                  Intimate / Destination
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </Field>
-            <Field label="Event priority · cost">
-              <ToggleGroup
-                type="single"
-                value={form.priority_cost ?? ""}
-                onValueChange={(v) =>
-                  update("priority_cost", v ? (v as PriorityCost) : null)
-                }
-                disabled={isArchived}
-                className="justify-start"
-              >
-                <ToggleGroupItem value="lower_cost">
-                  Lower Venue Costs
-                </ToggleGroupItem>
-                <ToggleGroupItem value="premium">Premium Venue</ToggleGroupItem>
-              </ToggleGroup>
-            </Field>
-          </section>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* ---- Sticky footer ---- */}
-      <div className="sticky bottom-0 z-10 -mx-6 mt-6 border-t-2 border-primary/40 bg-background/90 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+      <div className="actionbar">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
           <Button variant="ghost" onClick={goBack}>
             ← Back
           </Button>
           <div className="flex items-center gap-3">
             {dirty && (
-              <span className="text-xs font-mono uppercase tracking-wider text-amber-400">
+              <span className="text-xs font-mono uppercase tracking-wider text-warn">
                 Unsaved changes
               </span>
             )}
@@ -474,23 +507,3 @@ export default function BriefVenue() {
   );
 }
 
-// Inline Field -- matches the BriefEvent / NewScout page-form Field shape.
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label className="text-xs font-mono font-bold uppercase tracking-wider text-primary">
-        {label}
-        {required && <span className="ml-1 text-primary">*</span>}
-      </Label>
-      {children}
-    </div>
-  );
-}

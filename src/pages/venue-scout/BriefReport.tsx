@@ -17,8 +17,13 @@
 //     Confirm & Continue button is hidden. The Revisit nav surfaces this page
 //     from elsewhere in the flow.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ExternalLink, Loader2, Presentation } from "lucide-react";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,12 +44,12 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
-import {
-  ScoutSettingsLink,
-  ScoutStepThroughNav,
-} from "@/components/venue-scout/ScoutChrome";
+import { ScoutPageHeader } from "@/components/venue-scout/ScoutPageHeader";
 import { TagInput } from "@/components/venue-scout/TagInput";
 import { ChipMultiSelect } from "@/components/venue-scout/ChipMultiSelect";
+import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { DateRangePicker } from "@/components/ui/DateRangePicker";
+import { useCityIdForName } from "@/lib/hq/lookups";
 import { stepToRoute } from "@/lib/venue-scout/format";
 import {
   buildOverviewStub,
@@ -55,20 +60,14 @@ import {
   type PriorityLocation,
 } from "@/lib/venue-scout/briefForm";
 import { briefIntake } from "@/lib/venue-scout/briefIntakeStore";
+import {
+  GeneratedDecksCard,
+  type DeckEntry,
+} from "@/components/venue-scout/GeneratedDecksCard";
+import { BriefReportRow } from "@/components/venue-scout/BriefReportRow";
 import type { Database } from "@/integrations/supabase/types";
 
 type VsScoutRow = Database["public"]["Tables"]["vs_scouts"]["Row"];
-
-type DeckEntry = {
-  deck_id?: string;
-  deck_name?: string;
-  version?: number;
-  generated_at?: string;
-  venue_count?: number;
-  slide_count?: number;
-  edit_url?: string;
-  embed_url?: string;
-};
 
 const SCOUT_SELECT =
   "id, client_name, event_name, live_dates, city, budget, event_overview, brief_data, current_step, archived_at, name, status, project_id, sheet_storage_path, derived_columns, generated_decks, deck_order, last_touched_at, created_at, created_by, updated_at, updated_by";
@@ -85,27 +84,111 @@ const PRIORITY_COST_LABEL: Record<PriorityCost, string> = {
   premium: "Premium Venue",
 };
 
-function formatDeckDate(iso: string | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+// Phase 5.12.14 § 8.6: dynamic forward button on BriefReport. Maps the
+// scout's `current_step` to the next-actionable phase. `advancesStep` is
+// true only on the brief -> sheet_prompt transition (delegates to
+// `requestConfirm` for the CAS-guarded state write); everything else is
+// pure navigation. The `completed` case routes to deck_prep instead of
+// `stepToRoute("completed")` because the latter returns /brief (a loop
+// back to BriefReport).
+type ForwardCta = {
+  label: string;
+  destStep:
+    | "sheet_prompt"
+    | "sheet_upload"
+    | "researching"
+    | "sourcing_report"
+    | "shortlist"
+    | "compiling"
+    | "deck_prep"
+    | "completed";
+  advancesStep: boolean;
+};
+
+function resolveForwardCta(currentStep: string | null): ForwardCta {
+  switch (currentStep) {
+    case "brief":
+      return {
+        label: "Begin Sourcing →",
+        destStep: "sheet_prompt",
+        advancesStep: true,
+      };
+    case "sheet_prompt":
+      // Producer has confirmed the brief but hasn't committed any sourcing
+      // action yet (no sheet uploaded, no research kicked off). Still reads
+      // as "Begin" — they haven't started sourcing in any meaningful way.
+      return {
+        label: "Begin Sourcing →",
+        destStep: "sheet_prompt",
+        advancesStep: false,
+      };
+    case "sheet_upload":
+    case "researching":
+    case "sourcing_report":
+      // Sourcing in flight or candidate venues already sourced; switch to
+      // "Go to" because there's existing state to return to, not start.
+      return {
+        label: "Go to Sourcing →",
+        destStep:
+          (currentStep as ForwardCta["destStep"]) ?? "sourcing_report",
+        advancesStep: false,
+      };
+    case "shortlist":
+      return {
+        label: "Go to Shortlist →",
+        destStep: "shortlist",
+        advancesStep: false,
+      };
+    case "review_selects":
+      // Phase 5.12.15 retired the standalone Final Review step from the
+      // forward flow; legacy scouts still in this state route to the
+      // consolidated Review surface (stepToRoute("review_selects") resolves
+      // to /review per format.ts). NEVER fall to the default branch — that
+      // would rewind these scouts to sheet_prompt via requestConfirm.
+      return {
+        label: "Go to Review →",
+        destStep: "deck_prep",
+        advancesStep: false,
+      };
+    case "compiling":
+    case "deck_prep":
+      return {
+        label: "Go to Review →",
+        destStep: (currentStep as ForwardCta["destStep"]) ?? "deck_prep",
+        advancesStep: false,
+      };
+    case "completed":
+      return {
+        label: "Go to Review →",
+        destStep: "deck_prep",
+        advancesStep: false,
+      };
+    default:
+      // Unknown / null current_step: assume a fresh scout in the brief intake
+      // phase and let requestConfirm advance brief -> sheet_prompt. Every
+      // KNOWN step is handled above; this branch only ever fires when scout
+      // load races a render or carries a typo'd / future enum value.
+      return {
+        label: "Begin Sourcing →",
+        destStep: "sheet_prompt",
+        advancesStep: true,
+      };
+  }
 }
 
-function sqFtRangeLabel(min: number | null, max: number | null): string {
-  return `${min === null ? "TBD" : min.toLocaleString()} to ${
-    max === null ? "10,000+" : max.toLocaleString()
-  } sq ft`;
-}
+// Phase 5.12.14.1 Stage 2C revision round 2 item 1 → R7 amendment v3 § 3:
+// the dynamic-stage `resolveBriefReportCrumb` helper retired. The back-
+// crumb now lives in the global TopBar via `useReferrerCrumb`'s canonical-
+// parent table, which routes BriefReport → Brief Venue. If smoke surfaces
+// real producer need for the stage-aware routing (Sourcing /Shortlist
+// / Review depending on current_step), reinstate via a route-table
+// extension in `useReferrerCrumb` that reads scout state.
 
 export default function BriefReport() {
   const { id: scoutId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [scout, setScout] = useState<VsScoutRow | null>(null);
   const [form, setForm] = useState<BriefFormState | null>(null);
@@ -113,12 +196,24 @@ export default function BriefReport() {
   const [overviewStatus, setOverviewStatus] = useState<
     "idle" | "generating" | "regenerating"
   >("idle");
+  // Phase 5.12.14.3 Round 2 amendment v2: the Overview card sheds the
+  // BriefReportRow state machine (always-editable textarea). Local draft
+  // tracks producer edits; save fires on blur when dirty. confirmRegen gates
+  // Regenerate-while-dirty (discard-edits warning).
+  const [overviewDraft, setOverviewDraft] = useState("");
+  const [confirmRegen, setConfirmRegen] = useState(false);
 
   // Latest-form ref so async callbacks (overview generation) merge against the
   // current form, not a stale closure capture -- a card edit can land while
   // the overview is generating.
   const formRef = useRef<BriefFormState | null>(form);
   formRef.current = form;
+
+  // Phase 5.12.14.3 amendment v3 § I: Overview textarea auto-grows to fit
+  // content (no internal scroll). Hand-rolled scrollHeight measure pattern;
+  // resets to auto then sets to scrollHeight after every overviewDraft
+  // change. No new dep.
+  const overviewTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!scoutId) return;
@@ -250,20 +345,73 @@ export default function BriefReport() {
     [scoutId, saveForm],
   );
 
+  // Phase 5.12.14 § 8.7: post-deck-generate success toast. Generating.tsx
+  // navigates to /brief/report?just-generated=true on success. Fire the
+  // toast once on mount + strip the param via replace-state so a refresh
+  // doesn't re-fire.
+  useEffect(() => {
+    if (searchParams.get("just-generated") === "true") {
+      toast({
+        title: "Deck generated",
+        description: "Open in Google Slides below.",
+      });
+      const next = new URLSearchParams(searchParams);
+      next.delete("just-generated");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Hooks must be called before any early return; resolve cityId for the
+  // Neighborhoods row's RecordCombobox parent-scope (Phase 5.12.14.3 split
+  // of the prior composite City row).
+  const cityId = useCityIdForName(form?.city ?? "");
+
+  // Keep the Overview textarea draft synced with the persisted value when it
+  // changes from outside (initial load, generate completes, regenerate
+  // completes). Producer edits in the textarea drive overviewDraft directly.
+  useEffect(() => {
+    setOverviewDraft(form?.event_overview ?? "");
+  }, [form?.event_overview]);
+
+  // Auto-grow the Overview textarea to fit content (amendment v3 § I).
+  // Reset to auto first so shrinking on delete works; then read scrollHeight
+  // and set it as the explicit pixel height. R6 § M.9: `overviewStatus`
+  // added to the dep array so the effect re-fires when the textarea
+  // remounts after the loading branch flips back to idle (the ref is
+  // wired to the same DOM node, but the previous height computation may
+  // have run while the loading panel was on screen).
+  useEffect(() => {
+    const ta = overviewTextareaRef.current;
+    if (!ta) return;
+    if (overviewStatus !== "idle") return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [overviewDraft, overviewStatus]);
+
+  // R6 § M.15: ResizeObserver re-measures on viewport resize so the
+  // auto-grown height tracks line-wrap changes when the user resizes the
+  // window. Single observer instance, cleaned up on unmount or status flip.
+  useEffect(() => {
+    const ta = overviewTextareaRef.current;
+    if (!ta) return;
+    const ro = new ResizeObserver(() => {
+      if (overviewStatus !== "idle") return;
+      ta.style.height = "auto";
+      ta.style.height = `${ta.scrollHeight}px`;
+    });
+    ro.observe(ta);
+    return () => ro.disconnect();
+  }, [overviewStatus]);
+
   if (!scout || !form || !scoutId) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
-
-  const permanentSurface = scout.current_step !== "brief";
   const isArchived = scout.archived_at !== null;
 
   const decks = (
     Array.isArray(scout.generated_decks) ? scout.generated_decks : []
   ) as DeckEntry[];
-  const decksNewestFirst = [...decks].reverse();
 
-  const initials =
-    (form.client_name.trim().slice(0, 2) || "?").toUpperCase();
   const heroSub = [form.city.trim(), form.live_dates.trim()]
     .filter(Boolean)
     .join(" · ");
@@ -295,632 +443,668 @@ export default function BriefReport() {
 
   const cardDisabled = isArchived;
 
+  // Phase 5.12.14 § 8.6: derive the dynamic forward button + click handler.
+  // requestConfirm owns the brief -> sheet_prompt advance (CAS-guarded write
+  // via the existing handler); every other forward click is pure navigation.
+  const cta = resolveForwardCta(scout.current_step);
+  const onForwardClick = async () => {
+    if (confirming) return;
+    if (cta.advancesStep) {
+      await requestConfirm();
+      return;
+    }
+    navigate(stepToRoute(scoutId, cta.destStep));
+  };
+
+  // R7 amendment v3 § 3: per-page crumb fallback retired — the back-crumb
+  // now lives in the global TopBar via useReferrerCrumb. BriefReport's
+  // dynamic-stage crumb resolution (`resolveBriefReportCrumb` below)
+  // currently has no consumer; the canonical fallback in
+  // `useReferrerCrumb` routes BriefReport → Brief Venue. If the dynamic
+  // routing is missed in smoke, extend useReferrerCrumb's route table
+  // to read scout state.
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-24">
-      <Link to="/venue-scout" className="crumb">
-        ← Back to Venue Scout
-      </Link>
-      <header className="flex items-end justify-between gap-5">
-        <div className="space-y-2">
-          <h1 className="h-page">Brief</h1>
-          <p className="text-sm text-muted-foreground">
-            The locked brief. Click any card to edit it inline.
-          </p>
-        </div>
-        <ScoutSettingsLink scoutId={scout.id} />
+    <div className="stack-6 pb-32">
+      <header>
+        {/* R7 amendment v2 § 5: shared ScoutPageHeader. */}
+        <ScoutPageHeader scoutId={scout.id} scout={scout} />
       </header>
-      <ScoutStepThroughNav scoutId={scout.id} scout={scout} />
 
       {isArchived && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <div className="rounded-md border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
           This scout is archived. Restore it from the Venue Scout index to edit the brief.
         </div>
       )}
 
-      {/* ---- Hero band ---- */}
-      <div className="flex items-center gap-5 rounded-md border border-border bg-surface p-6">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-foreground text-2xl font-display font-extrabold text-background">
-          {initials}
-        </div>
-        <div className="space-y-1">
-          <div className="text-2xl font-display font-extrabold uppercase text-foreground">
-            {form.event_name || "Untitled event"}
+      {/* ---- One outer card (amendment v3 § A) ---- */}
+      {/* Hero moved into card-headbar; the page-level hero text block was
+          retired. 2-col 70/30 .detail-2col--wide grid lives inside the
+          outer card's .card-pad. Each column hosts labeled sub-sections,
+          NOT nested cards. */}
+      <section className="card">
+        <div className="card-headbar">
+          <div className="space-y-2">
+            {/* R6 § F.2: bumped from space-y-1 (4px) to space-y-2 (8px) so
+                the city/date caption breathes below the title (matches
+                ProjectDetail.tsx's title-to-meta gap). */}
+            <h1 className="h-page">{scout.name || "Untitled scout"}</h1>
+            {heroSub && <div className="detail-meta">{heroSub}</div>}
           </div>
-          {heroSub && (
-            <div className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-              {heroSub}
-            </div>
-          )}
         </div>
-      </div>
-
-      {/* ---- Generated Decks ---- */}
-      {decksNewestFirst.length > 0 && (
-        <section className="space-y-3">
-          <div className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
-            Generated Decks
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {decksNewestFirst.map((deck, i) => {
-              const meta = [
-                formatDeckDate(deck.generated_at) &&
-                  `Generated ${formatDeckDate(deck.generated_at)}`,
-                typeof deck.venue_count === "number" &&
-                  `${deck.venue_count} venues`,
-                typeof deck.slide_count === "number" &&
-                  `${deck.slide_count} slides`,
-              ]
-                .filter(Boolean)
-                .join(" · ");
-              return (
-                <div
-                  key={deck.deck_id ?? `${deck.deck_name}-${i}`}
-                  className="flex flex-col gap-3 rounded-md border border-border bg-surface-alt p-4"
-                >
-                  <div className="flex items-start gap-3">
-                    <Presentation className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-foreground">
-                        {deck.deck_name ??
-                          `Deck${
-                            typeof deck.version === "number"
-                              ? ` v${deck.version}`
-                              : ""
-                          }`}
-                      </div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        {meta}
-                      </div>
-                    </div>
-                  </div>
-                  {deck.edit_url && (
-                    <a
-                      href={deck.edit_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="self-start"
-                    >
-                      <Button
-                        variant={i === 0 ? "default" : "ghost"}
-                        size="sm"
-                        className="gap-1.5"
+        <div className="card-pad detail-2col--wide">
+          {/* Wide column (70%) -- Overview + Details sub-sections.
+              Amendment v6 § 5+6: column wrapper uses `space-y-9` for
+              inter-section breathing only; the divider-rhythm rule
+              (`[&>*]:py-N + first/last overrides`) moved INTO the
+              Details card body so the Details `.card` chrome isn't
+              affected by extra padding-top / pb-0 / column-level
+              hairlines. `pr-6` keeps the wide column content off the
+              70/30 gutter (v4 § 7). */}
+          <div className="space-y-9 pr-6">
+            {/* Overview sub-section -- always-editable textarea +
+                Regenerate-in-eyebrow per amendment v3 § A + § G + § H + § I.
+                Round 3 amendment v2 § 5: wraps in `.card` chrome with
+                `card-headbar` matching Details. Header cluster (label +
+                bullet + Regenerate) lives inside an inner flex div so
+                the three items stay grouped left despite the card-headbar's
+                `justify-content: space-between`. Textarea + loading
+                branch live inside `.card-pad`. */}
+            <section data-section="overview" className="card">
+              <div className="card-headbar">
+                <div className="flex items-center gap-2">
+                  <span className="h-card">Overview</span>
+                  {!cardDisabled && (
+                    <>
+                      <span className="text-muted-foreground">·</span>
+                      <button
+                        type="button"
+                        data-regen-button="true"
+                        disabled={overviewStatus !== "idle"}
+                        onClick={() => {
+                          // R6 § M.4: isEmpty reads the LOCAL draft (which
+                          // includes any unsaved typing) instead of the
+                          // persisted form value. A producer who types into
+                          // the empty textarea + clicks Generate would
+                          // otherwise have their draft discarded because the
+                          // form was still empty under the dirty draft.
+                          const isEmpty = (overviewDraft ?? "").trim() === "";
+                          const overviewDirty =
+                            overviewDraft !== (form.event_overview ?? "");
+                          if (isEmpty) {
+                            void runOverviewGeneration("generating");
+                            return;
+                          }
+                          if (overviewDirty) {
+                            setConfirmRegen(true);
+                          } else {
+                            void runOverviewGeneration("regenerating");
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.06em] text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
                       >
-                        Open in Google Slides
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Button>
-                    </a>
+                        {overviewStatus === "regenerating" && (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        )}
+                        {/* R6 § M.4: label tracks the dirty draft as well,
+                            so typing into an empty textarea flips the
+                            button from "Generate" to "Regenerate". */}
+                        {overviewStatus === "regenerating"
+                          ? "Regenerating…"
+                          : (overviewDraft ?? "").trim() === ""
+                            ? "Generate"
+                            : "Regenerate"}
+                      </button>
+                    </>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* ---- Event Overview ---- */}
-      <section className="space-y-3">
-        <div className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
-          Event Overview
-        </div>
-        <OverviewBlock
-          value={form.event_overview}
-          status={overviewStatus}
-          disabled={cardDisabled}
-          onSave={(v) => void saveForm({ ...form, event_overview: v })}
-          onGenerate={() => void runOverviewGeneration("generating")}
-          onRegenerate={() => void runOverviewGeneration("regenerating")}
-        />
-      </section>
-
-      {/* ---- Event ---- */}
-      <section className="space-y-3">
-        <div className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
-          Event
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <ReportCard
-            label="Live date(s)"
-            value={form.live_dates}
-            isBlank={(v) => v.trim() === ""}
-            disabled={cardDisabled}
-            renderDisplay={(v) => <span className="text-foreground">{v}</span>}
-            renderEditor={(draft, set) => (
-              <Input value={draft} onChange={(e) => set(e.target.value)} autoFocus />
-            )}
-            onSave={(v) => void saveForm({ ...form, live_dates: v })}
-          />
-
-          <ReportCard<{ install_dates: string; strike_dates: string }>
-            label="Install / Strike"
-            value={{
-              install_dates: form.install_dates,
-              strike_dates: form.strike_dates,
-            }}
-            isBlank={(v) =>
-              v.install_dates.trim() === "" && v.strike_dates.trim() === ""
-            }
-            disabled={cardDisabled}
-            renderDisplay={(v) => (
-              <div className="space-y-0.5 text-foreground">
-                <div>
-                  <span className="text-muted-foreground">Install: </span>
-                  {v.install_dates.trim() || "Not set"}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Strike: </span>
-                  {v.strike_dates.trim() || "Not set"}
-                </div>
               </div>
-            )}
-            renderEditor={(draft, set) => (
-              <div className="space-y-2">
-                <Input
-                  value={draft.install_dates}
-                  onChange={(e) =>
-                    set({ ...draft, install_dates: e.target.value })
-                  }
-                  placeholder="Install dates"
-                  autoFocus
-                />
-                <Input
-                  value={draft.strike_dates}
-                  onChange={(e) =>
-                    set({ ...draft, strike_dates: e.target.value })
-                  }
-                  placeholder="Strike dates"
-                />
-              </div>
-            )}
-            onSave={(v) => void saveForm({ ...form, ...v })}
-          />
-
-          <ReportCard
-            label="Budget"
-            value={form.budget_text}
-            isBlank={(v) => v.trim() === ""}
-            disabled={cardDisabled}
-            renderDisplay={(v) => <span className="text-foreground">{v}</span>}
-            renderEditor={(draft, set) => (
-              <Input
-                value={draft}
-                onChange={(e) => set(e.target.value)}
-                placeholder="e.g. $50,000"
-                autoFocus
-              />
-            )}
-            onSave={(v) => void saveForm({ ...form, budget_text: v })}
-          />
-
-          <ReportCard<number | null>
-            label="Activations / spaces"
-            value={form.activations_count}
-            isBlank={(v) => v === null}
-            disabled={cardDisabled}
-            renderDisplay={(v) => (
-              <span className="text-foreground">
-                {v !== null && v >= 10 ? "10+" : String(v)}
-              </span>
-            )}
-            renderEditor={(draft, set) => (
-              <div className="flex items-center gap-4 pt-1">
-                <Slider
-                  value={[draft ?? 0]}
-                  min={0}
-                  max={10}
-                  step={1}
-                  onValueChange={([v]) => set(v === 0 ? null : v)}
-                  className="flex-1"
-                />
-                <span className="w-12 shrink-0 text-right font-mono text-sm font-bold text-foreground">
-                  {draft === null ? "TBD" : draft >= 10 ? "10+" : String(draft)}
-                </span>
-              </div>
-            )}
-            onSave={(v) => void saveForm({ ...form, activations_count: v })}
-          />
-
-          <ReportCard<string[]>
-            label="Objectives"
-            value={form.objectives}
-            isBlank={(v) => v.length === 0}
-            disabled={cardDisabled}
-            fullWidth
-            renderDisplay={(v) => <TagList items={v} />}
-            renderEditor={(draft, set) => (
-              <TagInput value={draft} onChange={set} placeholder="Add objective, then Enter" />
-            )}
-            onSave={(v) => void saveForm({ ...form, objectives: v })}
-          />
-
-          <ReportCard
-            label="Target audience"
-            value={form.target_audience}
-            isBlank={(v) => v.trim() === ""}
-            disabled={cardDisabled}
-            fullWidth
-            renderDisplay={(v) => (
-              <span className="whitespace-pre-wrap text-foreground">{v}</span>
-            )}
-            renderEditor={(draft, set) => (
-              <Textarea
-                value={draft}
-                onChange={(e) => set(e.target.value)}
-                rows={4}
-                autoFocus
-              />
-            )}
-            onSave={(v) => void saveForm({ ...form, target_audience: v })}
-          />
-
-          <ReportCard
-            label="Vibe / aesthetic"
-            value={form.vibe_aesthetic}
-            isBlank={(v) => v.trim() === ""}
-            disabled={cardDisabled}
-            fullWidth
-            renderDisplay={(v) => (
-              <span className="whitespace-pre-wrap text-foreground">{v}</span>
-            )}
-            renderEditor={(draft, set) => (
-              <Textarea
-                value={draft}
-                onChange={(e) => set(e.target.value)}
-                rows={4}
-                autoFocus
-              />
-            )}
-            onSave={(v) => void saveForm({ ...form, vibe_aesthetic: v })}
-          />
-        </div>
-      </section>
-
-      {/* ---- Venue ---- */}
-      <section className="space-y-3">
-        <div className="text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
-          Venue
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <ReportCard<{
-            city: string;
-            target_neighborhoods: string[];
-            strict_neighborhoods_only: boolean;
-          }>
-            label="City & Target Neighborhoods"
-            value={{
-              city: form.city,
-              target_neighborhoods: form.target_neighborhoods,
-              strict_neighborhoods_only: form.strict_neighborhoods_only,
-            }}
-            isBlank={(v) =>
-              v.city.trim() === "" && v.target_neighborhoods.length === 0
-            }
-            disabled={cardDisabled}
-            fullWidth
-            renderDisplay={(v) => (
-              <div className="space-y-1.5 text-foreground">
-                <div>{v.city.trim() || "Not set"}</div>
-                {v.target_neighborhoods.length > 0 && (
-                  <TagList items={v.target_neighborhoods} />
+              <div className="card-pad">
+                {overviewStatus === "generating" ? (
+                  <div className="flex items-center gap-3 rounded-md border border-border bg-[hsl(0_0%_10%)] px-4 py-6 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    Writing the event overview…
+                  </div>
+                ) : (
+                  <Textarea
+                    ref={overviewTextareaRef}
+                    value={overviewDraft}
+                    onChange={(e) => setOverviewDraft(e.target.value)}
+                    onBlur={(e) => {
+                      // Amendment v3 § G: if focus is moving to the Regenerate
+                      // button, skip the auto-save so the button's onClick
+                      // still sees the dirty diff and fires the confirm dialog.
+                      const next = e.relatedTarget as HTMLElement | null;
+                      if (next?.dataset?.regenButton === "true") return;
+                      if (overviewDraft !== (form.event_overview ?? "")) {
+                        void saveForm({
+                          ...form,
+                          event_overview: overviewDraft,
+                        });
+                      }
+                    }}
+                    disabled={cardDisabled || overviewStatus !== "idle"}
+                    placeholder="A short overview of the activation, the audience, and the vibe."
+                    // Amendment v4 § 6: `!`-prefix forces precedence over
+                    // shadcn Textarea's default `bg-background` (#000).
+                    className="!bg-[hsl(0_0%_10%)] resize-none overflow-hidden border-0"
+                  />
                 )}
-                <div className="text-xs text-muted-foreground">
-                  Search strictly: {v.strict_neighborhoods_only ? "Yes" : "No"}
-                </div>
               </div>
-            )}
-            renderEditor={(draft, set) => (
-              <div className="space-y-3">
-                <Input
-                  value={draft.city}
-                  onChange={(e) => set({ ...draft, city: e.target.value })}
-                  placeholder="City"
-                  autoFocus
-                />
-                <TagInput
-                  value={draft.target_neighborhoods}
-                  onChange={(v) => set({ ...draft, target_neighborhoods: v })}
-                  placeholder="Add neighborhood, then Enter"
-                />
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Checkbox
-                    checked={draft.strict_neighborhoods_only}
-                    onCheckedChange={(c) =>
-                      set({
-                        ...draft,
-                        strict_neighborhoods_only: c === true,
+            </section>
+
+            {/* Details sub-section -- 6 rows in amendment v3 § B order;
+                standard divide-y hairlines (no custom overrides). v4 § 4:
+                Details gets its own card chrome (border + card-headbar +
+                card-pad); intentional card-inside-card. Overview / Dates /
+                Generated Decks stay flat labeled blocks. */}
+            <section data-section="details" className="card">
+              <div className="card-headbar">
+                <span className="h-card">Details</span>
+              </div>
+              {/* Amendment v6 § 4: divider rhythm bumped to 36px (py-9
+                  = 36px above + below content). Only inside the Details
+                  card body; the column-level wrappers now use space-y-9
+                  for inter-section breathing. */}
+              <div className="card-pad divide-y divide-border [&>*]:py-9 [&>:first-child]:pt-0 [&>:last-child]:pb-0">
+                {/* Row 1: City + Neighborhoods + Venue Type (3-col) */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <BriefReportRow
+                    label="City"
+                    value={form.city}
+                    isBlank={(v) => v.trim() === ""}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => (
+                      <span className="text-foreground">{v.trim() || "Not set"}</span>
+                    )}
+                    renderEditor={(draft, set) => (
+                      <RecordCombobox
+                        source={{ kind: "lookup", table: "cities" }}
+                        value={draft || null}
+                        onChange={(v) => set(v ?? "")}
+                        entityLabel="city"
+                      />
+                    )}
+                    onSave={(v) => {
+                      // City change clears target_neighborhoods (the pre-split
+                      // composite editor's clearing rule, preserved across
+                      // the row split). strict_neighborhoods_only stays
+                      // untouched per amendment v3 § C.
+                      const cleared = v !== form.city;
+                      void saveForm({
+                        ...form,
+                        city: v,
+                        target_neighborhoods: cleared
+                          ? []
+                          : form.target_neighborhoods,
+                      });
+                    }}
+                  />
+
+                  <BriefReportRow<{
+                    neighborhoods: string[];
+                    strict_neighborhoods_only: boolean;
+                  }>
+                    label={
+                      // Amendment v6 § 7: STRICT renders at 10px (down
+                      // from inherited 12px); `whitespace-nowrap` keeps
+                      // it as one indivisible token; the parent
+                      // `flex flex-wrap items-baseline` lets STRICT wrap
+                      // to a new line at narrow viewports instead of
+                      // overflowing into the Venue Type cell.
+                      <span className="flex flex-wrap items-baseline gap-2">
+                        <span>Neighborhoods</span>
+                        {form.strict_neighborhoods_only && (
+                          <span className="whitespace-nowrap text-[10px] text-primary">
+                            *STRICT
+                          </span>
+                        )}
+                      </span>
+                    }
+                    value={{
+                      neighborhoods: form.target_neighborhoods,
+                      strict_neighborhoods_only: form.strict_neighborhoods_only,
+                    }}
+                    isBlank={(v) => v.neighborhoods.length === 0}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => <TagList items={v.neighborhoods} />}
+                    renderEditor={(draft, set) => (
+                      <RecordCombobox
+                        multi
+                        multiValue={draft.neighborhoods}
+                        onMultiChange={(v) => set({ ...draft, neighborhoods: v })}
+                        source={{
+                          kind: "lookup",
+                          table: "neighborhoods",
+                          parentScopeId: cityId,
+                          parentScopeLabel: form.city || null,
+                          parentScopeLabelKey: "City",
+                        }}
+                        entityLabel="neighborhood"
+                        placeholder={cityId ? "Pick neighborhoods" : "Pick a city first"}
+                        disabled={!cityId}
+                      />
+                    )}
+                    editorLeftActions={(draft, set) => (
+                      <label className="flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.06em] text-muted-foreground">
+                        <Checkbox
+                          checked={draft.strict_neighborhoods_only}
+                          onCheckedChange={(c) =>
+                            set({
+                              ...draft,
+                              strict_neighborhoods_only: c === true,
+                            })
+                          }
+                        />
+                        Strict?
+                      </label>
+                    )}
+                    onSave={(v) =>
+                      void saveForm({
+                        ...form,
+                        target_neighborhoods: v.neighborhoods,
+                        strict_neighborhoods_only: v.strict_neighborhoods_only,
                       })
                     }
                   />
-                  Search strictly these neighborhoods only?
-                </label>
+
+                  <BriefReportRow<string[]>
+                    label="Venue Type"
+                    value={form.venue_types}
+                    isBlank={(v) => v.length === 0}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => <TagList items={v} />}
+                    renderEditor={(draft, set) => (
+                      <ChipMultiSelect value={draft} onChange={set} />
+                    )}
+                    onSave={(v) => void saveForm({ ...form, venue_types: v })}
+                  />
+                </div>
+
+                {/* Row 2: Vibe + Aesthetic + Ideal Features (2-col) */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <BriefReportRow<string[]>
+                    label="Vibe + Aesthetic"
+                    value={form.vibe_aesthetic}
+                    isBlank={(v) => v.length === 0}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => <TagList items={v} />}
+                    renderEditor={(draft, set) => (
+                      <TagInput
+                        value={draft}
+                        onChange={set}
+                        placeholder="Add vibe tag, then Enter"
+                      />
+                    )}
+                    onSave={(v) => void saveForm({ ...form, vibe_aesthetic: v })}
+                  />
+
+                  <BriefReportRow<string[]>
+                    label="Ideal Features"
+                    value={form.ideal_features}
+                    isBlank={(v) => v.length === 0}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => <TagList items={v} />}
+                    renderEditor={(draft, set) => (
+                      <TagInput
+                        value={draft}
+                        onChange={set}
+                        placeholder="catering kitchen, parking, projection mapping…"
+                      />
+                    )}
+                    onSave={(v) => void saveForm({ ...form, ideal_features: v })}
+                  />
+                </div>
+
+                {/* Row 3: Min. Square Footage + Expected Guest Count (2-col).
+                    Sq. Footage Range retired in 5.12.14.3 R4 amendment v2 § D. */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <BriefReportRow<number | null>
+                    label="Min. Square Footage"
+                    value={form.sq_ft_minimum}
+                    isBlank={(v) => v === null}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => (
+                      <span className="text-foreground">
+                        {v === null ? "Any" : `${v.toLocaleString()} sq ft`}
+                      </span>
+                    )}
+                    renderEditor={(draft, set) => (
+                      <div className="pt-1">
+                        <Slider
+                          value={[draft ?? 0]}
+                          min={0}
+                          max={SQ_FT_MAX}
+                          step={SQ_FT_STEP}
+                          onValueChange={([v]) => set(v === 0 ? null : v)}
+                        />
+                        <p className="mt-2 font-mono text-sm font-bold text-foreground">
+                          {draft === null
+                            ? "Any"
+                            : `${draft.toLocaleString()} sq ft`}
+                        </p>
+                      </div>
+                    )}
+                    onSave={(v) => void saveForm({ ...form, sq_ft_minimum: v })}
+                  />
+
+                  <BriefReportRow
+                    label="Expected Guest Count"
+                    value={form.expected_guest_count}
+                    isBlank={(v) => v.trim() === ""}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => <span className="text-foreground">{v}</span>}
+                    renderEditor={(draft, set) => (
+                      <Input
+                        inputMode="numeric"
+                        value={draft}
+                        onChange={(e) => set(e.target.value)}
+                        placeholder="e.g. 150"
+                        autoFocus
+                      />
+                    )}
+                    onSave={(v) => void saveForm({ ...form, expected_guest_count: v })}
+                  />
+                </div>
+
+                {/* Row 4: Priorities (composite) + # of Spaces (2-col) */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <BriefReportRow<{
+                    priority_location: PriorityLocation | null;
+                    priority_cost: PriorityCost | null;
+                  }>
+                    label="Priorities"
+                    value={{
+                      priority_location: form.priority_location,
+                      priority_cost: form.priority_cost,
+                    }}
+                    isBlank={(v) =>
+                      v.priority_location === null && v.priority_cost === null
+                    }
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => (
+                      <div className="space-y-1 text-foreground">
+                        <div>
+                          <span className="text-muted-foreground">Location: </span>
+                          {v.priority_location
+                            ? PRIORITY_LOCATION_LABEL[v.priority_location]
+                            : "Not set"}
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Cost: </span>
+                          {v.priority_cost
+                            ? PRIORITY_COST_LABEL[v.priority_cost]
+                            : "Not set"}
+                        </div>
+                      </div>
+                    )}
+                    renderEditor={(draft, set) => (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                            Location
+                          </div>
+                          <ToggleGroup
+                            type="single"
+                            value={draft.priority_location ?? ""}
+                            onValueChange={(v) =>
+                              set({
+                                ...draft,
+                                priority_location: v
+                                  ? (v as PriorityLocation)
+                                  : null,
+                              })
+                            }
+                            className="justify-start"
+                          >
+                            <ToggleGroupItem value="high_foot_traffic">
+                              High Foot Traffic
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="intimate_destination">
+                              Intimate / Destination
+                            </ToggleGroupItem>
+                          </ToggleGroup>
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                            Cost
+                          </div>
+                          <ToggleGroup
+                            type="single"
+                            value={draft.priority_cost ?? ""}
+                            onValueChange={(v) =>
+                              set({
+                                ...draft,
+                                priority_cost: v ? (v as PriorityCost) : null,
+                              })
+                            }
+                            className="justify-start"
+                          >
+                            <ToggleGroupItem value="lower_cost">
+                              Lower Venue Costs
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="premium">
+                              Premium Venue
+                            </ToggleGroupItem>
+                          </ToggleGroup>
+                        </div>
+                      </div>
+                    )}
+                    onSave={(v) => void saveForm({ ...form, ...v })}
+                  />
+
+                  <BriefReportRow<number | null>
+                    label="# of Spaces"
+                    value={form.activations_count}
+                    // R6 § M.10: treat 0 as blank so a parsed
+                    // `activations_count: 0` from the AI doesn't render as
+                    // the literal "0" string in the display cell. The
+                    // briefForm.ts parser-apply path also drops 0 values
+                    // (see applyParsedFields guard).
+                    isBlank={(v) => v === null || v === 0}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => (
+                      <span className="text-foreground">
+                        {v !== null && v >= 10 ? "10+" : String(v)}
+                      </span>
+                    )}
+                    renderEditor={(draft, set) => (
+                      <div className="flex items-center gap-4 pt-1">
+                        <Slider
+                          value={[draft ?? 0]}
+                          min={0}
+                          max={10}
+                          step={1}
+                          onValueChange={([v]) => set(v === 0 ? null : v)}
+                          className="flex-1"
+                        />
+                        <span className="w-12 shrink-0 text-right font-mono text-sm font-bold text-foreground">
+                          {draft === null ? "TBD" : draft >= 10 ? "10+" : String(draft)}
+                        </span>
+                      </div>
+                    )}
+                    onSave={(v) => void saveForm({ ...form, activations_count: v })}
+                  />
+                </div>
+
+                {/* Row 5: Event Objectives + Target Audience (2-col).
+                    Amendment v5 § 6: THICKER divider above this row
+                    (group separator between venue-spec rows 1-4 and the
+                    event-narrative row). `!`-prefix overrides the parent
+                    divide-y's 1px hairline with 2px + border-strong color. */}
+                <div className="!border-t-2 !border-border-strong grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <BriefReportRow<string[]>
+                    label="Event Objectives"
+                    value={form.objectives}
+                    isBlank={(v) => v.length === 0}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => <TagList items={v} />}
+                    renderEditor={(draft, set) => (
+                      <TagInput
+                        value={draft}
+                        onChange={set}
+                        placeholder="Add objective, then Enter"
+                      />
+                    )}
+                    onSave={(v) => void saveForm({ ...form, objectives: v })}
+                  />
+
+                  <BriefReportRow<string[]>
+                    label="Target Audience"
+                    value={form.target_audience}
+                    isBlank={(v) => v.length === 0}
+                    disabled={cardDisabled}
+                    renderDisplay={(v) => <TagList items={v} />}
+                    renderEditor={(draft, set) => (
+                      <TagInput
+                        value={draft}
+                        onChange={set}
+                        placeholder="Add audience tag, then Enter"
+                      />
+                    )}
+                    onSave={(v) => void saveForm({ ...form, target_audience: v })}
+                  />
+                </div>
+                {/* Row 6 (Audience + Budget) deleted in amendment v5:
+                    Audience moved to Row 5 alongside Event Objectives;
+                    Budget moved to the right column inline with Live
+                    Date(s). */}
               </div>
-            )}
-            onSave={(v) => void saveForm({ ...form, ...v })}
-          />
+            </section>
+          </div>
 
-          <ReportCard<string[]>
-            label="Venue type"
-            value={form.venue_types}
-            isBlank={(v) => v.length === 0}
-            disabled={cardDisabled}
-            renderDisplay={(v) => <TagList items={v} />}
-            renderEditor={(draft, set) => (
-              <ChipMultiSelect value={draft} onChange={set} />
-            )}
-            onSave={(v) => void saveForm({ ...form, venue_types: v })}
-          />
-
-          <ReportCard
-            label="Expected guest count"
-            value={form.expected_guest_count}
-            isBlank={(v) => v.trim() === ""}
-            disabled={cardDisabled}
-            renderDisplay={(v) => <span className="text-foreground">{v}</span>}
-            renderEditor={(draft, set) => (
-              <Input
-                inputMode="numeric"
-                value={draft}
-                onChange={(e) => set(e.target.value)}
-                placeholder="e.g. 150"
-                autoFocus
-              />
-            )}
-            onSave={(v) => void saveForm({ ...form, expected_guest_count: v })}
-          />
-
-          <ReportCard<number | null>
-            label="Minimum square footage"
-            value={form.sq_ft_minimum}
-            isBlank={(v) => v === null}
-            disabled={cardDisabled}
-            renderDisplay={(v) => (
-              <span className="text-foreground">
-                {v === null ? "Any" : `${v.toLocaleString()} sq ft`}
-              </span>
-            )}
-            renderEditor={(draft, set) => (
-              <div className="pt-1">
-                <Slider
-                  value={[draft ?? 0]}
-                  min={0}
-                  max={SQ_FT_MAX}
-                  step={SQ_FT_STEP}
-                  onValueChange={([v]) => set(v === 0 ? null : v)}
+          {/* Narrow column (30%) -- Live Date(s) / Budget side-by-side at
+              top, then Generated Decks. Amendment v6 § 5+6: same
+              column-wrapper refactor as the wide column -- `space-y-9`
+              for inter-section breathing only; divider rhythm lives
+              inside the Details card body. */}
+          <div className="space-y-9">
+            {/* Amendment v5 § 2: Dates + Budget render side-by-side as
+                their own labeled sub-sections inside a 2-col grid. The
+                BriefReportRow inside each one renders the value alone
+                (no label prop -- the section header IS the label).
+                Amendment v6 § 3: absolutely-positioned vertical divider
+                between the two cells, 75% of parent height, centered in
+                the gutter. `position: relative` on the grid anchors it.
+                Amendment v7: `gap-8` (32px) gives the divider ~15px of
+                breathing room from each cell.
+                Round 3 amendment v1 § 4: wrap the whole block in `.card`
+                + `.card-pad` (no card-headbar; the LIVE DATE(S)/BUDGET
+                eyebrows below carry the labels). */}
+            <section className="card">
+              <div className="card-pad">
+                <div className="relative grid grid-cols-2 gap-8">
+              <section data-section="dates">
+                <div className="label-section pb-3">LIVE DATE(S)</div>
+                <BriefReportRow
+                  value={form.live_dates}
+                  isBlank={(v) => v.trim() === ""}
+                  disabled={cardDisabled}
+                  renderDisplay={(v) => (
+                    <span className="text-foreground">{v || "Not set"}</span>
+                  )}
+                  renderEditor={(draft, set) => (
+                    <DateRangePicker
+                      value={draft}
+                      onChange={set}
+                      placeholder="Select live dates"
+                    />
+                  )}
+                  onSave={(v) => void saveForm({ ...form, live_dates: v })}
                 />
-                <p className="mt-2 font-mono text-sm font-bold text-foreground">
-                  {draft === null
-                    ? "Any"
-                    : `${draft.toLocaleString()} sq ft`}
-                </p>
-              </div>
-            )}
-            onSave={(v) => void saveForm({ ...form, sq_ft_minimum: v })}
-          />
+              </section>
 
-          <ReportCard<{ sq_ft_min: number | null; sq_ft_max: number | null }>
-            label="Square footage range"
-            value={{ sq_ft_min: form.sq_ft_min, sq_ft_max: form.sq_ft_max }}
-            isBlank={(v) => v.sq_ft_min === null && v.sq_ft_max === null}
-            disabled={cardDisabled}
-            renderDisplay={(v) => (
-              <span className="text-foreground">
-                {sqFtRangeLabel(v.sq_ft_min, v.sq_ft_max)}
-              </span>
-            )}
-            renderEditor={(draft, set) => (
-              <div className="pt-1">
-                <Slider
-                  value={[draft.sq_ft_min ?? 0, draft.sq_ft_max ?? SQ_FT_MAX]}
-                  min={0}
-                  max={SQ_FT_MAX}
-                  step={SQ_FT_STEP}
-                  onValueChange={([lo, hi]) =>
-                    set({
-                      sq_ft_min: lo === 0 ? null : lo,
-                      sq_ft_max: hi === SQ_FT_MAX ? null : hi,
-                    })
-                  }
-                />
-                <p className="mt-2 font-mono text-sm font-bold text-foreground">
-                  {sqFtRangeLabel(draft.sq_ft_min, draft.sq_ft_max)}
-                </p>
-              </div>
-            )}
-            onSave={(v) => void saveForm({ ...form, ...v })}
-          />
-
-          <ReportCard<string[]>
-            label="Ideal features"
-            value={form.ideal_features}
-            isBlank={(v) => v.length === 0}
-            disabled={cardDisabled}
-            fullWidth
-            renderDisplay={(v) => <TagList items={v} />}
-            renderEditor={(draft, set) => (
-              <TagInput
-                value={draft}
-                onChange={set}
-                placeholder="catering kitchen, parking, projection mapping…"
+              {/* Amendment v6 § 3 + v7: 75%-height vertical divider in
+                  the gutter between Dates + Budget. Centered horizontally
+                  + vertically via translate. Absolute-positioned inside
+                  the `relative` grid parent. v7 bumps line weight from
+                  1px to 2px (`border-l-2`). */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute left-1/2 top-1/2 h-3/4 -translate-x-1/2 -translate-y-1/2 border-l-2 border-border"
               />
-            )}
-            onSave={(v) => void saveForm({ ...form, ideal_features: v })}
-          />
 
-          <ReportCard<PriorityLocation | null>
-            label="Priority · Location"
-            value={form.priority_location}
-            isBlank={(v) => v === null}
-            disabled={cardDisabled}
-            renderDisplay={(v) => (
-              <span className="text-foreground">
-                {v ? PRIORITY_LOCATION_LABEL[v] : ""}
-              </span>
-            )}
-            renderEditor={(draft, set) => (
-              <ToggleGroup
-                type="single"
-                value={draft ?? ""}
-                onValueChange={(v) =>
-                  set(v ? (v as PriorityLocation) : null)
-                }
-                className="justify-start"
-              >
-                <ToggleGroupItem value="high_foot_traffic">
-                  High Foot Traffic
-                </ToggleGroupItem>
-                <ToggleGroupItem value="intimate_destination">
-                  Intimate / Destination
-                </ToggleGroupItem>
-              </ToggleGroup>
-            )}
-            onSave={(v) => void saveForm({ ...form, priority_location: v })}
-          />
+              {/* Amendment v7 follow-on: BUDGET is visually shorter than
+                  LIVE DATE(S), so the symmetric gutter reads off-balance.
+                  `pl-6` pushes BUDGET 24px further from the divider to
+                  visually compensate for the narrower text. */}
+              <section data-section="budget" className="pl-6">
+                <div className="label-section pb-3">BUDGET</div>
+                <BriefReportRow
+                  value={form.budget_text}
+                  isBlank={(v) => v.trim() === ""}
+                  disabled={cardDisabled}
+                  renderDisplay={(v) => (
+                    <span className="text-foreground">{v}</span>
+                  )}
+                  renderEditor={(draft, set) => (
+                    // R6 § D.2: auto-format budget editor input the same way
+                    // BriefEvent does — strip non-digits, reformat with
+                    // en-US thousands separator. Cursor may jump to end on
+                    // mid-string edits; tolerated for now.
+                    <Input
+                      value={draft}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/[^0-9]/g, "");
+                        if (!digits) {
+                          set("");
+                          return;
+                        }
+                        const n = parseInt(digits, 10);
+                        set(
+                          Number.isFinite(n)
+                            ? `$${n.toLocaleString("en-US")}`
+                            : "",
+                        );
+                      }}
+                      placeholder="$0"
+                      autoFocus
+                    />
+                  )}
+                  onSave={(v) => void saveForm({ ...form, budget_text: v })}
+                />
+              </section>
+                </div>
+              </div>
+            </section>
 
-          <ReportCard<PriorityCost | null>
-            label="Priority · Cost"
-            value={form.priority_cost}
-            isBlank={(v) => v === null}
-            disabled={cardDisabled}
-            renderDisplay={(v) => (
-              <span className="text-foreground">
-                {v ? PRIORITY_COST_LABEL[v] : ""}
-              </span>
-            )}
-            renderEditor={(draft, set) => (
-              <ToggleGroup
-                type="single"
-                value={draft ?? ""}
-                onValueChange={(v) => set(v ? (v as PriorityCost) : null)}
-                className="justify-start"
-              >
-                <ToggleGroupItem value="lower_cost">
-                  Lower Venue Costs
-                </ToggleGroupItem>
-                <ToggleGroupItem value="premium">Premium Venue</ToggleGroupItem>
-              </ToggleGroup>
-            )}
-            onSave={(v) => void saveForm({ ...form, priority_cost: v })}
-          />
+            {/* Round 3 amendment v1 § 4 + v2 § 4: Generated Decks gets
+                `.card` chrome with a `card-headbar` + `h-card` header,
+                matching the Details card. */}
+            <section data-section="generated-decks" className="card">
+              <div className="card-headbar">
+                <span className="h-card">Generated Decks</span>
+              </div>
+              <div className="card-pad">
+                <GeneratedDecksCard decks={decks} />
+              </div>
+            </section>
+          </div>
         </div>
       </section>
 
-      {/* ---- Sticky footer ---- */}
-      <div className="sticky bottom-0 z-10 -mx-6 mt-6 border-t-2 border-primary/40 bg-background/90 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-          <Button
-            variant="ghost"
-            onClick={() => navigate(`/venue-scout/scouts/${scout.id}/brief/venue`)}
-          >
-            ← Back / Edit
-          </Button>
-          {!permanentSurface && (
-            <Button onClick={requestConfirm} disabled={confirming || isArchived}>
-              {confirming ? "Saving…" : "Confirm & Continue"}
+      {/* ---- Sticky footer (dynamic forward button per current_step) ----
+          R6 § F.1: once the scout has generated at least one deck, the
+          Go-to-Review forward affordance is hidden (there's nothing further
+          forward; the producer can still reach Review via Scout Settings or
+          direct nav). */}
+      <div className="actionbar">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
+          <Link to="/venue-scout" className="crumb inline-flex items-center gap-1.5">
+            <ArrowLeft className="h-3 w-3" /> Back
+          </Link>
+          {decks.length === 0 ? (
+            <Button onClick={onForwardClick} disabled={confirming || isArchived}>
+              {confirming ? "Saving…" : cta.label}
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
-    </div>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// OverviewBlock -- the inline-editable Event Overview. Saves on blur or via
-// the explicit Save button when the draft diverges from the persisted value.
-// When empty, shows a Generate button: the manual fallback for scouts that
-// reached the report without a Submit Brief generation. Regenerate re-invokes
-// vs-generate-brief-overview; if the producer has unsaved edits it confirms
-// first.
-// ---------------------------------------------------------------------------
-function OverviewBlock({
-  value,
-  status,
-  disabled,
-  onSave,
-  onGenerate,
-  onRegenerate,
-}: {
-  value: string;
-  status: "idle" | "generating" | "regenerating";
-  disabled?: boolean;
-  onSave: (v: string) => void;
-  onGenerate: () => void;
-  onRegenerate: () => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  const [confirmRegen, setConfirmRegen] = useState(false);
-
-  // Keep the draft in sync when the persisted value changes from outside
-  // (generation completes, regeneration completes).
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-
-  const dirty = draft !== value;
-  const busy = status !== "idle";
-  const isEmpty = value.trim() === "";
-
-  if (status === "generating") {
-    return (
-      <div className="flex items-center gap-3 rounded-md border border-border bg-surface-alt px-4 py-6 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-        Writing the event overview…
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2 rounded-md border border-border bg-surface-alt p-4">
-      {isEmpty && (
-        <div className="flex flex-wrap items-center gap-3 pb-1">
-          <Button size="sm" onClick={onGenerate} disabled={disabled}>
-            Generate overview
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            No overview yet. Click Generate, or edit this block manually.
-          </p>
-        </div>
-      )}
-      <Textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          if (dirty) onSave(draft);
-        }}
-        rows={5}
-        disabled={disabled || busy}
-        placeholder="A short overview of the activation, the audience, and the vibe."
-      />
-      {(!isEmpty || dirty) && (
-        <div
-          className={cn(
-            "flex items-center gap-3",
-            isEmpty ? "justify-end" : "justify-between",
-          )}
-        >
-          {!isEmpty && (
-            <button
-              type="button"
-              disabled={disabled || busy}
-              onClick={() => {
-                if (dirty) setConfirmRegen(true);
-                else onRegenerate();
-              }}
-              className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-primary hover:underline disabled:opacity-50 disabled:hover:no-underline"
-            >
-              {status === "regenerating" && (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              )}
-              {status === "regenerating" ? "Regenerating…" : "Regenerate"}
-            </button>
-          )}
-          {dirty && !busy && (
-            <Button size="sm" onClick={() => onSave(draft)}>
-              Save
-            </Button>
-          )}
-        </div>
-      )}
-
+      {/* Confirm-regen-on-dirty: producer clicked Regenerate with unsaved
+          textarea edits. Preserved from the prior OverviewBlock behavior;
+          hoisted into BriefReport when the Overview row dropped the
+          BriefReportRow state machine in amendment v2. */}
       <AlertDialog open={confirmRegen} onOpenChange={setConfirmRegen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -936,7 +1120,7 @@ function OverviewBlock({
             <AlertDialogAction
               onClick={() => {
                 setConfirmRegen(false);
-                onRegenerate();
+                void runOverviewGeneration("regenerating");
               }}
             >
               Regenerate
@@ -948,98 +1132,15 @@ function OverviewBlock({
   );
 }
 
-// ---------------------------------------------------------------------------
-// ReportCard -- inline-editable card. Click anywhere to flip to edit mode;
-// Save commits, Cancel reverts to the last saved value, Escape cancels. The
-// blank state ("Not provided") still flips to edit mode on click.
-// ---------------------------------------------------------------------------
-function ReportCard<T>({
-  label,
-  value,
-  isBlank,
-  renderDisplay,
-  renderEditor,
-  onSave,
-  fullWidth,
-  disabled,
-}: {
-  label: string;
-  value: T;
-  isBlank: (v: T) => boolean;
-  renderDisplay: (v: T) => React.ReactNode;
-  renderEditor: (draft: T, setDraft: (v: T) => void) => React.ReactNode;
-  onSave: (v: T) => void;
-  fullWidth?: boolean;
-  disabled?: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<T>(value);
-
-  const enter = () => {
-    if (disabled || editing) return;
-    setDraft(value);
-    setEditing(true);
-  };
-  const commit = () => {
-    onSave(draft);
-    setEditing(false);
-  };
-  const cancel = () => setEditing(false);
-
-  return (
-    <div
-      className={cn(
-        "rounded-md border border-border bg-surface-alt p-4 transition-colors",
-        fullWidth && "sm:col-span-2",
-        !editing && !disabled && "cursor-pointer hover:border-primary/40",
-      )}
-      onClick={!editing ? enter : undefined}
-      onKeyDown={
-        editing
-          ? (e) => {
-              if (e.key === "Escape") cancel();
-            }
-          : undefined
-      }
-    >
-      <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      {editing ? (
-        <div className="mt-2 space-y-3" onClick={(e) => e.stopPropagation()}>
-          {renderEditor(draft, setDraft)}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={cancel}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={commit}>
-              Save
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-1.5 text-sm">
-          {isBlank(value) ? (
-            <span className="italic text-muted-foreground/60">
-              Not provided
-            </span>
-          ) : (
-            renderDisplay(value)
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Small pill list for tag-valued cards on the report.
+// Small pill list for tag-valued cards on the report. R6 amendment v1 § 3:
+// chip text settles at 13px sitewide.
 function TagList({ items }: { items: string[] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {items.map((it) => (
         <span
           key={it}
-          className="inline-flex items-center rounded bg-input px-2 py-0.5 text-xs font-medium text-foreground"
+          className="inline-flex items-center rounded bg-input px-2 py-0.5 text-[13px] font-medium text-foreground"
         >
           {it}
         </span>
@@ -1047,3 +1148,4 @@ function TagList({ items }: { items: string[] }) {
     </div>
   );
 }
+

@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Pencil } from "lucide-react";
-import {
-  IconArrowLeft,
-  IconLink,
-} from "@/components/icons/HQIcons";
+import { IconLink } from "@/components/icons/HQIcons";
 import { StarRating } from "@/components/data/StarRating";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { VendorFilesEditor } from "@/components/data/VendorFilesEditor";
@@ -13,7 +10,6 @@ import { InlineEditText } from "@/components/hq/InlineEditText";
 import { ContactsCard } from "@/components/hq/ContactsCard";
 import { DField } from "@/components/hq/DField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
-import { useBackHref } from "@/lib/hq/useBackHref";
 import { useAuth } from "@/hooks/useAuth";
 import { useLookup, getLookupCached } from "@/lib/hq/lookups";
 import { formatPhone } from "@/lib/hq/phone";
@@ -79,7 +75,6 @@ export default function VendorDetail() {
   const [ratings, setRatings] = useState<RatingRow[]>([]);
   const [primaryContactPersonId, setPrimaryContactPersonId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const back = useBackHref({ to: "/vendors", label: "Vendors" });
   const categories = useLookup("vendor_categories");
   const subcategories = useLookup("vendor_subcategories", {
     parentScopeId: vendor?.category_id || null,
@@ -442,9 +437,7 @@ export default function VendorDetail() {
   return (
     <div className="stack-6">
       <div className="stack-3">
-        <Link to={back.to} className="crumb">
-          <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
-        </Link>
+        {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
         <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow" style={{ paddingTop: 8 }}>Vendor</div>

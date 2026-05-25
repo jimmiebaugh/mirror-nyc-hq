@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { BulkImportPage } from "@/components/bulk-import/BulkImportPage";
 import { getEntityConfig } from "@/lib/hq/bulkImport/registry";
 // Side-effect import: registers every shipped entity config at module load.
@@ -27,9 +27,7 @@ export default function BulkImportEntityPage() {
     if (!pretty || !pending) {
       return (
         <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
-          <Link to="/settings" className="crumb">
-            ← Back to Settings
-          </Link>
+          {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
           <h1 className="h-page">Bulk Import</h1>
           <div className="rounded-md border border-dashed border-border py-12 text-center">
             <p className="text-sm text-muted-foreground">
@@ -43,9 +41,7 @@ export default function BulkImportEntityPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
         <header className="space-y-2">
-          <Link to="/settings" className="crumb">
-            ← Back to Settings
-          </Link>
+          {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
           <h1 className="h-page">Bulk Import · {pretty}</h1>
         </header>
         <div className="rounded-md border border-dashed border-border py-12 text-center">

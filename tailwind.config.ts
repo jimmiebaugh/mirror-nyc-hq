@@ -47,6 +47,12 @@ export default {
     "hq-form",
     // Phase 5.7.5 follow-up round 2: subgroup quick-add coral + button.
     "btn-quickadd",
+    // Phase 5.12.14.3 Round 3 amendment v2 § 2: excluded ReviewCards dim
+    // via conditional `opacity-40`. Template-literal conditional classes
+    // can slip Tailwind's content scanner; safelist guarantees the
+    // utilities ship. `grayscale` is the layered fallback per amendment
+    // v2 § 2 if 40% alone reads too subtle.
+    "opacity-40", "opacity-50", "grayscale",
   ],
   prefix: "",
   theme: {

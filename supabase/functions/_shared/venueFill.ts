@@ -10,10 +10,15 @@
 //
 // Memory rule (feedback_tool_choice_collapse): FILL_SYSTEM lifted verbatim
 // from VS Pro; do NOT edit to shape AI-output quality. Output quality lives
-// on schema descriptions + post-emission sanitization (canonicalizeType,
+// on schema descriptions + post-emission sanitization (sanitizeMultiAgainst,
 // sanitizeWebsiteUrl). Same rule the prior compile-summaries comment cited.
+//
+// Phase 5.12.10: FILL_TOOL.venue_type.description + FILL_SYSTEM swapped
+// from `${CANONICAL_TYPES.join(", ")}` interpolations to static strings
+// (prompt-cache stability). The live canonical venue-types list rides in
+// the per-call user message via buildFillUserMsg's optional canonicalSet
+// param; callers pass `await getVenueTypesCanonicalSet(sb, fn).names`.
 
-import { CANONICAL_TYPES } from "./venueTypes.ts";
 import type { ClaudeTool } from "./anthropic.ts";
 
 export const FILL_TOOL: ClaudeTool = {
@@ -45,7 +50,7 @@ export const FILL_TOOL: ClaudeTool = {
       venue_type: {
         type: "string",
         description:
-          `Slash-separated values from canonical list: ${CANONICAL_TYPES.join(", ")}`,
+          "Slash-separated values from the canonical venue-types list (passed in the user message). Multiple types allowed.",
       },
       website_url: {
         type: "string",
@@ -57,15 +62,15 @@ export const FILL_TOOL: ClaudeTool = {
       key_features: {
         type: "array",
         description:
-          "3-6 short, concrete physical or experiential features of this venue. Pull from web_search results (zones, ceilings, sightlines, outdoor space, load-in, infrastructure, aesthetic, signage rights, parking, transit). Examples: 'High vaulted ceilings, ~18 ft', 'Wraparound storefront windows on two streets', 'Adjacent fenced courtyard, ~1,200 sq ft', 'Load-in via 8 ft rollup door, no freight elevator needed', 'Industrial finish, exposed brick, polished concrete floor', 'Direct frontage on Melrose Ave, high foot traffic', 'Available signage band above the door for branded vinyl', 'Adjacent municipal lot, ~40 spaces'. Do NOT return an empty array. CRITICAL: do NOT use placeholder tokens like '<UNKNOWN>', 'TBD', 'N/A', 'None', 'Not Available', 'Not Provided', 'TODO', or any similar 'I don't know' sentinel -- if you don't have specific details, web_search the venue name + address again first; placeholder strings will be stripped from the response and the field treated as missing. Better to return 2 real features than 5 placeholder strings.",
+          "Array of 2-10 short, evergreen tags describing physical or experiential features of this venue. 1-4 words each (usually 1-2). Tags are reused across briefs and on the venue detail page; they describe WHAT THE SPACE IS, not what is happening around it. Use the canonical examples below as the reference shape; tags not on the list are fine if they match the shape. Examples: Courtyard, Skylight, High Ceilings, Garage Doors, Ground Floor, Multi-Level, Waterfront, Rooftop, Garden, Wood Floors, Exposed Brick, Balcony, Storefront, Vaulted Ceilings, Multiple Stages, Outdoor, Floor-to-Ceiling Windows. Capitalize as title case. Do NOT include: specific named neighborhoods, streets, addresses, landmarks, architects (Waterfront, not 'Hudson River Waterfront'); numbers, units, square footage, walk scores, capacity; narrative sentences (more than 4 words); marketing fluff ('amazing', 'world-class'); placeholder tokens like '<UNKNOWN>', 'TBD', 'N/A', 'None', 'TODO'. Items violating these rules will be stripped post-emission and the field treated as missing; emit fewer real tags rather than more invalid ones.",
         items: {
           type: "string",
           description:
-            "A single specific, observable feature of the venue. Concrete and brief (5-15 words). Do NOT use marketing fluff ('amazing', 'world-class', 'unparalleled'). Do NOT use placeholders like '<UNKNOWN>', 'TBD', 'N/A'.",
-          maxLength: 120,
+            "A single 1-4 word evergreen feature tag. Title case. No digits, units, addresses, narrative sentences, or placeholder tokens.",
+          maxLength: 35,
         },
-        minItems: 3,
-        maxItems: 6,
+        minItems: 2,
+        maxItems: 10,
       },
       derived_attrs: {
         type: "object",
@@ -113,7 +118,7 @@ export const FILL_TOOL: ClaudeTool = {
 };
 
 export const FILL_SYSTEM =
-  `You are a venue researcher for Mirror NYC. Fill in missing structured fields for a single venue. Type must use ONLY values from this canonical list: ${CANONICAL_TYPES.join(", ")}. Multiple types separated by " / " allowed. Prefer Retail for ground-floor commercial / storefront / vacancy spaces. Never set website_url to a listing-database URL (thestorefront.com, peerspace.com, propertyshark.com, loopnet.com, crexi.com).`;
+  `You are a venue researcher for Mirror NYC. Fill in missing structured fields for a single venue. Type must use ONLY values from the canonical venue-types list provided in the user message. Multiple types separated by " / " allowed. Never set website_url to a listing-database URL (thestorefront.com, peerspace.com, propertyshark.com, loopnet.com, crexi.com).`;
 
 // Brief context the model sees in every Pass 1 user message. Identical
 // across consumers so a refactor never drifts the prompt shape.
@@ -146,11 +151,20 @@ export type VenueForFill = {
   // drop the line conditionally -- that would be a system-prompt edit and
   // violates feedback_tool_choice_collapse.
   notes?: string | null;
+  // Phase 5.12.4 thread (a): HQ canonical about_venue paragraph for hq_pool
+  // rows. When present, signals to Claude that this venue is HQ-curated and
+  // the about_venue is the authoritative reference for identity / character /
+  // neighborhood. Claude focuses on per-brief judgment (recs / considerations
+  // / rank) instead of re-researching structural facts. Pass null /
+  // undefined / "" when not an hq_pool row; the builder degrades to today's
+  // behavior byte-for-byte.
+  aboutVenue?: string | null;
 };
 
 export function buildFillUserMsg(
   scout: ScoutBrief,
   venue: VenueForFill,
+  canonicalSet?: readonly string[],
 ): string {
   // Post-4.10.4 hot patch round 11: trimmed Brief block. The old version
   // dumped the entire scout.brief_data JSONB, which includes internal
@@ -213,12 +227,38 @@ Additional brief notes: ${
   const websiteLine = hasProducerUrl
     ? `Website (USE AS PRIMARY RESEARCH SOURCE): ${venue.website_url}`
     : `Website: (not provided)`;
-  const researchInstruction = hasProducerUrl
-    ? "You MUST invoke web_search at least once for this venue before responding. Start with the website URL above. If that URL is a listing-database deep link (LoopNet, NMRK, TheVendry, Blace, CityFeet, Crexi, etc.), research the venue's specifics directly from that listing page; the 'never use listing-database URLs as the website_url output' rule applies ONLY to the output `website_url` field, NOT to your research. Always fall back to additional searches if the primary URL lacks specific details. "
-    : "You MUST invoke web_search at least once for this venue before responding. Search for the venue by name + address + neighborhood and pull current photos, square footage, capacity, features, and recent press from your search results. ";
+
+  // Phase 5.12.4 thread (a): when the caller passes a non-empty aboutVenue
+  // (hq_pool rows only; vs-compile-summaries Pass 1 callsite gates on
+  // source === 'hq_pool'), narrow the research instruction so Claude focuses
+  // on per-brief judgment (recs / considerations / ranking_score) instead of
+  // re-researching identity / character / neighborhood facts HQ already
+  // curated. The wider web_search-mandatory instruction stays when aboutVenue
+  // is absent so the byte-for-byte 4.10.3-port behavior is preserved for
+  // every existing caller (vs-parse-sheet, manual + sheet rows in Pass 1).
+  const hasAboutVenue =
+    venue.aboutVenue != null && venue.aboutVenue.trim() !== "";
+  const hqAboutBlock = hasAboutVenue
+    ? `\n\nHQ CANONICAL ABOUT (this venue is in Mirror NYC's HQ database; treat as the authoritative reference, do not contradict, do not re-research identity / character / neighborhood facts):\n${venue.aboutVenue!.trim()}`
+    : "";
+  const researchInstruction = hasAboutVenue
+    ? "This venue is HQ-curated. The HQ CANONICAL ABOUT paragraph above is authoritative for identity, character, neighborhood, and aesthetic. Use it as your primary reference and skip web_search unless you need to verify a specific structured fact (sq_ft / capacity) that is missing AND the about paragraph does not address it. Focus on per-brief judgment: write recommendations + considerations + ranking_score that tie THIS venue's strengths and gaps to THIS brief. "
+    : hasProducerUrl
+      ? "You MUST invoke web_search at least once for this venue before responding. Start with the website URL above. If that URL is a listing-database deep link (LoopNet, NMRK, TheVendry, Blace, CityFeet, Crexi, etc.), research the venue's specifics directly from that listing page; the 'never use listing-database URLs as the website_url output' rule applies ONLY to the output `website_url` field, NOT to your research. Always fall back to additional searches if the primary URL lacks specific details. "
+      : "You MUST invoke web_search at least once for this venue before responding. Search for the venue by name + address + neighborhood and pull current photos, square footage, capacity, features, and recent press from your search results. ";
+
+  // Phase 5.12.10: per-call canonical venue-types list rides in the user
+  // message (schema descriptions + FILL_SYSTEM stay static for prompt-
+  // cache stability per feedback_tool_choice_collapse). When the caller
+  // doesn't pass canonicalSet (or passes an empty array), no constraint
+  // line is rendered and Claude relies on FILL_SYSTEM's reference only.
+  const canonicalLine =
+    canonicalSet && canonicalSet.length > 0
+      ? `\n\nCanonical venue types (CONSTRAINT): ${canonicalSet.join(", ")}. Use ONLY values from this list; multiple types separated by " / " allowed.`
+      : "";
 
   return `BRIEF
-${briefBlock}
+${briefBlock}${hqAboutBlock}${canonicalLine}
 
 VENUE (producer-entered, do not overwrite filled fields):
 Name: ${venue.name}

@@ -19,6 +19,7 @@ const SURFACE_LABELS: { match: RegExp; data: SurfaceLabel }[] = [
   { match: /^\/settings/, data: { title: "Settings is admin-only", surface: "Settings" } },
   { match: /^\/users/, data: { title: "Team management is admin-only", surface: "Team management" } },
   { match: /^\/team/, data: { title: "Team management is admin-only", surface: "Team management" } },
+  { match: /^\/venue-scout\/settings/, data: { title: "VS Settings is admin-only", surface: "VS Settings" } },
   { match: /^\/talent-scout/, data: { title: "Talent Scout is admin-only", surface: "Talent Scout" } },
   { match: /^\/wiki\/(new|.+\/edit)/, data: { title: "Editing the Wiki is admin-only", surface: "Editing Wiki pages" } },
 ];

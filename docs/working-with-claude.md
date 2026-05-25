@@ -29,137 +29,81 @@ Phase 4 (Venue Scout port) shipped to production 2026-05-13. Phase 5 (HQ Core) i
 
 ## 2. Two-session discipline
 
-This project runs two parallel Claude sessions. Both sessions can edit files. Without discipline, they clobber each other.
+Cowork and Code both edit files. Without discipline, they clobber each other.
 
 ### The rule
 
 **Cowork is read-only on `/Users/jimmie/Code/mirror-nyc-hq` while any `claude/*` feature branch is active.** During active feature work:
 
-- Cowork doc-update intent goes into `OUTPUTS/REPO_DOC_UPDATES.md` (Cowork workspace, not the repo). Code consumes it on its branch.
+- Cowork doc-update intent queues in `OUTPUTS/REPO_DOC_UPDATES.md` (Cowork workspace, not the repo). Code consumes the queue on its branch.
 - Spec drafts go into `OUTPUTS/phase-X-Y-<surface>-spec.md` (Cowork workspace).
-- The `OUTPUTS/COWORK_SYNC.md` channel remains Code to Cowork. Code overwrites it after each sub-phase wrap-up.
+- `OUTPUTS/COWORK_SYNC.md` is the Code-to-Cowork status channel. Code overwrites it at phase wrap-up, single write per phase. See `feedback_cowork_sync`.
 
-Cowork commits to repo `main` are allowed only when there are no active feature branches AND no uncommitted WIP on `main`. Same `[skip netlify]` pattern. Verify with the pre-flight check below.
+Cowork commits to repo `main` are allowed only when there are no active feature branches AND no uncommitted WIP on `main`. Verify with the pre-flight check below.
 
-### Pre-flight check (start of every session, both Cowork and Code)
+### Pre-flight check (start of every session)
 
 ```bash
 cd /Users/jimmie/Code/mirror-nyc-hq && \
   echo "=== branch ===" && git branch --show-current && \
   echo "=== status ===" && git status --short && \
   echo "=== worktrees ===" && git worktree list && \
-  echo "=== unmerged claude branches ===" && (git branch | grep '^  claude/' || echo "(none)") && \
-  echo "=== sync-doc drift check ===" && \
-  ACTUAL=$(git log -1 origin/main --format=%H) && \
-  CLAIMED=$(grep -oP 'SHIPPED at[ \x60]+\K[a-f0-9]{7,40}' /Users/jimmie/Claude/Mirror\ NYC\ HQ/OUTPUTS/COWORK_SYNC.md 2>/dev/null || echo "(no SHIPPED hash)") && \
-  echo "  origin/main: $ACTUAL" && \
-  echo "  sync doc:    $CLAIMED" && \
-  ( [ "${ACTUAL:0:7}" = "${CLAIMED:0:7}" ] || echo "  >>> DRIFT: sync doc and origin/main disagree" )
+  echo "=== unmerged claude branches ===" && (git branch | grep '^  claude/' || echo "(none)")
 ```
 
-Decision tree on the drift line:
+Decision tree:
 
-- **No drift (hashes match):** sync doc is fresh. Trust it.
-- **Sync doc says SHIPPED but hash mismatches origin/main:** sync wasn't refreshed after a subsequent commit landed. Re-read git log to find the actual latest state before any further work.
-- **Sync doc says AWAITING SQUASH APPROVAL:** the previous phase stopped at the approval gate. Cowork should NOT start new work; surface to Jimmie what's pending and offer to advance.
-- **No SHIPPED hash anywhere in the sync doc:** sync doc may be stale or the phase isn't complete. Investigate.
-
-Decision tree on the output:
-
-- **Active worktree on `claude/*` AND uncommitted changes on `main`:** Cowork goes read-only. Surface the WIP files to Jimmie. Don't edit, don't stash.
-- **Active worktree, main clean:** Cowork goes read-only. Code is the writer.
-- **No active worktree, main has uncommitted changes:** previous session left WIP. Surface to Jimmie before any new work.
-- **No active worktree, main clean:** business as usual.
+- **Active worktree on `claude/*` OR uncommitted changes on `main`:** Cowork goes read-only. Queue doc edits in `OUTPUTS/REPO_DOC_UPDATES.md`.
+- **No active worktree, main clean:** repo doc edits are allowed.
 
 ### Pre-squash check (Code, before any `git checkout main && git merge --squash`)
 
-Hard gate. Run `git status --short` on `main` first. If output is non-empty, **stop**. Do not auto-stash. Do not auto-commit. Surface every modified or deleted file to Jimmie with the diff and let him decide.
+Hard gate. Run `git status --short` on `main` first. If output is non-empty, **stop**. Do not auto-stash. Do not auto-commit. Surface modified files to Jimmie and let him decide.
 
 The Phase 4.3.1 main-checkout conflict was caught by exactly this check. Keep it.
 
+### Worktree spin-up: symlink the `.env`
+
+A fresh `git worktree add` does NOT copy `.env` because it's gitignored. Without it, `src/integrations/supabase/client.ts` throws `VITE_SUPABASE_URL is required` at module load and the page renders fully blank with NO console error. Silent failure mode.
+
+Fix on every fresh worktree before `npm run dev`:
+
+```bash
+ln -s /Users/jimmie/Code/mirror-nyc-hq/.env .claude/worktrees/<name>/.env
+```
+
+Symlink (not copy) so secrets stay in one place. See `feedback_worktree_env_symlink`.
+
 ### Worktree hygiene
 
-After a sub-phase squash-merges, Code removes the worktree:
+After a sub-phase squash-merges, Code removes its own worktree:
 
 ```bash
 git worktree remove .claude/worktrees/<name>
 git branch -D claude/<name>
 ```
 
-Stale worktrees make `git status` and `git branch -a` noisy. Clean up before declaring the sub-phase done.
-
-### COWORK_SYNC.md write convention (two-write per phase)
-
-`OUTPUTS/COWORK_SYNC.md` is the Code to Cowork status channel. To avoid stale-sync confusion, Code writes the doc twice per phase with an explicit status marker.
-
-**Write 1: at the squash-approval gate.** When Code has implemented + reviewed + committed locally and is stopping for Jimmie's squash decision, it writes a short sync block:
-
-```markdown
-**Status:** AWAITING SQUASH APPROVAL
-**Feature branch:** claude/<name>
-**Feature commit:** <hash>
-**Migration applied:** yes/no
-**Edge function deployed:** yes/no
-**Build:** tsc + vite clean
-```
-
-Plus a "What landed" summary and the squash + push instructions Jimmie will run.
-
-**Write 2: after squash + push + backfill + cleanup.** Code OVERWRITES the doc once the full flow completes:
-
-```markdown
-**Status:** SHIPPED at <main-hash>
-**Squashed at:** <squash-hash>
-**Backfilled at:** <backfill-hash>
-**Pushed to origin:** yes
-**Netlify deploy:** triggered (or skipped if [skip netlify])
-**Worktree:** cleaned up
-**Feature branch:** deleted
-```
-
-Plus the full "What landed" summary, code-reviewer recap, decisions confirmed, and carried-forward items. This is the version Cowork syncs from.
-
-**Why two writes:** if Jimmie session-outs before approving, Cowork next session reads the AWAITING block and knows the actual state without grepping git logs. If Jimmie approves and the full flow completes, Cowork reads SHIPPED and trusts the doc fully.
-
-**Don't conflate writes.** The AWAITING block is short and explicitly preliminary. The SHIPPED block is comprehensive and the source of truth. Don't try to make the AWAITING block do double duty.
+Scope strictly to THIS session's own worktree. Do NOT prune other `claude/*` worktrees even if git flags them prunable; concurrent sessions may have uncommitted work that the prunable flag cannot detect. See `feedback_worktree_cleanup_only_my_own`.
 
 ---
 
 ## 3. Cowork as the sync enforcer
 
-Every time a Code sub-phase summary lands in Cowork (via `OUTPUTS/COWORK_SYNC.md` or manual paste), Cowork's first action is a doc sync pass:
+When Code overwrites `OUTPUTS/COWORK_SYNC.md` at phase wrap-up, Cowork's next session opens with a doc sync pass:
 
 1. Update `CHECKPOINT.md`. Branch commit hash, current sub-phase, what's done vs. next.
-2. Update `docs/decisions.md`. Any architectural decisions, conflict resolutions, or rationale captured in the Code output that isn't already in the doc.
-3. Flag if anything in the Code output contradicts existing docs (`docs/schema.md`, `docs/edge-functions.md`, `docs/auth-model.md`) so it can be corrected before the next session starts.
-
-This makes Cowork the enforcing sync layer rather than relying on Code to defer to end-of-phase sweeps.
-
-### The COWORK_SYNC.md auto-bridge
-
-Code writes a structured summary to `OUTPUTS/COWORK_SYNC.md` after each sub-phase completion. Cowork reads it at session start instead of copying the terminal wall of text. Activate via the Code kickoff prompt:
-
-```
-After each sub-phase commit, write a structured summary to /Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/COWORK_SYNC.md with:
-- Sub-phase number and commit hash
-- What landed (files created/modified, migrations applied, functions deployed)
-- Decisions made or confirmed
-- Open items / flags for Jimmie
-- Next sub-phase
-Overwrite the file each time (Cowork reads the latest, not a log).
-```
+2. Update `docs/decisions.md` with any architectural decisions captured in COWORK_SYNC that aren't already logged.
+3. Flag any contradictions with `docs/schema.md`, `docs/edge-functions.md`, `docs/auth-model.md` so they can be reconciled before the next session.
 
 ### Phase-boundary check (roadmap.md)
 
-At every phase boundary (the squash-merge of the last sub-phase of a phase), Cowork verifies `docs/roadmap.md` reflects the new state:
+At every phase boundary (the squash-merge of the last sub-phase of a phase), Cowork verifies `docs/roadmap.md`:
 
-1. **Finishing phase summarizes to one line.** Per `docs/conventions.md`, completed phases collapse to a single-line `DONE` summary with shipped date and main HEAD hash. Phase 4 example: `Phase 4: Venue Scout port. DONE. Shipped to production 2026-05-13 (main at \`7cd27ed\`). Full 1:1 port from \`mirror-nyc-venue-scout-pro\`; 4.1-port through 4.10.6-port. Cutover + locked decisions in \`docs/decisions.md\`; sub-phase narratives in \`CHECKPOINT.md\`.`
-2. **Next phase expands to full active-phase detail.** Sub-phase candidates, ordering notes, dependencies between sub-phases.
-3. **Open questions section reconciled.** Anything answered by the finished phase moves to `docs/decisions.md` or is struck. Anything still open and forward-looking moves to the next phase's section.
+1. **Finishing phase summarizes to one line** per `docs/roadmap.md` line 3 convention. Detail moves to `docs/v1-changelog.md`.
+2. **Next phase expands to full active-phase detail.** Sub-phase candidates, ordering, dependencies.
+3. **Open questions reconciled.** Anything answered moves to `docs/decisions.md`; anything still open moves to the next phase's section.
 
-Two-session discipline applies. If a `claude/*` feature branch is still open at the moment of the check (rare; usually the last sub-phase is squashed before the phase formally closes), the roadmap edit queues in `OUTPUTS/REPO_DOC_UPDATES.md` instead of landing directly on `main`.
-
-The `TEMPLATES/phase-end-doc-sweep.md` template carries the full end-of-phase sweep list; the roadmap check is the Cowork-side enforcement of step 1 of that template.
+Two-session discipline applies. If a `claude/*` feature branch is open when the check runs, the roadmap edit queues in `OUTPUTS/REPO_DOC_UPDATES.md`. `TEMPLATES/phase-end-doc-sweep.md` carries the full end-of-phase sweep list.
 
 ---
 
@@ -195,7 +139,7 @@ For each new HQ surface:
 
   6. Code runs `npm run dev` on the worktree, navigates each new surface
      at 1440px, screenshots each one. Embeds screenshots in the AWAITING
-     SQUASH APPROVAL block in OUTPUTS/COWORK_SYNC.md. See § 4.1 below.
+     SQUASH APPROVAL block surfaced in chat. See § 4.1 below.
 
   7. Code runs code-reviewer subagent on the diff with cold context.
      Subagent verifies design-system.md adherence + the brand-rules-that-
@@ -295,11 +239,11 @@ The ship flow:
 2. From the worktree directory: `supabase gen types typescript --linked > src/integrations/supabase/types.ts`.
 3. Run the spec's `## Seed data for the visual check` SQL block against the live DB.
 4. Commit any regenerated `types.ts` to the worktree branch as `[skip netlify] regen types from linked DB`.
-5. **Update `CHECKPOINT.md` on the worktree branch BEFORE squash-merging.** Edit the head paragraph + Active-feature-branch + Current-phase lines + shift the predecessor chain. Do NOT reference the upcoming squash commit's hash — see § 4.5.c. Commit on the worktree branch as `[skip netlify] CHECKPOINT.md for Phase X.Y`.
+5. **Update `CHECKPOINT.md` on the worktree branch BEFORE squash-merging.** Edit the head paragraph + Active-feature-branch + Current-phase lines + shift the predecessor chain. Do NOT reference the upcoming squash commit's hash: see § 4.5.c. Commit on the worktree branch as `[skip netlify] CHECKPOINT.md for Phase X.Y`.
 6. From the bare repo: `git checkout main && git pull && git merge --squash <worktree-branch>` and commit with the message body drafted in the AWAITING block. The squash now includes the CHECKPOINT.md update from step 5 in the same commit (one commit per ship, not two).
-7. From the bare repo: `git push origin main`. Netlify sees the deploy-worthy commit at HEAD (assuming no `[skip netlify]` for a real deploy, or `[skip netlify]` if the deploy budget is in effect — either way only one push fires).
+7. From the bare repo: `git push origin main`. Netlify sees the deploy-worthy commit at HEAD (assuming no `[skip netlify]` for a real deploy, or `[skip netlify]` if the deploy budget is in effect: either way only one push fires).
 8. Worktree cleanup: `git worktree remove .claude/worktrees/<branch> && git branch -D claude/<branch>`.
-9. Overwrite `OUTPUTS/COWORK_SYNC.md` with the SHIPPED block per the two-write convention.
+9. Overwrite `OUTPUTS/COWORK_SYNC.md` with the latest ship state. Single write per phase. See `feedback_cowork_sync`.
 
 Jimmie's role at the gate: review screenshots, give a one-word go (or send specific iteration feedback if anything reads off). Code does everything else.
 
@@ -344,6 +288,61 @@ Each ship is exactly one commit on `main`: the squash itself, with CHECKPOINT.md
 **Operational impact.** Step 5 (CHECKPOINT.md update) moves to the WORKTREE branch BEFORE the squash-merge. The merge-squash folds CHECKPOINT.md changes into the same commit as everything else. Step 7 (single `git push`) replaces the old 5b + 5d two-push dance.
 
 Worktree-side commits (the `[skip netlify] regen types from linked DB` in step 4) still don't affect Netlify because they're on the feature branch, not on main. Squash-merge folds them all into the single ship commit.
+
+### 4.5.d. Post-push housekeeping (atomic; do not consider session complete until all verified)
+
+Amendment 2026-05-25. Steps 8 + 9 of the § 4.5 ship flow are routinely dropped at the depleted-context end of long ships (verified across 5.12.6 / 5.12.7 / 5.12.9 / 5.12.12 ships). Treat them as part of the ship itself, not trailing optional work. The slash command `/ship-finalize` (under `.claude/commands/ship-finalize.md`) automates these steps + the verification gate; prefer it over running the steps manually.
+
+**Step 8: Worktree + branch cleanup. SCOPED STRICTLY to this session's own worktree + branch.**
+
+```bash
+git worktree remove --force /Users/jimmie/Code/mirror-nyc-hq/.claude/worktrees/<branch>
+git branch -D claude/<branch>
+```
+
+**Scope rule (locked 2026-05-25 after the 5.12.13.4-pilot incident).** Step 8 only ever touches THIS session's own worktree + branch. Do NOT iterate over `git worktree list` to prune additional worktrees, even if git flags them `prunable`. Other `claude/*` worktrees may belong to concurrent parallel-pilot sessions with uncommitted work that the `prunable` flag cannot detect; the destructive `--force` flag bypasses git's "contains modified or untracked files" check on whatever target it's pointed at. During the 5.12.13.4 parallel pilot, the .4 session's `/ship-finalize` opportunistic-prune step deleted the .3 session's `keen-tharp-1ac9bb` worktree mid-session, destroying .3's committed-but-unpushed work; .3 had to re-author from scratch. The rule is non-negotiable during ANY parallel-pilot window. Stale-worktree cleanup is a separate manual operation the user runs when no `claude/*` branches are active.
+
+**Step 9: Overwrite `OUTPUTS/COWORK_SYNC.md`** with the latest ship state. Single write per phase. Canonical structure: squash SHA + Netlify deploy state + migrations applied + edge functions touched + decisions confirmed + carry-forwards + next phase pointer. See `feedback_cowork_sync`.
+
+**Verification gate (mandatory; session is NOT complete until clean):**
+
+1. `git log --oneline -3`. Top line should be the just-shipped commit (or its SHA-backfill follow-on). If you see the predecessor's hash at top, push didn't fire; re-run `git push origin main`.
+2. `head -10 "/Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/COWORK_SYNC.md"`. Marker commit shows the new ship's squash SHA, not the previous ship's. If you see the previous Marker commit, step 9 didn't write; re-run it.
+3. `git worktree list`. The just-shipped feature worktree no longer appears. If still listed, re-run step 8's `git worktree remove --force`.
+
+If any verification fails, re-run the corresponding step and re-verify. The session is not done until all three show clean. The `/ship-finalize` command runs all three verifications + reports a PASS/FAIL summary; use it.
+
+### 4.6 Smoke-ready handoff (parallelize doc updates with Jimmie's smoke window)
+
+Amendment 2026-05-25. The doc-update phase (CHECKPOINT.md / decisions.md / v1-changelog.md / roadmap.md / design-system.md / code-observations.md / REPO_DOC_UPDATES.md / OUTPUTS/COWORK_SYNC.md prep) routinely takes 5-15 minutes per ship. Pre-2026-05-25 Jimmie waited that window idle, then started smoke-testing after Code posted the AWAITING block. Producer call (Jimmie 2026-05-25): parallelize.
+
+**New step, between the verification gate (typecheck / build / test all clean) and the start of the doc-update phase:**
+
+If the ship touches any frontend code (any edit under `src/` other than pure shared-module consumers like `src/integrations/supabase/types.ts`), Code spins up `npm run dev` as a non-blocking background process before starting the doc-update phase. Surface a single-line ready message to Jimmie:
+
+> Smoke ready at http://127.0.0.1:8080/. Beginning doc updates in parallel.
+
+Then proceed with the doc-update phase without blocking. Jimmie smoke-tests while Code writes the doc updates. If Jimmie surfaces a smoke issue mid-doc-update, Code pauses doc writes, addresses the fix forward, then resumes doc updates.
+
+For edge-function-only / migration-only / prompt-tuning ships with no frontend diff (5.12.10 prompt-edit-only ships, 5.12.13.X SYSTEM-prompt ships, vs-* edge-function-only ships), skip the dev server: no smoke surface to use it.
+
+**Lifecycle.** The dev server stays running through the doc-update phase, the AWAITING block draft, Jimmie's approval window, and the squash flow (§ 4.5 steps 1-9). `/ship-finalize` does NOT kill the dev server (Jimmie may still want it for follow-on inspection); Code kills it explicitly as the last housekeeping step OR Jimmie kills it manually with Ctrl-C.
+
+**Why this works.** The dev server hot-reloads any source change. Code's doc-update edits don't touch `src/`, so the server's view stays stable while Jimmie smokes. If a smoke issue surfaces and Code edits source to fix it, the dev server reloads and Jimmie sees the fix without re-launching.
+
+**Why this doesn't break anything.** The dev server is local-only (`http://127.0.0.1:8080/`); no Netlify deploy implication. The doc-update phase doesn't depend on the dev server being up or down. The AWAITING block can post whether or not Jimmie has finished smoking; the dev server URL just gives Jimmie the option to smoke earlier.
+
+**Concrete prompt template for Code's smoke-ready message:**
+
+```
+Verification clean (typecheck + build + test). Spinning up `npm run dev`...
+
+Smoke ready at http://127.0.0.1:8080/. Beginning doc updates in parallel.
+
+Doc updates will land on the worktree branch over the next ~5-15 minutes. Smoke at your pace; I'll surface the AWAITING SQUASH APPROVAL block when docs are done. If you hit a smoke issue, just flag it in chat and I'll fix forward before continuing docs.
+```
+
+The numbering convention stays § 4.5.X for the ship-flow sub-rules; 4.6 is the smoke-ready handoff because it sits BETWEEN verification and the § 4.5 ship-flow steps (which run post-approval).
 
 ---
 
@@ -534,4 +533,4 @@ Phase 4 was a known shape (port). Phase 5 is the real test. The infrastructure a
 
 ---
 
-*Living playbook. Update when patterns we discover deserve to be encoded. Currently at ~540 lines; trim opportunistically.*
+*Living playbook. Update when patterns we discover deserve to be encoded. Trim opportunistically.*

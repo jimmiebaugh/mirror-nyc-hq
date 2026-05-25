@@ -23,6 +23,18 @@ How we write code in this repo. Read this before adding tables, columns, edge fu
 - After applying, regenerate types: `supabase gen types typescript --linked > src/integrations/supabase/types.ts`.
 - After adding fields, update `docs/schema.md` in the same commit.
 
+### RPC posture (which security + grant pattern)
+
+Three patterns are in use; pick the right one based on who invokes the function and whether the function enforces caller scope.
+
+- **`SECURITY INVOKER` + `GRANT EXECUTE TO authenticated`** when the browser is the caller and RLS on the affected tables enforces caller scope. Example: `reset_scout_for_deck_regenerate` (called from `DeckPrep.tsx generate()`; the caller's RLS gates which scouts they can reset). The function inherits the caller's identity; no extra in-function check needed because RLS is the gate.
+
+- **`SECURITY DEFINER` + `SET search_path = public` + service-role-only grant** (Phase 5.12.1) when only an edge function is allowed to invoke and the function has no caller-ownership check. Example: `vs_research_try_acquire_kickoff` (called from `vs-research-venues` via the service-role client; updates any scout by UUID without verifying ownership). REVOKE EXECUTE from PUBLIC + anon + authenticated; GRANT EXECUTE TO `service_role` only. Granting authenticated would let any signed-in user reset another row's state since the function lacks the ownership check that RLS would have given an INVOKER + authenticated function.
+
+- **`SECURITY DEFINER` + `SET search_path = public` + `GRANT EXECUTE TO authenticated` + in-function admin re-check** when the function does an atomic cross-table write that would trip RLS mid-flight AND the caller chain is mixed (edge function invokes via service-role client, but `auth.uid()` may or may not flow). Example: `bulk_import_commit_projects` / `_vendors` / `_venues` (called from the `bulk-import` edge function via the service-role client; `auth.uid()` is NULL inside the function; the body re-checks `permission_role='admin'` from a payload-supplied `actor_id`, raises 42501 otherwise). See `docs/auth-model.md` § "SECURITY DEFINER RPCs invoked by an edge function" for the actor-from-payload rule.
+
+Always pin `search_path = public` on SECURITY DEFINER functions to prevent search-path attacks; never inherit the caller's. Always REVOKE FROM PUBLIC + anon + authenticated before GRANT-ing to a narrower role; implicit grants are not safe (`feedback_revoke_execute_check_rls_callers`).
+
 ## Realtime
 
 - Tables the UI subscribes to via `postgres_changes` must be added to the `supabase_realtime` publication AND have `REPLICA IDENTITY FULL`. Both go in the same migration that adds the subscription.

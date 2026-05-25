@@ -4,10 +4,24 @@ Living-state doc. The "Now" block below should answer "where is the project righ
 
 ## Now
 
-- **Latest ship:** Phase 5.11 — UX/design-system audit + structural consistency + docs reorg. Marker commit `<5.11>` (SHA backfills on next ship). Combines what was 5.11.0 + 5.11.1 + 5.11.2 + the follow-on docs-cleanup pass into one squashed commit per the X.X-per-ship convention.
-- **Currently deployed to production:** Phase 5.11 (this commit). Pushing fires the Netlify deploy carrying everything since the v1 audit-pass build (`34b32d4`).
-- **Next sub-phase per roadmap:** Phase 5.12 (Venue Scout review).
-- **Last updated:** 2026-05-23.
+- **Latest ship:** Phase 5.12 (Venue Scout review, complete). Full review cycle: 28 sub-phases shipped 2026-05-23 to 2026-05-27, collapsed into a single squash. Per-sub-phase narratives in `docs/v1-changelog.md`. Architectural decisions in `docs/decisions.md` (`.tbl` matrix decouple, back-crumb relocation to TopBar, Lookup Lists shared component, plus per-sub-phase decisions across the 5.12 cycle). 10 migrations + 9 edge functions touched cumulatively across the cycle; all applied out-of-band during the cycle. Roadmap renumbered (5.14/5.15/5.16/5.17). `1a01d3e` 2026-05-27.
+
+- **Currently deployed to production:** Phase 5.11 (`d563bce`). **Netlify deploy pending:** the Phase 5.12 squash (`1a01d3e`) is pushed but Netlify deploys are currently locked; Jimmie unlocks Netlify after the push and the production frontend deploy fires from `1a01d3e`. Edge functions and migrations from the 5.12 cycle were applied out-of-band during the cycle (10 migrations applied; 9 edge functions touched across multiple redeploys: `vs-generate-deck`, `vs-research-venues`, `vs-compile-summaries`, `vs-parse-brief`, `vs-generate-brief-overview`, `vs-research-single-venue`, `vs-delete-scout`, `hq-generate-venue-about`, `vs-regenerate-venue-overview`). Phase 5.12.8 was CUT.
+- **Recent commits** (newest first):
+  - `1a01d3e` Phase 5.12: Venue Scout review (complete) — 28 sub-phases collapsed into one squash; per-sub-phase narratives in `docs/v1-changelog.md`
+- **Recent migrations** (5.12 cycle — 10 files applied out-of-band; canonical list in `supabase/migrations/`):
+  - `20260607000000_phase_5_12_10_venue_types_db_driven.sql` (Phase 5.12.10)
+  - `20260606000000_phase_5_12_9_neighborhoods_lookup.sql` (Phase 5.12.9)
+  - `20260605000000_phase_5_12_5_brief_data_shape_backfill.sql` (Phase 5.12.5)
+  - `20260604120000_phase_5_12_4_1_deck_kickoff_lock.sql` (Phase 5.12.4.1)
+  - `20260603220000_phase_5_12_3_vs_candidate_venues_dedupe_meta.sql` (Phase 5.12.3)
+  - `20260603200000_phase_5_12_2_city_aliases_cleanup.sql` (Phase 5.12.2)
+  - `20260603190000_phase_5_12_2_city_aliases.sql` (Phase 5.12.2)
+  - `20260603180000_phase_5_12_2_backfill_scout_cities.sql` (Phase 5.12.2)
+  - `20260603160000_phase_5_12_1_hq_pool_source_and_research_kickoff_lock.sql` (Phase 5.12.1)
+  - `20260603140000_phase_5_12_0_drop_shortlist_sync_trigger.sql` (Phase 5.12.0)
+- **Next sub-phase per roadmap:** Phase 5.12 VS review fully closed. Phase 5.13 (TS review) is NEXT per `docs/roadmap.md`. Queued future phases: Phase 5.14 venue photo persistence to HQ Venues DB; Phase 5.15 Anthropic per-tool call-log infra; Phase 5.16 DB tier hardening + freelance access + codebase triage; Phase 5.17 final smoke test + revisions. Queued carry-forwards (not yet slotted into a phase): HQ-wide `.tbl` canon flip (`code-observations.md` row #47, deferred); `vs-generate-deck` neighborhood auto-add into `public.neighborhoods` (5.12.13.3 carry-forward); VS research-accuracy C3 URL accuracy (logged in spec for future sub-phase).
+- **Last updated:** 2026-05-27 (Phase 5.12 squash — full Venue Scout review cycle collapsed into single commit `1a01d3e`; Netlify deploy pending unlock).
 
 ## What's where
 
@@ -28,7 +42,7 @@ Only items that need a fresh eye to act on. Items already triaged into a phase p
 
 ## How to update this file
 
-On every meaningful merge to `main`:
+On every meaningful merge and every push to `main`:
 
 1. Bump **Last updated** to today.
 2. Replace **Active phase** with the new sub-phase: status + commit hash + pointers to its `docs/decisions.md` entry and (once it deploys) its `docs/v1-changelog.md` section.

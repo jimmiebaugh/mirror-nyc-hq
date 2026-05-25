@@ -1,14 +1,22 @@
-// Frontend mirror of supabase/functions/_shared/venueTypes.ts. The two files
-// are kept in lock-step per port plan § 6 (Phase 4.1-port primed the server
-// side ahead of consumers; Phase 4.6-port lands this mirror when the matrix
-// surfaces). Any change to CANONICAL_TYPES, TYPE_STYLES, canonicalizeType,
-// canonicalizeMultiType, parseTypes, or sanitizeWebsiteUrl touches BOTH files
-// in the same commit. Drift produces mismatched venue type pills between the
-// matrix UI and the AI-research / sheet-parsed source data.
+// Frontend venue-type palette + parser.
+//
+// Phase 5.12.10 narrowed the lockstep contract with the server mirror
+// (supabase/functions/_shared/venueTypes.ts): CANONICAL_TYPES + TYPE_STYLES
+// + TYPE_FALLBACK_STYLE are the legacy 9-key palette keying set. The
+// runtime canonical set is whatever rows currently sit in
+// `public.venue_types`, read at render time via useVenueTypes
+// (src/lib/venue-scout/useVenueTypes.ts). Producer adds in HQ Settings
+// flow through to every VS surface automatically.
+//
+// Legacy canonicalizeType + canonicalizeMultiType regex helpers were
+// deleted in 5.12.10 (per OQ #1 + #2; existing VS data is testing
+// records). VenueTypePill migrates to the new paletteForType helper;
+// every other caller resolves against the runtime set via useVenueTypes.
 
 export const CANONICAL_TYPES = [
   "Retail",
   "Event Venue",
+  "White Box",
   "Industrial",
   "Warehouse",
   "Gallery",
@@ -24,65 +32,80 @@ export type CanonicalType = (typeof CANONICAL_TYPES)[number];
 // intentional desaturated brand-context palette; do NOT substitute HQ design
 // tokens here. See docs/decisions.md Phase 4.6-port for rationale.
 export const TYPE_STYLES: Record<CanonicalType, string> = {
-  Retail:      "bg-[rgba(181,133,136,0.18)] text-[#D89BA0] border-[rgba(181,133,136,0.42)]",
+  Retail:        "bg-[rgba(181,133,136,0.18)] text-[#D89BA0] border-[rgba(181,133,136,0.42)]",
   "Event Venue": "bg-[rgba(104,142,142,0.18)] text-[#8FB3B3] border-[rgba(104,142,142,0.42)]",
-  Industrial:  "bg-[rgba(120,146,171,0.18)] text-[#94B0C8] border-[rgba(120,146,171,0.42)]",
-  Warehouse:   "bg-[rgba(168,147,112,0.18)] text-[#C8B190] border-[rgba(168,147,112,0.42)]",
-  Gallery:     "bg-[rgba(144,128,176,0.18)] text-[#B5A3D4] border-[rgba(144,128,176,0.42)]",
-  Studio:      "bg-[rgba(124,124,144,0.18)] text-[#A6A6BC] border-[rgba(124,124,144,0.40)]",
-  Outdoor:     "bg-[rgba(144,163,128,0.18)] text-[#A8C098] border-[rgba(144,163,128,0.42)]",
-  Mobile:      "bg-[rgba(168,132,104,0.18)] text-[#CCA088] border-[rgba(168,132,104,0.42)]",
+  "White Box":   "bg-[rgba(140,140,144,0.18)] text-[#BCBCC0] border-[rgba(140,140,144,0.42)]",
+  Industrial:    "bg-[rgba(120,146,171,0.18)] text-[#94B0C8] border-[rgba(120,146,171,0.42)]",
+  Warehouse:     "bg-[rgba(168,147,112,0.18)] text-[#C8B190] border-[rgba(168,147,112,0.42)]",
+  Gallery:       "bg-[rgba(144,128,176,0.18)] text-[#B5A3D4] border-[rgba(144,128,176,0.42)]",
+  Studio:        "bg-[rgba(124,124,144,0.18)] text-[#A6A6BC] border-[rgba(124,124,144,0.40)]",
+  Outdoor:       "bg-[rgba(144,163,128,0.18)] text-[#A8C098] border-[rgba(144,163,128,0.42)]",
+  Mobile:        "bg-[rgba(168,132,104,0.18)] text-[#CCA088] border-[rgba(168,132,104,0.42)]",
 };
 
 export const TYPE_FALLBACK_STYLE =
   "bg-[rgba(124,124,144,0.18)] text-[#A6A6BC] border-[rgba(124,124,144,0.40)]";
 
-export function canonicalizeType(raw: string): CanonicalType | null {
-  const t = raw.trim().toLowerCase();
-  if (!t) return null;
-  for (const c of CANONICAL_TYPES) if (t === c.toLowerCase()) return c;
-  if (/(industrial)/.test(t) && /(warehouse)/.test(t)) return null;
-  if (/storefront|retail|commercial|ground[- ]?floor|vacancy|pop[- ]?up/.test(t)) {
-    return "Retail";
+/**
+ * Phase 5.12.10: case-insensitive palette lookup. Returns the rgba
+ * palette class for a legacy palette key (case-insensitive match
+ * against CANONICAL_TYPES), falling back to TYPE_FALLBACK_STYLE for
+ * any other token (producer-added types, legacy data with non-
+ * canonical names). Lowercase + canonical-case input both resolve
+ * the same palette so "retail" and "Retail" render identically.
+ *
+ * Use this helper for non-hook callers like VenueTypePill. Hook-
+ * based callers should use useVenueTypes().paletteFor instead.
+ */
+export function paletteForType(name: string | null | undefined): string {
+  if (!name) return TYPE_FALLBACK_STYLE;
+  const target = name.trim().toLowerCase();
+  for (const canonical of CANONICAL_TYPES) {
+    if (canonical.toLowerCase() === target) {
+      return TYPE_STYLES[canonical];
+    }
   }
-  if (/warehouse/.test(t)) return "Warehouse";
-  if (/industrial/.test(t)) return "Industrial";
-  if (/gallery/.test(t)) return "Gallery";
-  if (/studio|soundstage/.test(t)) return "Studio";
-  if (/theater|ballroom|event|club|music venue/.test(t)) return "Event Venue";
-  if (/outdoor|park|plaza|rooftop|courtyard/.test(t)) return "Outdoor";
-  if (/mobile|truck|vehicle|cart/.test(t)) return "Mobile";
-  return null;
+  return TYPE_FALLBACK_STYLE;
 }
 
 /**
- * For multi-type strings ("Warehouse / Gallery"), canonicalize each segment
- * and return the joined result. If nothing canonicalizes, return the original
- * trimmed input so the matrix's TYPE_FALLBACK_STYLE picks it up.
+ * Phase 5.12.10: parse a slash/comma-separated venue_type string into
+ * an ordered, deduped list of type tokens. When `canonicalSet` is
+ * provided AND non-empty, tokens are case-insensitively matched
+ * against the runtime canonical set; matches resolve to the canonical
+ * casing, non-matches keep their original trimmed casing (rendered
+ * via TYPE_FALLBACK_STYLE by the pill renderer). When `canonicalSet`
+ * is undefined OR empty (transient load / error state where
+ * `useVenueTypes()` returns names: [] before the cache populates),
+ * falls back to the legacy static `CANONICAL_TYPES` so callers
+ * without a hook-loaded set still resolve legacy types.
+ *
+ * Returns `string[]` (no longer the narrow `CanonicalType[]`) so the
+ * pill renderer can surface fallback-styled tokens for runtime-only
+ * additions.
  */
-export function canonicalizeMultiType(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-  const parts = trimmed
-    .split(/[/,]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const out: string[] = [];
-  for (const p of parts) {
-    const c = canonicalizeType(p);
-    if (c && !out.includes(c)) out.push(c);
-  }
-  return out.length > 0 ? out.join(" / ") : trimmed;
-}
-
-/** Matrix-friendly: returns the canonical types in order, deduped. */
-export function parseTypes(raw: string | null): CanonicalType[] {
+export function parseTypes(
+  raw: string | null,
+  canonicalSet?: readonly string[],
+): string[] {
   if (!raw) return [];
   const parts = raw.split(/[/,]/).map((s) => s.trim()).filter(Boolean);
-  const out: CanonicalType[] = [];
+  const set =
+    canonicalSet && canonicalSet.length > 0
+      ? canonicalSet
+      : (CANONICAL_TYPES as readonly string[]);
+  const out: string[] = [];
   for (const p of parts) {
-    const c = canonicalizeType(p);
-    if (c && !out.includes(c)) out.push(c);
+    const lower = p.toLowerCase();
+    let resolved: string | null = null;
+    for (const c of set) {
+      if (c.toLowerCase() === lower) {
+        resolved = c;
+        break;
+      }
+    }
+    const emit = resolved ?? p;
+    if (!out.includes(emit)) out.push(emit);
   }
   return out;
 }

@@ -149,3 +149,25 @@ verify_jwt = true
 # No self-invoke; reads + writes run under the caller's JWT (RLS-enforced).
 [functions.hq-generate-venue-about]
 verify_jwt = true
+
+# Phase 5.12.7 Feature C: single-venue research for manual rows promoted
+# to pitch on Shortlist. User-invoked synchronous from the togglePitch
+# handler; no self-invoke. verify_jwt = true matches the sibling
+# vs-* pattern. Authorization gates inside the function enforce
+# venue.scout_id == scout_id, venue.source == 'manual', and a scout-state
+# allowlist of shortlist | review_selects | deck_prep so a probe cannot
+# poison rows on other scouts (open-authenticated vs_* RLS leaves
+# function-level checks as the only cross-scout poisoning defense).
+[functions.vs-research-single-venue]
+verify_jwt = true
+
+# Phase 5.12.6: synchronous scout delete with storage-file cleanup.
+# User-invoked from ScoutIndex.tsx's confirmDelete handler, replaces a
+# direct DELETE that left brief PDFs / sourcing sheets / vs_venue_photos
+# orphaned. verify_jwt = true matches the sibling vs-* pattern. Single
+# scout_id input + no cross-entity surface means no extra in-function
+# authorization gate beyond the gateway check + 404 on missing scout;
+# this is the counter-example to vs-research-single-venue's three-gate
+# posture (see docs/auth-model.md § Function-level authorization gates).
+[functions.vs-delete-scout]
+verify_jwt = true

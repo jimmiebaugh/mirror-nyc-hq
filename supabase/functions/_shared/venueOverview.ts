@@ -1,94 +1,47 @@
 // Shared venue-overview primitives.
 //
-// ABOUT_VENUE_SYSTEM (the HQ prompt) is the CANONICAL venue-overview prompt.
-// The two generation paths below produce the SAME artifact -- the venue "About"
-// paragraph -- so their prompts MUST stay aligned in voice, length, and rules.
-// Tune ABOUT_VENUE_SYSTEM; do not let the VS prompt drift away from it.
+// `ABOUT_VENUE_SYSTEM` is the canonical venue-overview prompt. The HQ path
+// (`hq-generate-venue-about`) and the VS path (`vs-compile-summaries` Pass 2)
+// both feed it: same prompt, same tool-less posture (web_search only,
+// `tool_choice: auto`), same plain-text reply. The user-message builders
+// diverge because the row shapes do:
 //
-//   1. HQ path (hq-generate-venue-about): ABOUT_VENUE_SYSTEM, evergreen and
-//      tool-less (Jimmie, 2026-05-21). Runs plain-text (no custom tool,
-//      web_search only) and reads the model's text reply directly. Tool-less
-//      removes the collapse-risk class (there is no forced tool to collapse).
-//      buildOverviewUserMsgFromVenue builds the user-message venue-data block.
-//      This is the source of truth for venue-overview voice.
+//   - HQ: `buildOverviewUserMsgFromVenue(venue)` takes a `venues` row.
+//   - VS: `buildOverviewUserMsgForVsRow(venue, scoutCity)` takes a
+//     `vs_candidate_venues` row plus the scout's city, and tacks on an
+//     optional `<producer_inputs>` block carrying the producer-side
+//     recommendations + notes when set. `considerations` deliberately
+//     NEVER feed the overview prompt: they are caveats by nature and
+//     would poison the evergreen client-facing copy.
 //
-//   2. VS path (vs-compile-summaries Pass 2): OVERVIEW_TOOL + OVERVIEW_SYSTEM,
-//      the legacy VS Pro prompt, which still forces the `write_overview` tool.
-//      These are NO LONGER under a hard "never edit" mandate (Jimmie approved
-//      diverging). BUT: editing a forced-tool SYSTEM risks the
-//      feedback_tool_choice_collapse failure, so smoke a VS sourcing ->
-//      compile -> deck run after any change here, and keep any edits ALIGNED
-//      with ABOUT_VENUE_SYSTEM rather than diverging from it.
-//
-// END STATE (Phase 5.12, see docs/roadmap.md § 5.12): VS converges onto the HQ
-// path -- point vs-compile-summaries at ABOUT_VENUE_SYSTEM (tool-less + web
-// search), relocate overview generation to deck-prep, drop the brief, cut
-// considerations, and DELETE OVERVIEW_TOOL + OVERVIEW_SYSTEM. At that point the
-// only caller-specific piece is the user-message builder (VS feeds a
-// vs_candidate_venue row plus recommendations + producer notes; HQ feeds a
-// venues row), so ABOUT_VENUE_SYSTEM may gain a short line acknowledging the
-// optional recommendations/notes inputs VS passes.
-//
-// The user-message builder is NOT shared today: VS feeds a vs_candidate_venue
-// row (plus recommendations + producer notes); HQ feeds a venues row. Only the
-// VS TOOL/SYSTEM and the HQ SYSTEM are module-level primitives.
+// Phase 5.12.0 converged VS onto this path (drops the legacy `OVERVIEW_TOOL`
+// + `OVERVIEW_SYSTEM` that used to live here; retires the
+// `vs_candidate_venues_shortlist_sync` trigger; HQ-venue match-or-insert
+// moves to the top of `vs-generate-deck`'s work block so the producer's
+// last-mile edits on DeckPrep flow through to `venues.about_venue`). VS
+// adds a prompt-cache breakpoint on the system block so the long evergreen
+// prompt is billed once per scout instead of once per venue in the
+// sequential loop.
 
-import type { ClaudeTool } from "./anthropic.ts";
+/**
+ * Deterministic empty-string fallback so the producer always lands on a
+ * non-empty, editable paragraph if Claude returns nothing usable. Shared
+ * by `hq-generate-venue-about` and `vs-compile-summaries`. No em dashes.
+ */
+export function buildStub(venue: { name: string; city?: string | null }): string {
+  const name = (venue.name ?? "").trim() || "This venue";
+  const city = (venue.city ?? "").trim();
+  return city ? `${name} is a venue in ${city}.` : `${name} is an event venue.`;
+}
 
-// Phase 4.10.4-port: OVERVIEW_TOOL tuned to produce shorter, better-targeted
-// overviews. Per feedback_tool_choice_collapse memory rule, the levers are
-// the tool description + the venue_overview property description + maxLength.
-// OVERVIEW_SYSTEM stays untouched.
+// HQ path system prompt (Jimmie, 2026-05-21; tightened after smoke round 1;
+// 5.12.0 extended the `<input_fields>` block to acknowledge the optional
+// `<producer_inputs>` block VS passes).
 //
-// Targets:
-//   - 3-4 sentences, ~80 words.
-//   - Surface standout physical / experiential features + immediate
-//     neighborhood character + at most one critical consideration.
-//   - Don't itemize every amenity; don't pad with marketing fluff.
-//
-// `maxLength: 500` is a soft signal -- Claude generally honors but does not
-// strictly truncate.
-//
-// Diagnostic: if smoke output is still too long, tighten maxLength to 450
-// or 400 first. If output is still un-targeted, add more concrete examples
-// to the property description. (Editing OVERVIEW_SYSTEM is allowed now too --
-// see the VS-ONLY + alignment notes above -- but keep it ALIGNED with
-// ABOUT_VENUE_SYSTEM, and smoke a VS deck run after any forced-tool change.)
-export const OVERVIEW_TOOL: ClaudeTool = {
-  name: "write_overview",
-  description:
-    "Write a single-paragraph venue overview (3-4 sentences, ~80 words) tied to the brief. Focus on standout physical / experiential features, the immediate neighborhood character around the venue, and only the MOST critical considerations. Skip the nitty-gritty.",
-  input_schema: {
-    type: "object",
-    properties: {
-      venue_overview: {
-        type: "string",
-        description:
-          "A single producer-tone paragraph of 3-4 sentences (~80 words, max ~120). Structure: (1) one-sentence identity + standout physical or experiential feature; (2) what the space offers programmatically (zones, sightlines, infrastructure, outdoor connections, flexibility); (3) one sentence on the surrounding neighborhood and the cultural / commercial context; (4) optionally, one sentence on what it's best suited for OR one critical consideration. Examples of standout features worth surfacing: 'Extremely large, contiguous floors with high ceilings'; 'Strong ability to separate zones and mitigate sound bleed'; 'Industrial aesthetic with a clean, modernized interior'; 'Robust infrastructure for load-in, power, and large-scale production'; 'Rising cultural hub already hosting CFDA / NYFW shifts'; 'Proximity to Meatpacking, Chelsea galleries, High Line'; 'Brooklyn industrial aesthetic'; 'Multiple outdoor areas (courtyard + intimate garden)'; 'Casual, communal layout supports networking and social engagement'; 'Branding opportunities, prime advertising frontage'; 'High ceilings and multiple entrances; rigging points and truss'; 'Mezzanine great for another programming area'. Examples of well-calibrated overviews: 'The Sunset is a storefront for lease that is situated on the Sunset Strip in the heart of West Hollywood. This prime retail space is within walking distance of everything and has unparalleled access to premier destinations.' / 'Chelsea Industrial is a large, industrial-style event space in West Chelsea known for hosting high-production corporate events, brand activations, and conferences. The venue features a wide-open floor plan with high ceilings, offering a flexible canvas for custom builds and large-scale programming. Its industrial aesthetic and neutral interior lend themselves well to contemporary, tech-forward events, while the surrounding neighborhood provides easy access to transportation, hotels, and production resources.' / 'Platform is a vibrant, design-forward cultural destination. Developed on a repurposed industrial site, the 50,000 sq ft campus blends boutique retail, elevated restaurants and creative community experiences. Situated in Culver City, it sits in the heart of LA art galleries, studios and tech offices.' Do NOT itemize every amenity, do NOT pad with marketing fluff, do NOT exceed ~120 words.",
-        maxLength: 500,
-      },
-    },
-    required: ["venue_overview"],
-  },
-};
-
-// VS-ONLY. OVERVIEW_TOOL (above) + OVERVIEW_SYSTEM (below) are used solely by
-// vs-compile-summaries, which forces the write_overview tool. The HQ
-// About-Venue generator does NOT use either one; it uses ABOUT_VENUE_SYSTEM
-// (below), tool-less. OVERVIEW_SYSTEM is still the original VS Pro text.
-// Editing the VS prompt/tool is now ALLOWED -- the old "frozen, never edit"
-// mandate is lifted (Jimmie approved diverging, and VS converges to
-// ABOUT_VENUE_SYSTEM in Phase 5.12, see docs/roadmap.md § 5.12). CAUTION when
-// you do edit the VS side: per feedback_tool_choice_collapse, changing a
-// forced-tool SYSTEM has historically caused empty-tool-output collapses, so
-// smoke a VS sourcing -> compile -> deck run after any change here.
-export const OVERVIEW_SYSTEM =
-  `You are a producer at Mirror NYC writing venue summaries for a pitch deck. Tone: declarative, third-person, specific to the brief. 5-8 sentences. Mention how the venue serves the specific event (foot traffic, back-of-house, capacity, neighborhood fit). No marketing fluff. Forbidden words: "perfect", "ideal", "premier", "elevated experience", "world-class", "stunning", "amazing".`;
-
-// HQ path system prompt (Jimmie, 2026-05-21; tightened after smoke round 1).
-// Evergreen, brief-less, tool-less: hq-generate-venue-about runs plain-text +
-// web_search and reads the model's text reply directly. Venue data arrives as
-// the user message (buildOverviewUserMsgFromVenue).
+// Evergreen, brief-less, tool-less. Venue data arrives as the user message
+// (`buildOverviewUserMsgFromVenue` for HQ, `buildOverviewUserMsgForVsRow`
+// for VS). Both callers run the same `system` + tools (`web_search_20250305`
+// with `tool_choice: auto`), and read the model's text reply directly.
 //
 // Smoke-round-1 fixes: (1) output ran long -> hard 110-word cap restated, the
 // "bias toward comprehensiveness" nudge removed (it caused bloat). (2) One
@@ -108,7 +61,7 @@ Write for the CLIENT deciding whether to host their event at this venue. Clients
 </audience>
 
 <input_fields>
-You will receive the following venue data. Missing fields will render as "(not set)" — treat these as unknown, not as instructions to invent.
+You will receive the following venue data. Missing fields render as "(not set)"; treat these as unknown, not as instructions to invent.
 
 - Name
 - Address
@@ -118,11 +71,13 @@ You will receive the following venue data. Missing fields will render as "(not s
 - Size (sq ft)
 - Capacity
 - Website
-- Key features (list)
+- Key features (tags): short evergreen feature tags (1 to 4 words each, usually 1 to 2). Interpret each tag as a feature anchor; expand on what it describes in the paragraph. Do not list the tags verbatim. Not every tag has to make the paragraph; favor the ones most appealing or distinctive for this specific venue, especially when expanding on more would push the paragraph above the 150-word cap.
+
+Optionally, you may also receive a <producer_inputs> block with Mirror's producer-side annotations: recommendations (what makes the venue a fit) and producer notes (any free-text feedback the producer added on Review). These are signals about how Mirror sees this venue. Incorporate them into voice and emphasis when they sharpen the paragraph, but do NOT quote them verbatim. If the <producer_inputs> block is absent, ignore.
 </input_fields>
 
 <task>
-Write a single paragraph of 4 to 5 tight sentences, 90 to 110 words. The 110-word limit is a hard cap: never exceed it. Every sentence must earn its place; cut anything that does not sell the space or the guest experience.
+Write a single paragraph of 4 to 5 tight sentences, 100 to 150 words. The 150-word limit is a hard cap. If your draft exceeds 150 words, cut sentences or merge clauses until it fits before you reply. Count the words in your draft before returning. Prefer verb-first sentence openings where natural; avoid weak openings like "The venue is" or "It offers". Every sentence must earn its place.
 </task>
 
 <structure>
@@ -187,7 +142,7 @@ Input:
 - Size (sq ft): 5,000
 - Capacity: (not set)
 - Website: (not set)
-- Key features: 1936 warehouse building, 30-foot ceilings, large skylight, exposed steel beams, polished concrete floors, two upstairs mezzanines, built-in rigging, 400-amp power with cam lock, gigabit fiber, back-of-house entrance with kitchen, 11.5ft ground-floor entry door for vehicle load-in
+- Key features (tags): High Ceilings, Skylight, Concrete Floors, Multi-Level, Drive-In
 
 Output:
 Studio 525 is a white box event venue occupying a 1936 warehouse building on West 24th Street in Chelsea. Defined by 30-foot ceilings, a massive skylight, exposed steel beams, and polished concrete floors, the space has an industrial character within a fully neutral canvas. Two upstairs mezzanines add vertical dimension and programming zones. Large street-level entry doors accommodate outdoor visibility to vehicle drive-ins. The building sits in West Chelsea's historic arts district, a neighborhood with deep industrial roots that evolved into one of the city's most significant gallery corridors, with the High Line running directly alongside the block.
@@ -203,7 +158,7 @@ Input:
 - Size (sq ft): 22,000
 - Capacity: (not set)
 - Website: (not set)
-- Key features: three bookable spaces (The Yard 15,000 sq ft, The Lounge, The Village), 18-foot ceilings, large internal LED screen, projection and truss lighting, two kitchens, floor-to-ceiling windows with retractable privacy screens, private entrance, built-in bar, back-of-house space, multiple entry points
+- Key features (tags): High Ceilings, Floor-to-Ceiling Windows, Multiple Spaces, LED Screen, Built-In Bar
 
 Output:
 Chelsea Industrial is an industrial event space on West 28th Street, positioned between Chelsea, Hudson Yards, and Midtown West. The venue boasts 18-foot ceilings throughout, and floor-to-ceiling windows facing across 28th Street and 11th Avenue, and offers three distinct spaces: The Yard, at 15,000 sq ft and featuring a large internal LED screen, truss lighting systems, and two kitchens; The Lounge, with a private entrance and built-in bar; and The Village, with multiple entrances and back-of-house spaces. Sitting at the convergence of Chelsea's gallery district and the developing Hudson Yards, it offers accessibility in prominent neighborhoods and proximity to the west side's rising commercial energy.
@@ -219,7 +174,7 @@ Input:
 - Size (sq ft): 4,400
 - Capacity: (not set)
 - Website: (not set)
-- Key features: 1957 corner building, large windows, track lighting, open layout, high ceilings, rear parking lot, rooftop
+- Key features (tags): Corner Location, High Ceilings, Open Layout, Rooftop
 
 Output:
 8626 Melrose Ave is a highly desirable storefront and pop-up space, positioned on the corner of Melrose Avenue and Huntley Drive, surrounded by high-end retail and restaurants. The space features large windows and track lighting throughout, an open layout, and high ceilings, making it a flexible canvas for any event. An uncovered rooftop offers parking spaces or opportunities for outdoor programming. Sitting squarely within the West Hollywood Design District, it's a natural draw for a fashion-forward, design-literate consumer base. Art and fashion aficionados, trend-setters, and celebrities frequent the area, ducking into high-end boutiques that make this corridor one of the strongest retail audiences in Los Angeles.
@@ -235,7 +190,7 @@ Input:
 - Size (sq ft): (not set)
 - Capacity: (not set)
 - Website: (not set)
-- Key features: exposed brick walls, original woodwork, ceiling trusses, skylight, industrial-chic aesthetic, bold art pieces (red Marroquin telephone booth, pink neon light fixture), cast iron staircase, modern-furnished mezzanine lounge overlooking the main floor, outdoor balcony, freight elevator, in-house AV, steps from Madison Square Park, the Flatiron Building, and Eataly
+- Key features (tags): Exposed Brick, Skylight, Multi-Level, Balcony, Art Installations
 
 Output:
 The Flat NYC is a multi-level event venue in the Flatiron District, steps from Madison Square Park and the Flatiron Building, with Eataly across the street. The main floor pairs exposed brick, original woodwork, and ceiling trusses with a skylight that floods the space in natural light, anchored by an industrial-chic aesthetic and bold art accents like a red Marroquin phone booth and pink neon. A cast iron staircase climbs to a furnished lounge overlooking the floor, and a mezzanine and outdoor balcony extend the programming. The surrounding district is a sophisticated crossroads of tech, fashion, and fine dining that draws a design-conscious, well-heeled crowd suited to brands with something to say.
@@ -251,7 +206,7 @@ Input:
 - Size (sq ft): (not set)
 - Capacity: (not set)
 - Website: (not set)
-- Key features: multiple indoor and outdoor event spaces, 104-foot LED 5K media wall, central plaza, AT&T world headquarters on site (6,000 employees daily), sophisticated AV, downtown Dallas Arts District
+- Key features (tags): Outdoor, Multiple Spaces, LED Screen, Plaza
 
 Output:
 AT&T Discovery District is a mixed-use development in the heart of downtown Dallas, built around a network of indoor and outdoor event spaces and a 104-foot LED media wall that turns the central plaza into a dramatic backdrop for large-format moments. AT&T's world headquarters anchor the complex, bringing roughly 6,000 employees through the district every day, layered on top of steady downtown foot traffic and weekend crowds. The surrounding Dallas Arts District lends a polished, corporate-forward setting with cultural credibility, and the open plazas give activations real visibility, well suited to brands that want scale and a built-in daytime audience.
@@ -267,7 +222,7 @@ Input:
 - Size (sq ft): (not set)
 - Capacity: (not set)
 - Website: (not set)
-- Key features: open pedestrian plaza, high visibility, 360-degree exposure, Alamo cube landmark sculpture, constant foot traffic, retail/dining neighbors (MUJI, Wegmans, Toy Tokyo), near East Village/NoHo/Greenwich Village
+- Key features (tags): Outdoor, High Visibility, Plaza
 
 Output:
 Astor Place is a high-visibility public plaza at a busy downtown Manhattan crossroads where the East Village, NoHo, and Greenwich Village meet, anchored by the landmark Alamo cube sculpture. Its open, pedestrian-heavy layout gives activations 360-degree exposure to constant street-level foot traffic throughout the day and into the evening. Retail and dining neighbors such as MUJI and Wegmans keep a steady mix of students, commuters, and locals moving through at all hours. The plaza is built for high-impact, street-facing moments that depend on volume and visibility rather than a controlled guest list.
@@ -276,6 +231,8 @@ Astor Place is a high-visibility public plaza at a busy downtown Manhattan cross
 
 <output_format>
 CRITICAL: Your entire response is ONLY the finished paragraph, as plain text. Begin with the first word of the paragraph (the venue name) and end with the final sentence's period. Do NOT include any of the following: a preamble or introduction; any reasoning or research notes; any explanation of what you did, searched for, found, or could not verify; any separator such as "---"; any label or heading; any phrase such as "Here is the paragraph" or "Based on the available information". If you cannot say it inside the paragraph itself, do not say it at all.
+
+Before returning, count the words in your draft. If above 150, cut a sentence or merge two clauses and recount. Do not return a paragraph above 150 words.
 </output_format>`;
 
 /**
@@ -323,6 +280,88 @@ export function buildOverviewUserMsgFromVenue(venue: VenueOverviewRow): string {
 - Size (sq ft): ${sqFt != null ? String(sqFt) : "(not set)"}
 - Capacity: ${venue.capacity ?? "(not set)"}
 - Website: ${venue.website_url ?? "(not set)"}
-- Key features: ${features}
+- Key features (tags): ${features}
 </venue_input>`;
+}
+
+/**
+ * A `vs_candidate_venues`-table row shaped for the VS overview generator.
+ * Shape mirrors `VenueOverviewRow` plus the VS-only producer-side annotations
+ * (`recommendations`, `notes`) that VS layers in via the optional
+ * `<producer_inputs>` block. `considerations` is deliberately absent: they
+ * are caveats by nature and stay surfaced on Sourcing / Shortlist / Review /
+ * DeckPrep but never feed the overview prompt (locked Phase 5.12.0).
+ */
+export type VsCandidateVenueOverviewRow = {
+  name: string;
+  address?: string | null;
+  neighborhood?: string | null;
+  venue_type?: string | null;
+  size_sq_ft?: number | null;
+  capacity?: number | null;
+  website_url?: string | null;
+  key_features?: string[] | null;
+  recommendations?: string[] | null;
+  notes?: string | null;
+};
+
+/**
+ * Build the Claude user message for VS Pass 2. The `<venue_input>` block is
+ * shape-identical to the HQ builder so the prompt cache reads cleanly across
+ * the two callers; the `city` slot comes from the parent `vs_scouts` row
+ * since `vs_candidate_venues` has no city column. The optional
+ * `<producer_inputs>` block carries Mirror's producer-side annotations
+ * (recommendations + notes) and is omitted entirely when both are empty so
+ * the prompt looks identical to the HQ call and the cache hits.
+ */
+export function buildOverviewUserMsgForVsRow(
+  venue: VsCandidateVenueOverviewRow,
+  scoutCity: string | null | undefined,
+): string {
+  const features =
+    Array.isArray(venue.key_features) && venue.key_features.length > 0
+      ? venue.key_features.join(", ")
+      : "(not set)";
+  const type =
+    typeof venue.venue_type === "string" && venue.venue_type.trim().length > 0
+      ? venue.venue_type.trim()
+      : "(not set)";
+  const city =
+    typeof scoutCity === "string" && scoutCity.trim().length > 0
+      ? scoutCity.trim()
+      : "(not set)";
+
+  const venueInput = `<venue_input>
+- Name: ${venue.name}
+- Address: ${venue.address ?? "(not set)"}
+- Neighborhood: ${venue.neighborhood ?? "(not set)"}
+- City: ${city}
+- Type: ${type}
+- Size (sq ft): ${venue.size_sq_ft != null ? String(venue.size_sq_ft) : "(not set)"}
+- Capacity: ${venue.capacity ?? "(not set)"}
+- Website: ${venue.website_url ?? "(not set)"}
+- Key features (tags): ${features}
+</venue_input>`;
+
+  const recs =
+    Array.isArray(venue.recommendations) && venue.recommendations.length > 0
+      ? venue.recommendations.map((r) => r.trim()).filter((r) => r.length > 0)
+      : [];
+  const notes =
+    typeof venue.notes === "string" && venue.notes.trim().length > 0
+      ? venue.notes.trim()
+      : "";
+
+  if (recs.length === 0 && notes.length === 0) {
+    return venueInput;
+  }
+
+  const producerInputs = `<producer_inputs>
+- Recommendations: ${recs.length > 0 ? recs.join("; ") : "(not set)"}
+- Producer notes: ${notes.length > 0 ? notes : "(none)"}
+</producer_inputs>`;
+
+  return `${venueInput}
+
+${producerInputs}`;
 }

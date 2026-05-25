@@ -1,45 +1,41 @@
+// Phase 4.7.2-port + audit pass 2 item 3: AI compile loading screen.
+//
+// Audit pass 2 swap-out:
+//   - Shell rendered through `VSLoadingShell` (icon-as-spinner pencil; the
+//     icon itself animates, no separate spinning circle). Eyebrow + h-page
+//     duplication dropped; h-page lives inside the shell.
+//   - Step keys renamed to match the backend's `brief_data.progress_step`
+//     contract from item 3 (loading_pitched / pass_1_fill / pass_2_overview
+//     / handoff). The setInterval timer stays for now and walks the keys at
+//     the prior 12-second cadence; item 3b swaps the timer for a derived
+//     read of `scout?.brief_data?.progress_step` after the edge function
+//     deploys. Fallback to STEPS[0].key when the field is absent so older
+//     scouts in flight don't render a broken step list.
+//
+// Original 4.7.2 docblock kept below for context.
+// -----------------------------------------------------------------------
 // Phase 4.7.2-port: AI compile loading screen + Realtime subscription on
 // vs_scouts. Closes the 404 window 4.7.1-port opened at
-// /venue-scout/scouts/:id/sourcing/compiling. VS Pro is the layout
-// authority (port plan § 3, Adapt: replace sync await with
-// EdgeRuntime.waitUntil kickoff + Realtime subscription per port plan
-// § 8.3).
-//
-// VS Pro source: src/pages/sourcing/Compiling.tsx (~82 lines).
-//
-// Substitutions:
-//   projectId            -> scoutId
-//   projects table       -> vs_scouts
-//   venues table         -> vs_candidate_venues
-//   compile-summaries    -> vs-compile-summaries
-//   /projects/:id        -> /venue-scout/scouts/:id
-//   surface-2 (track)    -> bg-input
-//   bg-[hsl(var(--success))] -> bg-green-400 (HQ has no --success token)
-//   "30-60 seconds"      -> spelled out (no en dash per voice rule)
+// /venue-scout/scouts/:id/sourcing/compiling.
 //
 // Adaptation: sync await replaced with fire-and-forget invoke + Realtime
-// subscription + 3-second polling fallback. Pattern mirrors the 4.5-port
-// Researching page. The Realtime subscription is the channel through
-// which the page learns about completion or failure. vs-compile-summaries
-// writes vs_scouts.current_step='deck_prep' on success or
-// status='failed'+pipeline_error on failure; this page reacts to either.
-//
-// Active step starts at "summaries" because the producer just confirmed
-// "selects" on the Review page. The 4-step animation walks through
-// summaries -> slides -> handoff over 12-second intervals (capped at
-// handoff). Realtime success flips to "handoff" then navigates after
-// 800ms to /deck/prep (404 until 4.8-port).
+// subscription + 3-second polling fallback. The Realtime subscription is
+// the channel through which the page learns about completion or failure.
+// vs-compile-summaries writes vs_scouts.current_step='deck_prep' on success
+// or status='failed'+pipeline_error on failure; this page reacts to either.
 
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  VSLoadingShell,
+  type LoadingShellStep,
+} from "@/components/venue-scout/VSLoadingShell";
 
-type StepKey = "selects" | "summaries" | "slides" | "handoff";
-
-const STEPS: { key: StepKey; label: string }[] = [
-  { key: "selects", label: "Selects confirmed" },
-  { key: "summaries", label: "Venue summaries locked" },
-  { key: "slides", label: "Preparing slide content & photos…" },
+const STEPS: readonly LoadingShellStep[] = [
+  { key: "loading_pitched", label: "Selects confirmed" },
+  { key: "pass_1_fill", label: "Venue summaries locked" },
+  { key: "pass_2_overview", label: "Preparing slide content & photos" },
   { key: "handoff", label: "Handing off to deck builder" },
 ];
 
@@ -48,6 +44,7 @@ type ScoutRow = {
   current_step: string | null;
   status: string | null;
   pipeline_error: string | null;
+  brief_data: Record<string, unknown> | null;
 };
 
 export default function Compiling() {
@@ -55,8 +52,6 @@ export default function Compiling() {
   const navigate = useNavigate();
   const [scout, setScout] = useState<ScoutRow | null>(null);
   const [venueCount, setVenueCount] = useState<number | null>(null);
-  // Producer just confirmed Selects on Review; start at "summaries".
-  const [active, setActive] = useState<StepKey>("summaries");
 
   useEffect(() => {
     if (!scoutId) return;
@@ -73,7 +68,7 @@ export default function Compiling() {
     const fetchScout = async () => {
       const { data } = await supabase
         .from("vs_scouts")
-        .select("id, current_step, status, pipeline_error")
+        .select("id, current_step, status, pipeline_error, brief_data")
         .eq("id", scoutId)
         .maybeSingle();
       if (!cancelled && data) setScout(data as unknown as ScoutRow);
@@ -109,28 +104,11 @@ export default function Compiling() {
       )
       .subscribe();
 
-    // 3. 3-second polling fallback (belt-and-suspenders, same as
-    //    Researching). Realtime is generally reliable but the
-    //    publication can hiccup; poll keeps us moving.
+    // 3. 3-second polling fallback (belt-and-suspenders).
     const pollId = setInterval(fetchScout, 3000);
 
-    // 4. Step animation: bump active step every 12 seconds, cap at
-    //    "handoff". Producer never sees "selects" as the active step
-    //    (it's pre-done); animation marches summaries -> slides ->
-    //    handoff. Realtime success will jump straight to "handoff"
-    //    via the navigation effect.
-    const order: StepKey[] = ["summaries", "slides", "handoff"];
-    const stepInterval = setInterval(() => {
-      setActive((a) => {
-        const i = order.indexOf(a);
-        return i < order.length - 1 ? order[i + 1] : a;
-      });
-    }, 12000);
-
-    // 5. Kick off the edge function. Fire-and-forget; the function
-    //    returns a 200 immediately and runs the AI work inside
-    //    EdgeRuntime.waitUntil. The page learns about completion via
-    //    Realtime, not the response.
+    // 4. Kick off the edge function. Fire-and-forget; the function returns
+    //    a 200 immediately and runs the AI work inside EdgeRuntime.waitUntil.
     void supabase.functions.invoke("vs-compile-summaries", {
       body: { scout_id: scoutId },
     });
@@ -138,7 +116,6 @@ export default function Compiling() {
     return () => {
       cancelled = true;
       clearInterval(pollId);
-      clearInterval(stepInterval);
       supabase.removeChannel(channel);
     };
   }, [scoutId]);
@@ -147,11 +124,10 @@ export default function Compiling() {
   useEffect(() => {
     if (!scout || !scoutId) return;
     if (scout.current_step === "deck_prep") {
-      // Success: flip to "handoff", brief pause, navigate to /deck/prep
-      // (404 until 4.8-port).
-      setActive("handoff");
+      // Success: brief pause, navigate to the consolidated Review surface
+      // (Phase 5.12.15; was /deck/prep).
       const t = setTimeout(
-        () => navigate(`/venue-scout/scouts/${scoutId}/deck/prep`),
+        () => navigate(`/venue-scout/scouts/${scoutId}/review`),
         800,
       );
       return () => clearTimeout(t);
@@ -163,65 +139,35 @@ export default function Compiling() {
     }
   }, [scout, scoutId, navigate]);
 
-  const order: StepKey[] = ["selects", "summaries", "slides", "handoff"];
-  const activeIdx = order.indexOf(active);
-  // "selects" is pre-done; progress bar starts at 25% and walks up.
-  const progress = ((activeIdx + 1) / order.length) * 100;
+  if (!scoutId) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+
+  // Audit pass 2 item 3b: derive active step from server-emitted
+  // brief_data.progress_step (Realtime channel triggers re-render on
+  // UPDATE). Fallback to STEPS[0].key when the field is absent (scout
+  // created mid-pipeline at deploy time, or older scouts).
+  const progressStep =
+    typeof scout?.brief_data?.progress_step === "string"
+      ? (scout.brief_data.progress_step as string)
+      : null;
+  const active = progressStep ?? STEPS[0].key;
+
+  const description =
+    venueCount && venueCount > 0
+      ? `Assembling your ${venueCount} pitched ${
+          venueCount === 1 ? "venue" : "venues"
+        }, summaries, and photos into a deck preview. This typically takes about 60 seconds.`
+      : "Assembling your pitched venues, summaries, and photos into a deck preview. This typically takes about 60 seconds.";
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh]">
-      {/* Custom spinner ring (VS Pro pattern verbatim) */}
-      <div className="relative h-12 w-12 mb-8">
-        <div className="absolute inset-0 rounded-full border-2 border-border" />
-        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
-      </div>
-      <h1 className="h-page text-center">Compiling Deck Preview</h1>
-      <p className="text-sm text-muted-foreground text-center mt-4 max-w-md">
-        Assembling your pitched venues, summaries, and photos into a deck
-        preview. This typically takes ~ 60 seconds.
-      </p>
-      {/* Progress bar (track uses bg-input per design-system § 12 rule 1). */}
-      <div className="w-full max-w-md mt-8 h-1 bg-input rounded-full overflow-hidden">
-        <div
-          className="h-full bg-primary transition-all duration-700"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      {/* Step list (verbatim from VS Pro, venue-count enrichment on "selects"). */}
-      <ul className="mt-10 space-y-3 text-sm">
-        {STEPS.map((s, i) => {
-          const done = i < activeIdx;
-          const current = s.key === active;
-          const labelText =
-            s.key === "selects" && venueCount && venueCount > 0
-              ? `${s.label} · ${venueCount} venues`
-              : s.label;
-          return (
-            <li key={s.key} className="flex items-center gap-3">
-              <span
-                className={`inline-flex h-2.5 w-2.5 rounded-full ${
-                  done
-                    ? "bg-green-400"
-                    : current
-                      ? "bg-primary animate-pulse"
-                      : "bg-border"
-                }`}
-              />
-              <span
-                className={
-                  current
-                    ? "font-semibold"
-                    : done
-                      ? "text-muted-foreground"
-                      : "text-muted-foreground/60"
-                }
-              >
-                {labelText}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    <VSLoadingShell
+      scoutId={scoutId}
+      icon="pencil"
+      title="Compiling"
+      description={description}
+      steps={STEPS}
+      activeStepKey={active}
+    />
   );
 }

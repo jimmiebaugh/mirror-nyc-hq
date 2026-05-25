@@ -1,25 +1,33 @@
+// Phase 4.5-port + audit pass 2 item 3: AI research loading screen.
+//
+// Audit pass 2 swap-out:
+//   - Shell rendered through `VSLoadingShell` (icon-as-spinner magnifying
+//     glass; the icon itself sweeps in a slow scan motion, no separate
+//     spinning circle). Eyebrow + h-page duplication dropped; h-page lives
+//     inside the shell. Horizontal progress bar removed (step list is the
+//     producer's progress signal now).
+//   - Step keys renamed to match the backend's `brief_data.progress_step`
+//     contract from item 3 (brief_loaded / phase_a_enrichment /
+//     phase_b_research / finalizing). setInterval timer stays for now and
+//     walks the keys at the prior 12-second cadence; item 3b swaps the
+//     timer for a derived read of `scout?.brief_data?.progress_step` after
+//     the edge function deploys. Fallback to STEPS[0].key when the field
+//     is absent so older scouts in flight don't render a broken step list.
+//   - Sheet-count enrichment pulled from the step list. The 4-step list no
+//     longer has a "Sheet parsed" pre-step (it never tracked a real phase;
+//     it was a confirmation that sheet upload finished before this page
+//     mounted). If a future producer needs that signal back, surface it in
+//     the page description instead.
+//
+// Original 4.5-port docblock kept below for context.
+// -----------------------------------------------------------------------
 // Phase 4.5-port: AI research loading screen + Realtime subscription on
 // vs_scouts. Closes the 404 window 4.4-port opened at
-// /venue-scout/scouts/:id/sourcing/researching. VS Pro is the layout
-// authority (port plan § 3, Adapt: replace sync await with EdgeRuntime.
-// waitUntil kickoff + Realtime subscription per port plan § 8.3).
-//
-// VS Pro source: src/pages/sourcing/Researching.tsx (~77 lines).
-//
-// Substitutions:
-//   project_id              -> scout_id
-//   projects table          -> vs_scouts
-//   venues table            -> vs_candidate_venues
-//   research-venues         -> vs-research-venues
-//   /projects/:id           -> /venue-scout/scouts/:id
-//   surface-2 (track bar)   -> bg-input
-//   bg-[hsl(var(--success))] -> bg-green-400 (HQ has no --success token)
-//   "30 to 60 seconds"      -> spelled out (no en dash per voice rule)
+// /venue-scout/scouts/:id/sourcing/researching.
 //
 // Adaptation: sync await replaced with fire-and-forget invoke + Realtime
-// subscription + 3-second polling fallback. Pattern mirrors HQ
-// FinalReviewLoading.tsx (Phase 3.5). The Realtime subscription is the
-// channel through which the page learns about completion or failure.
+// subscription + 3-second polling fallback. The Realtime subscription is
+// the channel through which the page learns about completion or failure.
 // vs-research-venues writes vs_scouts.current_step='sourcing_report' on
 // success or status='failed'+pipeline_error on failure; this page reacts
 // to either.
@@ -27,13 +35,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  VSLoadingShell,
+  type LoadingShellStep,
+} from "@/components/venue-scout/VSLoadingShell";
 
-const STEPS = [
-  "Sheet parsed",
-  "Brief context loaded",
-  "Researching additional venues…",
-  "Cross-referencing addresses & specs",
-  "Generating recommendations & considerations",
+const STEPS: readonly LoadingShellStep[] = [
+  { key: "brief_loaded", label: "Brief context loaded" },
+  { key: "phase_a_enrichment", label: "Enriching sheet venues" },
+  { key: "phase_b_research", label: "Researching additional venues" },
+  { key: "finalizing", label: "Generating recommendations & considerations" },
 ];
 
 type ScoutRow = {
@@ -41,14 +52,13 @@ type ScoutRow = {
   current_step: string | null;
   status: string | null;
   pipeline_error: string | null;
+  brief_data: Record<string, unknown> | null;
 };
 
 export default function Researching() {
   const { id: scoutId } = useParams();
   const navigate = useNavigate();
   const [scout, setScout] = useState<ScoutRow | null>(null);
-  const [sheetCount, setSheetCount] = useState<number | null>(null);
-  const [active, setActive] = useState(2);
 
   useEffect(() => {
     if (!scoutId) return;
@@ -65,26 +75,15 @@ export default function Researching() {
     const fetchScout = async () => {
       const { data } = await supabase
         .from("vs_scouts")
-        .select("id, current_step, status, pipeline_error")
+        .select("id, current_step, status, pipeline_error, brief_data")
         .eq("id", scoutId)
         .maybeSingle();
       if (!cancelled && data) setScout(data as unknown as ScoutRow);
     };
 
-    // 1. Initial fetch (scout + sheet count, in parallel).
-    void (async () => {
-      const [, { count }] = await Promise.all([
-        fetchScout(),
-        supabase
-          .from("vs_candidate_venues")
-          .select("id", { count: "exact", head: true })
-          .eq("scout_id", scoutId)
-          .eq("source", "sheet"),
-      ]);
-      if (!cancelled) setSheetCount(count ?? 0);
-    })();
+    void fetchScout();
 
-    // 2. Realtime subscription on the scout row.
+    // Realtime subscription on the scout row.
     const channel = supabase
       .channel(`vs_scout_${scoutId}`)
       .on(
@@ -101,21 +100,11 @@ export default function Researching() {
       )
       .subscribe();
 
-    // 3. 3-second polling fallback (belt-and-suspenders, same as
-    //    FinalReviewLoading). Realtime is generally reliable but the
-    //    publication can hiccup; poll keeps us moving.
+    // 3-second polling fallback (Realtime publication can hiccup).
     const pollId = setInterval(fetchScout, 3000);
 
-    // 4. Step animation: bump active step every 12 seconds, cap at last.
-    //    Verbatim from VS Pro (12000ms interval).
-    const stepInterval = setInterval(() => {
-      setActive((a) => (a < STEPS.length - 1 ? a + 1 : a));
-    }, 12000);
-
-    // 5. Kick off the edge function. Fire-and-forget; the function
-    //    returns a 200 immediately and runs the AI work inside
-    //    EdgeRuntime.waitUntil. The page learns about completion via
-    //    Realtime, not the response.
+    // Kick off the edge function. Fire-and-forget; the function returns a
+    // 200 immediately and runs the AI work inside EdgeRuntime.waitUntil.
     void supabase.functions.invoke("vs-research-venues", {
       body: { scout_id: scoutId },
     });
@@ -123,7 +112,6 @@ export default function Researching() {
     return () => {
       cancelled = true;
       clearInterval(pollId);
-      clearInterval(stepInterval);
       supabase.removeChannel(channel);
     };
   }, [scoutId]);
@@ -132,8 +120,6 @@ export default function Researching() {
   useEffect(() => {
     if (!scout || !scoutId) return;
     if (scout.current_step === "sourcing_report") {
-      // Success: fill progress bar, brief pause, navigate.
-      setActive(STEPS.length);
       const t = setTimeout(
         () => navigate(`/venue-scout/scouts/${scoutId}/sourcing/report`),
         600,
@@ -147,65 +133,29 @@ export default function Researching() {
     }
   }, [scout, scoutId, navigate]);
 
+  if (!scoutId) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+
+  // Audit pass 2 item 3b: derive active step from server-emitted
+  // brief_data.progress_step (Realtime channel triggers re-render on
+  // UPDATE). Fallback to STEPS[0].key when the field is absent (scout
+  // created mid-pipeline at deploy time, or older scouts) so older
+  // pipelines don't render a broken step list.
+  const progressStep =
+    typeof scout?.brief_data?.progress_step === "string"
+      ? (scout.brief_data.progress_step as string)
+      : null;
+  const active = progressStep ?? STEPS[0].key;
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh]">
-      {/* Custom spinner ring (VS Pro pattern verbatim) */}
-      <div className="relative h-12 w-12 mb-8">
-        <div className="absolute inset-0 rounded-full border-2 border-border" />
-        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
-      </div>
-      <h1 className="h-page text-center">Researching Venues</h1>
-      <p className="text-sm text-muted-foreground text-center mt-4 max-w-md">
-        Researching venue candidates, comparing against the brief, and
-        preparing the matrix. This could take up to 4 minutes.
-      </p>
-      {/* Progress bar (track uses bg-input per design-system § 12 rule 1). */}
-      <div className="w-full max-w-md mt-8 h-1 bg-input rounded-full overflow-hidden">
-        <div
-          className="h-full bg-primary transition-all duration-700"
-          style={{
-            width: `${Math.min(((active + 1) / STEPS.length) * 100, 100)}%`,
-          }}
-        />
-      </div>
-      {/* Step list (verbatim from VS Pro, sheet-count enrichment included). */}
-      <ul className="mt-10 space-y-3 text-sm">
-        {STEPS.map((label, i) => {
-          const done = i < active;
-          const current = i === active;
-          const skipSheet =
-            i === 0 && (sheetCount === 0 || sheetCount == null);
-          if (skipSheet) return null;
-          const labelText =
-            i === 0 && sheetCount
-              ? `Sheet parsed · ${sheetCount} venues`
-              : label;
-          return (
-            <li key={i} className="flex items-center gap-3">
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  done
-                    ? "bg-green-400"
-                    : current
-                      ? "bg-primary animate-pulse"
-                      : "bg-border"
-                }`}
-              />
-              <span
-                className={
-                  current
-                    ? "font-semibold"
-                    : done
-                      ? "text-muted-foreground"
-                      : "text-muted-foreground/60"
-                }
-              >
-                {labelText}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    <VSLoadingShell
+      scoutId={scoutId}
+      icon="magnifying-glass"
+      title="Researching"
+      description="Researching venue candidates, comparing against the brief, and preparing the matrix. This could take up to 4 minutes."
+      steps={STEPS}
+      activeStepKey={active}
+    />
   );
 }

@@ -13,9 +13,9 @@
 //     section below the help card when set. Producer can copy the
 //     <CODE>: <message> for triage. Collapsed by default per spec § 14.
 //   - Per-page chrome: <ScoutSettingsLink /> (right slot) and
-//     <ScoutStepThroughNav /> (below the help card, conditional on
-//     current_step === 'completed'). On an error route this is rare but
-//     harmless.
+//     <ScoutPhaseBreadcrumb /> (rendered above the help card via the
+//     standard scout chrome). On an error route the breadcrumb still
+//     reads naturally.
 //   - AppShell-respecting wrapper: outer max-w-3xl with the header /
 //     gear in flex, inner centered min-h-[60vh] for the actual error
 //     panel.
@@ -24,16 +24,15 @@
 // those are rewritten as hyphens here.
 
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  ScoutSettingsLink,
-  ScoutStepThroughNav,
-} from "@/components/venue-scout/ScoutChrome";
+import { ScoutSettingsLink } from "@/components/venue-scout/ScoutChrome";
 
 type IconKind = "warn" | "x" | "block";
+
+type Phase = "sourcing" | "review";
 
 type PrimaryAction =
   | "research"
@@ -44,6 +43,7 @@ type PrimaryAction =
 
 type Cfg = {
   icon: IconKind;
+  phase: Phase;
   title: string;
   description: (ctx: { fileName?: string }) => React.ReactNode;
   helpTitle: string;
@@ -63,6 +63,7 @@ const CONFIGS: Record<string, Cfg> = {
   // ----------- Sourcing-side keys (ported from VS Pro) -----------
   "empty-sheet": {
     icon: "warn",
+    phase: "sourcing",
     title: "Sheet Looked Empty",
     description: ({ fileName }) => (
       <>
@@ -82,10 +83,14 @@ const CONFIGS: Record<string, Cfg> = {
     primaryLabel: "Skip · Research venues →",
     primaryAction: "research",
     secondaryLabel: "↑ Upload a different file",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/sourcing/sheet-upload`,
+    // Phase 5.12.14.1 Stage 2C: /sourcing/sheet-upload merged into /sourcing/sheet-prompt;
+    // `?upload=1` auto-expands the upload card on landing so the recovery
+    // affordance still lands the producer directly in the drop-zone.
+    secondaryHref: (id) => `/venue-scout/scouts/${id}/sourcing/sheet-prompt?upload=1`,
   },
   "parse-fail": {
     icon: "x",
+    phase: "sourcing",
     title: "Couldn't Parse the Sheet",
     description: () =>
       "The file you uploaded isn't in a format we can read. We need a clean PDF, XLSX, or CSV with venue rows.",
@@ -102,10 +107,14 @@ const CONFIGS: Record<string, Cfg> = {
     primaryLabel: "Skip · Research venues →",
     primaryAction: "research",
     secondaryLabel: "↑ Upload a different file",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/sourcing/sheet-upload`,
+    // Phase 5.12.14.1 Stage 2C: /sourcing/sheet-upload merged into /sourcing/sheet-prompt;
+    // `?upload=1` auto-expands the upload card on landing so the recovery
+    // affordance still lands the producer directly in the drop-zone.
+    secondaryHref: (id) => `/venue-scout/scouts/${id}/sourcing/sheet-prompt?upload=1`,
   },
   "research-timeout": {
     icon: "block",
+    phase: "sourcing",
     title: "Research Timed Out",
     description: () =>
       "We couldn't finish researching venues in time. This usually clears up in a minute or two, or there may be a service issue on our end.",
@@ -127,6 +136,7 @@ const CONFIGS: Record<string, Cfg> = {
   // ----------- Compile-side key (Phase 4.7.2-port) -----------
   "compile-failed": {
     icon: "x",
+    phase: "review",
     title: "Compile Failed",
     description: () =>
       "We couldn't finish compiling the deck. The AI request errored or timed out.",
@@ -143,11 +153,12 @@ const CONFIGS: Record<string, Cfg> = {
     primaryLabel: "↻ Retry compile",
     primaryAction: "retry-compile",
     secondaryLabel: "← Back to Review",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/sourcing/review`,
+    secondaryHref: (id) => `/venue-scout/scouts/${id}/review`,
   },
   // ----------- Deck-generation keys (Phase 4.8.2-port) -----------
   AUTH_FAILED: {
     icon: "block",
+    phase: "review",
     title: "Couldn't Authenticate",
     description: () =>
       "We couldn't authenticate with Google Drive. The service account credentials may need to be refreshed.",
@@ -160,11 +171,12 @@ const CONFIGS: Record<string, Cfg> = {
     ),
     // No primary action: producer can't self-resolve this.
     primaryAction: "none",
-    secondaryLabel: "← Back to Deck Prep",
-    secondaryHref: (id) => `/venue-scout/scouts/${id}/deck/prep`,
+    secondaryLabel: "← Back to Review",
+    secondaryHref: (id) => `/venue-scout/scouts/${id}/review`,
   },
   TEMPLATE_COPY_FAILED: {
     icon: "x",
+    phase: "review",
     title: "Couldn't Copy the Template",
     description: () =>
       "We couldn't copy the deck template into Drive. The template file or output folder may be inaccessible.",
@@ -180,6 +192,7 @@ const CONFIGS: Record<string, Cfg> = {
   },
   SLIDES_API_FAILED: {
     icon: "x",
+    phase: "review",
     title: "Slides API Errored",
     description: () =>
       "Google Slides returned an error while populating the deck. The deck was partially created; check your Drive folder.",
@@ -195,6 +208,7 @@ const CONFIGS: Record<string, Cfg> = {
   },
   NO_VENUES_INCLUDED: {
     icon: "warn",
+    phase: "review",
     title: "No Venues Included",
     description: () =>
       "No venues are marked for the deck. Go back to Deck Prep and check at least one venue's Include checkbox.",
@@ -208,8 +222,30 @@ const CONFIGS: Record<string, Cfg> = {
     primaryLabel: "← Back to Deck Prep",
     primaryAction: "back-to-deck-prep",
   },
+  // Phase 5.12.0: HQ Venues push at the top of vs-generate-deck failed
+  // (the name / address / website dedupe ladder or the venues INSERT or the
+  // linked_venue_id UPDATE errored). The deck was not generated; the
+  // producer can review the candidate that failed and retry from Deck Prep.
+  HQ_PUSH_FAILED: {
+    icon: "x",
+    phase: "review",
+    title: "Could Not Save to HQ Venues",
+    description: () =>
+      "We couldn't add the deck's venues to HQ Venues, so the deck wasn't generated. This usually means a write to the HQ venues table failed mid-batch.",
+    helpTitle: "What you can do:",
+    help: (
+      <ul className="space-y-1.5 text-sm text-muted-foreground list-disc pl-5">
+        <li>Try generating again, this is sometimes transient</li>
+        <li>The debug detail below names the candidate that failed; open it in Deck Prep, double-check name + address + website, then retry</li>
+        <li>Contact the team with the debug detail if it keeps failing</li>
+      </ul>
+    ),
+    primaryLabel: "← Back to Deck Prep",
+    primaryAction: "back-to-deck-prep",
+  },
   UNKNOWN: {
     icon: "block",
+    phase: "review",
     title: "Something Went Wrong",
     description: () =>
       "Something unexpected went wrong while generating the deck. Try again, or contact the team if it keeps failing.",
@@ -225,10 +261,9 @@ const CONFIGS: Record<string, Cfg> = {
   },
 };
 
-// Backward-compat alias (lifted from VS Pro).
-const ALIASES: Record<string, string> = {
-  "claude-timeout": "research-timeout",
-};
+// R6 § L.1: VS Pro back-compat alias retired (no live links exercise it).
+// Unrecognized codes now redirect to UNKNOWN via the route-fallback below.
+const ALIASES: Record<string, string> = {};
 
 type VsScoutMeta = {
   current_step: string | null;
@@ -280,7 +315,7 @@ export default function ErrorState() {
           .then(({ data }) => {
             if (cancelled) return;
             const f = data?.[0]?.name;
-            // Strip the `{timestamp}-` prefix that SheetUpload prepends
+            // Strip the `{timestamp}-` prefix that SheetUploadCard prepends
             // (`${scoutId}/${Date.now()}-${name}`).
             if (f) setFileName(f.replace(/^\d+-/, ""));
           }),
@@ -292,17 +327,15 @@ export default function ErrorState() {
     };
   }, [id, key]);
 
+  // R6 § L.3: unrecognized-code fallback redirects to UNKNOWN instead of
+  // rendering the inline "We don't recognize this error code" panel. The
+  // replace flag swaps history so the bad code isn't kept in the back stack.
   if (!cfg) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 pt-12 text-center">
-        <h1 className="h-page">Unknown error</h1>
-        <p className="text-sm text-muted-foreground">
-          We don't recognize this error code: <code className="font-mono">{errorKey}</code>.
-        </p>
-        <Link to="/venue-scout" className="crumb">
-          ← Back to Venue Scout
-        </Link>
-      </div>
+      <Navigate
+        to={`/venue-scout/scouts/${id}/deck/error/UNKNOWN`}
+        replace
+      />
     );
   }
 
@@ -337,7 +370,7 @@ export default function ErrorState() {
         return;
       }
       if (cfg.primaryAction === "back-to-deck-prep") {
-        nav(`/venue-scout/scouts/${id}/deck/prep`);
+        nav(`/venue-scout/scouts/${id}/review`);
         return;
       }
     } finally {
@@ -350,14 +383,20 @@ export default function ErrorState() {
 
   return (
     <div className="space-y-4">
-      {/* ---- Top strip: gear icon right-aligned ---- */}
+      {/* ---- Top strip: gear icon right-aligned ----
+          R6 § L.2: ScoutPhaseBreadcrumb removed from the error chrome (the
+          error pages no longer carry a stepper since the producer isn't
+          navigating through phases here). ScoutSettingsLink stays so the
+          producer can still reach Settings during an error. */}
       <div className="flex items-center justify-end">
         <ScoutSettingsLink scoutId={id} />
       </div>
-      {/* ---- Conditional step-through nav (only when completed) ---- */}
-      <ScoutStepThroughNav scoutId={id} scout={scout} />
 
-      {/* ---- Centered error panel ---- */}
+      {/* ---- Centered error panel ----
+          R6 amendment v1 § 7: phase eyebrow ("REVIEW" / "SOURCING") above
+          the title removed. Icon now flows directly into the h1; mt-6 on
+          the h1 carries the visual balance that the eyebrow + mt-2 stack
+          previously provided. */}
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-8 py-12">
         <Icon kind={cfg.icon} />
         <h1 className="h-page mt-6 text-center">{cfg.title}</h1>
@@ -367,9 +406,7 @@ export default function ErrorState() {
 
         <Card className="mt-8 w-full max-w-xl bg-surface-alt">
           <CardContent className="p-6">
-            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-              {cfg.helpTitle}
-            </div>
+            <div className="label-section mb-3">{cfg.helpTitle}</div>
             {cfg.help}
           </CardContent>
         </Card>
@@ -407,26 +444,26 @@ export default function ErrorState() {
   );
 }
 
-// Three SVG-styled icon variants, lifted verbatim from VS Pro with HQ
-// tokens (border-primary for coral on x + block; yellow-500 retained
-// for the warn variant since HQ has no canonical warn token).
+// Three SVG-styled icon variants. Failure variants (x, block) bind to the
+// destructive token; warn binds to the canonical warn token (hsl(var(--warn))
+// wired in tailwind.config.ts:107).
 function Icon({ kind }: { kind: IconKind }) {
   if (kind === "warn") {
     return (
-      <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-yellow-500 text-3xl font-black text-yellow-500">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-warn text-3xl font-black text-warn">
         !
       </div>
     );
   }
   if (kind === "x") {
     return (
-      <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-primary text-3xl font-black text-primary">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-destructive text-3xl font-black text-destructive">
         ×
       </div>
     );
   }
   return (
-    <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-primary text-primary">
+    <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-destructive text-destructive">
       <svg
         width="28"
         height="28"

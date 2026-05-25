@@ -20,7 +20,12 @@ import {
   MiniCreateModal,
   type MiniCreateField,
 } from "@/components/ui/MiniCreateModal";
-import { useLookup, type LookupTable } from "@/lib/hq/lookups";
+import {
+  useCityAliases,
+  useLookup,
+  type CityAliasOption,
+  type LookupTable,
+} from "@/lib/hq/lookups";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
@@ -226,6 +231,18 @@ function LookupCombobox(
   const lookup = useLookup(props.source.table, {
     parentScopeId: props.source.parentScopeId ?? null,
   });
+  // Phase 5.12.2: aliases load only when the source table is `cities`.
+  // For every other lookup, aliasesEnabled is false and the hook short-
+  // circuits to an empty list. Aliases render as a secondary, read-only
+  // CommandGroup below the canonical options; selecting an alias picks
+  // its canonical city. Inline-create is unaffected (aliases are not
+  // creatable through the picker).
+  const aliasesEnabled = props.source.table === "cities";
+  const aliasesHook = useCityAliases();
+  const aliasOptions: CityAliasOption[] = aliasesEnabled
+    ? aliasesHook.options
+    : [];
+
   const options: Option[] = useMemo(
     () => lookup.options.map((o) => ({ id: o.name, label: o.name })),
     [lookup.options],
@@ -252,6 +269,7 @@ function LookupCombobox(
       loading={lookup.loading}
       insertOption={insert}
       miniCreateContext={miniCreateContext}
+      aliasOptions={aliasOptions}
     />
   );
 }
@@ -303,6 +321,14 @@ type ViewProps = RecordComboboxProps & {
   loading: boolean;
   insertOption: (data: Record<string, string>) => Promise<Option | null>;
   miniCreateContext?: { label: string; value: string }[];
+  /**
+   * Phase 5.12.2: optional alias rows (cities only today). Render as a
+   * read-only secondary group below the canonical options. Selecting an
+   * alias row picks the canonical city via its `canonical` field.
+   * Filtering uses the `alias` text as the cmdk value so typing
+   * "Los Angeles" matches the alias whose canonical is "LA".
+   */
+  aliasOptions?: CityAliasOption[];
 };
 
 function ComboboxView(props: ViewProps) {
@@ -315,6 +341,7 @@ function ComboboxView(props: ViewProps) {
     disabled,
     miniCreateFields,
     miniCreateContext,
+    aliasOptions,
   } = props;
 
   const isMulti = props.multi === true;
@@ -446,7 +473,7 @@ function ComboboxView(props: ViewProps) {
                     return (
                       <span
                         key={s.id}
-                        className="pill pill-sm p-muted inline-flex items-center gap-1"
+                        className="pill pill-sm p-muted inline-flex items-center gap-1 text-[13px]"
                       >
                         {href ? (
                           <Link to={href} className="combo-link" style={{ fontWeight: 400 }}>
@@ -521,7 +548,7 @@ function ComboboxView(props: ViewProps) {
                     {selectedLabels.map((s) => (
                       <span
                         key={s.id}
-                        className="pill pill-sm p-muted inline-flex items-center gap-1"
+                        className="pill pill-sm p-muted inline-flex items-center gap-1 text-[13px]"
                       >
                         {s.label}
                         <span
@@ -582,7 +609,7 @@ function ComboboxView(props: ViewProps) {
                         key={opt.id}
                         value={opt.label}
                         onSelect={() => handlePick(opt)}
-                        className="cursor-pointer"
+                        className="cursor-pointer text-[15px]"
                       >
                         <span className="flex-1 truncate">{opt.label}</span>
                         {isSelected ? (
@@ -592,6 +619,30 @@ function ComboboxView(props: ViewProps) {
                     );
                   })}
                 </CommandGroup>
+              ) : null}
+              {aliasOptions && aliasOptions.length > 0 ? (
+                <>
+                  <CommandSeparator />
+                  <CommandGroup heading="Aliases">
+                    {aliasOptions.map((a) => (
+                      <CommandItem
+                        key={`alias:${a.alias}`}
+                        value={a.alias}
+                        onSelect={() =>
+                          handlePick({ id: a.canonical, label: a.canonical })
+                        }
+                        className="cursor-pointer text-[15px]"
+                      >
+                        <span className="flex-1 truncate text-muted-foreground">
+                          {a.alias}
+                        </span>
+                        <span className="ml-2 font-mono text-xs uppercase text-primary">
+                          {a.canonical}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </>
               ) : null}
               {canCreate ? (
                 <>

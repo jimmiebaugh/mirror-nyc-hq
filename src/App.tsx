@@ -65,22 +65,21 @@ const CandidateDetail = lazy(() => import("./pages/talent-scout/CandidateDetail"
 const FinalReviewLoading = lazy(() => import("./pages/talent-scout/FinalReviewLoading"));
 const FinalReviewDetail = lazy(() => import("./pages/talent-scout/FinalReviewDetail"));
 const ScoutIndex = lazy(() => import("./pages/venue-scout/ScoutIndex"));
-const NewScout = lazy(() => import("./pages/venue-scout/NewScout"));
+const Overview = lazy(() => import("./pages/venue-scout/Overview"));
 const BriefIndex = lazy(() => import("./pages/venue-scout/BriefIndex"));
 const BriefEvent = lazy(() => import("./pages/venue-scout/BriefEvent"));
 const BriefVenue = lazy(() => import("./pages/venue-scout/BriefVenue"));
 const BriefReport = lazy(() => import("./pages/venue-scout/BriefReport"));
 const SheetPrompt = lazy(() => import("./pages/venue-scout/SheetPrompt"));
-const SheetUpload = lazy(() => import("./pages/venue-scout/SheetUpload"));
 const Researching = lazy(() => import("./pages/venue-scout/Researching"));
 const SourcingReport = lazy(() => import("./pages/venue-scout/SourcingReport"));
 const Shortlist = lazy(() => import("./pages/venue-scout/Shortlist"));
-const Review = lazy(() => import("./pages/venue-scout/Review"));
 const Compiling = lazy(() => import("./pages/venue-scout/Compiling"));
-const DeckPrep = lazy(() => import("./pages/venue-scout/DeckPrep"));
+const Review = lazy(() => import("./pages/venue-scout/Review"));
 const Generating = lazy(() => import("./pages/venue-scout/Generating"));
 const ErrorState = lazy(() => import("./pages/venue-scout/ErrorState"));
 const ScoutSettings = lazy(() => import("./pages/venue-scout/ScoutSettings"));
+const ScoutGlobalSettings = lazy(() => import("./pages/venue-scout/ScoutGlobalSettings"));
 
 const queryClient = new QueryClient();
 
@@ -661,8 +660,20 @@ const App = () => (
                   </AdminRoute>
                 }
               />
+              <Route
+                path="/venue-scout/settings"
+                element={
+                  <AdminRoute>
+                    <ScoutGlobalSettings />
+                  </AdminRoute>
+                }
+              />
               <Route path="/venue-scout" element={<ScoutIndex />} />
-              <Route path="/venue-scout/scouts/new" element={<NewScout />} />
+              <Route path="/venue-scout/overview" element={<Overview />} />
+              {/* R7 § D: /venue-scout/scouts/new route retired. NewScout is
+                  now a modal (`NewScoutModal`) opened from ScoutIndex +
+                  Overview. Direct nav to the old path falls through to the
+                  global 404. */}
               <Route
                 path="/venue-scout/scouts/:id/brief"
                 element={<BriefIndex />}
@@ -688,10 +699,6 @@ const App = () => (
                 element={<SheetPrompt />}
               />
               <Route
-                path="/venue-scout/scouts/:id/sourcing/sheet-upload"
-                element={<SheetUpload />}
-              />
-              <Route
                 path="/venue-scout/scouts/:id/sourcing/researching"
                 element={<Researching />}
               />
@@ -704,16 +711,12 @@ const App = () => (
                 element={<Shortlist />}
               />
               <Route
-                path="/venue-scout/scouts/:id/sourcing/review"
-                element={<Review />}
-              />
-              <Route
                 path="/venue-scout/scouts/:id/sourcing/compiling"
                 element={<Compiling />}
               />
               <Route
-                path="/venue-scout/scouts/:id/deck/prep"
-                element={<DeckPrep />}
+                path="/venue-scout/scouts/:id/review"
+                element={<Review />}
               />
               <Route
                 path="/venue-scout/scouts/:id/deck/generating"

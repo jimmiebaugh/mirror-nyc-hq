@@ -35,6 +35,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callClaude } from "../_shared/anthropic.ts";
+import { formatBudgetForPrompt } from "../_shared/formatBudget.ts";
 
 // User-invoked synchronous only; no internal-secret path. Don't advertise
 // x-internal-secret to the browser preflight.
@@ -53,20 +54,68 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-// Voice rules baked from ABOUT ME/anti-ai-writing-style.md: no em dashes, no
-// filler affirmations, concise prose paragraphs.
+// Phase 5.12.13.4: SYSTEM_PROMPT rewrites from a short voice-rule list to a
+// <voice> + <must_not> + <rules> + <examples> structure. Hierarchy inverts
+// from "stay faithful to facts" to "creative extrapolation is welcome";
+// hard-fact lockdown moves to <must_not>. Three anchor overviews: A-List
+// Salon + Vaseline Oasis (Mirror past-deck references, em dashes stripped
+// to match the <rules> block; the few-shot cannot model what the rules
+// forbid) + The Art of Cooper Flagg (post-smoke addition from Jimmie's
+// manual edit of a generated overview; chosen because it models varied
+// sentence openings + active verbs + a clean atmospheric close on a
+// single-activation shape, addressing the template-rhythm drift the first
+// smoke surfaced). <voice> beats reframe from a checklist to illustrative
+// ("combine, skip, or fold as the brief calls for") + <rules> gain three
+// post-smoke lines (active verbs with stop list, vary sentence openings,
+// closing-one-clean-clause) targeting the same drift.
 const SYSTEM_PROMPT = [
-  "You write the Event Overview paragraph for a venue-sourcing brief at Mirror NYC, an experiential agency that produces brand activations, launches, and pop-ups.",
-  "Given the brief fields below, write a single tight overview of 3 to 5 sentences that captures what the activation is, who it's for, and the vibe the venue should carry.",
+  "You write the Event Overview paragraph for a venue-sourcing brief at Mirror NYC, an experiential agency that produces brand activations, launches, and pop-ups for fashion, beauty, and lifestyle clients.",
   "",
-  "Voice rules (follow exactly):",
+  "<voice>",
+  "Write in Mirror's producer voice: warm, evocative, present-tense, scene-setting, with a sense of place. The reader is the producer who will source venues for this brief. The overview frames what the activation is, who it's for, and the world it lives in.",
+  "",
+  "Beats that often show up in strong overviews. You do not need to hit all of them, and the order is yours. Combine, skip, or fold beats together as the brief calls for. The list is illustrative, not a checklist.",
+  "- Concept-first framing somewhere in the opener. Lead with what the activation IS; the brand name appears in service of the concept, not as the headline.",
+  "- Why this exists for the brand. Strategic intent, or what the activation is launching or celebrating.",
+  "- A hero beat. The centerpiece moment at the center of the experience.",
+  "- A guest-experience verb beat. What guests do, choose, or receive.",
+  "- Scene-setting via metaphor or branded vocabulary. Pull the activation's invented language (themed neighborhoods, hashtags, conceptual pairings) through as if it's already part of the world.",
+  "",
+  "Creative extrapolation is welcome. Additive inferences that build imagery and aesthetic are part of the voice when they align with the vibe tags, scope, and brief in general. Use sensory and material language (light, texture, scale, material, energy) where the brief allows.",
+  "",
+  "Name the audience with the specificity the brief gives. If the brief says 'GenZennial women,' write 'GenZennial women,' not 'consumers' or 'guests.'",
+  "</voice>",
+  "",
+  "<must_not>",
+  "Do NOT invent hard facts. Client names, event names, dates, venues, neighborhoods, budgets, and headcount come from the brief or they don't appear. Imagery supports the scene; the bulk of the overview stays the activation, the audience, and the world it lives in. Don't let extrapolation become the point.",
+  "</must_not>",
+  "",
+  "<rules>",
+  "- One paragraph. 3 to 5 sentences. No bullet points, no headings, no preamble.",
+  "- Present tense.",
+  "- Use active verbs. Lean away from stative or arrival constructions ('is a', 'arrives as', 'holds', 'sits within', 'exists as'). Subjects act on the page; let the activation, the guests, and the brand DO things.",
+  "- Vary sentence openings and structure. Not every sentence needs to start with the concept name or a subject-verb construction. Lead a sentence with a participial phrase, a temporal frame, or an audience cue when the rhythm calls for it.",
+  "- Closing sentence is one clean clause. Avoid comma-chained pile-ups of appositional descriptors (e.g., 'X, Y, Z, premium without spectacle, nostalgic in texture but current in energy').",
   "- No em dashes anywhere. Use commas, periods, or parentheses.",
-  "- No filler affirmations or hype ('exciting', 'amazing', 'we're thrilled').",
-  "- Plain, direct prose. One paragraph, no bullet points, no headings.",
-  "- Concise. Say what matters and stop. 3 to 5 sentences.",
-  "- Only use what the brief gives you. Don't invent specifics that aren't there.",
+  "- No filler affirmations or hype ('exciting', 'amazing', 'world-class', 'unparalleled', 'we're thrilled').",
+  "- Return ONLY the overview paragraph. No quotes, no labels, no headers.",
+  "</rules>",
   "",
-  "Return ONLY the overview paragraph. No preamble, no quotes, no labels.",
+  "<examples>",
+  "Three reference overviews. They demonstrate the voice; your output should sit in the same tonal range. The examples vary in opening structure (concept-first / participial-phrase / temporal-frame) on purpose; match the voice, not the surface shape.",
+  "",
+  "<example>",
+  "To turbocharge the new A-List Collection and to create a new styling occasion, we are daring GenZennial women to leave their beds and take on a night out this summer into fall. We'll invite them to kick off the night at our mobile salon, designed to turn heads and turn getting ready into the main event. A curated hotspot, it's not just where you get ready. It's where the night begins.",
+  "</example>",
+  "",
+  "<example>",
+  "An immersive beauty experience brings the duality of Glowasis and Slowasis to life at the Vaseline Oasis in celebration of Vaseline's new Gel Oils and upgraded Core Lotions. Guests choose their vibe, #GlowLifeGirl or #SlowLifeGirl, then follow their path to a personalized skincare sanctuary. The journey invites content creation, connection, and glowing skin, all set within a sensorial, side-by-side world of Glow vs. Slow.",
+  "</example>",
+  "",
+  "<example>",
+  "Anchored in the weeks surrounding the 2025-2026 season tip-off, The Art of Cooper Flagg is both a product launch and an immersive portrait that places Cooper Flagg's story in a gallery-forward pop-up that frames New Balance's newest NBA chapter through the lens of the athlete who defines it. His discipline, craft, and quiet intensity as a student of the game center the curated, gallery-style environment where sneakers and apparel are displayed with the weight of collected works. NBA and Mavericks fans and sneaker enthusiasts alike move through the space on their own terms, discovering product, storytelling, and photo moments that feel authored rather than assembled. The space exemplifies quiet confidence through the visual language of a career in its first chapter, yet already worth framing.",
+  "</example>",
+  "</examples>",
 ].join("\n");
 
 function asLine(label: string, value: unknown): string | null {
@@ -114,9 +163,21 @@ function buildStub(scout: {
 // Arrays are coerced to string[] but NOT trimmed/de-emptied: the client
 // helper hashes form arrays as-is, so the server must too. If the overview
 // prompt's input set changes, update both sides in lockstep.
+// Phase 5.12.5: extended to coerce a single string into a single-element
+// array. The § 5 backfill migration retires legacy-string-shape live values,
+// so the runtime sees array shape end-to-end after deploy. The string-
+// coercion branch stays as a defensive layer against future hand-edits to
+// brief_data (SQL console, manual JSON injection); mirrors normalizeTagArray
+// on the client side so both edges stay in lockstep on shape coercion
+// semantics.
 function hashAsStringArray(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return v.filter((x): x is string => typeof x === "string");
+  if (Array.isArray(v)) {
+    return v.filter((x): x is string => typeof x === "string");
+  }
+  if (typeof v === "string" && v.length > 0) {
+    return [v];
+  }
+  return [];
 }
 function hashAsNumberOrNull(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -143,15 +204,17 @@ async function computeOverviewSourceHash(
     client_name: normalize(scout.client_name ?? ""),
     event_name: normalize(scout.event_name ?? ""),
     live_dates: normalize(scout.live_dates ?? ""),
-    install_dates: normalize(hashAsString(briefData.install_dates)),
-    strike_dates: normalize(hashAsString(briefData.strike_dates)),
     city: normalize(scout.city ?? ""),
     budget: hashAsNumberOrNull(scout.budget),
     expected_guest_count: hashAsNumberOrNull(briefData.expected_guest_count),
     activations_count: hashAsNumberOrNull(briefData.activations_count),
     objectives: hashAsStringArray(briefData.objectives).sort(),
-    target_audience: normalize(hashAsString(briefData.target_audience)),
-    vibe_aesthetic: normalize(hashAsString(briefData.vibe_aesthetic)),
+    // Phase 5.12.5: target_audience + vibe_aesthetic flipped from string to
+    // string[]; hash uses sorted array shape, mirroring objectives /
+    // target_neighborhoods / venue_types / ideal_features. Object key order
+    // stays identical to the client-side hash in src/lib/venue-scout/briefForm.ts.
+    target_audience: hashAsStringArray(briefData.target_audience).sort(),
+    vibe_aesthetic: hashAsStringArray(briefData.vibe_aesthetic).sort(),
     target_neighborhoods: hashAsStringArray(
       briefData.target_neighborhoods,
     ).sort(),
@@ -209,33 +272,58 @@ Deno.serve(async (req) => {
 
   const briefData = (scout.brief_data ?? {}) as Record<string, unknown>;
 
-  // Build a readable context block from the named columns + the Phase 4
-  // Revision brief_data keys. Skip anything the producer left blank.
-  const contextLines = [
+  // Phase 5.12.13.4: user message reshapes from a flat key/value dump to
+  // three labeled blocks. BRIEF FACTS keeps key/value for hard-fact fields
+  // where precision matters (the <must_not> block forbids inventing these).
+  // BRIEF CONTEXT renders voice-driving arrays as paragraph segments the
+  // model can weave into prose. PRODUCER NOTES surfaces free-text
+  // `additional_notes` as its own discrete block.
+  const factsLines = [
     asLine("Client", scout.client_name),
     asLine("Event", scout.event_name),
     asLine("City", scout.city),
     asLine("Live dates", scout.live_dates),
-    asLine("Install dates", briefData.install_dates),
-    asLine("Strike dates", briefData.strike_dates),
+    // Phase 5.12.5 (Edge #2 resolve): pure-JS comma formatter removes the
+    // V8/ICU coupling on the prompt display string.
     typeof scout.budget === "number"
-      ? `Budget: $${scout.budget.toLocaleString("en-US")}`
+      ? (() => {
+          const formatted = formatBudgetForPrompt(scout.budget);
+          return formatted ? `Budget: ${formatted}` : null;
+        })()
       : null,
     asLine("Expected guest count", briefData.expected_guest_count),
     asLine("Activations / spaces", briefData.activations_count),
-    asLine("Objectives", briefData.objectives),
-    asLine("Target audience", briefData.target_audience),
-    asLine("Vibe / aesthetic", briefData.vibe_aesthetic),
-    asLine("Target neighborhoods", briefData.target_neighborhoods),
-    asLine("Venue types", briefData.venue_types),
-    asLine("Ideal features", briefData.ideal_features),
   ].filter((l): l is string => l !== null);
+
+  const contextSegments: string[] = [];
+  const objectives = briefData.objectives as string[] | undefined;
+  const audience = briefData.target_audience as string[] | undefined;
+  const vibe = briefData.vibe_aesthetic as string[] | undefined;
+  const neighborhoods = briefData.target_neighborhoods as string[] | undefined;
+  const venueTypes = briefData.venue_types as string[] | undefined;
+  const features = briefData.ideal_features as string[] | undefined;
+
+  if (objectives?.length) contextSegments.push(`The activation aims for ${objectives.join(", ")}`);
+  if (audience?.length) contextSegments.push(`The audience is ${audience.join(", ")}`);
+  if (vibe?.length) contextSegments.push(`The vibe is ${vibe.join(", ")}`);
+  if (neighborhoods?.length) contextSegments.push(`Target neighborhoods: ${neighborhoods.join(", ")}`);
+  if (venueTypes?.length) contextSegments.push(`Venue types under consideration: ${venueTypes.join(", ")}`);
+  if (features?.length) contextSegments.push(`Ideal features: ${features.join(", ")}`);
+
+  const additionalNotes =
+    typeof briefData.additional_notes === "string" && briefData.additional_notes.trim()
+      ? briefData.additional_notes.trim()
+      : null;
 
   const stub = buildStub(scout);
 
   let overview = "";
-  if (contextLines.length > 0) {
-    const userMsg = `BRIEF FIELDS\n${contextLines.join("\n")}\n\nWrite the Event Overview paragraph.`;
+  if (factsLines.length > 0 || contextSegments.length > 0 || additionalNotes) {
+    const userMsg =
+      `BRIEF FACTS\n${factsLines.join("\n")}\n\n` +
+      (contextSegments.length > 0 ? `BRIEF CONTEXT\n${contextSegments.join(". ")}.\n\n` : "") +
+      (additionalNotes ? `PRODUCER NOTES\n${additionalNotes}\n\n` : "") +
+      `Write the Event Overview paragraph.`;
     const result = await callClaude(
       "venue_scout",
       [{ role: "user", content: userMsg }],

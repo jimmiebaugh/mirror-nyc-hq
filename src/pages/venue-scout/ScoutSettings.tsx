@@ -15,11 +15,11 @@
 // + deletes vs_candidate_venues (photos cascade via FK).
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { VSPageField } from "@/components/venue-scout/VSPageField";
 import {
   Select,
   SelectContent,
@@ -40,6 +40,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { ScoutPageHeader } from "@/components/venue-scout/ScoutPageHeader";
 
 // Sentinel value used by the Project select to represent "no project".
 // shadcn's Select rejects empty-string values, so we use a non-empty
@@ -166,15 +167,14 @@ export default function ScoutSettings() {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
   if (loadStatus === "not-found" || !scout) {
+    // R6 § L.4 → R7 amendment v3 § 3: page-level back-crumb retired; the
+    // TopBar now carries the back-crumb globally via useReferrerCrumb.
     return (
-      <div className="mx-auto max-w-3xl space-y-4 pt-12 text-center">
+      <div className="mx-auto max-w-3xl space-y-4 pt-12">
         <h1 className="h-page">Scout not found</h1>
         <p className="text-sm text-muted-foreground">
           We couldn't find a scout with that id.
         </p>
-        <Link to="/venue-scout" className="crumb">
-          ← Back to Venue Scout
-        </Link>
       </div>
     );
   }
@@ -284,25 +284,22 @@ export default function ScoutSettings() {
   };
 
   // -------------------- Render --------------------
+  // R6 § K.3 → R7 amendment v3 § 3: per-page crumb fallback retired; the
+  // back-crumb now lives in TopBar via useReferrerCrumb's canonical-
+  // parent table (Scout Settings → Venue Scout).
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-32">
-      <Link to={`/venue-scout/scouts/${id}/brief`} className="crumb">
-        ← {scout.name ?? "Scout"}
-      </Link>
       <header className="space-y-2">
-        <div className="text-[14px] font-mono uppercase tracking-widest text-primary">
-          Settings
-        </div>
-        <h1 className="h-page">{scout.name ?? "Scout"}</h1>
-        <p className="text-sm text-muted-foreground">
-          Rename the scout, change its project link, or start over.
-        </p>
+        <ScoutPageHeader scoutId={id} scout={scout} />
+        {/* R6 § K.2: pt-2 adds ~8px breathing room between the
+            ScoutPhaseBreadcrumb stepper and the page title (was flush). */}
+        <h1 className="h-page pt-2">{scout.name ?? "Scout"}</h1>
       </header>
 
       {/* ---- Edit fields ---- */}
       <Card className="bg-surface-alt">
         <CardContent className="space-y-6 p-6">
-          <Field label="Scout name" required>
+          <VSPageField label="Scout name" required>
             <Input
               value={form.name}
               onChange={(e) => updateField("name", e.target.value)}
@@ -315,9 +312,9 @@ export default function ScoutSettings() {
             <p className="mt-1 text-xs text-muted-foreground">
               Defaults to {`{client_name} - {event_name}`} from the brief. Rename here to override.
             </p>
-          </Field>
+          </VSPageField>
 
-          <Field label="Project">
+          <VSPageField label="Project">
             <Select
               value={form.project_id ?? STANDALONE}
               onValueChange={(v) =>
@@ -339,12 +336,12 @@ export default function ScoutSettings() {
             <p className="mt-1 text-xs text-muted-foreground">
               Optional. Link this scout to an HQ project record.
             </p>
-          </Field>
+          </VSPageField>
         </CardContent>
       </Card>
 
       {/* ---- Danger Zone ---- */}
-      <Card className="border-destructive/40 bg-card">
+      <Card className="border-destructive/40 bg-surface-alt">
         <CardContent className="space-y-4 p-6">
           <div className="space-y-1">
             <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-destructive">
@@ -357,7 +354,7 @@ export default function ScoutSettings() {
 
           <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-surface-alt p-4">
             <div className="min-w-0 space-y-1">
-              <div className="text-sm font-semibold">Start Over</div>
+              <div className="text-base font-semibold text-foreground">Start Over</div>
               <p className="text-xs text-muted-foreground">
                 Deletes all candidate venues and venue photos for this scout. The brief, project link, and any generated decks are kept. The scout resets to the sheet-prompt step (back to the start of sourcing).
               </p>
@@ -367,36 +364,26 @@ export default function ScoutSettings() {
               className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={() => void openStartOver()}
             >
-              Start Over...
+              Start Over…
             </Button>
           </div>
         </CardContent>
       </Card>
 
       {/* ---- Sticky save bar ---- */}
-      <div className="sticky bottom-0 z-10 -mx-6 mt-6 border-t-2 border-primary/40 bg-background/90 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+      <div className="actionbar">
+        <div className="mx-auto flex max-w-3xl items-center justify-end gap-3 px-6 py-4">
+          {dirty && (
+            <span className="text-xs font-mono uppercase tracking-wider text-warn">
+              Unsaved changes
+            </span>
+          )}
           <Button
-            variant="ghost"
-            onClick={() =>
-              navigateOrConfirm(`/venue-scout/scouts/${id}/brief`)
-            }
+            onClick={() => void save()}
+            disabled={saving || !dirty || !canSave}
           >
-            ← Cancel
+            {saving ? "Saving…" : "Save changes"}
           </Button>
-          <div className="flex items-center gap-3">
-            {dirty && (
-              <span className="text-xs font-mono uppercase tracking-wider text-amber-400">
-                Unsaved changes
-              </span>
-            )}
-            <Button
-              onClick={() => void save()}
-              disabled={saving || !dirty || !canSave}
-            >
-              {saving ? "Saving…" : "Save changes"}
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -472,7 +459,7 @@ export default function ScoutSettings() {
                 void confirmStartOver();
               }}
               disabled={startingOver}
-              className="bg-red-500 text-white hover:bg-red-600"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {startingOver ? "Working…" : "Start Over"}
             </AlertDialogAction>
@@ -483,26 +470,3 @@ export default function ScoutSettings() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Inline Field -- matches Brief.tsx / NewScout.tsx convention. Coral
-// uppercase mono label, optional required asterisk.
-// ---------------------------------------------------------------------------
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-        {label}
-        {required && <span className="ml-1 text-primary">*</span>}
-      </Label>
-      {children}
-    </div>
-  );
-}

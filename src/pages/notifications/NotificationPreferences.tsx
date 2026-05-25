@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { IconArrowLeft, IconCheck, IconSlack } from "@/components/icons/HQIcons";
+import { IconCheck, IconSlack } from "@/components/icons/HQIcons";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -188,10 +187,7 @@ export default function NotificationPreferences() {
   return (
     <div style={{ maxWidth: 760, margin: "0 auto" }} className="space-y-6">
       <div className="space-y-3">
-        <Link to="/settings/profile" className="crumb">
-          <IconArrowLeft className="ic ic-sm" style={{ width: 12, height: 12 }} />{" "}
-          Back to Profile settings
-        </Link>
+        {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
         <div>
           <div className="eyebrow">Profile</div>
           <h1 className="h-page" style={{ marginTop: 4 }}>

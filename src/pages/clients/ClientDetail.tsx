@@ -2,16 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Pencil } from "lucide-react";
-import {
-  IconArrowLeft,
-  IconLink,
-} from "@/components/icons/HQIcons";
+import { IconLink } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { ContactsCard } from "@/components/hq/ContactsCard";
 import { DField } from "@/components/hq/DField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
-import { useBackHref } from "@/lib/hq/useBackHref";
 import { formatPhone } from "@/lib/hq/phone";
 import { prettyHost } from "@/lib/url";
 import { toast } from "@/hooks/use-toast";
@@ -61,7 +57,6 @@ export default function ClientDetail() {
   const [primaryContactPersonId, setPrimaryContactPersonId] = useState<string | null>(null);
   const [primaryContactEditing, setPrimaryContactEditing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const back = useBackHref({ to: "/clients", label: "Clients" });
 
   useEffect(() => {
     if (!id) return;
@@ -241,9 +236,7 @@ export default function ClientDetail() {
   return (
     <div className="stack-6">
       <div className="stack-3">
-        <Link to={back.to} className="crumb">
-          <IconArrowLeft className="ic ic-sm" /> Back to {back.label}
-        </Link>
+        {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
         <div className="row between" style={{ alignItems: "flex-start", paddingTop: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow" style={{ paddingTop: 8 }}>Client</div>

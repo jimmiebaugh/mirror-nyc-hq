@@ -15,7 +15,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
-  IconArrowLeft,
   IconDrive,
   IconSlack,
   IconExt,
@@ -59,7 +58,6 @@ import {
   updateProjectStatus,
   type ProjectStatus,
 } from "@/lib/projects/queries";
-import { useBackHref } from "@/lib/hq/useBackHref";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { DField } from "@/components/hq/DField";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
@@ -182,7 +180,6 @@ export default function ProjectDetail() {
   const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
   const [activityError, setActivityError] = useState<Error | null>(null);
-  const back = useBackHref({ to: "/projects", label: "Projects" });
   const { isAdmin, isFreelance, loading: roleLoading } = useUserRole();
   const viewerRole: ActivityViewerRole = isAdmin
     ? "admin"
@@ -593,10 +590,7 @@ export default function ProjectDetail() {
 
   return (
     <div className="stack-4">
-      <Link to={back.to} className="crumb">
-        <IconArrowLeft className="ic ic-sm" />
-        Back to {back.label}
-      </Link>
+      {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
 
       <header className="stack-3">
         {project.job_number ? (

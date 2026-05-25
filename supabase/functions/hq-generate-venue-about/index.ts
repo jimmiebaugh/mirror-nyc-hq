@@ -41,6 +41,7 @@ import { callClaude } from "../_shared/anthropic.ts";
 import {
   ABOUT_VENUE_SYSTEM,
   buildOverviewUserMsgFromVenue,
+  buildStub,
   type VenueOverviewRow,
 } from "../_shared/venueOverview.ts";
 
@@ -67,13 +68,9 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-// Deterministic fallback so the producer always lands on a non-empty,
-// editable paragraph if Claude returns nothing usable. No em dashes.
-function buildStub(venue: { name: string; city?: string | null }): string {
-  const name = (venue.name ?? "").trim() || "This venue";
-  const city = (venue.city ?? "").trim();
-  return city ? `${name} is a venue in ${city}.` : `${name} is an event venue.`;
-}
+// `buildStub` (the deterministic empty-string fallback) lives in
+// `_shared/venueOverview.ts` so both this function and `vs-compile-summaries`
+// share one fallback. Phase 5.12.0 lift.
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {

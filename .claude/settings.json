@@ -27,5 +27,11 @@
         ]
       }
     ]
-  }
+  },
+  "enabledPlugins": {
+    "codex@openai-codex": true
+  },
+  "additionalDirectories": [
+    "/Users/jimmie/Claude/Mirror NYC HQ"
+  ]
 }

@@ -6,11 +6,13 @@
 //   - Named vs_scouts columns: client_name, event_name, live_dates, city,
 //     budget, event_overview.
 //   - Everything else lives under vs_scouts.brief_data jsonb. Form-backed
-//     canonical keys (Phase 4 Revision): expected_guest_count, install_dates,
-//     strike_dates, activations_count, objectives, target_audience,
+//     canonical keys (Phase 4 Revision; install/strike dates retired in
+//     5.12.14.3; sq_ft_min + sq_ft_max retired in 5.12.14.3 R4 amendment v2):
+//     expected_guest_count, activations_count, objectives, target_audience,
 //     vibe_aesthetic, target_neighborhoods, strict_neighborhoods_only,
-//     venue_types, sq_ft_min, sq_ft_max, sq_ft_minimum, ideal_features,
-//     priority_location, priority_cost.
+//     venue_types, sq_ft_minimum, ideal_features, priority_location,
+//     priority_cost. Legacy sq_ft_min/sq_ft_max keys on existing scout rows
+//     are orphaned but harmless (no reader; not back-filled here).
 //   - Non-form keys ride along untouched in the brief_data passthrough:
 //     uploaded_files (string[]), the *_started_at idempotency flags,
 //     overview_source_hash (Phase 4 Revision pass 3: written by
@@ -20,7 +22,7 @@
 //     backward compat -- existing scouts that have notes keep them; new scouts
 //     never write the key).
 //
-// fromScout strips the 16 form-backed keys out of the brief_data passthrough
+// fromScout strips the 12 form-backed keys out of the brief_data passthrough
 // (they live in their own form fields); toUpdate rebuilds them from the form
 // fields. That keeps fromScout(toUpdate(state)) === state a clean round-trip.
 
@@ -50,19 +52,18 @@ export type BriefFormState = {
   expected_guest_count: string;
 
   // Event step (brief_data keys)
-  install_dates: string;
-  strike_dates: string;
   activations_count: number | null; // slider; null = TBD
   objectives: string[];
-  target_audience: string;
-  vibe_aesthetic: string;
+  // Phase 5.12.5: target_audience + vibe_aesthetic flipped from string to
+  // string[] (tag-array shape matching objectives / target_neighborhoods /
+  // venue_types / ideal_features). One demographic / aesthetic per tag.
+  target_audience: string[];
+  vibe_aesthetic: string[];
 
   // Venue step (brief_data keys)
   target_neighborhoods: string[];
   strict_neighborhoods_only: boolean;
   venue_types: string[]; // chip multi-select; arbitrary strings
-  sq_ft_min: number | null; // slider; null = any
-  sq_ft_max: number | null; // slider; null = any (10000+ stored as null)
   sq_ft_minimum: number | null; // slider; null = any
   ideal_features: string[];
   priority_location: PriorityLocation | null;
@@ -80,17 +81,13 @@ export const EMPTY_BRIEF_FORM: BriefFormState = {
   budget_text: "",
   event_overview: "",
   expected_guest_count: "",
-  install_dates: "",
-  strike_dates: "",
   activations_count: null,
   objectives: [],
-  target_audience: "",
-  vibe_aesthetic: "",
+  target_audience: [],
+  vibe_aesthetic: [],
   target_neighborhoods: [],
   strict_neighborhoods_only: false,
   venue_types: [],
-  sq_ft_min: null,
-  sq_ft_max: null,
   sq_ft_minimum: null,
   ideal_features: [],
   priority_location: null,
@@ -102,8 +99,6 @@ export const EMPTY_BRIEF_FORM: BriefFormState = {
 // passthrough by fromScout, rebuilt by toUpdate.
 const FORM_BACKED_BRIEF_DATA_KEYS = [
   "expected_guest_count",
-  "install_dates",
-  "strike_dates",
   "activations_count",
   "objectives",
   "target_audience",
@@ -111,8 +106,6 @@ const FORM_BACKED_BRIEF_DATA_KEYS = [
   "target_neighborhoods",
   "strict_neighborhoods_only",
   "venue_types",
-  "sq_ft_min",
-  "sq_ft_max",
   "sq_ft_minimum",
   "ideal_features",
   "priority_location",
@@ -138,25 +131,38 @@ export type ParsedBriefFields = {
   additional_notes?: string | null; // KEEP for backward compat with v14; not surfaced
 
   // New (Phase 4 Revision)
-  install_dates?: string | null;
-  strike_dates?: string | null;
   activations_count?: number | null;
   objectives?: string[] | null;
-  target_audience?: string | null;
-  vibe_aesthetic?: string | null;
+  // Phase 5.12.5: target_audience + vibe_aesthetic flipped to string[].
+  // Matches the new vs-parse-brief schema shape + the BriefFormState shape.
+  target_audience?: string[] | null;
+  vibe_aesthetic?: string[] | null;
   target_neighborhoods?: string[] | null;
   venue_types?: string[] | null;
   ideal_features?: string[] | null;
+
+  // Phase 5.12.13.7: multi-set live-dates options. Populated by vs-parse-brief
+  // INSTEAD OF the singular live_dates field when a brief contains 2+ distinct
+  // date sets for live dates (multi-city tours, multi-date offerings).
+  // ParsedPreview renders these as a radio group and writes the producer's
+  // pick into form state via the singular key. applyParsedFields does not
+  // consume *_options directly; the UI resolves to a single string before
+  // calling. (Install / strike dates retired in 5.12.14.3.)
+  live_dates_options?: string[] | null;
 };
 
 /**
  * Format a numeric budget as a US-dollar display string. Null / undefined
  * comes back empty.
+ *
+ * R6 § D.2: `maximumFractionDigits: 0` flips decimals off so legacy persisted
+ * values render with whole-dollar formatting consistent with the new typed
+ * `$X,XXX` input mask on BriefEvent + BriefReport.
  */
 function formatBudget(value: number | null | undefined): string {
   if (value === null || value === undefined) return "";
   if (!Number.isFinite(value)) return "";
-  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
 /**
@@ -195,6 +201,26 @@ function asStringArray(v: unknown): string[] {
   return v.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
 }
 
+/**
+ * Phase 5.12.5: target_audience + vibe_aesthetic flipped from string to
+ * string[]. Read legacy strings as single-element arrays so existing scouts
+ * surface their pre-5.12.5 content; on next save the array shape persists.
+ * The § 5 backfill migration normalizes the live test scout at deploy time;
+ * this helper stays as a defensive layer against future hand-edits (SQL
+ * console, manual JSON injection).
+ */
+function normalizeTagArray(v: unknown): string[] {
+  if (Array.isArray(v)) {
+    return v
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .map((x) => x.trim());
+  }
+  if (typeof v === "string" && v.trim().length > 0) {
+    return [v.trim()];
+  }
+  return [];
+}
+
 function asNumberOrNull(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
@@ -209,7 +235,7 @@ function asPriorityCost(v: unknown): PriorityCost | null {
 
 /**
  * Build the form state from a vs_scouts row. The brief_data jsonb is split:
- * the 16 form-backed keys hoist into their own form fields; everything else
+ * the 12 form-backed keys hoist into their own form fields; everything else
  * (uploaded_files, idempotency flags, legacy notes) stays under brief_data so
  * toUpdate round-trips it untouched.
  */
@@ -232,18 +258,21 @@ export function fromScout(row: VsScoutRow): BriefFormState {
     budget_text: formatBudget(row.budget),
     event_overview: row.event_overview ?? "",
     expected_guest_count: asString(briefData.expected_guest_count),
-    install_dates: asString(briefData.install_dates),
-    strike_dates: asString(briefData.strike_dates),
     activations_count: asNumberOrNull(briefData.activations_count),
     objectives: asStringArray(briefData.objectives),
-    target_audience: asString(briefData.target_audience),
-    vibe_aesthetic: asString(briefData.vibe_aesthetic),
+    target_audience: normalizeTagArray(briefData.target_audience),
+    vibe_aesthetic: normalizeTagArray(briefData.vibe_aesthetic),
     target_neighborhoods: asStringArray(briefData.target_neighborhoods),
     strict_neighborhoods_only: briefData.strict_neighborhoods_only === true,
     venue_types: asStringArray(briefData.venue_types),
-    sq_ft_min: asNumberOrNull(briefData.sq_ft_min),
-    sq_ft_max: asNumberOrNull(briefData.sq_ft_max),
-    sq_ft_minimum: asNumberOrNull(briefData.sq_ft_minimum),
+    // R6 § M.2: legacy `sq_ft_min` falls back to the new `sq_ft_minimum`
+    // slot at read time so scouts created before R4 amendment v2 still feed
+    // the size-floor veto + AI sourcing prompt. The legacy `sq_ft_min` jsonb
+    // key stays orphaned on the row; this fallback only fires when
+    // `sq_ft_minimum` is absent.
+    sq_ft_minimum:
+      asNumberOrNull(briefData.sq_ft_minimum) ??
+      asNumberOrNull(briefData.sq_ft_min),
     ideal_features: asStringArray(briefData.ideal_features),
     priority_location: asPriorityLocation(briefData.priority_location),
     priority_cost: asPriorityCost(briefData.priority_cost),
@@ -253,7 +282,7 @@ export function fromScout(row: VsScoutRow): BriefFormState {
 
 /**
  * Build the vs_scouts UPDATE payload from form state. Reassembles brief_data
- * jsonb from the passthrough plus the 16 form-backed keys. Empty strings /
+ * jsonb from the passthrough plus the 12 form-backed keys. Empty strings /
  * empty arrays / nulls drop their key so the jsonb doesn't fill with blanks;
  * strict_neighborhoods_only is always written (false is a meaningful value).
  * Numeric budget + guest-count parsing happens here.
@@ -275,12 +304,6 @@ export function toUpdate(state: BriefFormState): VsScoutUpdate {
     delete bd.expected_guest_count;
   }
 
-  const installDates = state.install_dates.trim();
-  setOrDelete("install_dates", installDates, installDates.length > 0);
-
-  const strikeDates = state.strike_dates.trim();
-  setOrDelete("strike_dates", strikeDates, strikeDates.length > 0);
-
   setOrDelete(
     "activations_count",
     state.activations_count,
@@ -289,11 +312,17 @@ export function toUpdate(state: BriefFormState): VsScoutUpdate {
 
   setOrDelete("objectives", state.objectives, state.objectives.length > 0);
 
-  const targetAudience = state.target_audience.trim();
-  setOrDelete("target_audience", targetAudience, targetAudience.length > 0);
+  setOrDelete(
+    "target_audience",
+    state.target_audience,
+    state.target_audience.length > 0,
+  );
 
-  const vibeAesthetic = state.vibe_aesthetic.trim();
-  setOrDelete("vibe_aesthetic", vibeAesthetic, vibeAesthetic.length > 0);
+  setOrDelete(
+    "vibe_aesthetic",
+    state.vibe_aesthetic,
+    state.vibe_aesthetic.length > 0,
+  );
 
   setOrDelete(
     "target_neighborhoods",
@@ -306,8 +335,6 @@ export function toUpdate(state: BriefFormState): VsScoutUpdate {
 
   setOrDelete("venue_types", state.venue_types, state.venue_types.length > 0);
 
-  setOrDelete("sq_ft_min", state.sq_ft_min, state.sq_ft_min !== null);
-  setOrDelete("sq_ft_max", state.sq_ft_max, state.sq_ft_max !== null);
   setOrDelete("sq_ft_minimum", state.sq_ft_minimum, state.sq_ft_minimum !== null);
 
   setOrDelete(
@@ -363,8 +390,17 @@ export function applyParsedFields(
 ): BriefFormState {
   const next: BriefFormState = { ...state, brief_data: { ...state.brief_data } };
 
-  if (parsed.client_name?.trim()) next.client_name = parsed.client_name.trim();
-  if (parsed.event_name?.trim()) next.event_name = parsed.event_name.trim();
+  // Phase 5.12.5: re-parse guard for client_name + event_name. The server-side
+  // guard in vs-parse-brief drops the field from parsed_fields when the scout
+  // already has a value; this client-side check is the second layer + covers
+  // the (very unlikely) case where the form state in memory has a value but
+  // the persisted scout row didn't.
+  if (parsed.client_name?.trim() && !state.client_name.trim()) {
+    next.client_name = parsed.client_name.trim();
+  }
+  if (parsed.event_name?.trim() && !state.event_name.trim()) {
+    next.event_name = parsed.event_name.trim();
+  }
   if (parsed.live_dates?.trim()) next.live_dates = parsed.live_dates.trim();
   if (parsed.city?.trim()) next.city = parsed.city.trim();
   if (typeof parsed.budget === "number" && Number.isFinite(parsed.budget)) {
@@ -380,19 +416,22 @@ export function applyParsedFields(
     next.expected_guest_count = String(Math.round(parsed.expected_guest_count));
   }
 
-  if (parsed.install_dates?.trim()) next.install_dates = parsed.install_dates.trim();
-  if (parsed.strike_dates?.trim()) next.strike_dates = parsed.strike_dates.trim();
+  // R6 § M.10: only apply activations_count when the parsed value is
+  // strictly positive. A returned 0 / negative reads as "no signal" and
+  // shouldn't overwrite a producer-set value (or render as a literal "0"
+  // in the display cell).
   if (
     typeof parsed.activations_count === "number" &&
-    Number.isFinite(parsed.activations_count)
+    Number.isFinite(parsed.activations_count) &&
+    parsed.activations_count > 0
   ) {
     next.activations_count = Math.round(parsed.activations_count);
   }
-  if (parsed.target_audience?.trim()) {
-    next.target_audience = parsed.target_audience.trim();
+  if (Array.isArray(parsed.target_audience)) {
+    next.target_audience = mergeUnique(next.target_audience, parsed.target_audience);
   }
-  if (parsed.vibe_aesthetic?.trim()) {
-    next.vibe_aesthetic = parsed.vibe_aesthetic.trim();
+  if (Array.isArray(parsed.vibe_aesthetic)) {
+    next.vibe_aesthetic = mergeUnique(next.vibe_aesthetic, parsed.vibe_aesthetic);
   }
 
   if (Array.isArray(parsed.objectives)) {
@@ -483,15 +522,18 @@ export async function computeOverviewSourceHash(
     client_name: normalize(state.client_name),
     event_name: normalize(state.event_name),
     live_dates: normalize(state.live_dates),
-    install_dates: normalize(state.install_dates),
-    strike_dates: normalize(state.strike_dates),
     city: normalize(state.city),
     budget: parseBudget(state.budget_text),
     expected_guest_count: parseGuestCount(state.expected_guest_count),
     activations_count: state.activations_count,
     objectives: [...state.objectives].sort(),
-    target_audience: normalize(state.target_audience),
-    vibe_aesthetic: normalize(state.vibe_aesthetic),
+    // Phase 5.12.5: target_audience + vibe_aesthetic flipped from string to
+    // string[]; hash uses sorted array shape (matches objectives /
+    // target_neighborhoods / venue_types / ideal_features). Object key order
+    // and shape must stay in lockstep with the server-side hash in
+    // supabase/functions/vs-generate-brief-overview/index.ts.
+    target_audience: [...state.target_audience].sort(),
+    vibe_aesthetic: [...state.vibe_aesthetic].sort(),
     target_neighborhoods: [...state.target_neighborhoods].sort(),
     venue_types: [...state.venue_types].sort(),
     ideal_features: [...state.ideal_features].sort(),

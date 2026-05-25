@@ -45,12 +45,33 @@ function redactSecrets(s: string): string {
     .replace(/Bearer [a-zA-Z0-9_.-]+/g, "Bearer [REDACTED]");
 }
 
-// Cap Anthropic calls at 60s wall-clock. A hung upstream burns the full
+// Per-fetch wall-clock cap on Anthropic calls. A hung upstream burns the
 // Edge Function budget (400s on Pro) and the caller has no signal to give
-// up. AbortSignal.timeout fires a DOMException whose name is either
-// "AbortError" or "TimeoutError" depending on runtime; we map both to a
-// stable "anthropic_timeout_60s" error string.
-const ANTHROPIC_TIMEOUT_MS = 60_000;
+// up.
+//
+// Phase 5.12.1 hot patch (cap bumped 60s -> 180s, label stable):
+//   The pre-5.12.1 60s value pre-dated web_search server-tool calls. VS
+//   Pro / 4.10.5 / 4.10.6 port notes have Phase B running 90-180s once
+//   web_search_20250305 max_uses=4 is in play, and vs-research-venues'
+//   own WORK_TIMEOUT_MS=360_000 matches that envelope. The 60s wrapper
+//   cap was tripping Phase B before its own work timeout had any chance
+//   to fire (live signal: scout 2de7c2ca, exact 60.3s delta from boot to
+//   failure log). With pause_turn continuation (max 1 cycle), total
+//   wall-clock max is now 360s -- still inside the platform 400s wall.
+//   Talent Scout callers (single-candidate evals, packet generation,
+//   bulk re-eval) all run under 30s in practice; the bump is transparent
+//   to them.
+//
+//   ALSO: replaced AbortSignal.timeout with an explicit AbortController +
+//   sentinel reason so we can distinguish our own timer from network-
+//   level AbortErrors that Deno's fetch surfaces with the same
+//   DOMException name. Pre-patch, any AbortError or TimeoutError from
+//   the fetch (TLS handshake drops, DNS failures, platform-side
+//   connection resets) was mislabeled as the timeout, which made fast
+//   network errors look like wall-clock hangs in scout pipeline_error
+//   reads.
+const ANTHROPIC_TIMEOUT_MS = 180_000;
+const ANTHROPIC_TIMEOUT_REASON = Symbol("anthropic_timeout_180s");
 
 export type ClaudeImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
@@ -298,23 +319,44 @@ export async function callClaude(
     if (options.tool_choice !== undefined) body.tool_choice = options.tool_choice;
 
     let res: Response;
+    // Explicit controller + sentinel reason so we can tell our 180s
+    // timer from network-level aborts (Deno's fetch throws AbortError
+    // for TLS handshake failures, DNS errors, connection resets, etc.).
+    // Only the sentinel-matching path returns the stable
+    // "anthropic_timeout_180s" label; everything else surfaces the
+    // underlying error name + message so the caller's pipeline_error
+    // read carries actionable signal.
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(
+      () => abortController.abort(ANTHROPIC_TIMEOUT_REASON),
+      ANTHROPIC_TIMEOUT_MS,
+    );
     try {
       res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(ANTHROPIC_TIMEOUT_MS),
+        signal: abortController.signal,
       });
     } catch (e) {
-      const name = e instanceof Error ? e.name : "";
-      if (name === "AbortError" || name === "TimeoutError") {
-        return { ok: false, status: 0, error: "anthropic_timeout_60s" };
+      const ourTimeoutFired =
+        abortController.signal.aborted &&
+        abortController.signal.reason === ANTHROPIC_TIMEOUT_REASON;
+      if (ourTimeoutFired) {
+        return { ok: false, status: 0, error: "anthropic_timeout_180s" };
       }
+      const name = e instanceof Error ? e.name : "Unknown";
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(
+        `[callClaude] app=${app} fn=${options.fn_name ?? "?"} fetch threw name=${name} msg=${redactSecrets(msg.slice(0, 300))}`,
+      );
       return {
         ok: false,
         status: 0,
-        error: `Anthropic fetch failed: ${e instanceof Error ? e.message : String(e)}`,
+        error: `anthropic_fetch_${name}: ${redactSecrets(msg.slice(0, 200))}`,
       };
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     if (!res.ok) {

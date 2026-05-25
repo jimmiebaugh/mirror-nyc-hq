@@ -2,6 +2,178 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.12: Venue Scout review (2026-05-23 → 2026-05-27, complete)
+
+Squash SHA `1a01d3e` on `origin/main` (docs reference via documented off-by-one; actual commit `94e2bbb`). 28 sub-phases (5.12.0 through 5.12.14.3) collapsed into one commit. Per-sub-phase narrative in `docs/v1-changelog.md` § Phase 5.12. Per-sub-phase specs archived at `OUTPUTS/historical/phase-5-12-*-spec.md`. 10 migrations + 9 edge functions touched cumulatively across the cycle, all applied out-of-band during the cycle. The decisions below are grouped by topic; sub-phase chronology is preserved as inline source labels.
+
+### Schema + migrations
+
+#### dedupe_meta jsonb shape on `vs_candidate_venues` (5.12.3)
+
+`vs_candidate_venues.dedupe_meta` jsonb column captures the points-based dedupe ladder's scoring breakdown on FRESH `pushVenuesToHq` merges only (NOT pre-linked candidates, NOT hq_pool rows, NOT fresh-INSERT no-match rows). Shape: `{ name: { score, signal }, address: { score, signal }, website: { score, signal }, city: { score, signal }, total, threshold, decision }`. Migration `20260603220000` adds the column nullable with no backfill. Why nullable + no backfill: indicator chrome is informational; existing rows without scoring breakdown are fine. UI consumer (`DedupeMetaIndicator`) shipped in 5.12.3, deprecated in 5.12.14 v1, fully pruned in 5.12.14.2; jsonb column + write path stay byte-unchanged because future re-introduction of a UI consumer is a fresh implementation from the still-present jsonb shape.
+
+#### brief_data shape lock (5.12.5)
+
+Five `vs_scouts.brief_data` keys flip from `string` to `string[]` to support array-shape tag entry: `objectives`, `target_audience`, `target_neighborhoods`, `vibe_aesthetic`, `ideal_features`. Migration `20260605000000_phase_5_12_5_brief_data_shape_backfill.sql` normalizes legacy strings to single-element arrays + resets `brief_data.overview_source_hash` to JSON null (accepted: one wasted overview-regenerate on first post-deploy submit against the test scout's throwaway overview). Schema descriptions in `vs-parse-brief`'s tool spec pin inline to `string[]`. New `hashAsStringArray` helper on the overview-hash side coerces single strings to single-element arrays as defense-in-depth for future hand-edits to `brief_data`. New `sanitizeTagArray(raw, maxLen)` parameterized helper backs `sanitizeAudienceTags`, `sanitizeFeatureTags`, and `sanitizeObjectives`. Closes `code-observations.md` Frontend #1 + Edge #2.
+
+#### neighborhoods nested in cities (5.12.9)
+
+New `public.neighborhoods` lookup parent-scoped under `cities`. Schema: `id`, `name`, `city_id FK ON DELETE CASCADE`, `created_by`, `created_at`. Unique `(city_id, LOWER(name))` constraint. Migration `20260606000000` seeded 15 distinct rows from `venues`, `vs_candidate_venues`, `vs_scouts.brief_data.target_neighborhoods`. Consumer columns stay text per the cities precedent (denormalized for query simplicity; the lookup is canonical for picker UI but not joined at query time). `useLookup` extended with a per-table `PARENT_COLUMN_BY_TABLE` map (`neighborhoods → city_id` alongside the existing `vendor_subcategories → parent_category_id`); new `useCityIdForName` helper threads city → city_id for the picker scope. Every neighborhood field across HQ + VS swaps to `<RecordCombobox source={{ kind: "lookup", table: "neighborhoods", parentScopeId, ... }}>`. City-change clears the dependent neighborhood / target_neighborhoods on every consumer (VendorEdit/VendorDetail precedent). New `<NeighborhoodsLookupEditor>` Settings card with native `<details>` collapsible per city + lazy editor mount. Carry-forward: `vs-generate-deck` neighborhood auto-add into `public.neighborhoods` at deck-push time (separate ship; carry-forward from 5.12.13.3).
+
+#### venue_types DB-driven with case-insensitive uniqueness (5.12.10)
+
+VS canonical venue-types now read at runtime from `public.venue_types` via shared `useLookup` cache on the frontend (new `useVenueTypes` hook) and per-request `getVenueTypesCanonicalSet` fetch in 5 edge functions (`vs-research-venues`, `vs-compile-summaries`, `vs-generate-deck`, `vs-parse-brief`, `vs-research-single-venue`). Migration `20260607000000` wraps 5 atomic steps: backfill 9 legacy palette names, prune unreferenced test rows, consolidate case-variants via insert-then-delete on `venue_venue_types` (avoids PRIMARY KEY violations the UPDATE pattern would hit), drop case-sensitive `venue_types_name_key` constraint + add `venue_types_name_lower_unique_idx ON LOWER(name)` (mirrors cities pattern from 5.2.2), `CREATE OR REPLACE bulk_import_commit_venues` with `ON CONFLICT DO NOTHING` + case-insensitive race re-read so a `"retail"` loser still resolves the `"Retail"` winner's id. Legacy `canonicalizeType` + `canonicalizeMultiType` regex helpers DELETED from `_shared/venueTypes.ts` and `src/lib/venue-scout/venueTypes.ts` after grep verified zero residual callers. Schema descriptions + system prompts stay static for prompt-cache stability per `feedback_tool_choice_collapse`; the live list rides in the per-call user message via `buildFillUserMsg` + Phase B requirements block + brief-parser user message. `TYPE_STYLES` palette stays keyed on the 9 legacy names; producer-added types render via `TYPE_FALLBACK_STYLE` (neutral grey). New `paletteForType(name)` non-hook palette helper used by `VenueTypePill`. `parseTypes` signature widened from `CanonicalType[]` to `string[]` with optional runtime `canonicalSet` param so legacy data dropped from the runtime set still surfaces as fallback-styled pills. `TypeTogglePopover` unions runtime types with any stale tokens stored on a venue so producers can uncheck stored-but-removed types.
+
+#### city_aliases lookup (5.12.2)
+
+New `public.city_aliases` table (`alias text`, `city_id uuid FK to cities`, `created_by uuid`) with `LOWER(alias)` unique index, RLS open SELECT/INSERT/UPDATE + admin DELETE. Seeded with 4 LA/NYC mappings. Three migrations (`20260603180000` backfill, `20260603190000` create + seed, `20260603200000` alias-first cleanup across vs_scouts/venues/vendors/projects/clients city columns + DELETE polluting cities rows whose LOWER(name) matches an alias). `vs-parse-brief` resolves through a 6-step alias-first ladder: trim → state-strip → alias-on-trimmed → alias-on-stripped → cities-on-trimmed → cities-on-stripped → insert using stripped value. Auto-creates novel cities at runtime with the state-stripped value so the lookup never accumulates alias-style "City, ST" strings. Frontend `LookupCombobox` consumes `useCityAliases` and surfaces alias rows as a read-only "Aliases" CommandGroup when `source.table === 'cities'`. Aliases never enter `optionLabelById`, keeping form-value display always canonical. Admin alias curation via Settings → Lookup Lists is a carry-forward; new aliases land via SQL today.
+
+#### Two new advisory-lock kickoff RPCs (5.12.1, 5.12.4.1)
+
+Two SECURITY DEFINER RPCs cap the kickoff race for long-running pipelines: `vs_research_try_acquire_kickoff` (5.12.1) and `vs_deck_try_acquire_kickoff` (5.12.4.1, migration `20260604120000`). Shape: `pg_try_advisory_xact_lock` under a per-function namespace (`vs-research:<scout_id>`, `vs-deck:<scout_id>`) + same-transaction read-and-write of the kickoff timestamp + clear `pipeline_error`. REVOKE FROM PUBLIC / anon / authenticated; GRANT TO service_role only. See **Kickoff RPC pattern** under Edge function patterns for the full design rationale.
+
+#### vs_candidate_venues.source widened to include 'hq_pool' (5.12.1)
+
+CHECK constraint expanded to allow `'hq_pool'` alongside `manual`, `sheet`, `research`. New `SOURCE_PRIORITY` ordering: manual (1) < sheet (2) < hq_pool (3) < research (4). New "Venues DB" SourcePill state (teal palette) on SourcingReport + Shortlist.
+
+#### vs_scouts.shortlist_sync trigger retired (5.12.0)
+
+`vs_candidate_venues_shortlist_sync` trigger dropped. HQ Venues match-or-insert moved from the trigger to the top of `vs-generate-deck`, gated by a Generate Deck confirmation modal on DeckPrep (later Review per 5.12.15). Rationale: trigger fired on every shortlist toggle including transient ones; the deck-generate gate is the only producer-confirmed write-to-HQ moment. Name-first dedupe ladder with cross-field conflict check on address + city; `venues.about_venue` written only when the linked HQ row's value is blank so producer-edited paragraphs are preserved. Migration `20260603140000_phase_5_12_0_drop_shortlist_sync_trigger.sql`.
+
+### Edge function patterns
+
+#### Kickoff RPC pattern: advisory lock + grace window (5.12.1, 5.12.4.1, hardened in 5.12.4.2)
+
+Long-running pipelines that mutate state on entry are vulnerable to a check-then-write race when invoked twice in rapid succession (producer double-click, retry without backoff). The kickoff-RPC pattern closes the race atomically. Shape:
+
+```sql
+CREATE OR REPLACE FUNCTION public.vs_research_try_acquire_kickoff(
+  target_scout_id uuid,
+  grace_seconds int DEFAULT 90
+) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  PERFORM pg_try_advisory_xact_lock(hashtext('vs-research:' || target_scout_id::text));
+  -- read brief_data.research_started_at within same transaction
+  -- if recent enough (now() - started_at < grace_seconds), return false (no acquire)
+  -- else UPDATE brief_data, clear pipeline_error, return true
+END;
+$$;
+```
+
+REVOKE FROM PUBLIC / anon / authenticated; GRANT TO service_role only. The grace window MUST exceed the function's `WORK_TIMEOUT_MS` (decision below) so a producer refresh during in-flight work doesn't acquire a second kickoff. Hardened in 5.12.4.2: `IN_FLIGHT_GRACE_MS` bumped to `WORK_TIMEOUT_MS + 60_000` across all three VS edge functions (vs-research-venues 360→420s, vs-compile-summaries 90→300s, vs-generate-deck 90→240s) so the grace window survives the timeout buffer plus a refresh-margin.
+
+#### CAS guards on final UPDATE (5.12.4.2)
+
+`Promise.race([work, timeoutPromise])` rejects on timeout + writes failure, but the losing work() promise is NOT cancelled: a slow Claude call can resolve after the timeout, then apply per-venue patches, then overwrite the failure stamp with success state. Lesson: every async pipeline's final success UPDATE must CAS on `current_step=<expected>` AND `pipeline_error IS NULL`. The kickoff RPC clears `pipeline_error` at acquisition so the happy path always sees NULL; once writeFailure/failWithCode stamps a non-null pipeline_error, the late-success UPDATE no-ops cleanly. CAS-no-op branch logs + returns without throwing so the outer catch doesn't double-write failure on top of failure. The `vs-generate-deck` CAS extends the existing `.eq("current_step", "deck_prep")` predicate (failWithCode leaves current_step unchanged so name-only CAS was insufficient).
+
+#### Fit-rescue pattern for HQ pool venues (5.12.4)
+
+Deterministic fit filter (5.12.3.1) decides first tier of HQ-pool seed inserts; Claude about_venue rescue is a third lane after cross-rail seed-then-drop. Pre-Phase-B rescue pass inside `vs-research-venues` sends brief + each fit-vetoed (wrong_type / aggregate_gaps) and drop-below-threshold HQ city-pool venue's structured fields + `about_venue` to Claude via a forced `submit_fit_evaluation` tool. Each keep-verdict venue INSERTs as `source='hq_pool'` with `linked_venue_id` set. Hard physical vetoes (below_sq_ft_min / above_sq_ft_max / below_capacity) and deterministic keeps are excluded from rescue; venues already linked to the scout skip idempotently; venues with null/empty about_venue skip (no rescue signal). Cap 20 venues per rescue call (sort by `about_venue` length DESC, name ASC). Two ephemeral prompt-cache breakpoints (FIT_RESCUE_SYSTEM + brief block). Rescue is best-effort: every Claude failure path falls back to the deterministic pool; research never blocks on rescue. Closes the 5.12.3.1 first-smoke recall hole where Platform-LA-shape rows (wrong HQ tagging + rich about_venue + brief alignment) couldn't land unless Claude independently surfaced them via cross-rail seed-then-drop.
+
+#### vs-research-single-venue: three in-function auth gates (5.12.7)
+
+VS `vs_*` RLS is open-authenticated, so identity verification at the edge-function layer needs explicit in-function gates. Pattern: `venue.scout_id === scout_id` (probe-defense per the vs-research-single-venue + vs-regenerate-venue-overview pattern), `venue.source ∈ {'manual', 'hq_pool'}` (research is only valid for producer-added or HQ-pool venues; research-source venues are already enriched), scout state ∈ `{sourcing_report, shortlist, review_selects, deck_prep}` (forward-only). Both 404 on miss to avoid probe disclosure.
+
+#### vs-regenerate-venue-overview: synchronous single-venue Pass 2 (5.12.15)
+
+New synchronous edge function mirrors vs-compile-summaries Pass 2 byte-for-byte (tool-less, web_search auto with max_uses=2, ABOUT_VENUE_SYSTEM with 1h ephemeral cache, max_tokens 2000). Two auth gates: `venue.scout_id === scout_id` + `scout.current_step === 'deck_prep'`. Frontend passes producer notes explicitly in the request body so producer-edit-then-immediately-regenerate doesn't race the 600ms notes debounce. Function substitutes the body's notes value into the synthetic venue row before calling `buildOverviewUserMsgForVsRow`. Server-side UPDATE; returns `{ ok, venue_overview }`. No confirm dialog (per-regen cost ~$0.05-$0.15; producer iterates on notes). Per-venue in-flight state map disables the button + flips label to "Regenerating…" during the wall (~10-20s). Why a new function instead of single-venue mode of vs-compile-summaries: vs-compile-summaries is async + CAS-guarded + has the kickoff lock; bolting a synchronous single-venue branch onto it means either bypassing the kickoff machinery (then explaining the bypass everywhere) or honoring it (then the producer waits ~30s for a kickoff window that wasn't needed). The new function file is cheaper.
+
+#### Non-mutating-prereq reorder in vs-generate-deck (5.12.4.2)
+
+Pre-5.12.4.2 `pushVenuesToHq` ran immediately after the venues load, BEFORE the env-var check + template copy + Slides API. A TEMPLATE_COPY_FAILED on a missing-env-var path would leave HQ state mutated (new `venues` rows + `linked_venue_id` writes) for a deck the producer was told was NOT generated. Fix: env-var existence check pulled up to immediately after the venues load + before `pushVenuesToHq`. Remaining HQ-mutated-but-deck-failed window: Drive `copyTemplate` throw or Slides API throw AFTER the push. Both fail the deck via the appropriate code; `pushVenuesToHq` is idempotent on `linked_venue_id` so the producer's Re-Generate path re-runs without re-INSERTing. The stronger guarantee (move HQ push after Slides success) is logged as carry-forward.
+
+#### vs-delete-scout: per-bucket storage cleanup (5.12.6)
+
+New synchronous edge function. `verify_jwt = true`, service-role client, no extra in-function gate (single `scout_id` input + no cross-entity surface to poison; counter-example to vs-research-single-venue's three-gate posture). Order: enumerate paths (read `vs_scouts.brief_data.uploaded_files` + `sheet_storage_path` + JOIN `vs_venue_photos.storage_path` via `vs_candidate_venues.scout_id`) → DB DELETE on `vs_scouts` (cascades to `vs_sourcing_rounds` + `vs_candidate_venues` + `vs_venue_photos` rows) → per-bucket batched `storage.from(bucket).remove([...paths])` against `briefs` + `sourcing_sheets` + `vs_venue_photos` (chunks of 100; errors collected into the response payload, never thrown). Partial-cleanup failures degrade to orphans rather than rolling back; the scout is already gone. HQ `venues` rows (referenced via `linked_venue_id ON DELETE SET NULL`) and Drive deck files stay permanently by design.
+
+### Prompt audit (5.12.13.X)
+
+#### key_features as evergreen tags, not narrative (5.12.13.1)
+
+Shift the `key_features` field from address-anchored narrative sentences to 2-10 short evergreen reusable feature tags (1-4 words each, usually 1-2) across every consumer that writes it. Three surfaces in lockstep: (a) shared `FILL_TOOL.key_features` schema rewrite in `_shared/venueFill.ts` (consumed by vs-research-venues Phase A + Pass 1 backfill + vs-research-single-venue), (b) Phase B `vs-research-venues TOOL.venues[].key_features` schema mirroring the FILL_TOOL shape, (c) `_shared/venueOverview.ts <input_fields>` line + both `buildOverviewUserMsgFromVenue` and `buildOverviewUserMsgForVsRow` user-message label sync (`Key features:` → `Key features (tags):`). New `sanitizeTagShape` deterministic helper in `_shared/venueTypes.ts` (drops non-strings, empty strings, items with digits, items > 4 whitespace-separated words, items > 35 chars, case-insensitive dupes) composes with `stripPlaceholders` at five write sites. `FILL_SYSTEM` and `ABOUT_VENUE_SYSTEM` bodies stay byte-for-byte per `feedback_tool_choice_collapse`. Historical data backfill explicitly out of scope. Closes Edge #3 + Edge #14. **Post-impl amendments folded into the same squash:** (A) Features matrix column swaps `EditableTextarea` for `<TagInput compact>` pills; (B) `addManualRow` + HQ Venue picker INSERT payload default `shortlisted: true` so manual + HQ-picker rows get auto-researched on Continue; (C) `vs-generate-deck pushVenuesToHq` match-path write-when-blank extends from `about_venue` only to also cover `features` + `total_sq_ft` + `capacity` + `website_url`, so VS enrichment backfills HQ-side gaps at deck-generation time (preserves producer HQ edits).
+
+#### ABOUT_VENUE_SYSTEM cap widen 90-110 → 100-150 (5.12.13.2 → 5.12.13.2.1)
+
+Two-step widen. 5.12.13.2 widened the cap from 90-110 to 90-120 words and reshaped the 6 example INPUT lines from long narrative `Key features:` strings to short tag-shaped `Key features (tags):` lists matching the post-.1 user-message label. Post-deploy smoke (Jimmie 2026-05-25, ~5-6 fresh regenerates) showed 5 of 6 outputs landing 130-175 words against the 120 cap. Producer call: quality of the longer outputs is right; the 120 cap was too tight for venues with material to work with. 5.12.13.2.1 widened again to 100-150 (numerical-only edit across `<task>` and `<output_format>` blocks; cut-or-merge fallback + count-before-returning nudges retained at 150). New tag-priority guidance on the `<input_fields>` line: "Not every tag has to make the paragraph; favor the ones most appealing or distinctive for this specific venue, especially when expanding on more would push the paragraph above the 150-word cap." All 6 example outputs stay byte-for-byte (Jimmie's hand-revised voice anchors; the variance across 92-112 is itself a signal to the model that paragraph length adapts to the venue's material). Server-side `trimToWordCap` helper deferred; re-open as 5.12.13.2.2 only if post-.2.1 smoke shows 3+ of 5 overshoot the new 150 ceiling. Two edge functions redeployed each step out-of-band (`hq-generate-venue-about` + `vs-compile-summaries`); one-time prompt-cache invalidation per consumer accepted per `feedback_tool_choice_collapse` (SYSTEM edit acceptable when the lever IS in SYSTEM).
+
+#### Retail bias soften + search-scope flexibility (5.12.13.3)
+
+Softens three Retail anchors across the VS write paths AND reshapes the existing `requirementLines` block in `vs-research-venues` so the brief's venue-type preference allows 1-2 high-aligning outliers and the neighborhood-strict toggle produces sharper guidance to Claude on both sides of the flag. Five edits across two files: (1) Phase B `SYSTEM` block in `vs-research-venues/index.ts` lines 1811-1818 drops the "Strongly prioritize ground-floor commercial" framing in favor of "Mirror often books storefronts" + "Equal-weight the other canonical venue types"; (2) Phase B userMsg "Return X net-new" line drops "Weight... heavily in ranking_score" in favor of brief-criteria-balanced ranking; (3) `_shared/venueFill.ts FILL_SYSTEM` drops the "Prefer Retail" sentence; (4) `requirementLines` strict-neighborhoods ternary in BOTH call sites tightens both branches (strict: allow 1-2 adjacent; non-strict: explicit "adjacent + reasonable radius within the city"); (5) `requirementLines` venueTypes "must be one of" softens to "should be" with 1-2 outliers permitted only when the venue ranks very high on the brief's other criteria. No new brief-stepper flag; always-soften. Three edge functions redeploy (`vs-research-venues`, `vs-research-single-venue`, `vs-compile-summaries`). Closes Edge #12. Carry-forward: `vs-generate-deck` neighborhood auto-add into `public.neighborhoods` at deck-push time (separate ship).
+
+#### Event Overview voice tuning (5.12.13.4)
+
+`vs-generate-brief-overview SYSTEM_PROMPT` rewrites from a short bullet rule list to a four-block `<voice>` + `<must_not>` + `<rules>` + `<examples>` structure modeled on `ABOUT_VENUE_SYSTEM`'s pattern. Hierarchy inverts from "stay faithful to facts" to "creative extrapolation is welcome," with the hard-fact lockdown (client/event/dates/venues/neighborhoods/budgets/headcount) moved to a dedicated `<must_not>` block so it anchors at the top as the binding constraint. `<voice>` block names 5 structural beats distilled from 4 reference past-deck overviews (concept-first opener, why-this-exists-for-the-brand, hero beat, guest-experience verb beat, scene-setting via metaphor or branded vocabulary). Three post-smoke amendments folded into the same squash: (i) beats reframe from "checklist" to "illustrative" to loosen the structural template-pull; (ii) active-verbs rule with stop list pulled directly from the Cooper Flagg drift; (iii) closing-clean-clause rule and vary-openings rule. User-message construction reshapes from flat `BRIEF FIELDS` key/value dump into three labeled blocks: BRIEF FACTS (precision fields), BRIEF CONTEXT (paragraph-shaped segments joining voice-driving arrays), PRODUCER NOTES (free-text `additional_notes` as discrete block). One edge function redeploys (`vs-generate-brief-overview`). Spec at `OUTPUTS/historical/phase-5-12-13-4-spec.md`. The most-felt producer change of the audit.
+
+#### ParsedPreview selective-apply checkboxes (5.12.13.6)
+
+`<ParsedPreview>` in `src/pages/venue-scout/BriefEvent.tsx` adds a per-row checkbox so the producer can opt out of any parsed field before applying. Default state every row checked (one-click Apply preserved as the happy path; deselect is the deliberate action). Selection state lives in `useState<Set<keyof ParsedBriefFields>>` lazy-initialized to the full row-key set. `onApply` signature changes from `() => void` to `(filteredParsed: ParsedBriefFields) => void`; the component owns the build-the-filter step. **Three post-implementation amendments folded into the same squash:** (A) Date + budget parse-prompt tightening in `vs-parse-brief/index.ts` schema descriptions; (B) ParsedPreview hides the `Event overview` row entirely (vs-parse-brief still emits `event_overview`, but downstream `vs-generate-brief-overview` owns the final value); (C) Multi-option dates with inline radio group via three new optional array fields (`live_dates_options`, `install_dates_options`, `strike_dates_options`); server-side `collapseDateOptions` helper enforces a mutual-exclusion contract with the singular fields; ParsedPreview row model becomes a discriminated union (`SingleRow` + `OptionsRow`).
+
+### UX + chrome (5.12.14.X)
+
+#### `.tbl` matrix decouple (5.12.14.3)
+
+R7 attempted to make Sourcing's matrix table the HQ-wide table canon via `.tbl` composition + `.tbl--matrix` modifier. The composition produced cascade conflicts: `.tbl` base rules (`.tbl thead th{text-align:left}`, `.tbl tbody td{padding:12px 14px;border-bottom:...;font-size:13px}`, `.tbl tbody tr:hover{background:rgba(255,255,255,.025)}`, plus the `::after` cell-divider pseudo) carry specificity (0,2,2)+ which beats every matching Tailwind utility (0,1,1) on the matrix's bespoke Th/Td/tr primitives. The `.tbl--matrix` modifier's selective-neuter approach didn't fully work. **Decision (R7 amendment v1 § 2):** detach matrix tables from `.tbl` entirely. The matrix `<table>` className is just `tbl--matrix` (no `.tbl`). `.tbl--matrix` carries only `width:100%; border-collapse:collapse; min-width:1280px; table-layout:fixed;` — matrix primitives in `src/components/venue-scout/matrix/primitives.tsx` drive all chrome via Tailwind utilities. HQ Core `.tbl` consumers (Settings, Wiki, ProjectDetail, TeamList, NotificationPreferences, etc.) remain on the original canon. **Future:** a planned HQ-wide canon flip (logged at `code-observations.md` row #47) would rewrite `.tbl` to match the matrix primitives' visual contract, then re-couple matrix tables to `.tbl` and keep `.tbl--matrix` as a min-width/table-fixed-only modifier.
+
+#### Back-crumb relocation page-chrome → TopBar (5.12.14.1 → 5.12.14.3)
+
+Every HQ page mounted its own `.crumb` element in its page header (21 pages total: 10 VS, 7 HQ Core detail pages, 3 bulk-import + notification surfaces, 1 BulkImportPage component). Each call site set its own fallback prop with cross-cutting inconsistency in rendered styling and route resolution. **Decision:** render the back-crumb once, globally, in TopBar's left zone via the existing `useReferrerCrumb` hook + the canonical-parent route table in `src/hooks/useReferrerCrumb.ts`. Per-page `<ReferrerCrumb>` mounts removed across all 21 pages/components. The TopBar applies a `showCrumb = referrerCrumb.href !== "/"` predicate so root-tier pages don't surface a useless "Back to HQ" affordance. Hidden below md (768px) so mobile TopBar stays clean alongside search + bells + avatar. **BriefReport stage-aware override:** BriefReport is a hub reachable from any post-intake stage, so its back-target depends on the scout's `current_step` (Sourcing/Shortlist/Review/Brief Intake). Implemented via a pathname-matched fetch inside `useReferrerCrumb` — when `pathname` matches `/venue-scout/scouts/:id/brief/report`, the hook fires a supabase query for the scout's `current_step` and routes accordingly. Only fires on that one route; every other page skips the query. Decoupled and self-contained; no context plumbing or page-level publishing needed. **VS-side simplification (5.12.14.1 revision round):** every `/venue-scout/*` page bypasses the sessionStorage referrer and ALWAYS uses the canonical-parent table (or caller's `fallback` prop if set). Rationale: VS is a linear scout flow, not a graph. HQ Core keeps the full three-layer resolution (state.from → sessionStorage → canonical-parent table).
+
+#### Lookup Lists shared component pattern (5.12.14.3)
+
+R7 § F.1 built a VS-specific `LookupListEditor` for VS Settings, reinventing the inline table-of-lists UI already shipped on HQ Settings. **Decision:** extract HQ Settings' inline table-of-lists block into a shared `src/components/settings/LookupListsCard.tsx` component with a `lookups` filter prop. Both HQ Settings (consuming the full `HQ_LOOKUPS` 7-entry list: Project Categories / Cities / Neighborhoods / Venue Types / Vendor Capabilities / Vendor Categories / Departments) and VS Settings (consuming the 3-entry `VS_LOOKUPS` subset: Cities / Neighborhoods / Venue Types) render the same chrome. Neighborhoods (parent-scoped by city) joins the table-of-lists row pattern via expansion-content branching — when `entry.key === "neighborhoods"`, the expansion row mounts `<NeighborhoodsLookupEditor inline />` (new `inline?: boolean` prop on the editor that drops the outer card chrome so it reads cleanly inside a table-row context). VS-specific duplicate deleted (`-323 LOC`). Adding a new lookup table HQ-wide = one entry in the consumer's filter array.
+
+#### ScoutPageHeader 3-zone primitive (5.12.14.3)
+
+New `src/components/venue-scout/ScoutPageHeader.tsx` primitive. 3-zone top row: empty-left (back-crumb relocated to TopBar) | stepper centered | gear icon (settings) right. Consumed by 8 in-scout VS pages (Sourcing/Shortlist/Review/BriefEvent/BriefVenue/BriefReport/SheetPrompt/ScoutSettings). `grid-cols-3` so the stepper stays centered regardless of right-zone width. Companion: brief intake pages' `Stepper.tsx` becomes informational (24→20px circles, inline with title row on BriefEvent + BriefVenue, hidden on BriefReport).
+
+#### VSPageField primitive + intake restructure (5.12.14.1 → 5.12.14.3)
+
+New `src/components/venue-scout/VSPageField.tsx` (canonical VS page-form field primitive: 12px coral mono uppercase label + optional required asterisk). Replaces 4 local Field helpers in NewScout (was 13px), BriefEvent (12px), BriefVenue (12px), ScoutSettings (13px). Drift normalized to 12px canon. `src/components/ui/Field.tsx` stays as the matrix-cell variant. **5.12.14.3 widening:** label prop accepts `ReactNode` (was `string`) to support composite labels like Neighborhoods + Strict checkbox split. **Intake restructure (5.12.14.3 R4):** BriefEvent + BriefVenue land full-width with `.card` canon adoption (nested-card hierarchy: outer Event/Venue card → Upload Brief + Details nested). Vibe + aesthetic migrated from BriefEvent → BriefVenue. `sq_ft_max` retired across the data layer with `sq_ft_min` legacy fallback at 4 call sites in `vs-research-venues`.
+
+#### ScoutPhaseBreadcrumb single-row + responsive scale (5.12.14 → 5.12.14.3)
+
+New `src/components/venue-scout/ScoutPhaseBreadcrumb.tsx` replaces the previous bulky filled-box chip-strip chrome. 20px numbered circles + mono labels + chevron `›` separators, no card/border/background container. Color states mirror Stepper.tsx semantics (active = white-filled + coral label; reached = coral-filled with check + white label; unreached = grey + grey). 5.12.14.3 enforces single-row layout (flex-nowrap + responsive scale text-[11/12/13px] + h-5/h-5/h-6 circles + hidden below md). Vertical footprint shrinks from ~70px to ~28px.
+
+#### Stage 2 single combined squash, not three (5.12.14.1)
+
+Stages 2A + 2B + 2C originally landed as three stacked WIP commits on `claude/ux-vs-audit-stage2` with the original plan calling for one squash to main at end of 2C. Decision held throughout: one squash, full Stage 2 scope in the subject + body. Rationale: cleaner main history; the staged structure was a working-session convenience, not a release boundary. (Same principle applied to the full 5.12 squash on 2026-05-27 — 28 sub-phases collapsed into one commit.)
+
+#### Loading shell honest server-driven progress (5.12.14.1)
+
+Replace timed-fake `setInterval` step bump with server-emitted `brief_data.progress_step`. Backend writes 4 progress markers in each of `vs-research-venues` (brief_loaded / phase_a_enrichment / phase_b_research / finalizing), `vs-compile-summaries` (loading_pitched / pass_1_fill / pass_2_overview / handoff), `vs-generate-deck` (copying_template / populating_slides / inserting_photos / finalizing). Frontend reads via existing Realtime subscription; falls back to step 0 when the field is absent (pre-deploy scouts mid-flight). Cost ~50-100ms per write; 9-12 writes total per pipeline. Rationale: timed fakes mislead the producer when the real operation runs faster or slower than the 12s-per-step timer assumes.
+
+#### DateRangePicker on shadcn Calendar + react-day-picker + date-fns (5.12.14)
+
+New `src/components/ui/DateRangePicker.tsx` wrapper. Three VS free-text date fields (live_dates, install_dates, strike_dates) swap from plain `<Input>` to range-mode pickers. Storage shape unchanged: formatted strings ("Oct 15-17, 2026") into existing `text` columns; downstream string consumers (Claude prompts, Slides text, UI display) consume as-is. Picker holds internal `DateRange | undefined` state during popover open. New dependencies: `react-day-picker` + `date-fns`. Multi-date (non-consecutive) explicitly carry-forward.
+
+#### Matrix shared 7-column layout via VenueMatrixRow (5.12.14)
+
+Both Sourcing + Shortlist render through the same row primitive (`src/components/venue-scout/matrix/VenueMatrixRow.tsx`); per-page differences collapse to col-1 label (Shortlist vs Pitch) + col-1 handler + page-level source-of-truth (shortlisted vs pitched). Column shape: Shortlist/Pitch+Source (col 1, 110px, checkbox top + SourcePill bottom stacked) | Venue (230px, name + venue_type pills horizontal max 2 per row) | Location (180px, neighborhood + address stacked) | Website (130px, InlineEditText with prettyHost tlink) | Features (230px, compact TagInput) | Recommendations (280px, Bullets) | Considerations (280px, Bullets). Total ~1440px. Notes/Feedback column drops from both pages.
+
+#### Final Review + Deck Prep consolidation (5.12.15)
+
+DeckPrep.tsx wins the rename slot; today's Review.tsx (FinalReview) deletes at squash time. Producer flow on Deck Prep is the load-bearing one (Generate fires from there). Route segment `/review` is shorter and producer-friendlier than `/deck/prep`. Producer flow drops the standalone `review_selects` step: Shortlist Continue flips `current_step` directly to `'compiling'`. `review_selects` enum value stays in the DB for back-compat; `stepToRoute("review_selects")` resolves to `/review` so any legacy scout routes forward without a backfill migration. Per-venue card layout wins over wide-matrix (producer's job on this surface is content tuning, not at-a-glance row scanning). Numbered "Venue 01 / 02 / ..." pill recomputes against the included set only (matches slide order on the actual generated deck). Per-card body extracts to `src/components/venue-scout/ReviewCard.tsx` sibling so the parent stays ~600-700 lines.
+
+### Cut + retired
+
+#### Phase 5.12.8 cut (2026-05-24): Brief client-logo web search
+
+Cut by Jimmie 2026-05-24: producer value low, busy-work shape; upcoming HQ-alignment styling pass on the brief surface is likely to drop the client logo display entirely, mooting the work.
+
+### Carry-forwards (still open after Phase 5.12 closes)
+
+- **HQ-wide `.tbl` canon flip** (`code-observations.md` row #47, queued). Rewrites `.tbl` to match matrix primitives + rolls out HQ-wide; recouples matrix tables if the visual contract matches end-to-end.
+- **Phase 5.14 venue photo persistence** (queued in roadmap during 5.12.14.3 wrap). Round-trips HQ Venue photos to the deck generator + persists final state at deck-time.
+- **VS research-accuracy audit** (C1 La Cienega/Helms hallucination concerns, C2 tag verifiability + name canonicalization + neighborhood canonicalization + address precision, C3 URL accuracy / Heights District base-URL rule walk-back). Logged in archived 5.12.14.3 spec.
+- **Phase 5.15 Anthropic per-tool call-log infra** (queued during R7 § F.2). New `anthropic_call_log` table/view + `callClaude()` log write + VS/TS Settings per-tool breakdown render. R7 § F.2 stubbed the card surface; infra lands separately.
+- **`vs-generate-deck` neighborhood auto-add into `public.neighborhoods`** (5.12.13.3 carry-forward, still open).
+- **Review-as-cards canon** (`code-observations.md` row #48). Producer-locked: Review stays a `<ReviewCard>` list, not a table; revisit if a future producer call surfaces real need.
+- **System Prompts editor** (R7 § F.3 placeholder card on VS Settings). Deferred future sub-phase.
+- **BriefReport stage-aware crumb scope.** Hook-internal fetch fires once on mount; if scout state mutates while producer is on the page, crumb won't update until next navigation. Acceptable for now; revisit if smoke flags.
+
+---
+
 ## Phase 5.11.2 (2026-05-23) — HQ Core structural consistency
 
 Frontend-only structural pass after the parallel 5.11.2 audits. The goal was chrome convergence and shared primitives, not a redesign. Product-call items were limited to the Wave 3 changes Jimmie approved during local smoke.

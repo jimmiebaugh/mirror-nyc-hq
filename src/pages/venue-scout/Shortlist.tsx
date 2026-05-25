@@ -1,29 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Check } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { NotesModal } from "@/components/venue-scout/NotesModal";
-import {
-  Th,
-  Td,
-  HdrStack,
-  VStack,
-  Bullets,
-  NotesCellButton,
-  parseTypes,
-  EditableField,
-  EditableTextarea,
-  VenueIdentityStack,
-  TypeTogglePopover,
-} from "@/components/venue-scout/matrix/primitives";
-import type { CanonicalType } from "@/components/venue-scout/matrix/primitives";
-import {
-  ScoutSettingsLink,
-  ScoutStepThroughNav,
-} from "@/components/venue-scout/ScoutChrome";
+import { Th } from "@/components/venue-scout/matrix/primitives";
+import { VenueMatrixRow } from "@/components/venue-scout/matrix/VenueMatrixRow";
+import { useVenueTypes } from "@/lib/venue-scout/useVenueTypes";
+import { ScoutPageHeader } from "@/components/venue-scout/ScoutPageHeader";
 import { SOURCE_PRIORITY } from "@/lib/venue-scout/format";
+import { useCityIdForName } from "@/lib/hq/lookups";
 
 // Lifted from VS Pro (src/pages/sourcing/Shortlist.tsx) per port plan § 9 +
 // Phase 4.6-port spec. Same column-rename / route-prefix / table-rename
@@ -31,10 +17,24 @@ import { SOURCE_PRIORITY } from "@/lib/venue-scout/format";
 //   - Photo column: 4.6-port stubbed the upload affordance (toast no-op,
 //     photoCounts always 0). 4.7.1-port unstubs it: real counts query
 //     against vs_venue_photos + real PhotoUploadModal open on pitched rows.
-//   - Manual venue add: inserts with `source: 'manual', shortlisted: false`
-//     to match VS Pro behavior. The filter `v.shortlisted || v.source ===
-//     'manual'` makes manual rows visible on Shortlist regardless of the
-//     shortlisted flag. See spec § "Open decision points" #4.
+//
+// Phase 5.12.7 Feature C: manual-add row + addManualRow function + the
+// autoFocusName plumbing have moved to SourcingReport (where the new
+// + Add Venue from HQ Venue List picker now lives in a sibling row).
+//
+// Phase 5.12.7 post-smoke 2026-05-24: the auto-research-on-promotion
+// trigger moved from this page's pitch-toggle handler to
+// SourcingReport's Continue button. Producer expectation is now: all
+// producer-added rows are enriched by the time Shortlist renders, so
+// the pitch toggle stays a pure boolean and the Continue button on
+// Sourcing is the single enrichment fan-out point.
+//
+// Phase 5.12.13.1 amendment B follow-on (2026-05-24): the page's visibility
+// filter dropped the `|| v.source === "manual"` override so the select
+// checkbox is the single source of truth for which venues advance to
+// Shortlist. Pairs with amendment B's `shortlisted: true` default on
+// manual + HQ-picker INSERTs, which keeps the happy path identical while
+// honoring the producer's explicit untick.
 
 type DerivedColumn = { id: string; label: string; criteria?: string };
 
@@ -54,6 +54,13 @@ type Venue = {
   pitched: boolean;
   source: string;
   notes: string | null;
+  // Phase 5.12.3: dedupe-meta affordance. Both fields read from
+  // vs_candidate_venues; `dedupe_meta` is typed `unknown` because no
+  // active UI consumer renders it (the matrix DedupeMetaIndicator was
+  // pruned in Phase 5.12.14.2; the jsonb write path on
+  // _shared/venueDedupe.ts stays for a future re-consumer).
+  linked_venue_id: string | null;
+  dedupe_meta: unknown;
 };
 
 // Phase 4.10.2-port: 9 -> 8 columns after dropping the Alignment | Rank
@@ -61,7 +68,7 @@ type Venue = {
 // Phase 4.10.4-port: 8 -> 7 columns after dropping the Upload Photos column.
 // Photos still live on Review.tsx; the upload affordance is gone from
 // Shortlist per producer-flow simplification (Jimmie lock 2026-05-13).
-const TOTAL_COLS = 7;
+const TOTAL_COLS = 6;
 
 export default function Shortlist() {
   const { id: scoutId } = useParams<{ id: string }>();
@@ -70,19 +77,13 @@ export default function Shortlist() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [columns, setColumns] = useState<DerivedColumn[]>([]);
   const [loading, setLoading] = useState(true);
-  // Phase 4.9-port: meta for <ScoutStepThroughNav />.
+  // Phase 4.9-port: meta consumed by <ScoutPhaseBreadcrumb /> (the
+  // post-5.12.14 chrome replacement for the retired ScoutStepThroughNav).
+  // Phase 5.12.9 widens to include `city` so the per-row neighborhood
+  // picker can parent-scope to the scout's brief city.
   const [scoutMeta, setScoutMeta] = useState<
-    { current_step: string | null } | null
+    { current_step: string | null; city: string | null } | null
   >(null);
-
-  const [notesOpen, setNotesOpen] = useState(false);
-  const [activeVenue, setActiveVenue] = useState<Venue | null>(null);
-  // Phase 4.10.2-port: id of the most recently inserted manual row. Passed
-  // through to <VenueIdentityStack autoFocusName> so the new contenteditable
-  // span receives focus on mount. Replaces the previous setTimeout +
-  // querySelector("input[data-manual-name=...]") path, which only worked when
-  // manual rows rendered as <input> elements.
-  const [lastManualId, setLastManualId] = useState<string | null>(null);
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {},
@@ -93,13 +94,13 @@ export default function Shortlist() {
     const [scoutResp, vsResp] = await Promise.all([
       supabase
         .from("vs_scouts")
-        .select("derived_columns, current_step")
+        .select("derived_columns, current_step, city")
         .eq("id", scoutId)
         .maybeSingle(),
       supabase
         .from("vs_candidate_venues")
         .select(
-          "id, name, neighborhood, address, venue_type, key_features, website_url, derived_attrs, recommendations, considerations, rank, shortlisted, pitched, source, notes",
+          "id, name, neighborhood, address, venue_type, key_features, website_url, derived_attrs, recommendations, considerations, rank, shortlisted, pitched, source, notes, linked_venue_id, dedupe_meta",
         )
         .eq("scout_id", scoutId),
     ]);
@@ -110,14 +111,23 @@ export default function Shortlist() {
       scoutResp.data
         ? {
             current_step: (scoutResp.data.current_step as string | null) ?? null,
+            city: (scoutResp.data.city as string | null) ?? null,
           }
         : null,
     );
 
     const all = ((vsResp.data ?? []) as unknown) as Venue[];
-    const visible = all.filter(
-      (v) => v.shortlisted || v.source === "manual",
-    );
+    // Phase 5.12.13.1 amendment B follow-on: the select checkbox is the
+    // single source of truth for Shortlist visibility. Pre-amendment this
+    // filter unioned `v.shortlisted || v.source === "manual"` so manual
+    // rows always appeared regardless of the checkbox (the pre-amendment-B
+    // manual default was `shortlisted: false` and the union kept them
+    // visible). With amendment B's `shortlisted: true` default on manual +
+    // HQ-picker INSERTs, manual rows pass the simple `v.shortlisted` gate
+    // naturally on the happy path, and the producer's explicit untick is
+    // now honored (manual rows disappear from Shortlist when unticked
+    // back on SourcingReport).
+    const visible = all.filter((v) => v.shortlisted);
     setVenues(visible);
 
     setLoading(false);
@@ -134,23 +144,6 @@ export default function Shortlist() {
       Object.values(timers).forEach((t) => clearTimeout(t));
     };
   }, []);
-
-  // Phase 4.10.2-port: one-shot reset of lastManualId after the new
-  // manual row's <EditableField> has had its mount-effect fire. Without
-  // this, if the manual row's tr ever remounts later (e.g. an edge case
-  // where the sort step swaps the manual row's tree position and React
-  // tears it down), autoFocusName would still be true at remount-time
-  // and steal focus from whichever cell the producer is currently
-  // editing. Clearing on requestAnimationFrame gives the contenteditable
-  // its initial focus, then takes the signal back down before any
-  // subsequent reconciliation can fire it a second time.
-  useEffect(() => {
-    if (lastManualId == null) return;
-    const handle = window.requestAnimationFrame(() =>
-      setLastManualId(null),
-    );
-    return () => window.cancelAnimationFrame(handle);
-  }, [lastManualId]);
 
   // Phase 4.10.3-port: 3-tier source priority sort (manual -> sheet ->
   // research). Mirrors SourcingReport. SOURCE_PRIORITY lives in
@@ -196,7 +189,22 @@ export default function Shortlist() {
   // (otherwise any consumer reading v.key_features as an array would
   // explode on a string at runtime; the `as unknown as string[]` cast that
   // used to live in the call site was a type-lie).
-  type VenuePatch = Partial<Omit<Venue, "key_features">> & {
+  //
+  // Phase 5.12.3: explicit editable column set instead of `Partial<Omit<Venue,
+  // ...>>`. Deriving from `Venue` widens the patch type every time a new
+  // read-only field lands on the local type (e.g. `linked_venue_id` +
+  // `dedupe_meta` from 5.12.3), letting `debounceSave({ dedupe_meta: ... })`
+  // compile + run as a literal UPDATE against vs_candidate_venues even though
+  // those columns are server-written by vs-generate-deck.pushVenuesToHq.
+  // Mirrors DeckPrep's `FieldPatch` pattern (also explicit column list).
+  // `pitched` is mutated through `togglePitch` (separate direct .update);
+  // `notes` flows through Review's inline notes field (post-5.12.15 unified
+  // surface); neither belongs on this surface.
+  type VenuePatch = {
+    name?: string;
+    address?: string | null;
+    neighborhood?: string | null;
+    venue_type?: string | null;
     key_features?: string[] | string | null;
   };
 
@@ -234,42 +242,16 @@ export default function Shortlist() {
     }, 600);
   }
 
-  async function addManualRow() {
-    if (!scoutId) return;
-    const { data, error } = await supabase
-      .from("vs_candidate_venues")
-      .insert({
-        scout_id: scoutId,
-        name: "",
-        source: "manual",
-        shortlisted: false,
-      })
-      .select("*")
-      .single();
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      return;
-    }
-    const inserted = (data as unknown) as Venue;
-    setVenues((prev) => [...prev, inserted]);
-    // Phase 4.10.2-port: signal <VenueIdentityStack autoFocusName> for this
-    // new row. The contenteditable name span focuses on its mount-effect
-    // (no setTimeout / querySelector needed; the previous DOM-query path
-    // only worked when manual rows rendered as <input> elements).
-    setLastManualId(inserted.id);
-  }
-
-  function openNotes(v: Venue) {
-    setActiveVenue(v);
-    setNotesOpen(true);
-  }
-
   async function onContinue() {
     if (!scoutId || !canContinue) return;
+    // Phase 5.12.15: skip the standalone Final Review step. Flip
+    // current_step directly to 'compiling' so vs-compile-summaries
+    // picks it up (its `.eq("current_step", "compiling")` guard is
+    // unchanged), then route to /sourcing/compiling.
     const { error } = await supabase
       .from("vs_scouts")
       .update({
-        current_step: "review_selects",
+        current_step: "compiling",
         last_touched_at: new Date().toISOString(),
       })
       .eq("id", scoutId);
@@ -277,42 +259,49 @@ export default function Shortlist() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
       return;
     }
-    nav(`/venue-scout/scouts/${scoutId}/sourcing/review`);
+    nav(`/venue-scout/scouts/${scoutId}/sourcing/compiling`);
   }
+
+  // Phase 5.12.9: page-level resolve of scout city -> cities.id so each
+  // matrix-row neighborhood picker can parent-scope (resolved once,
+  // threaded into every row).
+  const scoutCityId = useCityIdForName(scoutMeta?.city ?? null);
+
+  // Phase 5.12.10: runtime canonical venue-types set. Threaded into
+  // parseTypes; TypeTogglePopover reads the same set via its own
+  // useVenueTypes call.
+  const { names: availableTypes } = useVenueTypes();
 
   return (
     <div className="pb-32">
       <header className="space-y-2 mb-6">
-        <Link
-          to={`/venue-scout/scouts/${scoutId}/sourcing/report`}
-          className="crumb"
-        >
-          ← Sourcing
-        </Link>
-        <div className="flex items-end justify-between gap-5">
-          <div className="space-y-2">
-            <div className="text-[14px] font-mono uppercase tracking-widest text-primary">
-              Sourcing
-            </div>
-            <h1 className="h-page">Venue Shortlist</h1>
-            <p className="text-sm text-muted-foreground max-w-3xl">
-              Mark the venues you want to pitch. Add notes per venue and pull
-              in any manual additions before continuing.
-            </p>
-          </div>
-          <div className="flex items-end gap-4">
-            <div className="text-[13px] text-muted-foreground">
-              <strong className="text-foreground font-bold">{pitchCount}</strong>{" "}
-              marked for pitch of{" "}
-              <strong className="text-foreground font-bold">
-                {venues.length}
-              </strong>
-            </div>
-            {scoutId && <ScoutSettingsLink scoutId={scoutId} />}
-          </div>
-        </div>
+        {/* R7 amendment v2 § 5: shared ScoutPageHeader. */}
+        {scoutId && (
+          <ScoutPageHeader scoutId={scoutId} scout={scoutMeta} />
+        )}
+        <h1 className="h-page">Shortlist</h1>
       </header>
-      {scoutId && <ScoutStepThroughNav scoutId={scoutId} scout={scoutMeta} />}
+
+      {/* R6 § H.1: explainer card added at the top of Shortlist. Uses the
+          canonical .hq-explainer chrome (post-R3 Tip card). */}
+      <div className="hq-explainer">
+        <div className="hq-explainer-label">Tip</div>
+        <p className="hq-explainer-body">
+          Edit any field in-line. Go back to Sourcing to add a new venue and
+          advance. Select the venues you want to advance to Review and click
+          Continue — venue overviews are then generated.
+        </p>
+      </div>
+
+      {/* R6 amendment v1 § 6 + R7 § C → R7 amendment v1 § 3: counter row
+          right-aligned + text-base (mirrors Sourcing). */}
+      <div className="mb-3 text-right text-base text-muted-foreground">
+        <strong className="text-foreground font-bold">{pitchCount}</strong>{" "}
+        marked for deck of{" "}
+        <strong className="text-foreground font-bold">
+          {venues.length}
+        </strong>
+      </div>
 
       {/*
         Phase 4.10.2-port matrix overhaul:
@@ -335,27 +324,30 @@ export default function Shortlist() {
         photo upload now lives only on Review.tsx (4.7.1-port surface).
         Total matrix width 1580 -> 1450.
       */}
-      <div className="bg-surface-alt rounded-md overflow-hidden border border-border">
+      <div className="tbl-wrap bg-surface-alt">
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full min-w-[1450px] border-collapse text-[12.5px]">
+          {/* R7 § A → R7 amendment v1 § 2: matrix tables use `.tbl--matrix`
+              standalone (mirrors Sourcing). See SourcingReport for the
+              composition rationale. */}
+          <table className="tbl--matrix text-base">
             <colgroup>
-              <col style={{ width: 60 }} />
-              <col style={{ width: 230 }} />
-              <col style={{ width: 160 }} />
-              <col style={{ width: 220 }} />
-              <col style={{ width: 250 }} />
-              <col style={{ width: 250 }} />
-              <col style={{ width: 230 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 260 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 180 }} />
+              <col />
+              <col />
             </colgroup>
             <thead className="sticky top-0 z-20">
               <tr>
-                <Th sticky="col1">Pitch</Th>
-                <Th sticky="col2"><HdrStack a="Venue" b="Address" /></Th>
-                <Th><HdrStack a="Neighborhood" b="Type" /></Th>
+                <Th sticky="col1">
+                  <Check className="mx-auto h-4 w-4" aria-label="Select" />
+                </Th>
+                <Th sticky="col2">Venue</Th>
+                <Th>Website</Th>
                 <Th>Features</Th>
                 <Th>Recommendations</Th>
                 <Th>Considerations</Th>
-                <Th>Notes /<br />Feedback</Th>
               </tr>
             </thead>
             <tbody>
@@ -378,113 +370,50 @@ export default function Shortlist() {
                   </td>
                 </tr>
               ) : (
-                sorted.map((v) => {
-                  const types = parseTypes(v.venue_type);
-                  const note = v.notes ?? undefined;
-                  return (
-                    <tr
-                      key={v.id}
-                      className="border-t border-border [&>td]:border-r [&>td]:border-border [&>td:last-child]:border-r-0"
-                      style={{ height: 1 }}
-                    >
-                      <Td vCenter sticky="col1" className="text-center">
-                        <input
-                          type="checkbox"
-                          checked={v.pitched}
-                          onChange={(e) =>
-                            togglePitch(v.id, e.target.checked)
-                          }
-                          className="h-[18px] w-[18px] accent-[hsl(var(--primary))] cursor-pointer align-middle"
-                        />
-                      </Td>
-                      <Td noPadX noPadY sticky="col2">
-                        <VenueIdentityStack
-                          venueId={v.id}
-                          name={v.name}
-                          onNameChange={(n) =>
-                            debounceSave(v.id, { name: n })
-                          }
-                          address={v.address ?? ""}
-                          onAddressChange={(a) =>
-                            debounceSave(v.id, {
-                              address: a.trim() || null,
-                            })
-                          }
-                          website={v.website_url}
-                          source={v.source}
-                          autoFocusName={v.id === lastManualId}
-                        />
-                      </Td>
-                      <Td noPadX noPadY>
-                        <VStack
-                          dividerPad={18}
-                          top={
-                            <EditableField
-                              id={`${v.id}-neigh`}
-                              value={v.neighborhood ?? ""}
-                              onChange={(n) =>
-                                debounceSave(v.id, {
-                                  neighborhood: n.trim() || null,
-                                })
-                              }
-                              variant="neighborhood"
-                              placeholder="(no neighborhood)"
-                            />
-                          }
-                          bot={
-                            <TypeTogglePopover
-                              currentTypes={types}
-                              onChange={(next: CanonicalType[]) =>
-                                debounceSave(v.id, {
-                                  venue_type:
-                                    next.length > 0 ? next.join(" / ") : null,
-                                })
-                              }
-                            />
-                          }
-                        />
-                      </Td>
-                      <Td vCenter>
-                        <EditableTextarea
-                          id={`${v.id}-features`}
-                          value={(v.key_features ?? []).join(", ")}
-                          onChange={(raw) =>
-                            debounceSave(v.id, { key_features: raw })
-                          }
-                          placeholder="(no features)"
-                          rows={6}
-                        />
-                      </Td>
-                      <Td vCenter>
-                        <Bullets items={v.recommendations ?? []} />
-                      </Td>
-                      <Td vCenter>
-                        <Bullets items={v.considerations ?? []} />
-                      </Td>
-                      <Td vCenter className="text-center">
-                        <NotesCellButton
-                          note={note}
-                          onClick={() => openNotes(v)}
-                        />
-                      </Td>
-                    </tr>
-                  );
-                })
+                sorted.map((v) => (
+                  <VenueMatrixRow
+                    key={v.id}
+                    venue={v}
+                    col1={{
+                      label: "Pitch",
+                      value: v.pitched,
+                      onToggle: (next) => togglePitch(v.id, next),
+                    }}
+                    onNameChange={(n) => debounceSave(v.id, { name: n })}
+                    onAddressChange={(a) =>
+                      debounceSave(v.id, { address: a })
+                    }
+                    onWebsiteSave={async (next) => {
+                      const { error } = await supabase
+                        .from("vs_candidate_venues")
+                        .update({ website_url: next.trim() || null })
+                        .eq("id", v.id);
+                      if (error) throw error;
+                      setVenues((prev) =>
+                        prev.map((row) =>
+                          row.id === v.id
+                            ? { ...row, website_url: next.trim() || null }
+                            : row,
+                        ),
+                      );
+                    }}
+                    onNeighborhoodChange={(next) =>
+                      debounceSave(v.id, { neighborhood: next })
+                    }
+                    onTypesChange={(next) =>
+                      debounceSave(v.id, {
+                        venue_type: next.length > 0 ? next.join(" / ") : null,
+                      })
+                    }
+                    onFeaturesChange={(next) =>
+                      debounceSave(v.id, { key_features: next })
+                    }
+                    scoutCityId={scoutCityId}
+                    scoutCityName={scoutMeta?.city ?? null}
+                    availableTypes={availableTypes}
+                  />
+                ))
               )}
-
-              <tr
-                className="border-t border-border bg-primary/5 hover:bg-primary/10 cursor-pointer"
-                onClick={addManualRow}
-              >
-                <td
-                  colSpan={TOTAL_COLS}
-                  className="px-6 py-4 text-center text-primary text-xs font-bold uppercase tracking-[0.14em]"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <Plus className="h-3.5 w-3.5" /> Manually Add Venue
-                  </span>
-                </td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -498,9 +427,11 @@ export default function Shortlist() {
           >
             <ArrowLeft className="h-3 w-3" /> Back
           </Link>
-          <div className="flex-1 text-center text-xs text-muted-foreground">
+          {/* R6 § H.2: text-xs → text-base to match Review's action bar
+              center text. */}
+          <div className="flex-1 text-center text-base text-muted-foreground">
             <strong className="text-foreground">{pitchCount}</strong> marked for
-            pitch ·{" "}
+            deck ·{" "}
             <strong className="text-foreground">2</strong> minimum to continue
           </div>
           <Button onClick={onContinue} disabled={!canContinue}>
@@ -509,22 +440,6 @@ export default function Shortlist() {
         </div>
       </div>
 
-      <NotesModal
-        open={notesOpen}
-        onOpenChange={setNotesOpen}
-        venueId={activeVenue?.id ?? null}
-        venueName={activeVenue?.name ?? ""}
-        initialContent={activeVenue?.notes ?? ""}
-        onSaved={(content) => {
-          if (activeVenue) {
-            setVenues((prev) =>
-              prev.map((v) =>
-                v.id === activeVenue.id ? { ...v, notes: content } : v,
-              ),
-            );
-          }
-        }}
-      />
     </div>
   );
 }

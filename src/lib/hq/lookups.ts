@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type LookupTable =
   | "cities"
+  | "neighborhoods"
   | "project_categories"
   | "project_tags"
   | "vendor_capabilities"
@@ -38,6 +39,22 @@ export type LookupTable =
   | "departments";
 
 export type LookupOption = { id: string; name: string };
+
+/**
+ * Phase 5.12.9: per-table parent-column map for parent-scoped lookups.
+ * `useLookup` filters SELECT + writes the FK on INSERT using this column
+ * when `parentScopeId` is set. Tables not listed here fall back to
+ * `parent_category_id` (the historical default for `vendor_subcategories`,
+ * pre-5.12.9 hardcoded behavior).
+ */
+const PARENT_COLUMN_BY_TABLE: Partial<Record<LookupTable, string>> = {
+  vendor_subcategories: "parent_category_id",
+  neighborhoods: "city_id",
+};
+
+function parentColumnFor(table: LookupTable): string {
+  return PARENT_COLUMN_BY_TABLE[table] ?? "parent_category_id";
+}
 
 type CacheEntry = {
   options: LookupOption[] | null;
@@ -76,6 +93,19 @@ async function ensureLoaded(
 ) {
   const entry = getEntry(key);
   if (entry.options !== null || entry.loadPromise) return entry.loadPromise ?? Promise.resolve();
+  // Phase 5.12.9: parent-scoped lookups (neighborhoods, vendor_subcategories)
+  // must NOT load all rows unscoped when the parent isn't set. Consumers
+  // typically render disabled until the parent resolves; an unscoped
+  // `select id, name from <table>` would pull every neighborhood across
+  // every city (or every subcategory across every category) before the
+  // picker is even interactive. Short-circuit to an empty option list;
+  // the cache key includes the (null) parent so a later real
+  // parentScopeId creates its own cache entry that loads normally.
+  if (table in PARENT_COLUMN_BY_TABLE && !parentScopeId) {
+    entry.options = [];
+    notify(key);
+    return Promise.resolve();
+  }
   entry.loading = true;
   notify(key);
   entry.loadPromise = (async () => {
@@ -84,7 +114,7 @@ async function ensureLoaded(
       .select("id, name")
       .order("name", { ascending: true });
     if (parentScopeId) {
-      q = q.eq("parent_category_id", parentScopeId);
+      q = q.eq(parentColumnFor(table), parentScopeId);
     }
     const { data, error } = await q;
     if (error) {
@@ -101,10 +131,12 @@ async function ensureLoaded(
 }
 
 /**
- * `parentScopeId` (Phase 5.6.2): when set, the hook filters options by
- * `parent_category_id = parentScopeId` and includes `parent_category_id`
- * in the insert payload. Only `vendor_subcategories` carries a parent
- * column today; passing `parentScopeId` against other tables is a no-op
+ * `parentScopeId` (Phase 5.6.2; Phase 5.12.9): when set, the hook filters
+ * options by the parent column resolved via `PARENT_COLUMN_BY_TABLE` and
+ * writes that column on INSERT. Parent-scoped tables today:
+ *   - `vendor_subcategories` -> `parent_category_id` (parent: vendor_categories)
+ *   - `neighborhoods`        -> `city_id`            (parent: cities)
+ * Passing `parentScopeId` against a non-parent-scoped table is a no-op
  * load but will fail at insert time (no such column).
  */
 /**
@@ -164,6 +196,107 @@ export function invalidateLookup(
   }
 }
 
+/**
+ * Phase 5.12.2: city aliases hook. Loads the `city_aliases` table once
+ * and resolves each row to `{ alias, canonical }` against the cities
+ * lookup. Used exclusively by RecordCombobox's LookupCombobox when
+ * `source.table === 'cities'` to surface alias rows in the typeahead
+ * (typing "Los Angeles" matches the alias row whose canonical city is
+ * "LA"). Module-level cache like `useLookup`; refetched on demand via
+ * `invalidateCityAliases`.
+ *
+ * The alias resolution is intentionally NOT folded into useLookup
+ * because alias rows have a different shape (one canonical id per
+ * multiple aliases) and shouldn't pollute the addOption flow used by
+ * every other lookup picker. Aliases are read-only from the picker;
+ * admin curation belongs in a future Settings -> Lookup Lists card.
+ */
+export type CityAliasOption = { alias: string; canonical: string };
+
+type CityAliasCache = {
+  options: CityAliasOption[] | null;
+  loading: boolean;
+  loadPromise: Promise<void> | null;
+  subscribers: Set<(options: CityAliasOption[], loading: boolean) => void>;
+};
+
+const aliasCache: CityAliasCache = {
+  options: null,
+  loading: false,
+  loadPromise: null,
+  subscribers: new Set(),
+};
+
+function notifyAliases() {
+  for (const sub of aliasCache.subscribers) {
+    sub(aliasCache.options ?? [], aliasCache.loading);
+  }
+}
+
+async function ensureAliasesLoaded(): Promise<void> {
+  if (aliasCache.options !== null || aliasCache.loadPromise) {
+    return aliasCache.loadPromise ?? Promise.resolve();
+  }
+  aliasCache.loading = true;
+  notifyAliases();
+  aliasCache.loadPromise = (async () => {
+    const { data, error } = await supabase
+      .from("city_aliases")
+      .select("alias, cities!inner(name)")
+      .order("alias", { ascending: true });
+    if (error) {
+      console.warn("city_aliases load failed", error);
+      aliasCache.options = [];
+    } else {
+      aliasCache.options = (data ?? [])
+        .map((row) => {
+          const linked = (row as { cities?: { name?: string } }).cities;
+          const alias = (row as { alias?: string }).alias ?? "";
+          if (!alias || !linked?.name) return null;
+          return { alias, canonical: linked.name };
+        })
+        .filter((x): x is CityAliasOption => x !== null);
+    }
+    aliasCache.loading = false;
+    aliasCache.loadPromise = null;
+    notifyAliases();
+  })();
+  return aliasCache.loadPromise;
+}
+
+export function invalidateCityAliases(): void {
+  aliasCache.options = null;
+  aliasCache.loadPromise = null;
+  if (aliasCache.subscribers.size > 0) void ensureAliasesLoaded();
+}
+
+export function useCityAliases() {
+  const [snapshot, setSnapshot] = useState<{
+    options: CityAliasOption[];
+    loading: boolean;
+  }>(() => ({
+    options: aliasCache.options ?? [],
+    loading: aliasCache.options === null,
+  }));
+
+  useEffect(() => {
+    setSnapshot({
+      options: aliasCache.options ?? [],
+      loading: aliasCache.options === null,
+    });
+    const sub = (options: CityAliasOption[], loading: boolean) => {
+      setSnapshot({ options, loading });
+    };
+    aliasCache.subscribers.add(sub);
+    void ensureAliasesLoaded();
+    return () => {
+      aliasCache.subscribers.delete(sub);
+    };
+  }, []);
+
+  return { options: snapshot.options, loading: snapshot.loading };
+}
+
 export function useLookup(
   table: LookupTable,
   opts?: { parentScopeId?: string | null },
@@ -209,7 +342,7 @@ export function useLookup(
           ? { name: trimmed }
           : { name: trimmed, created_by };
       const insertPayload: Record<string, unknown> = parentScopeId
-        ? { ...basePayload, parent_category_id: parentScopeId }
+        ? { ...basePayload, [parentColumnFor(table)]: parentScopeId }
         : basePayload;
 
       const { data, error } = await supabase
@@ -237,4 +370,27 @@ export function useLookup(
   );
 
   return { options: snapshot.options, loading: snapshot.loading, addOption };
+}
+
+/**
+ * Phase 5.12.9: resolve a free-text city name to the canonical
+ * `cities.id`. Used by every consumer that scopes a neighborhoods picker
+ * to a city (VenueEdit, VenueDetail, BriefVenue, BriefReport, Review,
+ * SourcingReport, Shortlist, DeckPrep). Case-insensitive trim match
+ * against the loaded `cities` options. Returns `null` for blank input,
+ * unloaded options, or no-match (consumer keeps the picker disabled until
+ * a canonical city is selected).
+ *
+ * City aliases (Phase 5.12.2) are NOT consulted here. In practice the
+ * stored city value is always a canonical lookup name because every
+ * consumer's City field is itself a `RecordCombobox` over the cities
+ * lookup. If real alias coverage is needed later, fold `useCityAliases`
+ * resolution in here.
+ */
+export function useCityIdForName(cityName: string | null): string | null {
+  const { options } = useLookup("cities");
+  if (!cityName || !cityName.trim()) return null;
+  const target = cityName.trim().toLowerCase();
+  const match = options.find((o) => o.name.trim().toLowerCase() === target);
+  return match?.id ?? null;
 }

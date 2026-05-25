@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/data/DataTable";
 import {
@@ -260,9 +260,7 @@ export default function BulkImportHistoryPage() {
   return (
     <div className="stack-4">
       <div className="pagehead">
-        <Link to="/settings" className="crumb">
-          ← Back to Settings
-        </Link>
+        {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
         <h1 className="h-page" style={{ marginTop: 4 }}>
           Bulk Import · History
         </h1>
