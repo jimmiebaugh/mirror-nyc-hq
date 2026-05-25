@@ -93,8 +93,12 @@ fi
 # 4. git push origin to a feature branch without [skip netlify] in HEAD commit.
 # Catches accidental origin pushes that would fire deploy previews. The squash-merge
 # to main is the only sanctioned Netlify-deploy event per phase (CLAUDE.md item 8).
-# Skip the [skip netlify] check when pushing to main (the merge event itself).
-if matches_at_start 'git[[:space:]]+push[[:space:]]+origin[[:space:]]+main([[:space:]]|$)'; then
+# Skip the [skip netlify] check when the push DESTINATION is main (the merge
+# event itself). Matches the literal `git push origin main` AND refspec forms
+# that target main from a feature branch / detached HEAD, e.g.
+# `git push origin HEAD:main` or `git push origin claude/foo:main` — which is
+# how a squash-merge is pushed from a worktree where main can't be checked out.
+if matches_at_start 'git[[:space:]]+push[[:space:]]+origin[[:space:]]+([^[:space:]]+:)?main([[:space:]]|$)'; then
   : # Pushing to main is the merge event itself; evaluated at merge time, not here.
 elif matches_at_start 'git[[:space:]]+push[[:space:]]+origin[[:space:]]+'; then
   head_msg=$(git -C "$CLAUDE_PROJECT_DIR" log -1 --format=%s 2>/dev/null || echo "")

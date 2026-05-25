@@ -140,3 +140,16 @@ export function sanitizeWebsiteUrl(raw: unknown): string | null {
 
   return url.toString();
 }
+
+/**
+ * Root host for an inline website link: strips protocol + leading `www.`.
+ * Falls back to the raw string for unparseable input. Shared by VenueEdit
+ * + VenueDetail (was a per-file copy before the Phase 5.10.1 dedupe).
+ */
+export function prettyHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}

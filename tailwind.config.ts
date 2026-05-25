@@ -3,7 +3,7 @@ import tailwindcssAnimate from "tailwindcss-animate";
 
 export default {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
   // Safelist for dynamic-token classes constructed via template literals
   // (e.g. `pill p-${token}`, `rb-${token}`, `cal-ev ${kind}`). Tailwind's
   // content scanner cannot detect those suffixes statically, so the

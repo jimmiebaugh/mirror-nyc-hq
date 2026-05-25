@@ -9,12 +9,7 @@ import { IconPlus, IconSearch } from "@/components/icons/HQIcons";
 import { applyFilters } from "@/lib/hq/filterStateApply";
 import { loadVenues, type VenueListRow } from "@/lib/venues/queries";
 import { useLookup } from "@/lib/hq/lookups";
-import {
-  TYPE_STYLES,
-  TYPE_FALLBACK_STYLE,
-  canonicalizeType,
-  type CanonicalType,
-} from "@/lib/venue-scout/venueTypes";
+import { VenueTypePill } from "@/components/venues/VenueTypePill";
 
 /**
  * Venues List (Surface 09).
@@ -155,12 +150,12 @@ export default function VenuesList() {
       return typeof val === "string" ? val : String(val);
     });
 
-    // Phase 5.7.8 search bar (plan decision #13 scope: name + notes + features).
+    // Phase 5.7.8 search bar (plan decision #13 scope: name + about_venue + features).
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       result = result.filter((r) => {
         if (r.name.toLowerCase().includes(q)) return true;
-        if (r.notes && r.notes.toLowerCase().includes(q)) return true;
+        if (r.about_venue && r.about_venue.toLowerCase().includes(q)) return true;
         if (r.features.some((f) => f.toLowerCase().includes(q))) return true;
         return false;
       });
@@ -334,7 +329,7 @@ export default function VenuesList() {
                       style={{ display: "inline-flex", flexDirection: "column", gap: 7 }}
                     >
                       {r.venueTypes.map((t) => (
-                        <VenueTypePill key={t} type={t} />
+                        <VenueTypePill key={t} type={t} small />
                       ))}
                     </span>
                   ),
@@ -413,19 +408,6 @@ export default function VenuesList() {
         </>
       )}
     </div>
-  );
-}
-
-function VenueTypePill({ type }: { type: string }) {
-  const canonical = canonicalizeType(type) as CanonicalType | null;
-  const style = canonical ? TYPE_STYLES[canonical] : TYPE_FALLBACK_STYLE;
-  return (
-    <span
-      className={`pill pill-sm ${style}`}
-      style={{ borderWidth: 1, borderStyle: "solid" }}
-    >
-      {type}
-    </span>
   );
 }
 

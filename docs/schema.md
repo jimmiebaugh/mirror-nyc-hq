@@ -165,7 +165,7 @@ The pre-split unified-organizations shape is documented in `OUTPUTS/historical/p
 - `website_url`, `contact_name`, `contact_email`, `contact_phone` (text)
 - `general_email` (text, nullable). Phase 5.9.7 (`20260602210000_phase_5_9_7_venue_event_day_rate_and_general_email.sql`). Company-level general email, distinct from any contact (mirrors `vendors.general_email`). Surfaced on VenueDetail ("General Email" row in Venue Details, hidden when empty) + VenueEdit ("General Email" in the Details section) + the bulk importer's `general_email` column, written through on both the RPC create + update paths.
 - `features` (text[])
-- `notes` (text). Free-form About Venue body on Surface 09 detail.
+- `about_venue` (text). Free-form About Venue body on Surface 09 detail. Renamed from `notes` in Phase 5.10.0 (`20260603100000_phase_5_10_0_venue_about_venue_and_generator.sql`) for clarity (the `notes` name collided with the polymorphic `notes_log` Internal Notes table). OID-preserving RENAME COLUMN; the AI "Generate / Regenerate About Paragraph" button (VenueDetail + VenueEdit) writes this column via the `hq-generate-venue-about` edge function.
 - `photos` (text[]; Supabase Storage paths)
 - `created_by` (uuid, FK)
 - `created_at`, `updated_at`

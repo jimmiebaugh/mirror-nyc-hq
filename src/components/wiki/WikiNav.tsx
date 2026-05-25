@@ -1,10 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { IconLink, IconLock, IconPlus } from "@/components/icons/HQIcons";
-import {
-  isSpecialPageType,
-  type WikiPage,
-  type WikiPageType,
-} from "@/lib/wiki/queries";
+import { type WikiPage } from "@/lib/wiki/queries";
 
 /**
  * Wiki sidebar nav. Lists pages sorted by sort_order. Special page types
@@ -70,12 +66,4 @@ export function WikiNav({
       ) : null}
     </nav>
   );
-}
-
-export function specialPageBadge(t: WikiPageType): string | null {
-  if (!isSpecialPageType(t)) return null;
-  if (t === "team_directory") return "Team Directory embed";
-  if (t === "vendors_glance") return "Vendors at a Glance embed";
-  if (t === "account_logins") return "Account Logins";
-  return null;
 }

@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Local env config. VITE_ vars are inlined into the client bundle at build
+# time (not secret), but keep .env out of git so per-machine values don't
+# clobber each other. .env.example is the tracked template.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

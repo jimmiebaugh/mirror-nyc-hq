@@ -1,0 +1,24 @@
+import {
+  TYPE_STYLES,
+  TYPE_FALLBACK_STYLE,
+  canonicalizeType,
+  type CanonicalType,
+} from "@/lib/venue-scout/venueTypes";
+
+/**
+ * Colored venue-type pill. Shared across VenuesList / VenueEdit / VenueDetail
+ * (was three drifting per-file copies before the Phase 5.10.1 dedupe).
+ * `small` renders the compact `pill-sm` variant used in dense list/table rows.
+ */
+export function VenueTypePill({ type, small }: { type: string; small?: boolean }) {
+  const canonical = canonicalizeType(type) as CanonicalType | null;
+  const style = canonical ? TYPE_STYLES[canonical] : TYPE_FALLBACK_STYLE;
+  return (
+    <span
+      className={["pill", small && "pill-sm", style].filter(Boolean).join(" ")}
+      style={{ borderWidth: 1, borderStyle: "solid" }}
+    >
+      {type}
+    </span>
+  );
+}

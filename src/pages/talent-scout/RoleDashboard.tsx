@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { RoleStatusPill } from "@/components/talent-scout/RoleStatusPill";
 import { RoundStatusPill } from "@/components/talent-scout/RoundStatusPill";
 import { CandidateTable, type CandidateRow } from "@/components/talent-scout/CandidateTable";
-import { matchesSearch } from "@/components/talent-scout/CandidateSearch";
+import { matchesSearch } from "@/lib/talent-scout/candidateSearch";
 import { toast } from "@/hooks/use-toast";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";

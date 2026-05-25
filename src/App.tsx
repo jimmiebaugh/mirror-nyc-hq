@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,73 +8,79 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
 import { StandardOrAdminRoute } from "@/components/StandardOrAdminRoute";
 import AppShell from "@/components/AppShell";
-import Home from "./pages/Home";
-import PendingState from "./pages/PendingState";
-import ProjectsList from "./pages/projects/ProjectsList";
-import ProjectDetail from "./pages/projects/ProjectDetail";
-import ProjectEdit from "./pages/projects/ProjectEdit";
-import TasksList from "./pages/tasks/TasksList";
-import TaskDetail from "./pages/tasks/TaskDetail";
-import TaskEdit from "./pages/tasks/TaskEdit";
-import DeliverablesList from "./pages/deliverables/DeliverablesList";
-import DeliverableDetail from "./pages/deliverables/DeliverableDetail";
-import DeliverableEdit from "./pages/deliverables/DeliverableEdit";
-import ClientsList from "./pages/clients/ClientsList";
-import ClientDetail from "./pages/clients/ClientDetail";
-import ClientEdit from "./pages/clients/ClientEdit";
-import VendorsList from "./pages/vendors/VendorsList";
-import VendorDetail from "./pages/vendors/VendorDetail";
-import VendorEdit from "./pages/vendors/VendorEdit";
-import OrganizationsRedirect from "./pages/clients/OrganizationsRedirect";
-import PeopleList from "./pages/people/PeopleList";
-import PersonDetail from "./pages/people/PersonDetail";
-import PersonEdit from "./pages/people/PersonEdit";
-import VenuesList from "./pages/venues/VenuesList";
-import VenueDetail from "./pages/venues/VenueDetail";
-import VenueEdit from "./pages/venues/VenueEdit";
-import CalendarPage from "./pages/calendar/CalendarPage";
-import OutlookPage from "./pages/outlook/OutlookPage";
-import WikiPage from "./pages/wiki/WikiPage";
-import WikiPageEdit from "./pages/wiki/WikiPageEdit";
-import TeamList from "./pages/team/TeamList";
-import TeamMemberEdit from "./pages/team/TeamMemberEdit";
-import UserProfile from "./pages/users/UserProfile";
-import ProfileSettings from "./pages/users/ProfileSettings";
-import SettingsPage from "./pages/settings/SettingsPage";
-import BulkImportEntityPage from "./pages/bulk-import/BulkImportEntityPage";
-import BulkImportHistoryPage from "./pages/bulk-import/BulkImportHistoryPage";
-import ActivityFeed from "./pages/activity/ActivityFeed";
-import SearchPage from "./pages/search/SearchPage";
-import NotificationPreferences from "./pages/notifications/NotificationPreferences";
-import NotFound from "./pages/NotFound.tsx";
-import TalentScoutIndex from "./pages/talent-scout/Index";
-import TalentScoutSettings from "./pages/talent-scout/Settings";
-import NewRoleDetails from "./pages/talent-scout/NewRoleDetails";
-import NewRoleSearch from "./pages/talent-scout/NewRoleSearch";
-import NewRoleScorecard from "./pages/talent-scout/NewRoleScorecard";
-import RoleDashboard from "./pages/talent-scout/RoleDashboard";
-import RoleSettings from "./pages/talent-scout/RoleSettings";
-import PullDetail from "./pages/talent-scout/PullDetail";
-import CandidateDetail from "./pages/talent-scout/CandidateDetail";
-import FinalReviewLoading from "./pages/talent-scout/FinalReviewLoading";
-import FinalReviewDetail from "./pages/talent-scout/FinalReviewDetail";
-import ScoutIndex from "./pages/venue-scout/ScoutIndex";
-import NewScout from "./pages/venue-scout/NewScout";
-import BriefIndex from "./pages/venue-scout/BriefIndex";
-import BriefEvent from "./pages/venue-scout/BriefEvent";
-import BriefVenue from "./pages/venue-scout/BriefVenue";
-import BriefReport from "./pages/venue-scout/BriefReport";
-import SheetPrompt from "./pages/venue-scout/SheetPrompt";
-import SheetUpload from "./pages/venue-scout/SheetUpload";
-import Researching from "./pages/venue-scout/Researching";
-import SourcingReport from "./pages/venue-scout/SourcingReport";
-import Shortlist from "./pages/venue-scout/Shortlist";
-import Review from "./pages/venue-scout/Review";
-import Compiling from "./pages/venue-scout/Compiling";
-import DeckPrep from "./pages/venue-scout/DeckPrep";
-import Generating from "./pages/venue-scout/Generating";
-import ErrorState from "./pages/venue-scout/ErrorState";
-import ScoutSettings from "./pages/venue-scout/ScoutSettings";
+
+// Route components are lazy-loaded so each surface ships in its own chunk and
+// the initial bundle no longer eagerly pulls in every page (Talent Scout,
+// Venue Scout, bulk-import, etc.). The <Suspense> boundary below renders a
+// lightweight fallback while a route chunk loads. The shell + route guards
+// above stay eager since they wrap every authed route.
+const Home = lazy(() => import("./pages/Home"));
+const PendingState = lazy(() => import("./pages/PendingState"));
+const ProjectsList = lazy(() => import("./pages/projects/ProjectsList"));
+const ProjectDetail = lazy(() => import("./pages/projects/ProjectDetail"));
+const ProjectEdit = lazy(() => import("./pages/projects/ProjectEdit"));
+const TasksList = lazy(() => import("./pages/tasks/TasksList"));
+const TaskDetail = lazy(() => import("./pages/tasks/TaskDetail"));
+const TaskEdit = lazy(() => import("./pages/tasks/TaskEdit"));
+const DeliverablesList = lazy(() => import("./pages/deliverables/DeliverablesList"));
+const DeliverableDetail = lazy(() => import("./pages/deliverables/DeliverableDetail"));
+const DeliverableEdit = lazy(() => import("./pages/deliverables/DeliverableEdit"));
+const ClientsList = lazy(() => import("./pages/clients/ClientsList"));
+const ClientDetail = lazy(() => import("./pages/clients/ClientDetail"));
+const ClientEdit = lazy(() => import("./pages/clients/ClientEdit"));
+const VendorsList = lazy(() => import("./pages/vendors/VendorsList"));
+const VendorDetail = lazy(() => import("./pages/vendors/VendorDetail"));
+const VendorEdit = lazy(() => import("./pages/vendors/VendorEdit"));
+const OrganizationsRedirect = lazy(() => import("./pages/clients/OrganizationsRedirect"));
+const PeopleList = lazy(() => import("./pages/people/PeopleList"));
+const PersonDetail = lazy(() => import("./pages/people/PersonDetail"));
+const PersonEdit = lazy(() => import("./pages/people/PersonEdit"));
+const VenuesList = lazy(() => import("./pages/venues/VenuesList"));
+const VenueDetail = lazy(() => import("./pages/venues/VenueDetail"));
+const VenueEdit = lazy(() => import("./pages/venues/VenueEdit"));
+const CalendarPage = lazy(() => import("./pages/calendar/CalendarPage"));
+const OutlookPage = lazy(() => import("./pages/outlook/OutlookPage"));
+const WikiPage = lazy(() => import("./pages/wiki/WikiPage"));
+const WikiPageEdit = lazy(() => import("./pages/wiki/WikiPageEdit"));
+const TeamList = lazy(() => import("./pages/team/TeamList"));
+const TeamMemberEdit = lazy(() => import("./pages/team/TeamMemberEdit"));
+const UserProfile = lazy(() => import("./pages/users/UserProfile"));
+const ProfileSettings = lazy(() => import("./pages/users/ProfileSettings"));
+const SettingsPage = lazy(() => import("./pages/settings/SettingsPage"));
+const BulkImportEntityPage = lazy(() => import("./pages/bulk-import/BulkImportEntityPage"));
+const BulkImportHistoryPage = lazy(() => import("./pages/bulk-import/BulkImportHistoryPage"));
+const ActivityFeed = lazy(() => import("./pages/activity/ActivityFeed"));
+const SearchPage = lazy(() => import("./pages/search/SearchPage"));
+const NotificationPreferences = lazy(() => import("./pages/notifications/NotificationPreferences"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const TalentScoutIndex = lazy(() => import("./pages/talent-scout/Index"));
+const TalentScoutSettings = lazy(() => import("./pages/talent-scout/Settings"));
+const NewRoleDetails = lazy(() => import("./pages/talent-scout/NewRoleDetails"));
+const NewRoleSearch = lazy(() => import("./pages/talent-scout/NewRoleSearch"));
+const NewRoleScorecard = lazy(() => import("./pages/talent-scout/NewRoleScorecard"));
+const RoleDashboard = lazy(() => import("./pages/talent-scout/RoleDashboard"));
+const RoleSettings = lazy(() => import("./pages/talent-scout/RoleSettings"));
+const PullDetail = lazy(() => import("./pages/talent-scout/PullDetail"));
+const CandidateDetail = lazy(() => import("./pages/talent-scout/CandidateDetail"));
+const FinalReviewLoading = lazy(() => import("./pages/talent-scout/FinalReviewLoading"));
+const FinalReviewDetail = lazy(() => import("./pages/talent-scout/FinalReviewDetail"));
+const ScoutIndex = lazy(() => import("./pages/venue-scout/ScoutIndex"));
+const NewScout = lazy(() => import("./pages/venue-scout/NewScout"));
+const BriefIndex = lazy(() => import("./pages/venue-scout/BriefIndex"));
+const BriefEvent = lazy(() => import("./pages/venue-scout/BriefEvent"));
+const BriefVenue = lazy(() => import("./pages/venue-scout/BriefVenue"));
+const BriefReport = lazy(() => import("./pages/venue-scout/BriefReport"));
+const SheetPrompt = lazy(() => import("./pages/venue-scout/SheetPrompt"));
+const SheetUpload = lazy(() => import("./pages/venue-scout/SheetUpload"));
+const Researching = lazy(() => import("./pages/venue-scout/Researching"));
+const SourcingReport = lazy(() => import("./pages/venue-scout/SourcingReport"));
+const Shortlist = lazy(() => import("./pages/venue-scout/Shortlist"));
+const Review = lazy(() => import("./pages/venue-scout/Review"));
+const Compiling = lazy(() => import("./pages/venue-scout/Compiling"));
+const DeckPrep = lazy(() => import("./pages/venue-scout/DeckPrep"));
+const Generating = lazy(() => import("./pages/venue-scout/Generating"));
+const ErrorState = lazy(() => import("./pages/venue-scout/ErrorState"));
+const ScoutSettings = lazy(() => import("./pages/venue-scout/ScoutSettings"));
 
 const queryClient = new QueryClient();
 
@@ -89,6 +96,13 @@ const App = () => (
       <Toaster />
       <BrowserRouter>
         <AuthProvider>
+          <Suspense
+            fallback={
+              <div className="flex min-h-screen items-center justify-center bg-black">
+                <div className="text-muted-foreground text-sm">Loading…</div>
+              </div>
+            }
+          >
           <Routes>
             {/* Pending state: ProtectedRoute with the pending-redirect bypassed
                 so the page renders rather than looping. No shell. */}
@@ -716,6 +730,7 @@ const App = () => (
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

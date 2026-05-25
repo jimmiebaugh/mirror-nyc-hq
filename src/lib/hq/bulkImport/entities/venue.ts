@@ -63,7 +63,7 @@ export const venueConfig: EntityConfig = {
     { key: "contact_email", label: "Contact Email", kind: "text", section: "Essentials" },
     { key: "contact_phone", label: "Contact Phone", kind: "text", section: "Essentials" },
     { key: "features", label: "Features", kind: "text", section: "Essentials", multiValue: true },
-    { key: "notes", label: "Notes", kind: "longText", section: "Notes" },
+    { key: "about_venue", label: "About Venue", kind: "longText", section: "About Venue" },
   ],
 
   unresolvedRefConfig: {
@@ -94,7 +94,7 @@ export const venueConfig: EntityConfig = {
     "contact_email",
     "contact_phone",
     "features",
-    "notes",
+    "about_venue",
     "venue_slide_url",
   ],
 
@@ -185,7 +185,7 @@ export const venueConfig: EntityConfig = {
           contact_email: String(row.contact_email ?? "").trim(),
           contact_phone: String(row.contact_phone ?? "").trim(),
           features: splitMulti(row.features),
-          notes: String(row.notes ?? "").trim(),
+          about_venue: String(row.about_venue ?? "").trim(),
           dedupe_action: decisionByRow.get(i) ?? "create",
         };
       })

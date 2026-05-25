@@ -133,7 +133,7 @@ export default function SettingsPage() {
         <div className="card-headbar">
           <span className="h-card">Integrations</span>
           <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
-            — Coming Soon
+            (Coming Soon)
           </span>
         </div>
       </div>

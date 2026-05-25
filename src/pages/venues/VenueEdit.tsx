@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
-import { MultiTagInput } from "@/components/data/MultiTagInput";
-import { IconArrowLeft } from "@/components/icons/HQIcons";
+import { InlineTagInput } from "@/components/hq/InlineTagInput";
+import { InlineEditText } from "@/components/hq/InlineEditText";
+import { IconArrowLeft, IconLink, IconSlides } from "@/components/icons/HQIcons";
+import { prettyHost } from "@/lib/venue-scout/venueTypes";
+import { VenueTypePill } from "@/components/venues/VenueTypePill";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,17 +35,20 @@ import { loadLatestVenueRates, type VenueRate } from "@/lib/venues/queries";
  * Wireframe binding: Surface 08 Project Edit pattern (lines 1487-1583)
  * applied to the Venue fieldset per spec § 5.C.3.
  *
- *   crumb -> eyebrow + h-page -> .card .card-pad blocks for:
- *     1. Details (Name / Address / Neighborhood / City inline-add /
- *        Capacity / Total Sq Ft)
- *     2. Venue Types (multi-select via venue_types lookup; writes to
- *        venue_venue_types join on save)
- *     3. Rates (Event Day + Prod Day; "Log new rate" opens a mini-dialog
+ *   crumb -> eyebrow + h-page -> .card blocks (card-headbar header matching
+ *   VenueDetail) for:
+ *     1. Details (2-col: Name | Venue Types pills, City | Neighborhood,
+ *        Website | General Email, divider, 3-col Address/Total Sq Ft/Capacity,
+ *        divider, Features tag input). Venue Types writes to the
+ *        venue_venue_types join on save; Features is a string[] via
+ *        InlineTagInput; Website is an inline coral link (prettyHost).
+ *     2. Master Venue Deck Slide (venue_slide_url -> "Venue Slide" button when
+ *        set + Edit-link toggle to the input)
+ *     3. About Venue (venues.about_venue textarea + Generate button)
+ *     4. Rates (Event Day + Prod Day; "Log new rate" opens a mini-dialog
  *        that INSERTs into venue_rate_history; existing rows immutable)
- *     4. Links & References (website_url, venue_slide_url)
  *     5. Exclusive Vendors (multi-select Vendor picker;
  *        writes to venues.exclusive_vendor_ids)
- *     6. About Venue (venues.notes textarea)
  *   -> .savebar sticky bottom.
  */
 
@@ -49,8 +62,8 @@ type FormState = {
   general_email: string;
   website_url: string;
   venue_slide_url: string;
-  notes: string;
-  features: string;
+  aboutVenue: string;
+  features: string[];
 };
 
 const EMPTY: FormState = {
@@ -63,8 +76,8 @@ const EMPTY: FormState = {
   general_email: "",
   website_url: "",
   venue_slide_url: "",
-  notes: "",
-  features: "",
+  aboutVenue: "",
+  features: [],
 };
 
 type VendorOption = { id: string; name: string };
@@ -86,6 +99,9 @@ export default function VenueEdit() {
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
+  const [slideEditing, setSlideEditing] = useState(false);
   const [logRateOpen, setLogRateOpen] = useState<"event_day" | "prod_day" | null>(null);
   const [newRateAmount, setNewRateAmount] = useState("");
   const [newRateDate, setNewRateDate] = useState(new Date().toISOString().slice(0, 10));
@@ -104,7 +120,7 @@ export default function VenueEdit() {
           : supabase
               .from("venues")
               .select(
-                "name, address, neighborhood, city, capacity, total_sq_ft, general_email, website_url, venue_slide_url, notes, features, exclusive_vendor_ids",
+                "name, address, neighborhood, city, capacity, total_sq_ft, general_email, website_url, venue_slide_url, about_venue, features, exclusive_vendor_ids",
               )
               .eq("id", id)
               .single(),
@@ -129,7 +145,7 @@ export default function VenueEdit() {
           general_email: string | null;
           website_url: string | null;
           venue_slide_url: string | null;
-          notes: string | null;
+          about_venue: string | null;
           features: string[] | null;
           exclusive_vendor_ids: string[] | null;
         };
@@ -143,8 +159,8 @@ export default function VenueEdit() {
           general_email: row.general_email ?? "",
           website_url: row.website_url ?? "",
           venue_slide_url: row.venue_slide_url ?? "",
-          notes: row.notes ?? "",
-          features: (row.features ?? []).join(", "),
+          aboutVenue: row.about_venue ?? "",
+          features: row.features ?? [],
         };
         setForm(next);
         setInitial(next);
@@ -215,11 +231,8 @@ export default function VenueEdit() {
       general_email: form.general_email || null,
       website_url: form.website_url || null,
       venue_slide_url: form.venue_slide_url || null,
-      notes: form.notes || null,
-      features: form.features
-        .split(",")
-        .map((f) => f.trim())
-        .filter(Boolean),
+      about_venue: form.aboutVenue || null,
+      features: form.features,
       exclusive_vendor_ids: vendorIds,
     };
 
@@ -328,6 +341,36 @@ export default function VenueEdit() {
     navigate("/venues");
   };
 
+  // Phase 5.10.0: generate the About Venue paragraph. The edge function reads
+  // the SAVED venue row + persists about_venue, so we sync BOTH form state and
+  // the initial snapshot to the returned value -> the form stays clean (no
+  // dirty marker) because the DB value now matches the form value. Only fires
+  // when the form is not dirty (button is disabled otherwise) so the generator
+  // never runs against stale-saved values while edits are pending.
+  const handleGenerate = async () => {
+    if (!id) return;
+    setGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "hq-generate-venue-about",
+        { body: { venue_id: id } },
+      );
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error ?? "Generation failed");
+      setForm((f) => ({ ...f, aboutVenue: data.about_venue }));
+      setInitial((i) => ({ ...i, aboutVenue: data.about_venue }));
+      toast({ title: "About paragraph generated" });
+    } catch (err) {
+      toast({
+        title: "Couldn't generate paragraph",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="empty">
@@ -338,6 +381,9 @@ export default function VenueEdit() {
 
   const eventRate = rates.find((r) => r.rate_kind === "event_day");
   const prodRate = rates.find((r) => r.rate_kind === "prod_day");
+  const typeNames = typeIds
+    .map((tid) => venueTypes.options.find((o) => o.id === tid)?.name)
+    .filter((n): n is string => Boolean(n));
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
@@ -361,35 +407,49 @@ export default function VenueEdit() {
       </div>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Details</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Details</span>
-          </div>
-          <FormField label="Name" required>
-            <input
-              className={`input ${form.name ? "input--filled" : ""}`}
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="The Glasshouse"
-            />
-          </FormField>
-          <FormField label="Address">
-            <input
-              className={`input ${form.address ? "input--filled" : ""}`}
-              value={form.address}
-              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-              placeholder="545 W 25th St, New York, NY 10001"
-            />
-          </FormField>
           <div className="g2">
-            <FormField label="Neighborhood">
+            <FormField label="Name" required>
               <input
-                className={`input ${form.neighborhood ? "input--filled" : ""}`}
-                value={form.neighborhood}
-                onChange={(e) => setForm((f) => ({ ...f, neighborhood: e.target.value }))}
-                placeholder="Chelsea"
+                className={`input ${form.name ? "input--filled" : ""}`}
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="The Glasshouse"
               />
             </FormField>
+            <FormField label="Venue Types">
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+                {typeNames.length > 0 ? (
+                  <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
+                    {typeNames.map((t) => (
+                      <VenueTypePill key={t} type={t} />
+                    ))}
+                  </span>
+                ) : null}
+                <RecordCombobox
+                  multi
+                  hideMultiValueChips
+                  source={{ kind: "lookup", table: "venue_types" }}
+                  multiValue={typeNames}
+                  onMultiChange={(names) => {
+                    const nextIds: string[] = [];
+                    for (const n of names) {
+                      const match = venueTypes.options.find((o) => o.name === n);
+                      if (match) nextIds.push(match.id);
+                    }
+                    setTypeIds(nextIds);
+                  }}
+                  entityLabel="Venue Type"
+                  placeholder="Add venue type..."
+                />
+              </div>
+            </FormField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <div className="g2">
             <FormField label="City">
               <RecordCombobox
                 source={{ kind: "lookup", table: "cities" }}
@@ -398,12 +458,61 @@ export default function VenueEdit() {
                 entityLabel="city"
               />
             </FormField>
-            <FormField label="Capacity">
+            <FormField label="Neighborhood">
               <input
-                className={`input ${form.capacity ? "input--filled" : ""}`}
-                value={form.capacity}
-                onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))}
-                placeholder="1875"
+                className={`input ${form.neighborhood ? "input--filled" : ""}`}
+                value={form.neighborhood}
+                onChange={(e) => setForm((f) => ({ ...f, neighborhood: e.target.value }))}
+                placeholder="Chelsea"
+              />
+            </FormField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <div className="g2">
+            <FormField label="Website URL">
+              <InlineEditText
+                value={form.website_url || null}
+                inputType="url"
+                placeholder="https://theglasshouse.com"
+                renderRead={(v) =>
+                  v ? (
+                    <a
+                      className="tlink"
+                      href={v}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <IconLink className="ic ic-sm" /> {prettyHost(v)}
+                    </a>
+                  ) : (
+                    <span className="muted subtle">Add website URL</span>
+                  )
+                }
+                onSave={(next) => {
+                  setForm((f) => ({ ...f, website_url: next }));
+                  return Promise.resolve();
+                }}
+              />
+            </FormField>
+            <FormField label="General Email">
+              <input
+                type="email"
+                className={`input ${form.general_email ? "input--filled" : ""}`}
+                value={form.general_email}
+                onChange={(e) => setForm((f) => ({ ...f, general_email: e.target.value }))}
+                placeholder="bookings@theglasshouse.com"
+              />
+            </FormField>
+          </div>
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <div className="venue-addr-row">
+            <FormField label="Address">
+              <input
+                className={`input ${form.address ? "input--filled" : ""}`}
+                value={form.address}
+                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="545 W 25th St, New York, NY 10001"
               />
             </FormField>
             <FormField label="Total Sq Ft">
@@ -414,61 +523,128 @@ export default function VenueEdit() {
                 placeholder="75000"
               />
             </FormField>
+            <FormField label="Capacity">
+              <input
+                className={`input ${form.capacity ? "input--filled" : ""}`}
+                value={form.capacity}
+                onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))}
+                placeholder="1875"
+              />
+            </FormField>
           </div>
-          <FormField label="General Email">
-            <input
-              type="email"
-              className={`input ${form.general_email ? "input--filled" : ""}`}
-              value={form.general_email}
-              onChange={(e) => setForm((f) => ({ ...f, general_email: e.target.value }))}
-              placeholder="bookings@theglasshouse.com"
+          <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+          <FormField label="Features">
+            <InlineTagInput
+              values={form.features}
+              onChange={(next) => setForm((f) => ({ ...f, features: next }))}
+              placeholder="Add feature and hit enter..."
             />
           </FormField>
         </div>
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Master Venue Deck Slide</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Venue Types</span>
-          </div>
-          <RecordCombobox
-            multi
-            source={{ kind: "lookup", table: "venue_types" }}
-            multiValue={typeIds
-              .map((id) => venueTypes.options.find((o) => o.id === id)?.name)
-              .filter((n): n is string => Boolean(n))}
-            onMultiChange={(names) => {
-              const nextIds: string[] = [];
-              for (const n of names) {
-                const match = venueTypes.options.find((o) => o.name === n);
-                if (match) nextIds.push(match.id);
-              }
-              setTypeIds(nextIds);
-            }}
-            entityLabel="Venue Type"
-            placeholder="Add venue type..."
-          />
+          {form.venue_slide_url && !slideEditing ? (
+            <div className="row-c" style={{ gap: 12, alignItems: "center" }}>
+              <a
+                className="btn btn-secondary"
+                href={form.venue_slide_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <IconSlides className="ic" /> Venue Slide
+              </a>
+              <button type="button" className="tlink" onClick={() => setSlideEditing(true)}>
+                Edit link
+              </button>
+            </div>
+          ) : (
+            <input
+              className={`input ${form.venue_slide_url ? "input--filled" : ""}`}
+              value={form.venue_slide_url}
+              onChange={(e) => setForm((f) => ({ ...f, venue_slide_url: e.target.value }))}
+              onBlur={() => setSlideEditing(false)}
+              autoFocus={slideEditing}
+              placeholder="https://docs.google.com/presentation/..."
+            />
+          )}
         </div>
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">About Venue</span>
+          {!isCreate && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={
+                      form.aboutVenue.trim()
+                        ? () => setRegenerateConfirmOpen(true)
+                        : handleGenerate
+                    }
+                    disabled={generating || dirty}
+                  >
+                    {generating ? (
+                      <>
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        Generating…
+                      </>
+                    ) : form.aboutVenue.trim() ? (
+                      "Regenerate"
+                    ) : (
+                      "Generate"
+                    )}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {dirty && (
+                <TooltipContent>
+                  Save your changes first to generate based on current data.
+                </TooltipContent>
+              )}
+            </Tooltip>
+          )}
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Rates</span>
+          <FormField label="Deck-copy paragraph">
+            <textarea
+              className={`input textarea ${form.aboutVenue ? "input--filled" : ""}`}
+              value={form.aboutVenue}
+              onChange={(e) => setForm((f) => ({ ...f, aboutVenue: e.target.value }))}
+              rows={6}
+              placeholder="The Glasshouse is a three-floor Chelsea venue..."
+            />
+          </FormField>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Rates</span>
+        </div>
+        <div className="card-pad stack-4">
+          <div className="g2">
+            <RateRow
+              label="Event Day Rate"
+              rate={eventRate}
+              disabled={isCreate}
+              onLogNew={() => setLogRateOpen("event_day")}
+            />
+            <RateRow
+              label="Prod Day Rate"
+              rate={prodRate}
+              disabled={isCreate}
+              onLogNew={() => setLogRateOpen("prod_day")}
+            />
           </div>
-          <RateRow
-            label="Event Day Rate"
-            rate={eventRate}
-            disabled={isCreate}
-            onLogNew={() => setLogRateOpen("event_day")}
-          />
-          <RateRow
-            label="Prod Day Rate"
-            rate={prodRate}
-            disabled={isCreate}
-            onLogNew={() => setLogRateOpen("prod_day")}
-          />
           {isCreate ? (
             <p className="subtle" style={{ fontSize: 12 }}>
               Save the venue first, then log rates on the Edit screen.
@@ -478,36 +654,10 @@ export default function VenueEdit() {
       </section>
 
       <section className="card">
-        <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Links &amp; References</span>
-          </div>
-          <div className="g2">
-            <FormField label="Website URL">
-              <input
-                className={`input ${form.website_url ? "input--filled" : ""}`}
-                value={form.website_url}
-                onChange={(e) => setForm((f) => ({ ...f, website_url: e.target.value }))}
-                placeholder="https://theglasshouse.com"
-              />
-            </FormField>
-            <FormField label="Venue Slide URL">
-              <input
-                className={`input ${form.venue_slide_url ? "input--filled" : ""}`}
-                value={form.venue_slide_url}
-                onChange={(e) => setForm((f) => ({ ...f, venue_slide_url: e.target.value }))}
-                placeholder="https://docs.google.com/presentation/..."
-              />
-            </FormField>
-          </div>
+        <div className="card-headbar">
+          <span className="h-card">Exclusive Vendors</span>
         </div>
-      </section>
-
-      <section className="card">
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Exclusive Vendors</span>
-          </div>
           <RecordCombobox
             multi
             source={{ kind: "record", loadOptions: loadVendorOptions }}
@@ -516,31 +666,6 @@ export default function VenueEdit() {
             entityLabel="Vendor"
             placeholder="Add vendor..."
           />
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">About Venue</span>
-          </div>
-          <FormField label="Deck-copy paragraph">
-            <textarea
-              className={`input textarea ${form.notes ? "input--filled" : ""}`}
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              rows={6}
-              placeholder="The Glasshouse is a three-floor Chelsea venue..."
-            />
-          </FormField>
-          <FormField label="Features (comma-separated)">
-            <input
-              className={`input ${form.features ? "input--filled" : ""}`}
-              value={form.features}
-              onChange={(e) => setForm((f) => ({ ...f, features: e.target.value }))}
-              placeholder="Loading Dock, Freight Elevator, AV In-House"
-            />
-          </FormField>
         </div>
       </section>
 
@@ -599,6 +724,29 @@ export default function VenueEdit() {
       </AlertDialog>
 
 
+      <AlertDialog open={regenerateConfirmOpen} onOpenChange={setRegenerateConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Regenerate About paragraph?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The current About paragraph will be cleared and overwritten. This
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setRegenerateConfirmOpen(false);
+                void handleGenerate();
+              }}
+            >
+              Regenerate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog
         open={Boolean(logRateOpen)}
         onOpenChange={(v) => !v && setLogRateOpen(null)}
@@ -655,7 +803,7 @@ function RateRow({
   onLogNew: () => void;
 }) {
   return (
-    <div className="row between" style={{ alignItems: "center" }}>
+    <div className="row" style={{ alignItems: "center", gap: 12 }}>
       <div>
         <div className="label-form">{label}</div>
         <div style={{ marginTop: 4 }}>

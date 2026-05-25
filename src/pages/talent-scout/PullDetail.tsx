@@ -25,7 +25,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { CandidateTable, type CandidateRow } from "@/components/talent-scout/CandidateTable";
-import { matchesSearch } from "@/components/talent-scout/CandidateSearch";
+import { matchesSearch } from "@/lib/talent-scout/candidateSearch";
 import { PullStepsList } from "@/components/talent-scout/PullStepsList";
 import { RoundStatusPill } from "@/components/talent-scout/RoundStatusPill";
 import { cn } from "@/lib/utils";

@@ -17,9 +17,12 @@ Internal operations app for Mirror NYC, an experiential agency in NYC. Replaces 
 
 ```bash
 npm install
-npm run dev   # localhost:8080
+cp .env.example .env   # then fill in VITE_SUPABASE_PUBLISHABLE_KEY
+npm run dev            # localhost:8080
 npm run build
 npm run lint
 ```
+
+`.env` is no longer tracked in git (as of the v1 audit pass). Copy `.env.example` to `.env` and fill in `VITE_SUPABASE_PUBLISHABLE_KEY` (the public anon key, from the Netlify dashboard or Jimmie). The URL + project id are pre-filled in the template.
 
 Local dev talks to the production Supabase project; there is no local Supabase stack. See [`docs/operations.md`](docs/operations.md) for migration + deploy + debug recipes.

@@ -23,7 +23,7 @@ export type DeliverableContext = {
  * prefix per Jimmie. Now reads "{ProjectTitle} {DeliverableTitle} Due".
  * Falls back to "(no project)" when projectName is null.
  */
-export function autoTaskTitle(ctx: DeliverableContext): string {
+function autoTaskTitle(ctx: DeliverableContext): string {
   return `${ctx.projectName ?? "(no project)"} ${ctx.deliverableTitle} Due`;
 }
 

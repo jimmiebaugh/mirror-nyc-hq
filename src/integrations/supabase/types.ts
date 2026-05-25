@@ -2179,6 +2179,7 @@ export type Database = {
       }
       venues: {
         Row: {
+          about_venue: string | null
           address: string | null
           bulk_import_session_id: string | null
           capacity: number | null
@@ -2194,7 +2195,6 @@ export type Database = {
           id: string
           name: string
           neighborhood: string | null
-          notes: string | null
           photos: string[]
           square_footage: number | null
           total_sq_ft: number | null
@@ -2203,6 +2203,7 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          about_venue?: string | null
           address?: string | null
           bulk_import_session_id?: string | null
           capacity?: number | null
@@ -2218,7 +2219,6 @@ export type Database = {
           id?: string
           name: string
           neighborhood?: string | null
-          notes?: string | null
           photos?: string[]
           square_footage?: number | null
           total_sq_ft?: number | null
@@ -2227,6 +2227,7 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          about_venue?: string | null
           address?: string | null
           bulk_import_session_id?: string | null
           capacity?: number | null
@@ -2242,7 +2243,6 @@ export type Database = {
           id?: string
           name?: string
           neighborhood?: string | null
-          notes?: string | null
           photos?: string[]
           square_footage?: number | null
           total_sq_ft?: number | null

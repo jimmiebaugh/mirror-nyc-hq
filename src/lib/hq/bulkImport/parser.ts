@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import type { ParsedSheet } from "./types";
 
 const CSV_EXT = /\.csv$/i;
@@ -13,7 +12,7 @@ export async function parseFile(file: File): Promise<ParsedSheet> {
   }
   if (XLSX_EXT.test(name)) {
     const buffer = await file.arrayBuffer();
-    return parseWorkbook(buffer);
+    return await parseWorkbook(buffer);
   }
   return {
     headers: [],
@@ -22,7 +21,7 @@ export async function parseFile(file: File): Promise<ParsedSheet> {
   };
 }
 
-export function parseDelimitedText(text: string, delimiter: "," | "\t"): ParsedSheet {
+function parseDelimitedText(text: string, delimiter: "," | "\t"): ParsedSheet {
   const warnings: string[] = [];
   const cleaned = text.replace(/^\uFEFF/, "");
   if (cleaned.length === 0) {
@@ -61,7 +60,10 @@ export function parseDelimitedText(text: string, delimiter: "," | "\t"): ParsedS
   return { headers, rows, warnings };
 }
 
-function parseWorkbook(buffer: ArrayBuffer): ParsedSheet {
+async function parseWorkbook(buffer: ArrayBuffer): Promise<ParsedSheet> {
+  // Dynamic import keeps the heavy `xlsx` library out of the initial bundle;
+  // it loads only when an admin actually uploads an .xlsx/.xls file.
+  const XLSX = await import("xlsx");
   const warnings: string[] = [];
   const wb = XLSX.read(buffer, { type: "array" });
   if (wb.SheetNames.length > 1) {

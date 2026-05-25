@@ -1059,7 +1059,10 @@
 
   /* Type utilities (extends 5.1's .h-card / .h-page; adds what 5.2 needs) */
   .label-section{font-family:var(--font-mono);font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:hsl(var(--muted-foreground));font-weight:400;}
-  .label-form{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--primary));}
+  /* Phase 5.10.1: form labels are grey, not coral. Coral is reserved for
+     links / CTAs (feedback_coral_reserved_for_hyperlinks). Matches the
+     detail-page .kv dt label color. App-wide across every .label-form. */
+  .label-form{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--subtle-foreground));}
   .cap{font-family:var(--font-mono);font-size:11px;color:hsl(var(--subtle-foreground));}
   .mono{font-family:var(--font-mono);}
   .muted{color:hsl(var(--muted-foreground));}
@@ -1094,6 +1097,12 @@
   .g2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;}
   .g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
   .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  /* Phase 5.10.1: first responsive breakpoint in the app. Two-column form
+     pairs stack on narrow viewports so labels/inputs stop getting squeezed
+     (e.g. VenueEdit). The full mobile sweep is the deferred Phase 5.13. */
+  @media (max-width: 640px){
+    .g2,.g3,.g4{grid-template-columns:1fr;}
+  }
 
   /* Block label */
   .block-lbl{display:flex;align-items:center;gap:9px;margin-bottom:12px;}
@@ -1302,6 +1311,21 @@
     box-shadow:0 0 0 2px color-mix(in srgb, hsl(var(--primary)) 25%, transparent);
   }
   .inline-edit-input:focus{outline:none;}
+  /* Phase 5.10.1: in the venue edit form, inline-edit link fields (Website,
+     Venue Slide) sit next to 44px inputs in a g2 row. Center the read-mode
+     value in a 44px slot so it vertically aligns with the adjacent input.
+     Scoped to .hq-form so detail-page inline edits are untouched. */
+  .hq-form .inline-edit-read{min-height:44px;display:inline-flex;align-items:center;}
+  /* Venue edit Address row: address wide + sq ft / capacity narrow. */
+  .venue-addr-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px;}
+  /* VenueDetail address row runs wider on address (65 / 17.5 / 17.5). */
+  .venue-addr-row-d{display:grid;grid-template-columns:26fr 7fr 7fr;gap:16px;}
+  @media (max-width: 640px){ .venue-addr-row,.venue-addr-row-d{grid-template-columns:1fr;} }
+  /* VenueDetail Details card: give the inline-edit values + combobox triggers a
+     uniform height so paired fields (e.g. City combobox vs Neighborhood text)
+     line up vertically. */
+  .vd-fields .inline-edit-read,
+  .vd-fields .combobox-trigger{min-height:30px;display:inline-flex;align-items:center;}
 
   /* Saved views dropdown trigger */
   .savedviews{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border:1px solid hsl(var(--border-strong));border-radius:var(--radius);background:hsl(var(--surface-alt));font-family:var(--font-mono);font-size:11px;font-weight:700;color:hsl(var(--muted-foreground));cursor:pointer;}

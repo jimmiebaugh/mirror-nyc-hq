@@ -109,6 +109,10 @@ Some Edge Functions (`ts-pull-candidates`, `ts-bulk-reevaluate`; the packet-gene
 
 One difference from `promote_outlook_to_project`: the bulk-import RPCs are invoked by the `bulk-import` edge function using the **service-role client**, so `auth.uid()` is NULL inside the function. The admin re-check therefore reads `actor_id` from the JSON payload (the edge function sets it from the verified user) rather than `auth.uid()`. The edge function has already verified the JWT + admin role before invoking, so `actor_id` is trustworthy; the in-function check is the third layer. Any future RPC invoked via the service-role client (not the user JWT) must take its actor from the payload, not `auth.uid()`.
 
+## Edge function using the caller's JWT for RLS-enforced writes (Phase 5.10.0)
+
+`hq-generate-venue-about` is the inverse of the service-role pattern above: it opens a supabase-js client with the **caller's own `Authorization` header** (anon key + forwarded user JWT) and does its SELECT + `about_venue` UPDATE through that client, so every read/write is RLS-enforced under the caller's session. No service role, no SECURITY DEFINER. This works because `venues` UPDATE is **open-authenticated** (per the HQ-tables rule above: SELECT/INSERT/UPDATE for any auth user), so any tier that can view a venue can also generate its About paragraph — no admin re-check needed inside the function. A Freelance/read-only-tier caller whose RLS denies the venues UPDATE would see the write fail and surface as a destructive toast. Use this caller-JWT pattern (not service role) whenever an edge function's writes should respect the caller's RLS rather than escalate past it.
+
 ## Phase 5.8.8 hardening notes
 
 Sign-in regressions surfaced in 5.8.5 / 5.8 close-out. The fixes in `20260601100000_phase_5_8_8_auth_pre_provision_hotfix.sql` codify rules that must hold going forward:

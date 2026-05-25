@@ -143,3 +143,9 @@ verify_jwt = false
 # top of the AdminRoute gate; see spec § 9.
 [functions.bulk-import]
 verify_jwt = true
+
+# Phase 5.10.0 first-use of callClaude('hq'). User-invoked synchronous from
+# the About Venue Generate / Regenerate button on VenueDetail + VenueEdit.
+# No self-invoke; reads + writes run under the caller's JWT (RLS-enforced).
+[functions.hq-generate-venue-about]
+verify_jwt = true

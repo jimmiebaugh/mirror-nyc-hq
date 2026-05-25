@@ -217,7 +217,7 @@ export function CandidateTable({
   onChanged?: () => void | Promise<void>;
   /** Phase 3.6.7: when both provided, the search input renders inside the
       bulk-action bar's left side. Parents that pass these stop rendering
-      their own CandidateSearch above the table. */
+      their own search input above the table. */
   search?: string;
   onSearchChange?: (value: string) => void;
   searchPlaceholder?: string;

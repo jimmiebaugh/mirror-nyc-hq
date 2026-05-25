@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Pencil } from "lucide-react";
+import { Loader2, Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
 import { IconArrowLeft, IconLink, IconSlides } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { InlineEditText } from "@/components/hq/InlineEditText";
@@ -16,16 +17,13 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  TYPE_STYLES,
-  TYPE_FALLBACK_STYLE,
-  canonicalizeType,
-  type CanonicalType,
-} from "@/lib/venue-scout/venueTypes";
+import { prettyHost } from "@/lib/venue-scout/venueTypes";
+import { VenueTypePill } from "@/components/venues/VenueTypePill";
 import { toast } from "@/hooks/use-toast";
 
 /**
@@ -51,7 +49,7 @@ type Venue = {
   website_url: string | null;
   venue_slide_url: string | null;
   features: string[];
-  notes: string | null;
+  about_venue: string | null;
   exclusive_vendor_ids: string[];
 };
 
@@ -72,6 +70,8 @@ export default function VenueDetail() {
   const [rates, setRates] = useState<VenueRate[]>([]);
   const [rateModalKind, setRateModalKind] = useState<"event_day" | "prod_day" | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
   const back = useBackHref({ to: "/venues", label: "Venues" });
   const venueTypesLookup = useLookup("venue_types");
 
@@ -82,7 +82,7 @@ export default function VenueDetail() {
       const venueRes = await supabase
         .from("venues")
         .select(
-          "id, name, address, neighborhood, city, capacity, total_sq_ft, general_email, website_url, venue_slide_url, features, notes, exclusive_vendor_ids",
+          "id, name, address, neighborhood, city, capacity, total_sq_ft, general_email, website_url, venue_slide_url, features, about_venue, exclusive_vendor_ids",
         )
         .eq("id", id)
         .single();
@@ -162,6 +162,33 @@ export default function VenueDetail() {
     if (error) {
       setVenue({ ...venue, [field]: prev });
       throw error;
+    }
+  };
+
+  // Phase 5.10.0: generate the About Venue paragraph via the hq edge function.
+  // The function persists about_venue to the DB and returns it; we mirror the
+  // value into local state optimistically. Used for both Generate (empty) and
+  // Regenerate (populated, gated by the confirm dialog).
+  const handleGenerate = async () => {
+    if (!venue) return;
+    setGenerating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "hq-generate-venue-about",
+        { body: { venue_id: venue.id } },
+      );
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error ?? "Generation failed");
+      setVenue((v) => (v ? { ...v, about_venue: data.about_venue } : v));
+      toast({ title: "About paragraph generated" });
+    } catch (err) {
+      toast({
+        title: "Couldn't generate paragraph",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -286,13 +313,7 @@ export default function VenueDetail() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow" style={{ paddingTop: 8 }}>Venue</div>
             <h1 className="h-page" style={{ marginTop: 5 }}>
-              <InlineEditText
-                value={venue.name}
-                required
-                placeholder="Venue name"
-                renderRead={(v) => v ?? "(unnamed)"}
-                onSave={(next) => saveField("name", next)}
-              />
+              {venue.name || "(unnamed)"}
             </h1>
           </div>
           <div
@@ -344,23 +365,59 @@ export default function VenueDetail() {
             <div className="card-headbar">
               <span className="h-card">Venue Details</span>
             </div>
-            <div className="card-pad">
-              {/* Card field order (per Jimmie 2026-05-21): reads left-to-right,
-                  top-to-bottom. Single 4-column grid (label value label value)
-                  so each visual row is ONE grid row -> the left + right cells
-                  share a row height and stay vertically aligned even when a
-                  tall cell like Venue Type grows (two separate .kv blocks did
-                  NOT align, since each sized its rows independently). Pair order:
-                  City | Venue Type, Neighborhood | Address, Website | General
-                  Email, Total Sq Ft | Capacity, Event Day Rate | Prod Day Rate.
-                  Exclusive Vendors + Features span full width below. Venue Slide
-                  is NOT a field here (the header has a Venue Slide button). */}
-              <dl
-                className="kv"
-                style={{ gridTemplateColumns: "130px minmax(0, 1fr) 130px minmax(0, 1fr)", columnGap: 24 }}
-              >
-                <dt>City</dt>
-                <dd>
+            <div className="card-pad stack-4 vd-fields">
+              {/* Phase 5.10.1: label-above layout matching VenueEdit (Venue
+                  Types full row; City | Neighborhood; Website | General Email;
+                  3-col Address / Total Sq Ft / Capacity; Features), with a
+                  hairline between rows. Rates + Exclusive Vendors are now their
+                  own cards below. Venue Slide stays the header button. */}
+              <div className="g2">
+                <DField label="Name">
+                  <InlineEditText
+                    value={venue.name}
+                    required
+                    placeholder="Venue name"
+                    renderRead={(v) => (v ? v : <span className="muted subtle">(unnamed)</span>)}
+                    onSave={(next) => saveField("name", next)}
+                  />
+                </DField>
+                <DField label="Venue Types">
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+                  {venueTypes.length > 0 ? (
+                    <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
+                      {venueTypes.map((t) => (
+                        <VenueTypePill key={t} type={t} />
+                      ))}
+                    </span>
+                  ) : null}
+                  <RecordCombobox
+                    multi
+                    hideMultiValueChips
+                    source={{ kind: "lookup", table: "venue_types" }}
+                    multiValue={venueTypesLookup.options
+                      .filter((o) => venueTypeIds.includes(o.id))
+                      .map((o) => o.name)}
+                    onMultiChange={(nextNames) => {
+                      const cached = getLookupCached("venue_types");
+                      const nextIds = nextNames
+                        .map(
+                          (n) =>
+                            venueTypesLookup.options.find((o) => o.name === n)?.id ??
+                            cached.find((o) => o.name === n)?.id,
+                        )
+                        .filter((x): x is string => !!x);
+                      if (nextIds.length !== nextNames.length) return;
+                      void saveVenueTypeIds(nextIds);
+                    }}
+                    entityLabel="Venue type"
+                    placeholder="Select"
+                  />
+                </div>
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="g2">
+                <DField label="City">
                   <RecordCombobox
                     source={{ kind: "lookup", table: "cities" }}
                     value={venue.city || null}
@@ -368,72 +425,19 @@ export default function VenueDetail() {
                     entityLabel="city"
                     placeholder="Select"
                   />
-                </dd>
-                <dt>Venue Type</dt>
-                <dd>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-start",
-                      gap: 8,
-                    }}
-                  >
-                    {venueTypes.length > 0 ? (
-                      <span className="row-c wrap" style={{ display: "inline-flex", gap: 5 }}>
-                        {venueTypes.map((t) => (
-                          <VenueTypePill key={t} type={t} small />
-                        ))}
-                      </span>
-                    ) : null}
-                    <RecordCombobox
-                      multi
-                      hideMultiValueChips
-                      source={{ kind: "lookup", table: "venue_types" }}
-                      multiValue={venueTypesLookup.options
-                        .filter((o) => venueTypeIds.includes(o.id))
-                        .map((o) => o.name)}
-                      onMultiChange={(nextNames) => {
-                        // Stale-snapshot fallback to the sync cache:
-                        // freshly-added option is in the cache the same
-                        // tick but not yet in the parent's useLookup
-                        // state, so direct lookup misses without this.
-                        const cached = getLookupCached("venue_types");
-                        const nextIds = nextNames
-                          .map(
-                            (n) =>
-                              venueTypesLookup.options.find((o) => o.name === n)?.id ??
-                              cached.find((o) => o.name === n)?.id,
-                          )
-                          .filter((x): x is string => !!x);
-                        if (nextIds.length !== nextNames.length) return;
-                        void saveVenueTypeIds(nextIds);
-                      }}
-                      entityLabel="Venue type"
-                      placeholder="Select"
-                    />
-                  </div>
-                </dd>
-                <dt>Neighborhood</dt>
-                <dd>
+                </DField>
+                <DField label="Neighborhood">
                   <InlineEditText
                     value={venue.neighborhood}
                     placeholder="Neighborhood"
                     renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
                     onSave={(next) => saveField("neighborhood", next || null)}
                   />
-                </dd>
-                <dt>Address</dt>
-                <dd>
-                  <InlineEditText
-                    value={venue.address}
-                    placeholder="Street address"
-                    renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
-                    onSave={(next) => saveField("address", next || null)}
-                  />
-                </dd>
-                <dt>Website</dt>
-                <dd>
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="g2">
+                <DField label="Website">
                   <InlineEditText
                     value={venue.website_url}
                     placeholder="https://example.com"
@@ -455,9 +459,8 @@ export default function VenueDetail() {
                     }
                     onSave={(next) => saveField("website_url", next || null)}
                   />
-                </dd>
-                <dt>General Email</dt>
-                <dd>
+                </DField>
+                <DField label="General Email">
                   <InlineEditText
                     value={venue.general_email}
                     placeholder="bookings@example.com"
@@ -477,19 +480,25 @@ export default function VenueDetail() {
                     }
                     onSave={(next) => saveField("general_email", next || null)}
                   />
-                </dd>
-                <dt>Total Sq Ft</dt>
-                <dd>
+                </DField>
+              </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <div className="venue-addr-row-d">
+                <DField label="Address">
+                  <InlineEditText
+                    value={venue.address}
+                    placeholder="Street address"
+                    renderRead={(v) => (v ? v : <span className="muted subtle">-</span>)}
+                    onSave={(next) => saveField("address", next || null)}
+                  />
+                </DField>
+                <DField label="Total Sq Ft">
                   <InlineEditText
                     value={venue.total_sq_ft != null ? String(venue.total_sq_ft) : null}
                     placeholder="Total sq ft"
                     inputType="number"
                     renderRead={(v) =>
-                      v ? (
-                        Number(v).toLocaleString("en-US")
-                      ) : (
-                        <span className="muted subtle">-</span>
-                      )
+                      v ? Number(v).toLocaleString("en-US") : <span className="muted subtle">-</span>
                     }
                     onSave={(next) => {
                       const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
@@ -499,19 +508,14 @@ export default function VenueDetail() {
                       );
                     }}
                   />
-                </dd>
-                <dt>Capacity</dt>
-                <dd>
+                </DField>
+                <DField label="Capacity">
                   <InlineEditText
                     value={venue.capacity != null ? String(venue.capacity) : null}
                     placeholder="Capacity"
                     inputType="number"
                     renderRead={(v) =>
-                      v ? (
-                        Number(v).toLocaleString("en-US")
-                      ) : (
-                        <span className="muted subtle">-</span>
-                      )
+                      v ? Number(v).toLocaleString("en-US") : <span className="muted subtle">-</span>
                     }
                     onSave={(next) => {
                       const parsed = next ? Number(next.replace(/[^0-9]/g, "")) : null;
@@ -521,111 +525,50 @@ export default function VenueDetail() {
                       );
                     }}
                   />
-                </dd>
-                <dt>Event Day Rate</dt>
-                <dd>
-                  <button
-                    type="button"
-                    className="inline-edit-read"
-                    title="Click to add a new rate"
-                    onClick={() => setRateModalKind("event_day")}
-                    style={{ background: "transparent", border: 0, padding: "1px 4px", margin: "-1px -4px", cursor: "text", textAlign: "left", font: "inherit", color: "inherit" }}
-                  >
-                    {eventRate ? (
-                      <>
-                        ${eventRate.amount_usd.toLocaleString("en-US")}{" "}
-                        <span className="cap">as of {formatShortDate(eventRate.effective_from)}</span>
-                      </>
-                    ) : (
-                      <span className="muted subtle">Click to add</span>
-                    )}
-                  </button>
-                </dd>
-                <dt>Prod Day Rate</dt>
-                <dd>
-                  <button
-                    type="button"
-                    className="inline-edit-read"
-                    title="Click to add a new rate"
-                    onClick={() => setRateModalKind("prod_day")}
-                    style={{ background: "transparent", border: 0, padding: "1px 4px", margin: "-1px -4px", cursor: "text", textAlign: "left", font: "inherit", color: "inherit" }}
-                  >
-                    {prodRate ? (
-                      <>
-                        ${prodRate.amount_usd.toLocaleString("en-US")}{" "}
-                        <span className="cap">as of {formatShortDate(prodRate.effective_from)}</span>
-                      </>
-                    ) : (
-                      <span className="muted subtle">Click to add</span>
-                    )}
-                  </button>
-                </dd>
-              </dl>
-              <div
-                style={{
-                  marginTop: 20,
-                  borderTop: "1px solid hsl(var(--border))",
-                  paddingTop: 16,
-                }}
-              >
-                <div
-                  className="label-form"
-                  style={{ color: "hsl(var(--subtle-foreground))", marginBottom: 9 }}
-                >
-                  Exclusive Vendors
-                </div>
-                <div className="stack-2">
-                  <RecordCombobox
-                    multi
-                    source={{ kind: "record", loadOptions: loadVendorOptions }}
-                    multiValue={venue.exclusive_vendor_ids}
-                    onMultiChange={(next) => void saveExclusiveVendorIds(next)}
-                    entityLabel="Vendor"
-                    placeholder="Add vendor..."
-                  />
-                  {vendors.length > 0 ? (
-                    <span className="row-c wrap" style={{ display: "inline-flex", gap: 8 }}>
-                      {vendors.map((v, i) => (
-                        <span key={v.id}>
-                          <Link to={`/vendors/${v.id}`} className="tlink">
-                            {v.name}
-                          </Link>
-                          {i < vendors.length - 1 ? <span className="muted">, </span> : null}
-                        </span>
-                      ))}
-                    </span>
-                  ) : null}
-                </div>
+                </DField>
               </div>
-              <div
-                style={{
-                  marginTop: 20,
-                  borderTop: "1px solid hsl(var(--border))",
-                  paddingTop: 16,
-                }}
-              >
-                <div
-                  className="label-form"
-                  style={{ color: "hsl(var(--subtle-foreground))", marginBottom: 9 }}
-                >
-                  Features
-                </div>
+              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
+              <DField label="Features">
                 <InlineTagInput
                   values={venue.features}
                   onChange={(next) => void saveField("features", next)}
                   placeholder="Add feature and hit enter..."
                 />
-              </div>
+              </DField>
             </div>
           </section>
 
           <section className="card">
-            <div className="card-headbar">
+            <div
+              className="card-headbar"
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+            >
               <span className="h-card">About Venue</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={
+                  venue.about_venue?.trim()
+                    ? () => setRegenerateConfirmOpen(true)
+                    : handleGenerate
+                }
+                disabled={generating}
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    Generating…
+                  </>
+                ) : venue.about_venue?.trim() ? (
+                  "Regenerate About Paragraph"
+                ) : (
+                  "Generate About Paragraph"
+                )}
+              </Button>
             </div>
             <div className="card-pad">
               <InlineEditText
-                value={venue.notes}
+                value={venue.about_venue}
                 placeholder="Deck-copy paragraph about the venue..."
                 multiline
                 renderRead={(v) =>
@@ -646,11 +589,110 @@ export default function VenueDetail() {
                     </p>
                   )
                 }
-                onSave={(next) => saveField("notes", next || null)}
+                onSave={(next) => saveField("about_venue", next || null)}
               />
             </div>
           </section>
+
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Rates</span>
+            </div>
+            <div className="card-pad">
+              <div className="g2">
+                <DField label="Event Day Rate">
+                  <button
+                    type="button"
+                    className="inline-edit-read"
+                    title="Click to add a new rate"
+                    onClick={() => setRateModalKind("event_day")}
+                    style={{ background: "transparent", border: 0, padding: "1px 4px", margin: "-1px -4px", cursor: "text", textAlign: "left", font: "inherit", color: "inherit" }}
+                  >
+                    {eventRate ? (
+                      <>
+                        ${eventRate.amount_usd.toLocaleString("en-US")}{" "}
+                        <span className="cap">as of {formatShortDate(eventRate.effective_from)}</span>
+                      </>
+                    ) : (
+                      <span className="muted subtle">Click to add</span>
+                    )}
+                  </button>
+                </DField>
+                <DField label="Prod Day Rate">
+                  <button
+                    type="button"
+                    className="inline-edit-read"
+                    title="Click to add a new rate"
+                    onClick={() => setRateModalKind("prod_day")}
+                    style={{ background: "transparent", border: 0, padding: "1px 4px", margin: "-1px -4px", cursor: "text", textAlign: "left", font: "inherit", color: "inherit" }}
+                  >
+                    {prodRate ? (
+                      <>
+                        ${prodRate.amount_usd.toLocaleString("en-US")}{" "}
+                        <span className="cap">as of {formatShortDate(prodRate.effective_from)}</span>
+                      </>
+                    ) : (
+                      <span className="muted subtle">Click to add</span>
+                    )}
+                  </button>
+                </DField>
+              </div>
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Exclusive Vendors</span>
+            </div>
+            <div className="card-pad">
+              <div className="stack-2">
+                <RecordCombobox
+                  multi
+                  source={{ kind: "record", loadOptions: loadVendorOptions }}
+                  multiValue={venue.exclusive_vendor_ids}
+                  onMultiChange={(next) => void saveExclusiveVendorIds(next)}
+                  entityLabel="Vendor"
+                  placeholder="Add vendor..."
+                />
+                {vendors.length > 0 ? (
+                  <span className="row-c wrap" style={{ display: "inline-flex", gap: 8 }}>
+                    {vendors.map((v, i) => (
+                      <span key={v.id}>
+                        <Link to={`/vendors/${v.id}`} className="tlink">
+                          {v.name}
+                        </Link>
+                        {i < vendors.length - 1 ? <span className="muted">, </span> : null}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </section>
         </div>
+
+        <AlertDialog open={regenerateConfirmOpen} onOpenChange={setRegenerateConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Regenerate About paragraph?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The current About paragraph will be cleared and overwritten. This
+                cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setRegenerateConfirmOpen(false);
+                  void handleGenerate();
+                }}
+              >
+                Regenerate
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <aside className="stack-6">
           <section className="card">
@@ -804,23 +846,14 @@ function AddRateModal({
   );
 }
 
-function VenueTypePill({ type, small }: { type: string; small?: boolean }) {
-  const canonical = canonicalizeType(type) as CanonicalType | null;
-  const style = canonical ? TYPE_STYLES[canonical] : TYPE_FALLBACK_STYLE;
+// Label-above field wrapper (matches VenueEdit's FormField). Used for the
+// inline-edit fields on the detail page so labels sit above their values.
+function DField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <span
-      className={`pill ${small ? "pill-sm" : ""} ${style}`}
-      style={{ borderWidth: 1, borderStyle: "solid" }}
-    >
-      {type}
-    </span>
+    <div className="field">
+      <div className="label-form">{label}</div>
+      {children}
+    </div>
   );
 }
 
-function prettyHost(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
