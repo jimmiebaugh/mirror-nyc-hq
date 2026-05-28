@@ -62,7 +62,7 @@ Walks every `ts_roles.status='open'` AND `auto_pull_schedule != 'off'` row, comp
 Three-pass cleanup per `docs/cron-jobs.md`. Uses `STORAGE_BUCKET` from `_shared/attachmentStorage.ts`. Storage `.remove()` errors log and continue: a failed Storage delete leaves an orphan file but never blocks the row delete. Cron-only; no UI trigger.
 
 ### `ts-cron-monthly-spend-reset`
-Resets `global_settings.anthropic_spend_current_month_usd=0` and `cap_alert_sent_this_month=false`. Logs the previous spend value for audit.
+Resets `global_settings.anthropic_spend_current_month_usd=0` and `cap_alert_sent_this_month=false`. Logs the previous spend value for audit. **Phase 5.15:** after the global_settings reset, prunes `public.anthropic_call_log` rows older than 12 months (`lt("created_at", now - 365d)`). Prune runs AFTER the reset so a prune failure cannot block the cap-alert re-arm; prune errors are warn-logged and non-fatal (next month's run catches up). Response summary now includes `call_log_pruned_count` + `call_log_prune_cutoff`.
 
 ## Venue Scout: Phase 4
 
@@ -150,9 +150,12 @@ The original spec mentioned an `auth-on-signup` Edge Function. Phase 2 implement
 ### `anthropic.ts`: `callClaude(app, messages, options)`
 Wraps the raw fetch to `api.anthropic.com`. `app` is `'talent_scout' | 'venue_scout' | 'hq'` and selects the per-app secret (`ANTHROPIC_API_KEY_TS` / `_VS` / `_HQ`). After each successful call:
 1. Computes cost from the response usage block (incl. cache-read/write discounts).
-2. Increments `global_settings.anthropic_spend_current_month_usd`.
+2. Increments `global_settings.anthropic_spend_current_month_usd` (`trackSpendAndAlert`).
 3. Emails the admin once per cap crossing (gated by `cap_alert_sent_this_month`).
-4. **Does NOT refuse calls when over cap**: graceful degradation, not a hard failure.
+4. **Phase 5.15:** writes one row to `public.anthropic_call_log` via `logCallToTable` (app, fn_name, model, all token columns, cost_usd, scout_id, role_id). Runs AFTER `trackSpendAndAlert`; both steps are best-effort, errors swallowed so a logging outage never blocks the caller. Failed `callClaude` calls (`!res.ok` early return) skip both the spend increment and the log row, matching the existing posture.
+5. **Does NOT refuse calls when over cap**: graceful degradation, not a hard failure.
+
+**Phase 5.15: `CallClaudeOptions` gains `scout_id?: string | null` + `role_id?: string | null`.** Optional; null when the caller has no scout or role in scope. Threaded through every VS caller (`scout_id` from `req.body.scout_id`) and every TS caller with a role available (`role_id` from `req.body.role_id` or `cand.role_id`). Pre-create flow callers (`ts-generate-scorecard`, `ts-refine-scorecard`) and `hq-generate-venue-about` log with both nulls. Drives the per-tool drilldown stored in `anthropic_call_log` (UI surfaces the aggregate today; per-scout / per-role drilldown deferred).
 
 Phase 3.8 wires the real cap-alert email path via `_shared/sendEmail.ts`. Recipient lookup: first `users` row with `permission_role='admin'` (oldest by `created_at`), fallback `jobs@mirrornyc.com`. The cap-alert is gated by `cap_alert_sent_this_month` so it fires once per cap crossing; `ts-cron-monthly-spend-reset` re-arms it on the 1st.
 
@@ -162,7 +165,7 @@ Use 1-hour prompt caching (`cache_control: { type: 'ephemeral', ttl: '1h' }`) on
 
 **Phase 4.10.6-port: `extractWebSearchResults(content)` helper.** Walks a Claude response's content blocks and pulls every `{ url, title }` from `web_search_tool_result` blocks. Used by venue-research callers as a fallback when Claude's tool output left `website_url` null but search results contained usable URLs.
 
-**Phase 4.10.6-port: `findVenueWebsite(app, { name, address, city })` helper.** Runs a targeted, focused Claude call per venue with `web_search` + a tight "Find the official website URL for {name} at {address}" prompt. Parses the first http(s) URL from the text response; falls back to the first search-result URL. Used as Phase B's URL fallback after `validateWebsiteUrls` returns null. ~10-15s per call, runs parallel across all null-URL venues.
+**Phase 4.10.6-port: `findVenueWebsite(app, { name, address, city })` helper.** Runs a targeted, focused Claude call per venue with `web_search` + a tight "Find the official website URL for {name} at {address}" prompt. Parses the first http(s) URL from the text response; falls back to the first search-result URL. Used as Phase B's URL fallback after `validateWebsiteUrls` returns null. ~10-15s per call, runs parallel across all null-URL venues. **Phase 5.15: signature gains `scout_id?: string | null`** in its options so the inner `callClaude` records the parent scout against the URL-fallback call (otherwise the row would land with `scout_id IS NULL` despite the caller knowing the scout). `vs-research-venues:url-fallback` passes the scout id through.
 
 **Phase 5.12.1: per-fetch wall-clock ceiling bumped 60s -> 180s + AbortError disambiguation.** `ANTHROPIC_TIMEOUT_MS` now 180_000 (was 60_000 since 5.8.6). Pre-bump the 60s cap tripped Phase B before its own `WORK_TIMEOUT_MS=360s` budget had any chance, because `web_search_20250305 max_uses=4` legitimately runs 90-180s. With pause_turn continuation (max 1 cycle) the new ceiling allows total wall-clock up to 360s, still inside the Supabase Pro 400s isolate wall. Also replaced `AbortSignal.timeout` with an explicit `AbortController` + sentinel `Symbol("anthropic_timeout_180s")` reason so network-level AbortErrors (TLS drops, DNS failures, connection resets) no longer mislabel as wrapper timeouts. Real wrapper timeouts return `anthropic_timeout_180s`; network failures return `anthropic_fetch_<RealName>: <message>` carrying the underlying DOMException name + message so `pipeline_error` reads stay actionable.
 

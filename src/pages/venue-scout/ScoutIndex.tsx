@@ -402,11 +402,12 @@ export default function ScoutIndex() {
         </div>
       ) : (
         <>
-          {/* R7 amendment v2 § 2: scout-list-tbl wrapper scopes matrix
-              visual contract (header bg, centered headers, column
-              dividers, no `::after` pseudo bar) without the matrix's
-              sticky col / 1280 min-width / table-fixed. */}
-          <div className="scout-list-tbl">
+          {/* R7 amendment v2 § 2 → renamed Phase 5.15.2: .tbl-list
+              wrapper scopes the matrix visual contract (header bg,
+              centered headers, column dividers, no `::after` pseudo
+              bar) without the matrix's sticky col / 1280 min-width /
+              table-fixed. */}
+          <div className="tbl-list">
             <DataTable<Scout>
               rows={rows}
               flat

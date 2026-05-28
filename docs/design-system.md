@@ -245,17 +245,19 @@ HQ Core edit pages use `src/components/hq/HQFormField.tsx` for grey `.label-form
 
 ## 4. Tables
 
-Three table families coexist. `.tbl` is the canonical base for HQ Core and Talent Scout tables. VS matrix tables use `.tbl--matrix` standalone (decoupled from `.tbl` per `decisions.md` § Phase 5.12). VS ScoutIndex uses `.scout-list-tbl` as a wrapper.
+Three table families coexist. `.tbl` is the canonical base for HQ Core and Talent Scout tables. VS matrix tables use `.tbl--matrix` standalone (decoupled from `.tbl` per `decisions.md` § Phase 5.12). List-view tables (TS Index, VS ScoutIndex, HQ admin breakdown surfaces) wrap `.tbl` in `.tbl-list` to inherit the matrix visual contract.
 
 **`.tbl` (canonical for HQ Core + TS):** `width:100%; border-collapse:collapse`. Full rule set covers thead th (mono 11px uppercase), tbody td (12px 14px padding, 13px font), row hover, 3px transparent left-border (colorable for status rows via `rowBorderToken`), vertical cell dividers via `::after` pseudo-elements. `.tbl--flat` strips row left-borders. TS's FinalReviewDetail will adopt `.tbl` during the Phase 5.13 review (currently uses bare `w-full`).
 
 **`.tbl--matrix` (VS Sourcing + Shortlist):** Standalone class, does NOT compose with `.tbl`. `width:100%; border-collapse:collapse; min-width:1280px; table-layout:fixed`. Matrix Th/Td primitives in `src/components/venue-scout/matrix/primitives.tsx` drive all chrome via Tailwind utilities. Decoupled because `.tbl` base specificity was burying matrix utilities for header alignment, td padding, row hover, and the `::after` pseudo was painting over content.
 
-**`.scout-list-tbl` (VS ScoutIndex wrapper):** Scopes overrides through to the inner `.tbl` to inherit matrix visual contract without matrix-specific deltas (no sticky col, no 1280 min-width, no table-layout fixed).
+**`.tbl-list` (canonical list-view wrapper):** Scopes overrides through to the inner `.tbl` to inherit the matrix visual contract without matrix-specific deltas (no sticky col, no 1280 min-width, no table-layout fixed). Consumed by TS Index, VS ScoutIndex, and the HQ Anthropic spend breakdown table. Renamed from `.scout-list-tbl` in Phase 5.15 so the class name signals cross-cutting canon rather than a single VS consumer.
+
+**`.tbl-divider` (structural section header inside a table):** Single-row `<tr>` class that paints muted coral background + bold white 11px uppercase mono text (Phase 5.15 repaint; previously surface-alt + subtle-foreground). Used by `<DataTable>`'s two-tier "Done · N hidden" footer and by `<AnthropicSpendBreakdownTable>`'s HQ / TS / VS section headers. Carries enough contrast against any tbody-bg context (canonical `.tbl` or lifted `.tbl-list`).
 
 **Two-tier pattern** (active rows above, rejected/archived rows below collapsible) is available on both `<DataTable>` (HQ Core) and `CandidateTable` (TS). CandidateTable carries its own select-row + bulk action bar (round-level Re-evaluate / Reject / Promote flow); HQ Core's DataTable does NOT carry row selection.
 
-Reference: `src/components/talent-scout/CandidateTable.tsx` (TS two-tier), `src/pages/venue-scout/ScoutIndex.tsx` (VS list with `.scout-list-tbl`).
+Reference: `src/components/talent-scout/CandidateTable.tsx` (TS two-tier), `src/pages/venue-scout/ScoutIndex.tsx` (VS list with `.tbl-list`).
 
 Column header rules:
 - 12px mono uppercase
@@ -585,7 +587,7 @@ New tokens / primitives / patterns introduced across the 7-round phase. Cross-re
 **Tokens / classes (`src/index.css`):**
 
 - **`.hq-scout-label`** — TopBar center-zone label rendered inside any active VS scout route (`/venue-scout/scouts/:id/*`). Font: `var(--font-display)` (Montserrat) at 15px font-extrabold uppercase tracking-[-0.01em]. Color: `hsl(var(--foreground))`. Matches the `.hq-brand-txt` cadence as a peer of the left-zone wordmark. Defers visually to the brand (15px vs the brand's 21px). TopBar consumer: `src/components/shell/TopBar.tsx`; renders `Client Name · Event Name` with a `mx-2 opacity-50` mid-dot separator. Hidden below md.
-- **`.scout-list-tbl`** — wrapper class consumed by ScoutIndex's `<DataTable>` (`src/pages/venue-scout/ScoutIndex.tsx`). Scopes a small set of overrides through to the inner `.tbl` to inherit the Sourcing/Shortlist matrix visual contract WITHOUT the matrix-specific deltas (no sticky col, no 1280 min-width, no `table-layout: fixed`). Overrides: header text-align center + bg `hsl(var(--surface))`, body td bg `hsl(var(--surface-alt))`, archived rows (selector hook `tr[style*="opacity"]`) match header bg + subtle-foreground text, per-cell border-right column dividers, drop the canon `::after` cell-divider pseudo bar.
+- **`.tbl-list`** — renamed from `.scout-list-tbl` in Phase 5.15. Canonical wrapper class for list-view tables across HQ Core, Talent Scout, and Venue Scout. Currently consumed by TS Index, VS ScoutIndex, and the HQ Anthropic spend breakdown table; future HQ Core list-page sweeps will adopt it too. Scopes a small set of overrides through to the inner `.tbl` to inherit the Sourcing/Shortlist matrix visual contract WITHOUT the matrix-specific deltas (no sticky col, no 1280 min-width, no `table-layout: fixed`). Overrides: header text-align center + bg `hsl(var(--surface))`, body td bg `hsl(var(--surface-alt))`, archived rows (selector hook `tr[style*="opacity"]`) match header bg + subtle-foreground text, per-cell border-right column dividers, drop the canon `::after` cell-divider pseudo bar.
 - **`.tbl--matrix`** — VS matrix canon (Sourcing/Shortlist tables in `src/pages/venue-scout/SourcingReport.tsx` + `Shortlist.tsx`). Rule body: `width:100%; border-collapse:collapse; min-width:1280px; table-layout:fixed;`. **Standalone class — does NOT compose with `.tbl`** (see `decisions.md § Phase 5.12.14.3` decision 1 for the cascade rationale). Matrix Th/Td primitives in `src/components/venue-scout/matrix/primitives.tsx` drive the rest of the chrome via Tailwind utilities.
 
 **Phase pill mapping** — design-system tokens applied to ScoutIndex's Phase column rendering. Module-level `SCOUT_PHASE_TOKENS: Record<string, StatusToken>` map in `src/pages/venue-scout/ScoutIndex.tsx`:
@@ -623,7 +625,7 @@ Find the closest analog and start from its layout. The 5.12 VS audit established
 
 | If you're building... | Start from |
 | --- | --- |
-| A list/table page (Projects, Venues, Tasks lists) | `ProjectsList.tsx` (HQ Core `.tbl` canon) or `ScoutIndex.tsx` (VS `.scout-list-tbl`) |
+| A list/table page (Projects, Venues, Tasks lists) | `ProjectsList.tsx` (HQ Core `.tbl` canon) or `ScoutIndex.tsx` (`.tbl-list` lifted-cells wrapper) |
 | A detail page with section cards | `ProjectDetail.tsx` (`.card` + `.card-headbar` + `.card-pad` canon) |
 | An edit form (Edit Project, Edit Client) | `ProjectEdit.tsx` (`.hq-form` + `HQFormField` + `StickySaveBar`) |
 | A VS page-form surface | `BriefEvent.tsx` (`.card` nested canon + `HQFormField` + `.actionbar`) |

@@ -235,6 +235,7 @@ Deno.serve(async (req) => {
       ],
       tool_choice: { type: "auto" },
       fn_name: "vs-research-single-venue:fill",
+      scout_id,
     },
   );
 

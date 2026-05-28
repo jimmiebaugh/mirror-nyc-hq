@@ -62,11 +62,25 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Phase 5.15: prune anthropic_call_log rows older than 12 months.
+  // Runs AFTER the global_settings reset so a prune failure can't block the
+  // cap-alert re-arm. Non-fatal; next month's run catches up.
+  const pruneCutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+  const { error: pruneErr, count: prunedCount } = await supabase
+    .from("anthropic_call_log")
+    .delete({ count: "exact" })
+    .lt("created_at", pruneCutoff);
+  if (pruneErr) {
+    console.warn("[ts-cron-monthly-spend-reset] call-log prune failed:", pruneErr);
+  }
+
   const summary = {
     reset_at: new Date().toISOString(),
     previous_spend_usd: Number(before.anthropic_spend_current_month_usd ?? 0),
     cap_usd: Number(before.anthropic_spend_cap_monthly_usd ?? 0),
     cap_alert_was_armed: before.cap_alert_sent_this_month === false,
+    call_log_pruned_count: pruneErr ? null : (prunedCount ?? 0),
+    call_log_prune_cutoff: pruneCutoff,
   };
   console.log(`[ts-cron-monthly-spend-reset] done`, summary);
   return new Response(JSON.stringify(summary), {

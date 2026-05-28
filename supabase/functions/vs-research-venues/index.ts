@@ -163,6 +163,7 @@ async function enrichSheetVenue(
         ],
         tool_choice: { type: "auto" },
         fn_name: "vs-research-venues:fill",
+        scout_id,
       },
     );
 
@@ -523,6 +524,7 @@ async function enrichHqPoolForResearch(
               ],
               tool_choice: { type: "auto" },
               fn_name: "vs-research-venues:hq-pool-enrich",
+              scout_id,
             },
           );
           if (!fillResult.ok) {
@@ -1680,6 +1682,7 @@ Additional brief notes: ${
         tools: [FIT_RESCUE_TOOL],
         tool_choice: { type: "tool", name: "submit_fit_evaluation" },
         fn_name: "vs-research-venues:fit-rescue",
+        scout_id,
       },
     );
   } catch (e) {
@@ -2562,6 +2565,7 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
           ],
           tool_choice: { type: "auto" },
           fn_name: "vs-research-venues",
+          scout_id,
         },
       );
 
@@ -2942,7 +2946,7 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
             const candidate = await findVenueWebsite(
               "venue_scout",
               { name: v.name, address: v.address, city: scout.city ?? null },
-              { fn_name: "vs-research-venues:url-fallback" },
+              { fn_name: "vs-research-venues:url-fallback", scout_id },
             );
             if (!candidate) return null;
             const validated = await validateWebsiteUrl(candidate);

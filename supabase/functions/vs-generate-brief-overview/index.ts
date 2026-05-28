@@ -331,6 +331,7 @@ Deno.serve(async (req) => {
         system: SYSTEM_PROMPT,
         max_tokens: 600,
         fn_name: "vs-generate-brief-overview",
+        scout_id,
       },
     );
     if (result.ok) {

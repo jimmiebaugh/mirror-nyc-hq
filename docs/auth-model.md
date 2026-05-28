@@ -37,6 +37,7 @@ A user can be assigned to projects (as account manager or designer) regardless o
 - `notifications`: SELECT and UPDATE only by recipient. INSERT via service role only.
 - `global_settings`: SELECT any auth user. UPDATE admin only.
 - `activity_log`: SELECT any auth user. INSERT via Postgres trigger only.
+- `anthropic_call_log` (Phase 5.15): admin-only SELECT via the `anthropic_call_log_admin_read` policy (inline `EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND permission_role = 'admin')`). No INSERT / UPDATE / DELETE policies — writes flow from the service-role wrapper (`_shared/anthropic.ts logCallToTable`) which bypasses RLS; the 12-month prune in `ts-cron-monthly-spend-reset` runs from the same service-role client. GRANT SELECT to `authenticated` so the policy can gate the read; GRANT ALL to `service_role`. Companion RPC `public.anthropic_spend_breakdown(month_iso text)` is SECURITY DEFINER STABLE with an inline `public.is_admin()` gate (raises `'anthropic_spend_breakdown: admin only'` on non-admins); EXECUTE revoked from PUBLIC and granted to `authenticated` so non-admin callers surface the exception cleanly. Phase 5.16.0's `is_active_member()` rewrite may broaden the SELECT predicate; until that pass, admin-only stays the narrow canonical posture for cost data.
 
 Admin checks are done via a SECURITY DEFINER function that reads `permission_role` from `public.users` for `auth.uid()`.
 

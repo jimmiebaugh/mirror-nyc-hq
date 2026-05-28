@@ -999,6 +999,7 @@ async function processOne(
         system: claudeRequest.system as any,
         anthropic_beta: ["extended-cache-ttl-2025-04-11"],
         fn_name: "ts-pull-candidates",
+        role_id: roleId,
       },
     );
 

@@ -45,6 +45,8 @@ Cron-only; no UI affordance for manual triggering. The conservative retention wi
 ### `ts-cron-monthly-spend-reset` (1st of each month, 00:01 UTC)
 Resets `global_settings.anthropic_spend_current_month_usd` to 0 and `cap_alert_sent_this_month` to false. Without this, the cap alert never re-arms after the first month it fires.
 
+**Phase 5.15:** also prunes `public.anthropic_call_log` rows older than 12 months. Prune runs AFTER the global_settings reset, so a prune failure (RLS gotcha, network blip) cannot block the cap-alert re-arm; failures warn-log and the next month's run catches up. Response summary surfaces `call_log_pruned_count` + `call_log_prune_cutoff` for audit.
+
 ## HQ Core
 
 ### `hq-cron-deliverable-due-3d` (13:00 UTC daily, Phase 5.5)

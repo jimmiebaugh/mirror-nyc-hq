@@ -183,6 +183,7 @@ Deno.serve(async (req) => {
         ],
         tool_choice: { type: "auto" },
         fn_name: "vs-regenerate-venue-overview",
+        scout_id,
       },
     );
 

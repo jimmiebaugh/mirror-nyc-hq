@@ -1,4 +1,3 @@
-Initialising login role...
 export type Json =
   | string
   | number
@@ -74,6 +73,66 @@ export type Database = {
             columns: ["actor_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      anthropic_call_log: {
+        Row: {
+          app: string
+          cache_read_tokens: number
+          cache_write_tokens: number
+          cost_usd: number
+          created_at: string
+          fn_name: string
+          id: string
+          input_tokens: number
+          model: string
+          output_tokens: number
+          role_id: string | null
+          scout_id: string | null
+        }
+        Insert: {
+          app: string
+          cache_read_tokens?: number
+          cache_write_tokens?: number
+          cost_usd?: number
+          created_at?: string
+          fn_name: string
+          id?: string
+          input_tokens?: number
+          model: string
+          output_tokens?: number
+          role_id?: string | null
+          scout_id?: string | null
+        }
+        Update: {
+          app?: string
+          cache_read_tokens?: number
+          cache_write_tokens?: number
+          cost_usd?: number
+          created_at?: string
+          fn_name?: string
+          id?: string
+          input_tokens?: number
+          model?: string
+          output_tokens?: number
+          role_id?: string | null
+          scout_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "anthropic_call_log_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "ts_roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "anthropic_call_log_scout_id_fkey"
+            columns: ["scout_id"]
+            isOneToOne: false
+            referencedRelation: "vs_scouts"
             referencedColumns: ["id"]
           },
         ]
@@ -2723,6 +2782,16 @@ export type Database = {
         Args: { queued: string[]; ref: string }
         Returns: string
       }
+      anthropic_spend_breakdown: {
+        Args: { window_iso?: string; window_kind?: string }
+        Returns: {
+          app: string
+          avg_cost_usd: number
+          calls: number
+          fn_name: string
+          total_cost_usd: number
+        }[]
+      }
       bulk_import_commit_projects: { Args: { payload: Json }; Returns: Json }
       bulk_import_commit_vendors: { Args: { payload: Json }; Returns: Json }
       bulk_import_commit_venues: { Args: { payload: Json }; Returns: Json }
@@ -2989,6 +3058,3 @@ export const Constants = {
     },
   },
 } as const
-<claude-code-hint v="1" type="plugin" value="supabase@claude-plugins-official" />
-A new version of Supabase CLI is available: v2.101.0 (currently installed v2.98.1)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

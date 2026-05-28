@@ -2,9 +2,79 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.15: Anthropic per-tool call-log infra + spend breakdown surface (2026-05-28, complete)
+
+Squash SHA `e9a382e`. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.15. 4 sub-phases collapsed (originally 5.15 / 5.15.1 / 5.15.2 / 5.15.3). Two migrations (`20260608000000_phase_5_15_anthropic_call_log.sql` + `20260609000000_phase_5_15_3_spend_breakdown_window.sql`); 11 edge function redeploys; 5 frontend files + design-system canon updates.
+
+Decisions grouped thematically: infra (D1-D5), UX iteration (D6-D8), CSS canonicalization (D9-D10), window selector (D11-D16).
+
+### D1: Storage shape — per-call rows in a table, not pre-aggregated buckets
+
+Picked an append-only `public.anthropic_call_log` table (one row per successful `callClaude`) over the alternatives of (a) bucketed monthly aggregates on `global_settings` (cap at 5 columns, breakdown impossible), (b) a materialized rollup view (refresh complexity for marginal read speedup), or (c) attaching counters to existing tables (`vs_scouts.anthropic_spend_usd`, `ts_roles.anthropic_spend_usd`). Per-row keeps the raw token counts available for re-costing after pricing changes, supports future per-scout / per-role drilldown without schema work, and the breakdown RPC's hot path (one window of data, indexed by `(app, fn_name, created_at desc)`) is fast enough that pre-aggregation isn't worth the staleness tradeoff. 12-month prune via the existing monthly-reset cron keeps the table small without a separate maintenance job.
+
+### D2: Cap-control consolidation onto HQ Admin Settings (cap-edit only)
+
+HQ Admin Settings becomes the sole canonical home for the editable Anthropic spend cap. Pre-5.15, both TS Settings and VS Settings carried duplicate editable cap inputs writing the same `global_settings.anthropic_spend_cap_monthly_usd` column. Consolidating produces one editable surface (HQ Admin Settings) and two read-only spend displays (TS Settings shows TS-only + global spend; VS Settings shows VS-only + global spend). Avoids the "edit the cap from any of three places, all writing the same row" sprawl. The read-only **per-function breakdown** lives on all three Settings consumers as of this ship (D6 below) — the consolidation applies to the editable cap input only, not the read-only breakdown surface.
+
+### D3: scout_id / role_id at the wrapper, not in caller-side metadata
+
+`scout_id` + `role_id` ride the `callClaude` options object so every caller that knows them threads them through one place; pre-create flows (`ts-generate-scorecard`, `ts-refine-scorecard`) and venue-only contexts (`hq-generate-venue-about`) log null for both, which is fine. Both columns are nullable FKs with `ON DELETE SET NULL` so a deleted scout or role doesn't lose the cost record (which is what producers care about for spend retrospectives). Indexes on `scout_id` + `role_id` are partial (`WHERE ... IS NOT NULL`) because most rows have neither set.
+
+### D4: Per-scout / per-role drilldown UI deferred
+
+The schema captures `scout_id` + `role_id` per row, but the v1 breakdown surfaces only Tool / Calls / Total Spend / Avg per call. Per-scout drilldown (e.g., "how much did Claude cost this specific scout?") and per-role drilldown sit behind a "Drill into scout / role" button on the breakdown table that doesn't exist yet. Defer to a future phase that picks the right anchor surface (scout detail page or role detail page). The schema linkage is the load-bearing piece; the UI lift is straightforward when a producer asks for it.
+
+### D5: Admin-only RLS for v1; 5.16 may rewrite
+
+`anthropic_call_log` SELECT is admin-only via an inline `EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND permission_role = 'admin')` policy. The aggregation RPC is SECURITY DEFINER with an inline `public.is_admin()` gate, with EXECUTE granted to `authenticated` so the gate surfaces a clean `admin only` exception instead of a 403. Forward-compatible with 5.16.0's `is_active_member()` pass: the narrow policy stays narrow until that broader hardening rewrite either replaces it with the new helper or leaves it alone.
+
+### D6: Per-function breakdown broadens to TS + VS Settings (app-filtered)
+
+The initial cap-control consolidation (D2 above) put the breakdown table only on HQ Admin Settings. Smoke note surfaced the gap: producers working inside Talent Scout or Venue Scout wanted their own tool's per-function spend visible without bouncing to HQ. The breakdown broadens back to TS + VS Settings as a client-filtered view scoped to that one app (`<AnthropicSpendBreakdownTable appFilter="talent_scout" />`). Cap input stays HQ-only per D2; only the read-only breakdown surface broadens. Filter mechanism is intentionally client-side: the RPC returns the full pool unchanged, the component drops rows where `r.app !== appFilter` before render. Two RPC calls per TS / VS page load (parent summary + table fetch) is fine at Mirror's scale; introducing a shared `useAnthropicSpend` hook deferred.
+
+### D7: HQ Admin Settings keeps the grouped full-pool view
+
+When `appFilter` is omitted, the table renders a grouped view: HQ Core / Talent Scout / Venue Scout subheaders in fixed order, each with inline subtotal ("App Label · N calls · $X.XX total") and per-function rows below sorted by spend desc. Fixed order is locked even when a section is empty (empty groups render a "No calls this month" stub under the subheader) so producers always see the three sections regardless of month-to-month spend mix. Subheaders read better than a flat-sorted mix where TS, VS, and HQ rows would interleave by spend desc. Single table with `colSpan={4}` subheader rows + `Fragment` keys per group; no nested tables.
+
+### D8: `SpendCapCard` rename deferred
+
+VS Settings' `SpendCapCard` function name is misleading post-consolidation (no cap input lives there). Renaming to `AnthropicSpendCard` would touch one declaration + one JSX usage; deferred to keep the squash diff tight. One-line carry-over comment added at the function declaration so the next sweep notices. Carry-forward to a future cleanup phase (or fold into 5.16's codebase triage).
+
+### D9: `.scout-list-tbl` → `.tbl-list` canonicalization
+
+The list-table wrapper class shipped as `.scout-list-tbl` in Phase 5.12.14.3 / 5.13.2 alongside its first VS consumer (ScoutIndex). TS Index adopted it in 5.13, and this ship brought it to the HQ Anthropic spend breakdown surface — three consumers across all three app contexts. The name still implied a VS-only scope. Renamed globally to `.tbl-list` so the identifier signals the canon role ("list-table wrapper") rather than the original consumer. Six selector groups in `src/index.css` and three consumer `<div className="...">` references all flip in the same commit; comment block above the rule rewritten to describe the cross-cutting role. Future HQ Core list-page sweep (Projects / Tasks / Venues / Vendors / Clients / People) will adopt the wrapper without the prior name dissonance.
+
+### D10: `.tbl-divider` global repaint to coral + white
+
+Pre-ship `.tbl-divider td` rendered surface-alt + subtle-foreground 11px uppercase mono, mirroring the thead chrome. That contract worked when the tbody background was the canonical `.tbl` neutral, but `.tbl-list` paints tbody td with surface-alt — and the new HQ breakdown surface composes the two — so dividers blended into the body. Repainted globally: muted coral background (`hsl(var(--primary) / 0.3)`) + bold white text + coral-tinted top/bottom borders at the matching `0.3` alpha so borders blend with the coral fill. Keeps the 11px uppercase mono chrome; only color + bg shift. Single repaint covers every consumer: `<DataTable>`'s two-tier "Done · N hidden" footer (every HQ Core list) and `<AnthropicSpendBreakdownTable>`'s HQ / TS / VS section headers. Selector grew to a comma list (`.tbl-divider td, .tbl-list .tbl tbody tr.tbl-divider td`) so the repaint's specificity beats `.tbl-list .tbl tbody td` and wins inside the lifted-cells context. Final alpha 0.3 picked via in-commit smoke (tried 0.7 → 0.4 → 0.3).
+
+### D11: Year window = calendar year
+
+`window_kind='year'` snaps via `date_trunc('year', anchor)` to Jan 1 of the anchor's calendar year + adds one-year interval for the exclusive end. Rolling 12 months (e.g., May 2025 → May 2026) was the alternative; calendar year matches the fiscal lens admins think in ("year-to-date Anthropic spend") and pairs with the existing 12-month log retention via `ts-cron-monthly-spend-reset`. Multi-year compare deferred (log retention is one year so it's bounded; surfacing it would require a different RPC + UI).
+
+### D12: Toggle scope = all three Settings consumers
+
+The Month / Year segmented toggle ships on HQ Admin Settings, TS Settings, and VS Settings. Toggle state lives in each consumer (no shared global) and is passed to `<AnthropicSpendBreakdownTable>` via a `window?: 'month' | 'year'` prop. Each consumer derives its summary numbers from a parallel breakdown RPC call that takes the same `window_kind` — two RPC calls per page (parent summary sum + breakdown table fetch) keeps the summary and the table in sync without a shared cache. Toggle state does not persist across navigation; remount defaults to Month. Persistence deferred.
+
+### D13: HQ Cap-card "Current Period Spend" comparison frame scales
+
+Under Month, the spend display reads "$X.XX of $Y.XX cap" against the monthly cap. Under Year, it reads "$X.XX of $Y.XX annualized" where annualized = monthly cap × 12. The cap input field itself stays monthly (the underlying `global_settings.anthropic_spend_cap_monthly_usd` column is monthly); only the comparison reference frame scales with the toggle. Over-cap warning fires against the relevant reference per window. Email-alert copy ("Alert email already sent for this month") was left as-is under Year; the alert wiring is monthly so the copy stays accurate, and rewriting it for the annualized case would be a layering misstep. Reconsider if/when a year-mode alert lands.
+
+### D14: Segmented `.viewswitch` UI primitive
+
+Two text-only buttons ("Month", "Year") rendered directly with the canonical `.viewswitch` class. No icons (the breakdown context already says "Per-tool breakdown" + window labels above). `.on` class drives active state; `aria-selected` + `role="tab"` for a11y. Did not adopt `<ViewSwitch>` (`src/components/data/ViewSwitch.tsx`) because that component is hardcoded to the HQ list-page view-kind enum (list / board / timeline / calendar). Lifting it to be generic was deferred. No new CSS.
+
+### D15: Drop `anthropic_spend_current_month_usd` from Settings reads
+
+The pre-window-selector reads on TS Settings + VS Settings + HQ Cap card pulled `global_settings.anthropic_spend_current_month_usd` to display "Current Period Spend." That column is the cap-alert tracker — written incrementally by `_shared/anthropic.ts trackSpendAndAlert` and reset monthly — but it's monthly-only by definition. To support Year mode, all three consumers derive `currentSpend` from the breakdown RPC pool (sum all returned rows). The column stays on `global_settings` because the cap-alert system still uses it; the read just shifts to the RPC.
+
+### D16: RPC signature: explicit DROP before CREATE
+
+The window-selector ship's second migration drops the old `anthropic_spend_breakdown(month_iso text)` signature explicitly via `DROP FUNCTION IF EXISTS` before creating the new two-arg form. `CREATE OR REPLACE` with a different signature creates a sibling function alongside the old one; both would coexist and PostgREST's named-argument resolution would be ambiguous. No callers of the old signature exist post-ship in the codebase (every Settings consumer + the breakdown component migrate to the new signature in the same window-selector ship), so the DROP is safe.
+
 ## Phase 5.14: Venue photo persistence (2026-05-28, complete)
 
-Squash SHA `bf2cb67`. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.14. Two edge functions touched: `vs-generate-deck` + `vs-research-venues`. No migration.
+Squash SHA `4e67f12`. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.14. Two edge functions touched: `vs-generate-deck` + `vs-research-venues`. No migration.
 
 All three `vs-research-venues` hq_pool INSERT paths covered (`loadHqVenuesIntoPool` deterministic-keep, Phase B seed-then-drop, `rescueHqPoolFitVetoedVenues`). Pre-populate pattern is uniform: fresh INSERT captures candidate id via `.select("id").maybeSingle()`; photos queued in `photoSeedCandidates`; `Promise.allSettled` fires `seedHqPhotosToVs` per candidate after the loop. Telemetry unified with `path=load/seed_then_drop/rescue` qualifier on all three `[hqPoolPhotoSeed]` log lines.
 
@@ -38,7 +108,7 @@ No VenueDetail photo display, no VenueEdit photo management. Photos are storage-
 
 ## Phase 5.13: Talent Scout review (2026-05-27, complete)
 
-Squash SHA `9e15841`. 7 sub-phases plus project doc clean-up, collapsed into one commit. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.13.
+Squash SHA `2393840`. 7 sub-phases plus project doc clean-up, collapsed into one commit. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.13.
 
 ### `.savebar` deleted; `.actionbar` is the single sticky-bar class
 

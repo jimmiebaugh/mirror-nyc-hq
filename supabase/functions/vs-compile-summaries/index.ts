@@ -480,6 +480,7 @@ Deno.serve(async (req) => {
                 ],
                 tool_choice: { type: "auto" },
                 fn_name: "vs-compile-summaries:fill",
+                scout_id,
               },
             );
 
@@ -725,6 +726,7 @@ Deno.serve(async (req) => {
                 ],
                 tool_choice: { type: "auto" },
                 fn_name: "vs-compile-summaries:overview",
+                scout_id,
               },
             );
 

@@ -204,6 +204,7 @@ Deno.serve(async (req) => {
           const result = await callClaude("talent_scout", [{ role: "user", content: prompt }], {
             max_tokens: 8000,
             fn_name: "ts-final-review",
+            role_id,
           });
           if (!result.ok) {
             lastErr = result.error;

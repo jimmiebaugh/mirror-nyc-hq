@@ -120,6 +120,10 @@ export type CallClaudeOptions = {
    */
   tools?: ClaudeTool[];
   tool_choice?: ClaudeToolChoice;
+  /** VS scout id, for per-scout cost drilldown (Phase 5.15 call log). */
+  scout_id?: string | null;
+  /** TS role id, for per-role cost drilldown (Phase 5.15 call log). */
+  role_id?: string | null;
 };
 
 /** A single content block from Claude's response (text, tool_use, etc.). */
@@ -216,6 +220,41 @@ async function emailAdminCapCrossed(
     console.log(`[anthropic-spend-tracker] cap-alert email dispatched to ${to}`);
   } catch (e) {
     console.error("[anthropic-spend-tracker] cap-alert email failed:", e);
+  }
+}
+
+// Phase 5.15: per-call log row. Append-only writes to public.anthropic_call_log;
+// read by the HQ Admin Settings breakdown via public.anthropic_spend_breakdown.
+// Best-effort -- a logging outage must never block the caller, same posture as
+// trackSpendAndAlert above.
+async function logCallToTable(args: {
+  app: AppKey;
+  fn_name: string | null | undefined;
+  model: string;
+  usage: ClaudeUsage;
+  cost_usd: number;
+  scout_id: string | null | undefined;
+  role_id: string | null | undefined;
+}): Promise<void> {
+  try {
+    const sb = getServiceClient();
+    const { error } = await sb.from("anthropic_call_log").insert({
+      app: args.app,
+      fn_name: args.fn_name ?? "unknown",
+      model: args.model,
+      input_tokens: args.usage.input_tokens,
+      output_tokens: args.usage.output_tokens,
+      cache_read_tokens: args.usage.cache_read_input_tokens ?? 0,
+      cache_write_tokens: args.usage.cache_creation_input_tokens ?? 0,
+      cost_usd: args.cost_usd,
+      scout_id: args.scout_id ?? null,
+      role_id: args.role_id ?? null,
+    });
+    if (error) {
+      console.warn("[anthropic-call-log] insert failed (non-fatal):", error);
+    }
+  } catch (e) {
+    console.warn("[anthropic-call-log] insert threw (non-fatal):", e);
   }
 }
 
@@ -448,6 +487,23 @@ export async function callClaude(
     console.warn("[anthropic-spend-tracker] tracking failed (non-fatal):", e);
   }
 
+  // Phase 5.15: per-call log for the HQ Settings per-tool breakdown. Runs
+  // after trackSpendAndAlert so a log outage can't block the cap-alert
+  // email path; both are best-effort.
+  try {
+    await logCallToTable({
+      app,
+      fn_name: options.fn_name,
+      model,
+      usage,
+      cost_usd: accumulatedCost,
+      scout_id: options.scout_id,
+      role_id: options.role_id,
+    });
+  } catch (e) {
+    console.warn("[anthropic-call-log] tracking failed (non-fatal):", e);
+  }
+
   return {
     ok: true,
     text,
@@ -537,7 +593,7 @@ export function extractWebSearchResults(
 export async function findVenueWebsite(
   app: AppKey,
   args: { name: string; address: string | null; city: string | null },
-  options: { fn_name?: string } = {},
+  options: { fn_name?: string; scout_id?: string | null } = {},
 ): Promise<string | null> {
   const addr = args.address?.trim();
   const city = args.city?.trim();
@@ -558,6 +614,7 @@ export async function findVenueWebsite(
       ],
       tool_choice: { type: "auto" },
       fn_name: options.fn_name ?? "findVenueWebsite",
+      scout_id: options.scout_id ?? null,
     },
   );
   if (!result.ok) return null;

@@ -1,4 +1,5 @@
 import { AdminsCard } from "@/components/settings/AdminsCard";
+import { AnthropicSpendCapCard } from "@/components/settings/AnthropicSpendCapCard";
 import { BulkImportCard } from "@/components/settings/BulkImportCard";
 import {
   HQ_LOOKUPS,
@@ -9,11 +10,12 @@ import { MirrorHolidaysEditor } from "@/components/settings/MirrorHolidaysEditor
 /**
  * Admin Settings page. Card-stack layout matching Wireframe Surface 20:
  *   1. Admins
- *   2. Lookup Lists (expandable inline editors per row; covers Project
- *      Categories + Cities + Venue Types + Vendor Capabilities +
- *      Vendor Categories + Departments)
- *   3. Mirror Holidays
- *   4. Integrations (collapsed Coming Soon stub; wiring lands with notification dispatch in a future phase)
+ *   2. Lookup Lists
+ *   3. Bulk Import
+ *   4. Anthropic Spend (Phase 5.15: cap input + per-tool breakdown; sole
+ *      canonical home for the cap — TS + VS Settings show read-only spend)
+ *   5. Integrations (Coming Soon stub)
+ *   6. Mirror Holidays
  *
  * R7 amendment v1 § 6: Lookup Lists table extracted to
  * `src/components/settings/LookupListsCard.tsx` so VS Settings can
@@ -32,6 +34,8 @@ export default function SettingsPage() {
       <LookupListsCard lookups={HQ_LOOKUPS} />
 
       <BulkImportCard />
+
+      <AnthropicSpendCapCard />
 
       <div className="card">
         <div className="card-headbar">

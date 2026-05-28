@@ -1,27 +1,24 @@
-// Phase 5.12.14.3 R7 § F: VS Settings page build-out. Replaces the stub
-// from Phase 5.12.12. Three section cards:
-//   - F.1 Lookup Lists: CRUD on cities / neighborhoods / venue_types using
+// VS Settings page. Three section cards:
+//   - Lookup Lists: CRUD on cities / neighborhoods / venue_types using
 //     existing `useLookup` infra.
-//   - F.2 Anthropic Spend Cap: writes `global_settings.anthropic_spend_cap_
-//     monthly_usd`; displays current-period spend. Mirrors the Talent Scout
-//     Settings UI pattern (`src/pages/talent-scout/Settings.tsx`). Per-tool
-//     breakdown is deferred (no call-log infra exists yet; flagged in
-//     OUTPUTS/REPO_DOC_UPDATES.md).
-//   - F.3 System Prompts: placeholder only; editor lands in a future
+//   - Anthropic Spend (read-only as of Phase 5.15; per-function breakdown
+//     table added Phase 5.15.1; Month / Year window toggle added Phase
+//     5.15.3): VS spend + global spend for the selected window. Both
+//     summary numbers derive from the breakdown RPC so they scale with
+//     the toggle. Cap editing + the grouped full-pool breakdown live on
+//     HQ Admin Settings (canonical home).
+//   - System Prompts: placeholder only; editor lands in a future
 //     sub-phase.
 //
-// Gated by AdminRoute (App.tsx:665). Producer + admin role discrimination
-// is layered at the schema (RLS) layer; the page-level gate stays admin-
-// only since the Spend Cap + future System Prompts editor are admin
-// concerns.
+// Gated by AdminRoute. Phase 5.16 will revisit RLS posture across HQ Core
+// tables; the page-level gate stays admin-only until that pass.
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   LookupListsCard,
   type LookupListsCardEntry,
 } from "@/components/settings/LookupListsCard";
+import { AnthropicSpendBreakdownTable } from "@/components/settings/AnthropicSpendBreakdownTable";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -70,91 +67,67 @@ const VS_LOOKUPS: LookupListsCardEntry[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// F.2 — Anthropic Spend Cap card
+// Anthropic Spend card (read-only as of Phase 5.15; per-function breakdown
+// table added Phase 5.15.1; Month / Year window toggle added Phase 5.15.3)
 // ---------------------------------------------------------------------------
 
+type BreakdownRow = {
+  app: "talent_scout" | "venue_scout" | "hq";
+  fn_name: string;
+  calls: number;
+  total_cost_usd: number;
+  avg_cost_usd: number;
+};
+
+// Name carry-over from Phase 5.15 (no cap input lives here anymore;
+// rename to AnthropicSpendCard deferred per Phase 5.15.1 spec § 6).
 function SpendCapCard() {
-  const [settingsId, setSettingsId] = useState<string | null>(null);
-  const [capInput, setCapInput] = useState("");
-  const [capInitial, setCapInitial] = useState("");
-  const [currentSpend, setCurrentSpend] = useState(0);
+  const [window, setWindow] = useState<"month" | "year">("month");
+  const [vsSpend, setVsSpend] = useState(0);
+  const [globalSpend, setGlobalSpend] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data, error } = await supabase
-        .from("global_settings")
-        .select(
-          "id, anthropic_spend_cap_monthly_usd, anthropic_spend_current_month_usd",
-        )
-        .limit(1)
-        .maybeSingle();
+      setLoading(true);
+      const { data: rows, error } = await supabase.rpc(
+        "anthropic_spend_breakdown",
+        { window_kind: window },
+      );
       if (!active) return;
       if (error) {
         toast({
-          title: "Failed to load spend cap",
+          title: "Couldn't load VS spend breakdown",
           description: error.message,
           variant: "destructive",
         });
-        setLoading(false);
-        return;
-      }
-      if (data) {
-        setSettingsId(data.id as string);
-        const cap = String(data.anthropic_spend_cap_monthly_usd ?? 0);
-        setCapInput(cap);
-        setCapInitial(cap);
-        setCurrentSpend(Number(data.anthropic_spend_current_month_usd ?? 0));
+        setVsSpend(0);
+        setGlobalSpend(0);
+      } else {
+        const all = (rows ?? []) as BreakdownRow[];
+        const vsTotal = all
+          .filter((r) => r.app === "venue_scout")
+          .reduce((acc, r) => acc + Number(r.total_cost_usd ?? 0), 0);
+        const globalTotal = all.reduce(
+          (acc, r) => acc + Number(r.total_cost_usd ?? 0),
+          0,
+        );
+        setVsSpend(vsTotal);
+        setGlobalSpend(globalTotal);
       }
       setLoading(false);
     })();
     return () => {
       active = false;
     };
-  }, []);
-
-  const dirty = capInput.trim() !== capInitial.trim();
-
-  const onSave = async () => {
-    if (!settingsId) return;
-    const capNum = Number(capInput);
-    if (!Number.isFinite(capNum) || capNum < 0) {
-      toast({
-        title: "Invalid spend cap",
-        description: "Enter a non-negative number.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setSaving(true);
-    const { error } = await supabase
-      .from("global_settings")
-      .update({ anthropic_spend_cap_monthly_usd: capNum })
-      .eq("id", settingsId);
-    setSaving(false);
-    if (error) {
-      toast({
-        title: "Save failed",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
-    }
-    setCapInitial(String(capNum));
-    setCapInput(String(capNum));
-    toast({ title: "Spend cap saved" });
-  };
-
-  const overCap =
-    Number(capInitial || 0) > 0 && currentSpend >= Number(capInitial || 0);
+  }, [window]);
 
   if (loading) {
     return (
       <section className="card">
         <div className="card-headbar">
-          <h2 className="h-card">Anthropic Spend Cap</h2>
+          <h2 className="h-card">Anthropic Spend</h2>
         </div>
         <div className="card-pad">
           <p className="text-sm text-muted-foreground">Loading…</p>
@@ -163,64 +136,57 @@ function SpendCapCard() {
     );
   }
 
+  const windowLabel = window === "year" ? "this year" : "this month";
+
   return (
     <section className="card">
       <div className="card-headbar">
-        <h2 className="h-card">Anthropic Spend Cap</h2>
+        <h2 className="h-card">Anthropic Spend</h2>
       </div>
-      <div className="card-pad space-y-4">
+      <div className="card-pad space-y-3">
         <p className="text-xs text-muted-foreground">
-          The monthly cap is shared across Talent Scout + Venue Scout (single
-          `global_settings` row). Crossing the cap fires a one-time email
-          alert to the admin and re-arms on the 1st of each month. Calls keep
-          running over cap (graceful degradation, not a hard cutoff).
+          Venue Scout's contribution to the selected window's Anthropic spend. Cap
+          and full per-tool breakdown live on the HQ Admin Settings page.
         </p>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="space-y-1">
-            <div className="label-form">Monthly Cap (USD)</div>
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              value={capInput}
-              onChange={(e) => setCapInput(e.target.value)}
-              className="max-w-[200px]"
-            />
-          </div>
-          <div className="space-y-1">
-            <div className="label-form">Current Period Spend</div>
+        <div className="flex flex-wrap items-center gap-6">
+          <div>
+            <div className="label-form">Venue Scout ({windowLabel})</div>
             <div className="text-[17px] font-bold text-primary">
-              ${currentSpend.toFixed(2)}
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                of ${Number(capInitial || 0).toFixed(2)} cap
-              </span>
+              ${vsSpend.toFixed(2)}
+            </div>
+          </div>
+          <div>
+            <div className="label-form">Global ({windowLabel})</div>
+            <div className="text-[17px] font-bold text-primary">
+              ${globalSpend.toFixed(2)}
             </div>
           </div>
         </div>
-        {overCap && (
-          <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
-            Cap reached. Alert email already sent for this month. Calls
-            continue (graceful degradation).
+        <div className="space-y-3 pt-3 border-t border-border">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="h-card" style={{ fontSize: 15 }}>Per-tool breakdown</h2>
+            <div className="viewswitch" role="tablist" aria-label="Spend window">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={window === "month"}
+                className={window === "month" ? "on" : undefined}
+                onClick={() => setWindow("month")}
+              >
+                Month
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={window === "year"}
+                className={window === "year" ? "on" : undefined}
+                onClick={() => setWindow("year")}
+              >
+                Year
+              </button>
+            </div>
           </div>
-        )}
-
-        {/* R7 § F.2 → R7 amendment v1 § 5: per-tool breakdown stub now
-            sits above the Save button (was below). The call-log infra
-            (per-edge-function row in an anthropic_call_log table or
-            aggregation view) doesn't exist yet; queued via
-            REPO_DOC_UPDATES. */}
-        <div className="rounded-md border border-border bg-input/40 px-3 py-2">
-          <p className="text-xs text-muted-foreground">
-            Per-tool breakdown (calls + spend per edge function) coming when
-            the call-log infrastructure ships. Tracking infra queued for a
-            future sub-phase.
-          </p>
-        </div>
-
-        <div className="flex justify-end">
-          <Button disabled={!dirty || saving} onClick={() => void onSave()}>
-            {saving ? "Saving…" : "Save spend cap"}
-          </Button>
+          <AnthropicSpendBreakdownTable appFilter="venue_scout" window={window} />
         </div>
       </div>
     </section>
@@ -228,7 +194,7 @@ function SpendCapCard() {
 }
 
 // ---------------------------------------------------------------------------
-// F.3 — System Prompts placeholder
+// System Prompts placeholder
 // ---------------------------------------------------------------------------
 
 function SystemPromptsCard() {

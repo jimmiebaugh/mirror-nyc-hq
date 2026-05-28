@@ -318,7 +318,7 @@ export default function TalentScoutIndex() {
         </div>
       ) : (
         <>
-          <div className="scout-list-tbl">
+          <div className="tbl-list">
             <DataTable<RoleExt>
               rows={rows}
               flat

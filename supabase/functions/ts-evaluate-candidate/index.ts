@@ -225,6 +225,7 @@ Deno.serve(async (req) => {
         system: claudeRequest.system as any,
         anthropic_beta: ["extended-cache-ttl-2025-04-11"],
         fn_name: "ts-evaluate-candidate",
+        role_id: cand.role_id,
       },
     );
     if (!result.ok) throw new Error(`Anthropic ${result.status}: ${result.error.slice(0, 300)}`);

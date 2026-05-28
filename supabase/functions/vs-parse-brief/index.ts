@@ -711,6 +711,7 @@ Deno.serve(async (req) => {
       tool_choice: { type: "tool", name: "submit_brief" },
       max_tokens: 1500,
       fn_name: "vs-parse-brief",
+      scout_id,
     },
   );
 

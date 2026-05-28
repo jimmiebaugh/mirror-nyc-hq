@@ -223,7 +223,7 @@
   .tier-badge--3 { background: hsl(var(--success) / 0.10); color: hsl(var(--success)); border-color: hsl(var(--success) / 0.3); }
   /* Bonus tier uses the Mirror coral (deck primary). RGBA derived from
      #BE4E44 = rgb(190, 78, 68). */
-  .tier-badge--bonus { background: hsl(var(--primary) / 0.15); color: hsl(var(--primary)); border-color: hsl(var(--primary) / 0.4); }
+  .tier-badge--bonus { background: hsl(var(--primary) / 0.15); color: hsl(var(--primary)); border-color: hsl(var(--primary) / 0.3); }
 
   /* Phase 4.10.2-port: .manual-tag removed. Was used by Shortlist's
      manual-row branch to label rows "Manual" inline; the new
@@ -890,36 +890,41 @@
      `src/components/venue-scout/matrix/primitives.tsx` carry the rest. */
   .tbl--matrix{width:100%;border-collapse:collapse;min-width:1280px;table-layout:fixed;}
 
-  /* R7 amendment v2 § 2 → R7 amendment v3 § 1: `.scout-list-tbl` wrapper
-     aligns ScoutIndex DataTable visuals with Sourcing/Shortlist matrix
-     contract (header bg + centering, body row bg, archived-row treatment,
-     column dividers, no canon `::after` pseudo bar) WITHOUT matrix-
-     specific deltas (sticky col, 1280 min-width, table-fixed). HQ Core
-     `.tbl` consumers (Settings, Wiki, ProjectDetail, etc.) stay
-     unchanged because all rules are scoped through `.scout-list-tbl`. */
-  .scout-list-tbl .tbl thead th{
+  /* Phase 5.15.2: renamed from .scout-list-tbl. Canonical wrapper for
+     list-view tables across HQ Core, Talent Scout, and Venue Scout.
+     Composes with .tbl + .tbl-wrap to add lifted-cells (surface-alt
+     tbody) + column-divider borders + thead surface-bg. Use on any
+     list table that wants the ScoutIndex/TSIndex visual contract.
+     Original R7 amendment v2 § 2 → v3 § 1 context: contract derived
+     from the Sourcing/Shortlist matrix's header bg + centering, body
+     row bg, archived-row treatment, column dividers, no canon `::after`
+     pseudo bar — WITHOUT matrix-specific deltas (sticky col, 1280
+     min-width, table-fixed). Plain `.tbl` consumers (Wiki, detail
+     pages, etc.) stay unchanged because every rule is scoped through
+     `.tbl-list`. */
+  .tbl-list .tbl thead th{
     background:hsl(var(--surface));
     text-align:center;
   }
   /* Phase 5.13.2c smoke: explicit `.l` opt-out so a column can left-align
-     its header (e.g. TS Index "Role" column) inside the scout-list-tbl
+     its header (e.g. TS Index "Role" column) inside the tbl-list
      center-default. DataTable emits the .l class when align==="l". */
-  .scout-list-tbl .tbl thead th.l,
-  .scout-list-tbl .tbl tbody td.l{
+  .tbl-list .tbl thead th.l,
+  .tbl-list .tbl tbody td.l{
     text-align:left;
   }
-  .scout-list-tbl .tbl thead th, .scout-list-tbl .tbl tbody td{
+  .tbl-list .tbl thead th, .tbl-list .tbl tbody td{
     border-right:1px solid hsl(var(--border));
   }
-  .scout-list-tbl .tbl thead th:last-child,
-  .scout-list-tbl .tbl tbody td:last-child{
+  .tbl-list .tbl thead th:last-child,
+  .tbl-list .tbl tbody td:last-child{
     border-right:0;
   }
   /* Drop the canon `::after` cell-divider pseudo bar; the per-cell
      border-r above takes its place (mirrors how matrix `[&>td]:border-r`
      replaces the pseudo). */
-  .scout-list-tbl .tbl thead th::after,
-  .scout-list-tbl .tbl tbody td::after{
+  .tbl-list .tbl thead th::after,
+  .tbl-list .tbl tbody td::after{
     display:none;
   }
   /* R7 amendment v3 § 1.1: body row bg matches matrix tables' `bg-surface-
@@ -927,22 +932,37 @@
      `<div className="tbl-wrap bg-surface-alt">`). ScoutIndex consumes
      DataTable which renders a `.tbl-wrap` with no bg, so painting
      `bg-surface-alt` on every tbody td closes the visual gap. */
-  .scout-list-tbl .tbl tbody td{
+  .tbl-list .tbl tbody td{
     background:hsl(var(--surface-alt));
   }
   /* R7 amendment v3 § 1.2: archived (terminal-tier) rows match the
      header's bg + text color. DataTable applies `opacity: 0.6` inline
      to terminal rows — that's the selector hook. Subtle-foreground
      matches what the .tbl thead th uses. */
-  .scout-list-tbl .tbl tbody tr[style*="opacity"] td{
+  .tbl-list .tbl tbody tr[style*="opacity"] td{
     background:hsl(var(--surface));
     color:hsl(var(--subtle-foreground));
   }
   .checkbox{width:15px;height:15px;border:1px solid hsl(var(--border-strong));border-radius:3px;background:hsl(var(--surface-alt));display:inline-flex;align-items:center;justify-content:center;color:#000;cursor:pointer;}
   .checkbox--on{background:hsl(var(--primary));border-color:hsl(var(--primary));}
   .checkbox .ic{width:11px;height:11px;stroke-width:3;}
-  /* Phase 5.7.4 smoke round 2: divider row mirrors thead chrome (surface-alt fill + 11px / 10px padding) so the two-tier "Done · N hidden" footer reads as a structural section header, not floating mid-table. */
-  .tbl-divider td{background:hsl(var(--surface-alt));padding:10px 14px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:hsl(var(--subtle-foreground));border-top:1px solid hsl(var(--border));border-bottom:1px solid hsl(var(--border));}
+  /* Phase 5.15.2 repaint (+ polish amendment): muted coral background +
+     bold white text for visible structural separation against any
+     tbody-bg context. Keeps the 11px uppercase mono chrome — only color
+     + bg change. Used by:
+       - DataTable two-tier "Done · N hidden" footer (every HQ Core list)
+       - AnthropicSpendBreakdownTable HQ/TS/VS section headers
+     Replaces the pre-5.15.2 surface-alt + subtle-foreground treatment
+     (Phase 5.7.4 smoke round 2). Polish amendment: alpha dropped 0.7
+     → 0.3 (softer coral tint; smoke-tuned through 0.4 to 0.3), and
+     added the `.tbl-list` wrapper-aware
+     selector so the divider repaint wins inside the lifted-cells context
+     too — without it, `.tbl-list .tbl tbody td` (specificity 0,0,2,2)
+     overrides the base `.tbl-divider td` (0,0,1,1). The new combined
+     selector is (0,0,3,3) so it beats the cell-bg cascade in `.tbl-list`
+     while the base path keeps applying on canonical `.tbl` consumers. */
+  .tbl-divider td,
+  .tbl-list .tbl tbody tr.tbl-divider td{background:hsl(var(--primary) / 0.3);color:hsl(var(--primary-foreground));padding:10px 14px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-top:1px solid hsl(var(--primary) / 0.3);border-bottom:1px solid hsl(var(--primary) / 0.3);}
 
   /* View switcher (icon-segmented). Active = .on. */
   .viewswitch{display:inline-flex;border:1px solid hsl(var(--border-strong));border-radius:var(--radius);overflow:hidden;}
@@ -1550,7 +1570,7 @@
   .fr-step-circle--active {
     background: hsl(var(--primary) / 0.15);
     color: hsl(var(--primary));
-    border-color: hsl(var(--primary) / 0.4);
+    border-color: hsl(var(--primary) / 0.3);
   }
   .fr-error-card {
     border-left: 3px solid hsl(var(--destructive));

@@ -1,32 +1,43 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { TagInput } from "@/components/talent-scout/TagInput";
+import { AnthropicSpendBreakdownTable } from "@/components/settings/AnthropicSpendBreakdownTable";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
 /**
- * Phase 3.7.5 / 3.8: Talent Scout global settings page.
+ * Talent Scout global settings page.
  *
  * Settings:
- *   - Global competitor list (default seed for new roles)
- *   - Anthropic monthly spend cap + current month spend display (read-only)
- *
- * The competitor list is the seed value for new roles' competitor_bonus.competitors
- * on creation. Editing here does NOT propagate to existing roles (per Jimmie's
- * spec); existing roles keep their saved list until edited via Role Settings.
+ *   - Global competitor list (default seed for new roles). Editing here
+ *     does NOT propagate to existing roles; existing roles keep their
+ *     saved list until edited via Role Settings.
+ *   - Anthropic Spend (read-only, Phase 5.15; per-function breakdown
+ *     table added Phase 5.15.1; Month / Year window toggle added Phase
+ *     5.15.3). TS spend + global spend for the selected window, plus
+ *     the per-function breakdown filtered to `app='talent_scout'`. Both
+ *     summary numbers derive from the breakdown RPC so they scale with
+ *     the toggle. Cap editing + the grouped full-pool breakdown live on
+ *     HQ Admin Settings (canonical home).
  *
  * Spend tracking: callClaude in _shared/anthropic.ts increments
- * anthropic_spend_current_month_usd after every Claude call. Crossing the cap
- * fires a one-time email alert via _shared/sendEmail.ts to the oldest active
- * admin (cap_alert_sent_this_month gates re-fires; ts-cron-monthly-spend-reset
- * re-arms it on the 1st of each month). Calls are NOT blocked over cap —
- * graceful degradation per the spec.
+ * `global_settings.anthropic_spend_current_month_usd` after every Claude
+ * call AND writes a per-call row to `anthropic_call_log` (Phase 5.15).
+ * Cap-alert wiring lives unchanged on _shared/anthropic.ts; the cap value
+ * is now editable only on HQ Admin Settings.
  *
- * Storage maintenance is fully automated: ts-cron-storage-cleanup runs daily
- * at 03:00 UTC and purges per the conservative schema-doc retention rules.
- * No manual trigger surfaced to the UI.
+ * Storage maintenance is fully automated: ts-cron-storage-cleanup runs
+ * daily at 03:00 UTC; ts-cron-monthly-spend-reset resets spend + prunes
+ * 12-month-old call-log rows on the 1st (Phase 5.15).
  */
+type BreakdownRow = {
+  app: "talent_scout" | "venue_scout" | "hq";
+  fn_name: string;
+  calls: number;
+  total_cost_usd: number;
+  avg_cost_usd: number;
+};
+
 export default function TalentScoutSettings() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
 
@@ -34,10 +45,10 @@ export default function TalentScoutSettings() {
   const [competitors, setCompetitors] = useState<string[]>([]);
   const [competitorsInitial, setCompetitorsInitial] = useState<string[]>([]);
 
-  // Spend cap state.
-  const [capInput, setCapInput] = useState("");
-  const [capInitial, setCapInitial] = useState("");
-  const [currentSpend, setCurrentSpend] = useState(0);
+  // Spend display state (read-only as of 5.15; window-toggleable as of 5.15.3).
+  const [window, setWindow] = useState<"month" | "year">("month");
+  const [tsSpend, setTsSpend] = useState(0);
+  const [globalSpend, setGlobalSpend] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -45,54 +56,66 @@ export default function TalentScoutSettings() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data, error } = await supabase
-        .from("global_settings")
-        .select("id, talent_scout_competitor_list, anthropic_spend_cap_monthly_usd, anthropic_spend_current_month_usd")
-        .limit(1)
-        .maybeSingle();
+      setLoading(true);
+      const [{ data: gs, error: gsErr }, { data: rows, error: rpcErr }] =
+        await Promise.all([
+          supabase
+            .from("global_settings")
+            .select("id, talent_scout_competitor_list")
+            .limit(1)
+            .maybeSingle(),
+          supabase.rpc("anthropic_spend_breakdown", { window_kind: window }),
+        ]);
       if (!active) return;
-      if (error) {
-        toast({ title: "Failed to load settings", description: error.message, variant: "destructive" });
+      if (gsErr) {
+        toast({ title: "Failed to load settings", description: gsErr.message, variant: "destructive" });
         setLoading(false);
         return;
       }
-      if (data) {
-        setSettingsId(data.id);
-        const list = data.talent_scout_competitor_list ?? [];
+      if (gs) {
+        setSettingsId(gs.id);
+        const list = gs.talent_scout_competitor_list ?? [];
         setCompetitors(list);
         setCompetitorsInitial(list);
-        const cap = String(data.anthropic_spend_cap_monthly_usd ?? 0);
-        setCapInput(cap);
-        setCapInitial(cap);
-        setCurrentSpend(Number(data.anthropic_spend_current_month_usd ?? 0));
+      }
+      if (rpcErr) {
+        toast({
+          title: "Couldn't load TS spend breakdown",
+          description: rpcErr.message,
+          variant: "destructive",
+        });
+        setTsSpend(0);
+        setGlobalSpend(0);
+      } else {
+        const all = (rows ?? []) as BreakdownRow[];
+        const tsTotal = all
+          .filter((r) => r.app === "talent_scout")
+          .reduce((acc, r) => acc + Number(r.total_cost_usd ?? 0), 0);
+        const globalTotal = all.reduce(
+          (acc, r) => acc + Number(r.total_cost_usd ?? 0),
+          0,
+        );
+        setTsSpend(tsTotal);
+        setGlobalSpend(globalTotal);
       }
       setLoading(false);
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [window]);
 
   const competitorsDirty =
     competitors.length !== competitorsInitial.length ||
     competitors.some((c, i) => c !== competitorsInitial[i]);
-  const capDirty = capInput.trim() !== capInitial.trim();
-  const dirty = competitorsDirty || capDirty;
+  const dirty = competitorsDirty;
 
   const onSave = async () => {
     if (!settingsId) return;
-    const capNum = Number(capInput);
-    if (!Number.isFinite(capNum) || capNum < 0) {
-      toast({ title: "Invalid spend cap", description: "Enter a non-negative number.", variant: "destructive" });
-      return;
-    }
     setSaving(true);
     const { error } = await supabase
       .from("global_settings")
-      .update({
-        talent_scout_competitor_list: competitors,
-        anthropic_spend_cap_monthly_usd: capNum,
-      })
+      .update({ talent_scout_competitor_list: competitors })
       .eq("id", settingsId);
     setSaving(false);
     if (error) {
@@ -100,21 +123,18 @@ export default function TalentScoutSettings() {
       return;
     }
     setCompetitorsInitial(competitors);
-    setCapInitial(String(capNum));
-    setCapInput(String(capNum));
     toast({ title: "Settings saved" });
   };
 
   const onDiscard = () => {
     setCompetitors(competitorsInitial);
-    setCapInput(capInitial);
   };
-
-  const overCap = Number(capInitial || 0) > 0 && currentSpend >= Number(capInitial || 0);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
+
+  const windowLabel = window === "year" ? "this year" : "this month";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -141,34 +161,53 @@ export default function TalentScoutSettings() {
 
       <section className="card">
         <div className="card-headbar">
-          <span className="h-card">Anthropic Monthly Spend Cap (USD)</span>
+          <span className="h-card">Anthropic Spend</span>
         </div>
         <div className="card-pad space-y-3">
           <p className="text-xs text-muted-foreground">
-            Crossing the cap fires a one-time email alert to the admin and re-arms on the 1st of each month. Calls keep running over cap (graceful degradation, not a hard cutoff).
+            Talent Scout's contribution to the selected window's Anthropic spend. Cap
+            and full per-tool breakdown live on the HQ Admin Settings page.
           </p>
-          <div className="flex items-center gap-4">
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              value={capInput}
-              onChange={(e) => setCapInput(e.target.value)}
-              className="max-w-[200px]"
-            />
-            <div className="text-[15px] text-muted-foreground">
-              Current month spend:{" "}
-              {/* Sanctioned coral: spend amount stays coral per Phase 5.13.2c spec. */}
-              <span className="text-primary font-semibold text-[17px]">
-                ${currentSpend.toFixed(2)}
-              </span>
+          <div className="flex flex-wrap items-center gap-6">
+            <div>
+              <div className="label-form">Talent Scout ({windowLabel})</div>
+              <div className="text-[17px] font-bold text-primary">
+                ${tsSpend.toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="label-form">Global ({windowLabel})</div>
+              <div className="text-[17px] font-bold text-primary">
+                ${globalSpend.toFixed(2)}
+              </div>
             </div>
           </div>
-          {overCap && (
-            <div className="text-xs text-destructive">
-              Cap reached. Alert email already sent for this month.
+          <div className="space-y-3 pt-3 border-t border-border">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h2 className="h-card" style={{ fontSize: 15 }}>Per-tool breakdown</h2>
+              <div className="viewswitch" role="tablist" aria-label="Spend window">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={window === "month"}
+                  className={window === "month" ? "on" : undefined}
+                  onClick={() => setWindow("month")}
+                >
+                  Month
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={window === "year"}
+                  className={window === "year" ? "on" : undefined}
+                  onClick={() => setWindow("year")}
+                >
+                  Year
+                </button>
+              </div>
             </div>
-          )}
+            <AnthropicSpendBreakdownTable appFilter="talent_scout" window={window} />
+          </div>
         </div>
       </section>
 
