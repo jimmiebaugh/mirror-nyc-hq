@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -26,6 +25,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { TagInput } from "@/components/talent-scout/TagInput";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { CriterionCard } from "@/components/talent-scout/CriterionCard";
 import { TIER_META, COMPETITOR_BONUS_POINTS } from "@/lib/talent-scout/scorecard";
 import type { Criterion } from "@/lib/talent-scout/wizardStore";
@@ -451,21 +451,13 @@ export default function RoleSettings() {
   const isClosed = role.status === "closed";
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      {/* Title row — back link, title, close-role button on the right. */}
+    <div className="mx-auto max-w-7xl space-y-6 pb-32">
       <header className="space-y-3">
-        <button
-          type="button"
-          onClick={() => navigateOrConfirm(`/talent-scout/roles/${role.id}`)}
-          className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline"
-        >
-          ← Back to role
-        </button>
-        {/* Phase 3.7.6.7: page header simplified — role title moved into
-             the Role Details card title row (coral, larger). The page-
-             level h1 'Edit role' subtitle line is gone. */}
         <div className="flex items-start justify-between gap-6">
-          <h1 className="h-page">Edit role</h1>
+          <div className="space-y-2">
+            <div className="eyebrow">Edit Role</div>
+            <h1 className="h-page">{role.title}</h1>
+          </div>
           <div className="flex flex-shrink-0 items-center gap-2">
             {isClosed ? (
               <Button variant="outline" onClick={onReopen}>Reopen role</Button>
@@ -492,38 +484,28 @@ export default function RoleSettings() {
         </div>
       </header>
 
-      {/* Phase 3.7.6.11: switched from a 2-column flex-of-stacks to an
-           explicit 2-column × 3-row grid so the Scorecard card on the
-           right can be precisely bounded to the LEFT column's three
-           cards (Role Details, Eval Prompt, Competitor List). Top of
-           Scorecard aligns with top of Role Details; bottom of Scorecard
-           aligns with bottom of Competitor List. If the scorecard's
-           content exceeds that height, the inner body scrolls. */}
-      <div className="grid items-start gap-6 md:grid-cols-2 md:grid-rows-[auto_auto_auto]">
-        {/* LEFT COLUMN — three separate grid items, one per row, col 1. */}
-        <div className="min-w-0 md:col-start-1 md:row-start-1">
-          <Card className="bg-surface-alt">
-            <CardContent className="space-y-6 p-6">
-              {/* Phase 3.7.6.7: title row carries both the section label
-                   and the editable role title (coral, larger size).
-                   Phase 3.10.2: title sits at the far LEFT of the column
-                   with the section label hugging its right edge.
-                   Phase 3.10.3: input width comes from a hidden sizer
-                   span that renders the title text in the same font /
-                   size / weight / case so the actual rendered width is
-                   measured (Montserrat ExtraBold uppercase is wider per
-                   glyph than the input's `size` attribute average). */}
-              <RoleTitleRow
-                title={form.title}
-                onChange={(v) => update("title", v)}
-              />
+      {/* Phase 5.13.2c smoke: regridded. LEFT column = Details (tall card).
+           RIGHT column = Evaluation Prompt + Competitor List stacked.
+           Scorecard moves OUT of the grid and renders full-width below as
+           its own section. */}
+      <div className="grid items-start gap-6 md:grid-cols-2">
+        {/* LEFT COLUMN — Details only. */}
+        <div className="min-w-0">
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Details</span>
+            </div>
+            <div className="card-pad space-y-6">
+              <HQFormField label="Role title" required>
+                <Input value={form.title} onChange={(e) => update("title", e.target.value)} placeholder="Role title" />
+              </HQFormField>
 
-              {/* Location / Type / Compensation row sits directly under the title */}
+              {/* Location / Type / Compensation row */}
               <div className="grid gap-4 md:grid-cols-3">
-                <Field label="Location">
+                <HQFormField label="Location">
                   <Input value={form.location} onChange={(e) => update("location", e.target.value)} />
-                </Field>
-                <Field label="Type">
+                </HQFormField>
+                <HQFormField label="Type">
                   <Select value={form.type} onValueChange={(v) => update("type", v)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select…" />
@@ -534,30 +516,30 @@ export default function RoleSettings() {
                       <SelectItem value="Freelance">Freelance</SelectItem>
                     </SelectContent>
                   </Select>
-                </Field>
-                <Field label="Compensation">
+                </HQFormField>
+                <HQFormField label="Compensation">
                   <Input value={form.compensation} onChange={(e) => update("compensation", e.target.value)} />
-                </Field>
+                </HQFormField>
               </div>
 
-              <Field label="Job description" required>
+              <HQFormField label="Job description" required>
                 <Textarea
                   className="min-h-[180px]"
                   value={form.job_description}
                   onChange={(e) => update("job_description", e.target.value)}
                 />
-              </Field>
+              </HQFormField>
 
               {/* Phase 3.7.6: relabeled from "Hiring priorities not in JD" */}
-              <Field label="Additional Priorities and Factors Not in JD">
+              <HQFormField label="Additional Priorities and Factors Not in JD">
                 <Textarea
                   className="min-h-[100px]"
                   value={form.hiring_priorities}
                   onChange={(e) => update("hiring_priorities", e.target.value)}
                 />
-              </Field>
+              </HQFormField>
 
-              <Field label="Auto-rejection threshold">
+              <HQFormField label="Auto-rejection threshold">
                 <div className="space-y-2">
                   <Slider
                     min={0}
@@ -572,26 +554,26 @@ export default function RoleSettings() {
                     <span>100</span>
                   </div>
                 </div>
-              </Field>
+              </HQFormField>
 
-              <Field label="Subject line keywords" required>
+              <HQFormField label="Subject line keywords" required>
                 <TagInput
                   value={form.email_keywords}
                   onChange={(v) => update("email_keywords", v)}
                   placeholder="Add keyword…"
                   normalize
                 />
-              </Field>
+              </HQFormField>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Start pulling from">
+                <HQFormField label="Start pulling from">
                   <Input
                     type="date"
                     value={form.email_search_start_date}
                     onChange={(e) => update("email_search_start_date", e.target.value)}
                   />
-                </Field>
-                <Field label="Auto-pull schedule">
+                </HQFormField>
+                <HQFormField label="Auto-pull schedule">
                   {/* Phase 3.7.6.4: 2×2 grid of options instead of vertical
                        stack. Compacts the height and pairs naturally with
                        Start-pulling-from on the left. */}
@@ -609,11 +591,11 @@ export default function RoleSettings() {
                       </div>
                     ))}
                   </RadioGroup>
-                </Field>
+                </HQFormField>
               </div>
 
               {/* Phase 3.7.6.4: hiring manager moved to bottom of section. */}
-              <Field label="Hiring manager" required>
+              <HQFormField label="Hiring manager" required>
                 <Select
                   value={form.hiring_manager_id ?? undefined}
                   onValueChange={(v) => update("hiring_manager_id", v || null)}
@@ -629,24 +611,26 @@ export default function RoleSettings() {
                     ))}
                   </SelectContent>
                 </Select>
-              </Field>
-            </CardContent>
-          </Card>
+              </HQFormField>
+            </div>
+          </section>
         </div>
 
-        {/* LEFT COLUMN row 2 — Evaluation Prompt. Phase 3.7.6.11: own grid
-             item so the Scorecard on the right can bound itself to row 1+2+3. */}
-        <div className="min-w-0 md:col-start-1 md:row-start-2">
-          <Card className="bg-surface-alt">
-            <CardContent className="space-y-4 p-6">
-              <div className="label-section pb-2 border-b border-border -mx-6 -mt-6 px-6 pt-6 mb-4">
-                Evaluation Prompt
-              </div>
+        {/* RIGHT COLUMN — Evaluation Prompt + Competitor List stacked. */}
+        <div className="min-w-0 flex flex-col gap-6">
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Evaluation Prompt</span>
+            </div>
+            <div className="card-pad space-y-4">
               <Textarea
                 value={form.evaluation_prompt}
                 onChange={(e) => update("evaluation_prompt", e.target.value)}
                 className="h-[252px] resize-none overflow-y-auto font-mono text-[12px] leading-relaxed"
               />
+              <p className="text-xs text-muted-foreground">
+                Location rules are always applied during evaluation, even when using a custom prompt.
+              </p>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>
                   {form.evaluation_prompt === DEFAULT_EVAL_PROMPT
@@ -662,18 +646,14 @@ export default function RoleSettings() {
                   Reset to default
                 </button>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </section>
 
-        {/* LEFT COLUMN row 3 — Role Competitor List. Last item in col 1;
-             Scorecard's bottom edge aligns with this card's bottom. */}
-        <div className="min-w-0 md:col-start-1 md:row-start-3">
-          <Card className="bg-surface-alt">
-            <CardContent className="space-y-4 p-6">
-              <div className="label-section pb-2 border-b border-border -mx-6 -mt-6 px-6 pt-6 mb-4">
-                Role Competitor List
-              </div>
+          <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Competitor List</span>
+            </div>
+            <div className="card-pad space-y-4">
               <p className="text-xs text-muted-foreground">
                 Candidates with experience at any company below earn the competitor bonus.
                 3 pts: 1 to 2 yrs · 5 pts: 3 to 4 yrs · 8 pts: 5+ yrs · +2 pts: leadership at competitor.
@@ -697,36 +677,27 @@ export default function RoleSettings() {
                 placeholder="Add competitor…"
                 caseInsensitiveDedup
               />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* RIGHT COLUMN — Scorecard. Phase 3.7.6.11: spans col 2 across
-             all 3 left-column rows. min-h-0 keeps it from forcing the
-             grid rows to expand if its content would otherwise be
-             taller than the left stack. overflow-hidden + h-full +
-             flex-col on Card and an inner overflow-y-auto body means
-             content scrolls inside the card when it exceeds the
-             bounded height — top edge aligns with Role Details, bottom
-             with Competitor List. */}
-        <div className="min-w-0 min-h-0 overflow-hidden md:col-start-2 md:row-span-3 md:row-start-1">
-          <Card className="flex h-full flex-col bg-surface-alt">
-            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-border px-6 py-4">
-              <div className="label-section text-[15px]">Scorecard</div>
-              <ScorecardTotalReadout total={scorecardTotal(form.scorecard)} />
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-6">
-              <ScorecardEditor
-                criteria={form.scorecard}
-                onChange={(c) => {
-                  update("scorecard", c);
-                  setScorecardEditedSinceRefine(true);
-                }}
-              />
-            </div>
-          </Card>
+          </section>
         </div>
       </div>
+
+      {/* Scorecard — full-width below the 2-col grid (Phase 5.13.2c smoke). */}
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Scorecard</span>
+          <ScorecardTotalReadout total={scorecardTotal(form.scorecard)} />
+        </div>
+        <div className="card-pad">
+          <ScorecardEditor
+            criteria={form.scorecard}
+            onChange={(c) => {
+              update("scorecard", c);
+              setScorecardEditedSinceRefine(true);
+            }}
+          />
+        </div>
+      </section>
 
       {/* Phase 3.7.6.9: save/cancel bar floats sticky-bottom so it's
            always reachable on long pages without scrolling. -mx-6 lets
@@ -739,10 +710,10 @@ export default function RoleSettings() {
            "Save changes" to "Process scorecard" and runs ts-refine-
            scorecard. Once refined, the button flips back to Save and the
            normal confirm-reeval-and-persist flow takes over. */}
-      <div className="sticky bottom-0 z-10 -mx-6 mt-6 border-t-2 border-primary/40 bg-background/90 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+      <div className="actionbar">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
           <Button variant="ghost" onClick={() => navigateOrConfirm(`/talent-scout/roles/${role.id}`)}>
-            ← Cancel
+            Cancel
           </Button>
           <div className="flex items-center gap-3">
             {dirty && (
@@ -869,7 +840,7 @@ function ScorecardEditor({
           <div key={tier} className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0">
-                <span className={cn("inline-flex items-center rounded-sm border px-2.5 py-1 text-[12px] font-mono font-bold uppercase tracking-wider", meta.color)}>
+                <span className={cn("pill pill-sm", meta.token)}>
                   {meta.label}
                 </span>
                 <span className="text-[13px] text-muted-foreground truncate">{meta.subtitle}</span>
@@ -878,7 +849,7 @@ function ScorecardEditor({
             </div>
             <div className="space-y-3">
               {items.map(({ c, i }) => (
-                <CriterionCard key={i} c={c} onChange={(p) => update(i, p)} onRemove={() => remove(i)} />
+                <CriterionCard key={i} c={c} onChange={(p) => update(i, p)} onRemove={() => remove(i)} hideManualBorder />
               ))}
               <button
                 type="button"
@@ -902,45 +873,5 @@ function ScorecardEditor({
   );
 }
 
-// Phase 3.10.4: editable role title sitting alone in the card header row.
-// "Role Details" section label removed — title carries the section identity
-// on its own. (Auto-sizing logic dropped along with the inline label since
-// nothing now sits to the title's right that needs the right edge measured.)
-function RoleTitleRow({
-  title,
-  onChange,
-}: {
-  title: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="flex items-center border-b border-border -mx-6 -mt-6 px-6 pt-6 pb-3 mb-4">
-      <input
-        value={title}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Role title"
-        className="w-full bg-transparent font-display text-[20px] font-extrabold uppercase tracking-wide text-primary outline-none focus:underline"
-      />
-    </div>
-  );
-}
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label className="text-[12px] font-mono font-bold uppercase tracking-wider text-foreground">
-        {label}
-        {required && <span className="ml-1 text-primary">*</span>}
-      </Label>
-      {children}
-    </div>
-  );
-}
+

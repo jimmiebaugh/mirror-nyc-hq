@@ -28,7 +28,7 @@ import { toast } from "@/hooks/use-toast";
  *   .card blocks (Details / Event Info / Team / Links & References /
  *   Project Vendors), each opening with a .card-headbar + .h-card title to
  *   match the detail pages. Each .field has a .label-form + .input (with
- *   .input--filled on populated fields). .savebar at the bottom.
+ *   .input--filled on populated fields). .actionbar at the bottom.
  *
  * Team card (Phase 5.6.1 catch-up): Account Managers + Designers are
  * multi RecordCombobox pickers sourced from `users` (active=true). Save

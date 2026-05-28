@@ -1,3 +1,8 @@
+---
+description: Triage code-observations.md into a prioritized fix plan with a ready-to-paste Code prompt.
+argument-hint: "[severity|section] (optional filter, e.g. 'high' or 'Frontend')"
+---
+
 Triage the `code-observations.md` log: turn the passive findings into a summary, a prioritized fix plan with recommended phase/order, and a ready-to-paste Code prompt. Runs the `triage-observations` skill (`.agents/skills/triage-observations/SKILL.md`). Does NOT implement fixes; the prepared prompt is the deliverable.
 
 ## Argument

@@ -31,7 +31,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { ScoutPageHeader } from "@/components/venue-scout/ScoutPageHeader";
-import { VSPageField } from "@/components/venue-scout/VSPageField";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { Stepper } from "@/components/venue-scout/Stepper";
 import { TagInput } from "@/components/venue-scout/TagInput";
 import { DateRangePicker } from "@/components/ui/DateRangePicker";
@@ -376,35 +376,35 @@ export default function BriefEvent() {
             <div className="card-pad space-y-6">
               {/* Row 1: Client Name | Event Name */}
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <VSPageField label="Client Name" required>
+                <HQFormField label="Client Name" required>
                   <Input
                     value={form.client_name}
                     onChange={(e) => update("client_name", e.target.value)}
                     placeholder="e.g. Hennessy"
                     disabled={isArchived}
                   />
-                </VSPageField>
-                <VSPageField label="Event Name" required>
+                </HQFormField>
+                <HQFormField label="Event Name" required>
                   <Input
                     value={form.event_name}
                     onChange={(e) => update("event_name", e.target.value)}
                     placeholder="e.g. Hennessy V.S Launch"
                     disabled={isArchived}
                   />
-                </VSPageField>
+                </HQFormField>
               </div>
 
               {/* Row 2: Live Date(s) | Budget | # of Spaces */}
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                <VSPageField label="Live Date(s)">
+                <HQFormField label="Live Date(s)">
                   <DateRangePicker
                     value={form.live_dates}
                     onChange={(v) => update("live_dates", v)}
                     placeholder="Select live dates"
                     disabled={isArchived}
                   />
-                </VSPageField>
-                <VSPageField label="Budget">
+                </HQFormField>
+                <HQFormField label="Budget">
                   <Input
                     value={form.budget_text}
                     onChange={(e) => {
@@ -430,8 +430,8 @@ export default function BriefEvent() {
                     placeholder="$0"
                     disabled={isArchived}
                   />
-                </VSPageField>
-                <VSPageField
+                </HQFormField>
+                <HQFormField
                   label={
                     <span className="flex items-baseline justify-between">
                       <span># of Spaces</span>
@@ -458,27 +458,27 @@ export default function BriefEvent() {
                       className="w-full"
                     />
                   </div>
-                </VSPageField>
+                </HQFormField>
               </div>
 
               {/* Row 3: Event Objectives | Target Audience */}
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <VSPageField label="Event Objectives">
+                <HQFormField label="Event Objectives">
                   <TagInput
                     value={form.objectives}
                     onChange={(v) => update("objectives", v)}
                     placeholder="e.g. Brand awareness, then Enter"
                     disabled={isArchived}
                   />
-                </VSPageField>
-                <VSPageField label="Target Audience">
+                </HQFormField>
+                <HQFormField label="Target Audience">
                   <TagInput
                     value={form.target_audience}
                     onChange={(v) => update("target_audience", v)}
                     placeholder="e.g. Runners, Basketball Fans, then Enter"
                     disabled={isArchived}
                   />
-                </VSPageField>
+                </HQFormField>
               </div>
             </div>
           </section>

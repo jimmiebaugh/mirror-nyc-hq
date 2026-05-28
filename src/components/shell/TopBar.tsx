@@ -43,7 +43,7 @@ export function TopBar({
   // Global search indexes HQ Core entities (Projects / Venues / Vendors /
   // People / Clients / Outlook); it is not VS-scoped, so surfacing it on
   // VS pages misleads producers expecting scout / candidate-venue search.
-  const hideSearch = pathname.startsWith("/venue-scout");
+  const hideSearch = pathname.startsWith("/venue-scout") || pathname.startsWith("/talent-scout");
 
   // R7 § E: detect active VS scout route and surface the client + event
   // name in the TopBar's center zone. `useMatch` works outside the routed
@@ -140,7 +140,7 @@ export function TopBar({
         // divider; the inline element was added in error).
         <Link to={referrerCrumb.href} className="crumb hidden md:inline-flex">
           <IconArrowLeft className="ic ic-sm" />
-          {referrerCrumb.label}
+          Back
         </Link>
       ) : null}
       {!hideSearch ? (

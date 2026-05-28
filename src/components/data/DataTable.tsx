@@ -141,7 +141,7 @@ export function DataTable<T extends { id: string }>({
         onClick={() => onRowClick?.(row)}
       >
         {columns.map((c) => {
-          const alignCls = c.align === "r" ? "r" : c.align === "c" ? "c" : "";
+          const alignCls = c.align === "r" ? "r" : c.align === "c" ? "c" : c.align === "l" ? "l" : "";
           const dividerCls = c.noRightDivider ? "tbl-cell-nodivider" : "";
           const className = [alignCls, dividerCls].filter(Boolean).join(" ") || undefined;
           return (
@@ -245,7 +245,7 @@ export function DataTable<T extends { id: string }>({
               }
               const c = run.col;
               const isSorted = sort?.key === c.key;
-              const alignCls = c.align === "r" ? "r" : c.align === "c" ? "c" : "";
+              const alignCls = c.align === "r" ? "r" : c.align === "c" ? "c" : c.align === "l" ? "l" : "";
               const dividerCls = c.noRightDivider ? "tbl-cell-nodivider" : "";
               const className = [alignCls, dividerCls].filter(Boolean).join(" ") || undefined;
               return (

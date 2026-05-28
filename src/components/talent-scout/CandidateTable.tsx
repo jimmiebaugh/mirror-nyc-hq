@@ -10,7 +10,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -132,13 +131,16 @@ function RowCheckbox({
       aria-label={ariaLabel}
       aria-pressed={checked}
       className={cn(
-        "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
+        // Phase 5.13.2c smoke: bump from 16px → 20px and use the stronger
+        // border-strong token so the checkbox reads clearly against the
+        // surface-alt row background. Checked uses coral fill as before.
+        "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border-2 transition-colors",
         checked
           ? "border-primary bg-primary text-primary-foreground"
-          : "border-input bg-background hover:border-foreground/50",
+          : "border-border-strong bg-background hover:border-foreground",
       )}
     >
-      {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+      {checked && <Check className="h-4 w-4" strokeWidth={3} />}
     </button>
   );
 }
@@ -391,70 +393,31 @@ export function CandidateTable({
     await onChanged?.();
   };
 
-  if (candidates.length === 0) {
-    return (
-      <Card className="overflow-hidden bg-surface-alt">
-        {title && (
-          <div className="flex items-baseline gap-3 border-b border-border px-5 py-4">
-            <h2 className="text-[18px] font-extrabold uppercase tracking-tight text-primary" style={{ fontFamily: "var(--font-display)" }}>
-              {title}
-            </h2>
-            {meta && <span className="text-[11px] text-foreground">{meta}</span>}
-          </div>
-        )}
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">{emptyMessage}</div>
-      </Card>
-    );
-  }
-
+  // Phase 5.13.2c smoke v2: when at least one row is selected, the bulk
+  // action cluster takes over the right side of the headbar (replacing the
+  // search input + count badge). When no selection, headbar shows the
+  // standard title + meta + search-inline-after-title layout. The separate
+  // bulk action row that previously sat below the headbar is gone.
   const selCount = effectiveSelection.size;
-
-  return (
-    <Card className="overflow-hidden bg-surface-alt">
-      {/* Phase 3.7.8.7: optional in-card title row, sits above the
-          bulk-action bar. Title renders in coral at 18px (smaller than
-          the page-level h-section utility), meta sits inline-right in
-          white at 11px. Hidden when no title prop is passed. */}
-      {title && (
-        <div className="flex items-baseline gap-3 border-b border-border px-5 py-4">
-          <h2 className="text-[18px] font-extrabold uppercase tracking-tight text-primary" style={{ fontFamily: "var(--font-display)" }}>
-            {title}
-          </h2>
-          {meta && <span className="text-[11px] text-foreground">{meta}</span>}
-        </div>
-      )}
-
-      {/* Bulk action bar — Phase 3.6.8 layout:
-            [ search ─ flex grow ] [ bulk_buttons N_selected ]
-          Search input always present on the left; bulk buttons + 'N
-          selected' grouped together on the right (buttons immediately
-          left of the count), opacity-on when selection > 0. Clear
-          button removed (Jimmie's call). The right-side block reserves
-          its slot via opacity rather than removing from layout, so the
-          row height stays constant when selection toggles. */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-border bg-secondary/40 px-3 py-2.5">
-        {/* Left: search */}
-        <div className="min-w-[220px] max-w-[360px] flex-1">
-          {onSearchChange ? (
+  const headbar = title ? (
+    <div className="card-headbar gap-4">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-4">
+        <span className="h-card">{title}</span>
+        {meta && <span className="text-[12px] text-muted-foreground">{meta}</span>}
+        {selCount === 0 && onSearchChange ? (
+          <div className="min-w-[180px] max-w-[280px] flex-1">
             <input
               type="search"
               value={search ?? ""}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={searchPlaceholder}
-              className="h-10 w-full rounded-sm border border-border bg-background px-3 text-[13px] outline-none placeholder:text-muted-foreground focus:border-primary"
+              className="h-9 w-full rounded-sm border border-border bg-background px-3 text-[13px] outline-none placeholder:text-muted-foreground focus:border-primary"
             />
-          ) : null}
-        </div>
-
-        {/* Right group: bulk action buttons + 'N selected' caption,
-            opacity-toggled together so the bar reserves its full width. */}
-        <div
-          aria-hidden={selCount === 0}
-          className={cn(
-            "ml-auto flex flex-wrap items-center gap-2 transition-opacity",
-            selCount > 0 ? "opacity-100" : "pointer-events-none opacity-0",
-          )}
-        >
+          </div>
+        ) : null}
+      </div>
+      {selCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
           <BulkStatusButton
             label="Reject"
             colorClass="bg-red-500/10 text-red-500 border-red-500/30 hover:bg-red-500/20"
@@ -487,11 +450,26 @@ export function CandidateTable({
           >
             {bulkBusy ? "Working…" : "Re-evaluate"}
           </button>
-          <span className="ml-2 text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
+          <span className="ml-1 text-[12px] font-mono font-bold uppercase tracking-wider text-primary">
             {selCount} selected
           </span>
         </div>
-      </div>
+      )}
+    </div>
+  ) : null;
+
+  if (candidates.length === 0) {
+    return (
+      <section className="card overflow-hidden">
+        {headbar}
+        <div className="px-5 py-10 text-center text-sm text-muted-foreground">{emptyMessage}</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="card overflow-hidden">
+      {headbar}
 
       {/* Sticky header */}
       <div
@@ -566,7 +544,7 @@ export function CandidateTable({
             dim
           />
         ))}
-    </Card>
+    </section>
   );
 }
 

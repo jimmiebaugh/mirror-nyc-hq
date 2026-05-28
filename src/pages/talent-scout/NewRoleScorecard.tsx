@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Stepper } from "@/components/ui/Stepper";
 import { TagInput } from "@/components/talent-scout/TagInput";
 import { CriterionCard } from "@/components/talent-scout/CriterionCard";
@@ -290,6 +289,7 @@ export default function NewRoleScorecard() {
   if (loading) {
     return (
       <div className="mx-auto max-w-3xl">
+        <div className="eyebrow mb-2">New Role</div>
         <Stepper steps={TS_WIZARD_STEPS} active={3} />
         <div className="flex flex-col items-center gap-4 py-24 text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -307,140 +307,136 @@ export default function NewRoleScorecard() {
   if (error && criteria.length === 0) {
     return (
       <div className="mx-auto max-w-3xl">
+        <div className="eyebrow mb-2">New Role</div>
         <Stepper steps={TS_WIZARD_STEPS} active={3} />
-        <Card>
-          <CardContent className="space-y-4 p-8 text-center">
+        <section className="card">
+          <div className="card-pad space-y-4 text-center">
             <p className="text-sm">⚠ {error}</p>
             <div className="flex justify-center gap-3">
-              <Button variant="ghost" onClick={() => navigate("/talent-scout/new/search")}>
-                ← Back
+              <Button variant="ghost" className="text-primary" onClick={() => navigate("/talent-scout/new/search")}>
+                Back
               </Button>
               <Button onClick={() => generate(false)}>Try again</Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6 pb-32">
+      <div className="eyebrow mb-2">New Role</div>
       <Stepper steps={TS_WIZARD_STEPS} active={3} />
 
-      <div className="flex items-end justify-between gap-5">
-        <div className="space-y-2">
-          <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
-          <h1 className="h-page">Review scorecard</h1>
-          <p className="text-sm text-muted-foreground">
-            Generated from your JD. Edit weights, add criteria, then lock it in.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => generate(true)} title="Regenerates AI criteria · keeps your manual additions">
-          <RefreshCw className="mr-2 h-3.5 w-3.5" />
-          Regenerate
-        </Button>
-      </div>
+      <header className="space-y-2">
+        <h1 className="h-page">Review scorecard</h1>
+      </header>
 
-      <div className="rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-xs text-muted-foreground">
-        <span className="font-bold text-primary">✱</span> Manually-added criteria are tagged <span className="ml-1 inline-block rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">Manual</span> and persist through regenerate. After any edit, click <strong className="text-foreground">Process scorecard</strong> to refine your phrasing for evaluation use; then lock it in.
+      <div className="hq-explainer">
+        <div className="hq-explainer-label">Tip</div>
+        <p className="hq-explainer-body">Mark any Tier 1 criteria as disqualifying to reject candidates that are missing it. Manually add a criterion within any tier - manual adds persist through regeneration. Make any edits, including point adjustments, and process the scorecard and lock in to begin evaluating candidates.</p>
       </div>
 
       {dirty && (
-        <div className="rounded-md border border-amber-400/40 bg-amber-400/5 px-4 py-3 text-xs text-amber-200">
-          <span className="font-bold text-amber-300">●</span> Edits pending. Run <strong>Process scorecard</strong> to refine before locking. Claude will retain every concept you added and standardize phrasing for downstream evaluations.
+        <div className="rounded-md border border-warn/40 bg-warn/10 px-4 py-3 text-xs text-warn">
+          <span className="font-bold">●</span> Edits pending. Run <strong>Process scorecard</strong> to refine before locking. Your edits will be retained and phrasing standardized for evaluations.
         </div>
       )}
 
-      <div className={cn(refining && "pointer-events-none opacity-60 transition-opacity")}>
-      {([1, 2, 3] as const).map((tier) => {
-        const items = criteria.map((c, i) => ({ c, i })).filter(({ c }) => c.tier === tier);
-        const subtotal = items.reduce((s, { c }) => s + (Number(c.weight) || 0), 0);
-        const meta = TIER_META[tier];
-        return (
-          <div key={tier} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className={cn("inline-flex items-center rounded-sm border px-2.5 py-1 text-[13px] font-mono font-bold uppercase tracking-wider", meta.color)}>
-                  {meta.label}
-                </span>
-                <span className="text-xs text-muted-foreground">{meta.subtitle}</span>
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Scorecard</span>
+          <Button
+            className="bg-primary text-white hover:bg-primary-hover"
+            size="sm"
+            onClick={() => generate(true)}
+            title="Regenerates AI criteria · keeps your manual additions"
+            disabled={refining}
+          >
+            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+            Regenerate
+          </Button>
+        </div>
+        <div className={cn("card-pad space-y-6", refining && "pointer-events-none opacity-60 transition-opacity")}>
+          {([1, 2, 3] as const).map((tier) => {
+            const items = criteria.map((c, i) => ({ c, i })).filter(({ c }) => c.tier === tier);
+            const subtotal = items.reduce((s, { c }) => s + (Number(c.weight) || 0), 0);
+            const meta = TIER_META[tier];
+            return (
+              <div key={tier}>
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={cn("pill pill-sm", meta.token)}>
+                      {meta.label}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{meta.subtitle}</span>
+                  </div>
+                  <span className="text-xs font-bold text-muted-foreground">{subtotal} / 100 pts</span>
+                </div>
+                <div className="space-y-2">
+                  {items.map(({ c, i }) => (
+                    <CriterionCard key={i} c={c} onChange={(p) => update(i, p)} onRemove={() => remove(i)} />
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => addManual(tier)}
+                    className="w-full rounded-md border border-dashed border-border py-3 text-[13px] font-mono font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                  >
+                    + Add tier {tier} criterion
+                  </button>
+                </div>
+                {tier < 3 && <div className="mt-6 border-t border-border" />}
               </div>
-              <span className="text-xs font-bold text-muted-foreground">{subtotal} / 100 pts</span>
-            </div>
+            );
+          })}
+        </div>
+      </section>
 
-            <div className="space-y-2">
-              {items.map(({ c, i }) => (
-                <CriterionCard key={i} c={c} onChange={(p) => update(i, p)} onRemove={() => remove(i)} />
-              ))}
-              <button
-                type="button"
-                onClick={() => addManual(tier)}
-                className="w-full rounded-md border border-dashed border-border py-3 text-[13px] font-mono font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-              >
-                + Add tier {tier} criterion
-              </button>
-            </div>
-          </div>
-        );
-      })}
-      </div>
-
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {/* Source's tier-badge--bonus uses coral primary (#ef5b5b),
-                  not purple. Aligned in Phase 3.5b. */}
-              <span className="inline-flex items-center rounded-sm border border-primary/40 bg-primary/15 px-2.5 py-1 text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-                Bonus: Competitor Experience
-              </span>
-              <span className="text-xs text-muted-foreground">Up to +{COMPETITOR_BONUS_POINTS} bonus points</span>
-            </div>
-            <span className="text-xs font-bold text-muted-foreground">+{COMPETITOR_BONUS_POINTS} max</span>
-          </div>
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Bonus: Competitor Experience</span>
+          <span className="text-xs text-muted-foreground">Up to +{COMPETITOR_BONUS_POINTS} bonus points</span>
+        </div>
+        <div className="card-pad space-y-3">
           <p className="text-xs text-muted-foreground">
             Candidates with experience at any company below earn the competitor bonus.
             5 pts: 1 to 2 years · 10 pts: 3+ years · +2 pts: leadership role at competitor.
           </p>
           <TagInput value={competitors} onChange={setCompetitors} placeholder="Add competitor…" />
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      {/* Spacer so the floating bottom nav doesn't overlap the last criterion. */}
-      <div className="h-16" />
-
-      <div className="sticky bottom-0 -mx-4 border-t-2 border-primary/40 bg-primary/10 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-primary/15 sm:-mx-6 sm:px-6">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-          <Button variant="ghost" onClick={() => navigate("/talent-scout/new/search")}>
-            ← Back
+      <div className="actionbar">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
+          <Button variant="ghost" className="text-primary" onClick={() => navigate("/talent-scout/new/search")}>
+            Back
           </Button>
-          <div className="flex items-center gap-4">
-            <span className="text-lg text-muted-foreground">
-              Total:{" "}
-              <strong className={total === 100 ? "text-foreground" : "text-amber-400"}>
-                {total} pts + {COMPETITOR_BONUS_POINTS} bonus
-              </strong>
-            </span>
-            {dirty ? (
-              <Button onClick={process} disabled={refining || saving} size="lg" title="Refine your edits through Claude before locking">
-                {refining ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Refining…
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Process scorecard →
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button onClick={onApprove} disabled={saving || refining} size="lg">
-                {saving ? "Saving…" : "Approve & lock scorecard →"}
-              </Button>
-            )}
+          <div className="flex-1 text-center text-base text-muted-foreground">
+            Total:{" "}
+            <strong className={total === 100 ? "text-foreground" : "text-warn"}>
+              {total} pts + {COMPETITOR_BONUS_POINTS} bonus
+            </strong>
           </div>
+          {dirty ? (
+            <Button onClick={process} disabled={refining || saving} size="lg" title="Refine your edits through Claude before locking">
+              {refining ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Refining…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Process scorecard →
+                </>
+              )}
+            </Button>
+          ) : (
+            <Button onClick={onApprove} disabled={saving || refining} size="lg">
+              {saving ? "Saving…" : "Approve & lock scorecard →"}
+            </Button>
+          )}
         </div>
       </div>
     </div>

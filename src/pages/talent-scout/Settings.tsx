@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TagInput } from "@/components/talent-scout/TagInput";
@@ -121,43 +119,34 @@ export default function TalentScoutSettings() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="space-y-2">
-        <Link
-          to="/talent-scout"
-          className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline"
-        >
-          ← Back to Talent Scout
-        </Link>
         <h1 className="h-page">Talent Scout Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Global configuration for the Talent Scout tool.
-        </p>
       </header>
 
-      <Card className="bg-surface-alt">
-        <CardContent className="space-y-3 p-6">
-          <div className="space-y-1">
-            <div className="label-section">Global Competitor List</div>
-            <p className="text-xs text-muted-foreground">
-              Used as the default competitor pool for newly created roles. Hit Enter or Tab to add a tag. Changes here apply to future roles only. Existing roles keep their saved competitor list until you edit it on Role Settings.
-            </p>
-          </div>
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Global Competitor List</span>
+        </div>
+        <div className="card-pad space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Used as the default competitor pool for newly created roles. Hit Enter or Tab to add a tag. Changes here apply to future roles only. Existing roles keep their saved competitor list until you edit it on Role Settings.
+          </p>
           <TagInput
             value={competitors}
             onChange={setCompetitors}
             placeholder="Add competitor…"
             caseInsensitiveDedup
           />
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card className="bg-surface-alt">
-        <CardContent className="space-y-3 p-6">
-          <div className="space-y-1">
-            <div className="label-section">Anthropic Monthly Spend Cap (USD)</div>
-            <p className="text-xs text-muted-foreground">
-              Crossing the cap fires a one-time email alert to the admin and re-arms on the 1st of each month. Calls keep running over cap (graceful degradation, not a hard cutoff).
-            </p>
-          </div>
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Anthropic Monthly Spend Cap (USD)</span>
+        </div>
+        <div className="card-pad space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Crossing the cap fires a one-time email alert to the admin and re-arms on the 1st of each month. Calls keep running over cap (graceful degradation, not a hard cutoff).
+          </p>
           <div className="flex items-center gap-4">
             <Input
               type="number"
@@ -169,18 +158,19 @@ export default function TalentScoutSettings() {
             />
             <div className="text-[15px] text-muted-foreground">
               Current month spend:{" "}
+              {/* Sanctioned coral: spend amount stays coral per Phase 5.13.2c spec. */}
               <span className="text-primary font-semibold text-[17px]">
                 ${currentSpend.toFixed(2)}
               </span>
             </div>
           </div>
           {overCap && (
-            <div className="text-xs text-red-400">
+            <div className="text-xs text-destructive">
               Cap reached. Alert email already sent for this month.
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       <div className="flex items-center justify-end gap-3">
         <Button variant="outline" disabled={!dirty || saving} onClick={onDiscard}>

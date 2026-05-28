@@ -17,9 +17,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { VSPageField } from "@/components/venue-scout/VSPageField";
+import { HQFormField } from "@/components/hq/HQFormField";
 import {
   Select,
   SelectContent,
@@ -297,9 +296,12 @@ export default function ScoutSettings() {
       </header>
 
       {/* ---- Edit fields ---- */}
-      <Card className="bg-surface-alt">
-        <CardContent className="space-y-6 p-6">
-          <VSPageField label="Scout name" required>
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Settings</span>
+        </div>
+        <div className="card-pad space-y-6">
+          <HQFormField label="Scout name" required>
             <Input
               value={form.name}
               onChange={(e) => updateField("name", e.target.value)}
@@ -312,9 +314,9 @@ export default function ScoutSettings() {
             <p className="mt-1 text-xs text-muted-foreground">
               Defaults to {`{client_name} - {event_name}`} from the brief. Rename here to override.
             </p>
-          </VSPageField>
+          </HQFormField>
 
-          <VSPageField label="Project">
+          <HQFormField label="Project">
             <Select
               value={form.project_id ?? STANDALONE}
               onValueChange={(v) =>
@@ -336,21 +338,19 @@ export default function ScoutSettings() {
             <p className="mt-1 text-xs text-muted-foreground">
               Optional. Link this scout to an HQ project record.
             </p>
-          </VSPageField>
-        </CardContent>
-      </Card>
+          </HQFormField>
+        </div>
+      </section>
 
       {/* ---- Danger Zone ---- */}
-      <Card className="border-destructive/40 bg-surface-alt">
-        <CardContent className="space-y-4 p-6">
-          <div className="space-y-1">
-            <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-destructive">
-              Danger Zone
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Irreversible actions. Read the dialog before confirming.
-            </p>
-          </div>
+      <section className="card" style={{ borderColor: "hsl(var(--destructive) / 0.4)" }}>
+        <div className="card-headbar">
+          <span className="h-card" style={{ color: "hsl(var(--destructive))" }}>Danger Zone</span>
+        </div>
+        <div className="card-pad space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Irreversible actions. Read the dialog before confirming.
+          </p>
 
           <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-surface-alt p-4">
             <div className="min-w-0 space-y-1">
@@ -367,8 +367,8 @@ export default function ScoutSettings() {
               Start Over…
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* ---- Sticky save bar ---- */}
       <div className="actionbar">

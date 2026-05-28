@@ -1,3 +1,8 @@
+---
+description: Boot the design-spec-builder subagent for a new HQ surface spec.
+argument-hint: "<surface-name> (kebab-case, e.g. venue-scout-dashboard)"
+---
+
 Boot the design-spec-builder subagent for a new HQ surface. The spec is the deliverable; Jimmie reviews + edits it before any code is touched.
 
 ## Argument

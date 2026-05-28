@@ -1,6 +1,7 @@
 ---
 description: Post-push ship finalization. Overwrites COWORK_SYNC, cleans worktree + branch, verifies. Run after `git push origin main` lands a sub-phase squash.
 allowed-tools: Bash, Edit, Read, Write
+argument-hint: "[branch-name] (the claude/* branch to clean)"
 ---
 
 Execute the post-push ship finalization for the just-pushed sub-phase. Branch name (argument): `$ARGUMENTS`. If empty, derive from the most-recent merge commit's subject via `git log -1 --format='%s' main` (e.g., "Phase 5.12.12: ..." → use the worktree path that matches the sub-phase number).

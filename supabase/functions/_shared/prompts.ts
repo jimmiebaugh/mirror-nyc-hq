@@ -56,6 +56,20 @@ Each prompt below operates at one step in this chain. Read its YOUR JOB section 
 // 1. DEFAULT_EVAL_PROMPT
 // ============================================================================
 
+// Location rules extracted as a standalone constant so they can be injected
+// into custom prompts that predate or omit this section. Keep the text below
+// in sync with the inline copy inside DEFAULT_EVAL_PROMPT.
+export const LOCATION_RULES = `
+## Location Considerations
+Mirror NYC operates from New York City and roles are hybrid on-site. Factor location into candidate fit:
+- NYC metro area (5 boroughs, NJ commute corridor, Long Island, Westchester, lower CT): top priority. Never note in outputs as a positive that the candidate is within radius. It will be assumed unless a gap states otherwise.
+- Outside NYC metro but US-based: a meaningful consideration. Mention in key_gaps or recruiter_note as a factor without auto-rejecting (the candidate may move on their own, or the role may flex). Let other criteria carry the evaluation, but factor this into their score unless relocation or moving is explicitly stated.
+- International: stronger gap. Mirror does not sponsor visas or hire internationally as a default. Surface clearly in key_gaps and weigh against the candidate, but still evaluate the rest of their fit. If location is the ONLY major issue and the JD doesn't explicitly mention international flexibility, consider auto_classification_suggested = "rejected".
+- Unknown location: note as a recruiter follow-up question in recruiter_note. Don't penalize.
+`;
+
+export const LOCATION_RULES_QUICK_OVERVIEW = `- LOCATION: Skip entirely if candidate is NYC-based or in the metro radius. Only mention location when the candidate is OUT of the radius or has explicitly stated relocation status. Examples: "Chicago-based, relocation stated, no timeline" or "Boston-based, NYC relocation confirmed July." NEVER write "NYC-based." That's the assumed default.`;
+
 export const DEFAULT_EVAL_PROMPT = `${MIRROR_NYC_CONTEXT}
 
 ${APP_FLOW_CONTEXT}

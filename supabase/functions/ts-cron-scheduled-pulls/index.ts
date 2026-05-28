@@ -106,6 +106,19 @@ Deno.serve(async (req) => {
 
     summary.candidates_for_pull++;
 
+    // Weekly roles only fire on Monday (UTC). The cron fires at 12:00 UTC
+    // (8am ET), and Monday 8am ET = Monday 12:00 UTC, so getUTCDay() === 1
+    // is the correct gate. The 166h grace window below still prevents
+    // double-fires if the cron somehow runs twice on the same Monday.
+    if (schedule === "weekly") {
+      const dayOfWeek = new Date(now).getUTCDay(); // 0=Sun, 1=Mon, …, 6=Sat
+      if (dayOfWeek !== 1) {
+        summary.skipped++;
+        summary.details.push({ role_id: role.id, title: role.title, action: "skipped", reason: "not Monday" });
+        continue;
+      }
+    }
+
     // Most recent pull for this role.
     const { data: lastRound } = await supabase
       .from("ts_pull_rounds")

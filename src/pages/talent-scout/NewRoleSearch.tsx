@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Stepper } from "@/components/ui/Stepper";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { TagInput } from "@/components/talent-scout/TagInput";
 import { TS_WIZARD_STEPS, wizard, type WizardStep2 } from "@/lib/talent-scout/wizardStore";
 import { toast } from "@/hooks/use-toast";
@@ -50,41 +50,31 @@ export default function NewRoleSearch() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6 pb-32">
+      <div className="eyebrow mb-2">New Role</div>
       <Stepper steps={TS_WIZARD_STEPS} active={2} />
       <header className="space-y-2">
-        <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
         <h1 className="h-page">Email search</h1>
-        <p className="text-sm text-muted-foreground">
-          How to find applicants for this role in the jobs@mirrornyc.com inbox.
-        </p>
       </header>
 
-      <Card>
-        <CardContent className="space-y-6 p-6">
-          <div className="space-y-2">
-            <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-              Subject line keywords
-              <span className="ml-2 text-[11px] font-normal normal-case tracking-normal text-muted-foreground">
-                Add every variant you want to catch · press Enter
-              </span>
-            </Label>
+      <div className="hq-explainer">
+        <div className="hq-explainer-label">Tip</div>
+        <p className="hq-explainer-body">How applicants are searched for this role in the jobs@mirrornyc.com inbox. Subject lines matching ANY of the keywords entered below are pulled.</p>
+      </div>
+
+      <section className="card">
+        <div className="card-pad space-y-6">
+          <HQFormField label="Subject line keywords">
             <TagInput
               value={form.email_keywords}
               onChange={(v) => setForm((f) => ({ ...f, email_keywords: v }))}
-              placeholder="Add keyword…"
+              placeholder="Add keyword and press enter..."
               normalize
             />
-            <p className="text-xs text-muted-foreground">
-              Case-insensitive match against the email subject line. More variants = better coverage.
-            </p>
-          </div>
+          </HQFormField>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-                Start pulling from
-              </Label>
+            <HQFormField label="Start pulling from">
               <Input
                 type="date"
                 value={form.email_search_start_date}
@@ -93,13 +83,9 @@ export default function NewRoleSearch() {
               <p className="text-xs text-muted-foreground">
                 Defaults to today. Pulls only emails received after this date.
               </p>
-            </div>
+            </HQFormField>
 
-            <div className="space-y-2">
-              <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-                Scheduled auto-pull
-                <span className="ml-2 text-[11px] font-normal normal-case tracking-normal text-muted-foreground">Optional</span>
-              </Label>
+            <HQFormField label="Scheduled auto-pull">
               <RadioGroup
                 value={form.auto_pull_schedule}
                 onValueChange={(v) =>
@@ -116,20 +102,19 @@ export default function NewRoleSearch() {
                   </div>
                 ))}
               </RadioGroup>
-              <p className="text-xs text-muted-foreground">
-                Hiring manager gets an email summary after each scheduled pull.
-              </p>
-            </div>
+            </HQFormField>
           </div>
+        </div>
+      </section>
 
-          <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
-            <Button variant="ghost" onClick={() => navigate("/talent-scout/new/details")}>
-              ← Back
-            </Button>
-            <Button onClick={onContinue}>Generate scorecard →</Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="actionbar">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
+          <Button variant="ghost" className="text-primary" onClick={() => navigate("/talent-scout/new/details")}>
+            Back
+          </Button>
+          <Button onClick={onContinue}>Generate scorecard →</Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { DataTable, type Column } from "@/components/data/DataTable";
 import { supabase } from "@/integrations/supabase/client";
 import { RoleStatusPill } from "@/components/talent-scout/RoleStatusPill";
 import { toast } from "@/hooks/use-toast";
@@ -53,93 +53,10 @@ const fmtDate = (iso: string | null) =>
 
 const POOL_STATUSES = new Set(["consider", "interview", "fast_track"]);
 
-const GRID = "grid-cols-[minmax(0,2fr)_140px_140px_140px_90px_90px_180px]";
-
-function RoleHeader() {
-  return (
-    <div
-      className={`grid ${GRID} gap-4 border-b border-border bg-secondary/30 px-5 py-3 text-[13px] font-mono font-bold uppercase tracking-wider text-muted-foreground`}
-    >
-      <div>Role / Hiring Manager</div>
-      <div>Role Posted</div>
-      <div>Last Pull</div>
-      <div>Status</div>
-      <div className="text-right">Reviewed</div>
-      <div className="text-right">In Pool</div>
-      <div />
-    </div>
-  );
-}
-
-function RoleRow({
-  r,
-  onReopen,
-  onDelete,
-}: {
-  r: RoleExt;
-  onReopen?: (id: string) => void;
-  onDelete?: (r: RoleExt) => void;
-}) {
-  const nav = useNavigate();
-  const isClosed = r.status === "closed";
-  const managerLabel = r.hiring_manager?.full_name ?? r.hiring_manager?.email ?? "Unassigned";
-  return (
-    <div
-      onClick={() => nav(`/talent-scout/roles/${r.id}`)}
-      className={`grid ${GRID} cursor-pointer items-center gap-4 border-b border-border px-5 py-4 last:border-b-0 transition-colors hover:bg-secondary/40`}
-    >
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-sm font-semibold">{r.title}</span>
-        <span className="text-xs text-muted-foreground">{managerLabel}</span>
-      </div>
-      <div className="text-xs text-muted-foreground">{fmtDate(r.created_at)}</div>
-      <div className="text-xs text-muted-foreground">{fmtRelative(r.last_pull_at)}</div>
-      <div>
-        <RoleStatusPill
-          status={r.status}
-          latestRound={r.latest_round_number}
-          hasFinalReport={r.has_final_report}
-        />
-      </div>
-      <div className="text-right text-base font-bold tabular-nums">{r.reviewed}</div>
-      <div className="text-right text-base font-bold tabular-nums text-amber-400">
-        {r.in_pool}
-      </div>
-      <div className="flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-        {isClosed ? (
-          <>
-            <button
-              type="button"
-              onClick={() => onReopen?.(r.id)}
-              className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary hover:underline"
-            >
-              Reopen
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete?.(r)}
-              className="text-[13px] font-mono font-bold uppercase tracking-wider text-red-400 hover:text-red-300 hover:underline"
-            >
-              Delete
-            </button>
-          </>
-        ) : (
-          <Link
-            to={`/talent-scout/roles/${r.id}/settings`}
-            className="text-[13px] font-mono font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-          >
-            Settings
-          </Link>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function TalentScoutIndex() {
+  const nav = useNavigate();
   const [roles, setRoles] = useState<RoleExt[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [closedOpen, setClosedOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<RoleExt | null>(null);
   const [deleteCounts, setDeleteCounts] = useState<{ rounds: number; candidates: number; attachments: number } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -273,63 +190,154 @@ export default function TalentScoutIndex() {
     void reload();
   };
 
-  const open = (roles ?? []).filter((r) => r.status !== "closed");
-  const closed = (roles ?? []).filter((r) => r.status === "closed");
+  const rows = roles ?? [];
+  const activeCount = rows.filter((r) => r.status !== "closed").length;
+
+  // Phase 5.13.2c smoke: column order locked as
+  // Role / Posted / Reviewed / In Pool / Status / Last Pull / Settings.
+  const columns: Column<RoleExt>[] = [
+    {
+      key: "role",
+      label: "Role",
+      align: "l",
+      sort: (a, b) => a.title.localeCompare(b.title),
+      render: (r) => (
+        <Link
+          to={`/talent-scout/roles/${r.id}`}
+          className="lead"
+          style={{ fontSize: 13.5 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {r.title}
+        </Link>
+      ),
+    },
+    {
+      key: "posted",
+      label: "Posted",
+      width: 130,
+      align: "c",
+      sort: (a, b) => a.created_at.localeCompare(b.created_at),
+      render: (r) => <span className="muted mono" style={{ fontSize: 12 }}>{fmtDate(r.created_at)}</span>,
+    },
+    {
+      key: "reviewed",
+      label: "Reviewed",
+      width: 90,
+      align: "c",
+      sort: (a, b) => a.reviewed - b.reviewed,
+      render: (r) => <span className="font-bold tabular-nums">{r.reviewed}</span>,
+    },
+    {
+      key: "in_pool",
+      label: "In Pool",
+      width: 90,
+      align: "c",
+      sort: (a, b) => a.in_pool - b.in_pool,
+      render: (r) => (
+        <span className="font-bold tabular-nums text-amber-400">{r.in_pool}</span>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      width: 180,
+      align: "c",
+      render: (r) => (
+        <RoleStatusPill
+          status={r.status}
+          latestRound={r.latest_round_number}
+          hasFinalReport={r.has_final_report}
+        />
+      ),
+    },
+    {
+      key: "last_pull",
+      label: "Last Pull",
+      width: 130,
+      align: "c",
+      sort: (a, b) => (a.last_pull_at ?? "").localeCompare(b.last_pull_at ?? ""),
+      render: (r) => <span className="muted">{fmtRelative(r.last_pull_at)}</span>,
+    },
+    {
+      key: "actions",
+      label: "",
+      width: 160,
+      align: "c",
+      render: (r) => {
+        const isClosed = r.status === "closed";
+        return (
+          <div className="flex items-center justify-center gap-3" onClick={(e) => e.stopPropagation()}>
+            {isClosed ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void reopen(r.id)}
+                  className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary hover:underline"
+                >
+                  Reopen
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openDelete(r)}
+                  className="text-[11px] font-mono font-bold uppercase tracking-wider text-destructive hover:underline"
+                >
+                  Delete
+                </button>
+              </>
+            ) : (
+              <Link
+                to={`/talent-scout/roles/${r.id}/settings`}
+                className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary hover:underline"
+              >
+                Settings
+              </Link>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
-    <div className="space-y-8">
-      <header className="flex items-end justify-between gap-5">
-        <div className="space-y-2">
-          <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout</div>
-          <h1 className="h-page">Open roles</h1>
-          <p className="text-sm text-muted-foreground">Active hiring searches at Mirror NYC.</p>
-        </div>
+    <div className="stack-6">
+      <div className="row between list-head">
+        <h1 className="h-page">Talent Scout</h1>
         <Button asChild>
           <Link to="/talent-scout/new/details">
             <Plus className="mr-2 h-4 w-4" />
             New Role
           </Link>
         </Button>
-      </header>
-
-      <Card className="overflow-hidden">
-        <RoleHeader />
-        {loading ? (
-          <div className="px-5 py-10 text-center text-sm text-muted-foreground">Loading…</div>
-        ) : open.length === 0 ? (
-          <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-            No open roles yet. Click <span className="font-semibold text-foreground">+ New Role</span> to get started.
-          </div>
-        ) : (
-          open.map((r) => <RoleRow key={r.id} r={r} />)
-        )}
-      </Card>
-
-      <div>
-        <button
-          type="button"
-          onClick={() => setClosedOpen((v) => !v)}
-          className="flex w-full items-center gap-3 rounded-md border border-border bg-card px-5 py-3 text-left text-[13px] font-mono font-bold uppercase tracking-wider transition-colors hover:bg-secondary/40"
-        >
-          <ChevronRight
-            className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${closedOpen ? "rotate-90" : ""}`}
-          />
-          <span>Closed Roles</span>
-          <span className="ml-auto rounded-full border border-border bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
-            {closed.length}
-          </span>
-        </button>
-        {closedOpen && (
-          <Card className="mt-3 overflow-hidden">
-            <RoleHeader />
-            {closed.length === 0 ? (
-              <div className="px-5 py-8 text-center text-sm text-muted-foreground">No closed roles.</div>
-            ) : (
-              closed.map((r) => <RoleRow key={r.id} r={r} onReopen={reopen} onDelete={openDelete} />)
-            )}
-          </Card>
-        )}
       </div>
+
+      {loading ? (
+        <div className="flex flex-col items-center gap-4 py-24 text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        </div>
+      ) : (
+        <>
+          <div className="scout-list-tbl">
+            <DataTable<RoleExt>
+              rows={rows}
+              flat
+              columns={columns}
+              onRowClick={(r) => nav(`/talent-scout/roles/${r.id}`)}
+              twoTier={{
+                isTerminal: (r) => r.status === "closed",
+                dividerLabel: (n) => `Closed Roles · ${n} hidden`,
+              }}
+              empty={{
+                message: "No open roles yet.",
+                ctaLabel: "+ New Role",
+                onCta: () => nav("/talent-scout/new/details"),
+              }}
+            />
+          </div>
+          <span className="cap">{activeCount} roles</span>
+        </>
+      )}
 
       <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
         <AlertDialogContent>
@@ -354,7 +362,7 @@ export default function TalentScoutIndex() {
             <AlertDialogAction
               onClick={confirmDelete}
               disabled={deleting}
-              className="bg-red-500 text-white hover:bg-red-600"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? "Deleting…" : "Delete Role"}
             </AlertDialogAction>

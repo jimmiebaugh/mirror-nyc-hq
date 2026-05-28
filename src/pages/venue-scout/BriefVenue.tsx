@@ -21,7 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { ScoutPageHeader } from "@/components/venue-scout/ScoutPageHeader";
-import { VSPageField } from "@/components/venue-scout/VSPageField";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { Stepper } from "@/components/venue-scout/Stepper";
 import { TagInput } from "@/components/venue-scout/TagInput";
 import { ChipMultiSelect } from "@/components/venue-scout/ChipMultiSelect";
@@ -313,7 +313,7 @@ export default function BriefVenue() {
                   inner Checkbox's own <Label htmlFor> keeps explicit
                   single-association for the checkbox toggle. */}
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                <VSPageField label="City" required>
+                <HQFormField label="City" required>
                   <RecordCombobox
                     source={{ kind: "lookup", table: "cities" }}
                     value={form.city || null}
@@ -325,8 +325,8 @@ export default function BriefVenue() {
                     entityLabel="city"
                     disabled={isArchived}
                   />
-                </VSPageField>
-                <VSPageField
+                </HQFormField>
+                <HQFormField
                   label={
                     <span className="flex items-center gap-2">
                       <span>Neighborhood(s)</span>
@@ -364,8 +364,8 @@ export default function BriefVenue() {
                     placeholder={cityId ? "Pick neighborhoods" : "Pick a city first"}
                     disabled={isArchived || !cityId}
                   />
-                </VSPageField>
-                <VSPageField label="Expected Guest Count">
+                </HQFormField>
+                <HQFormField label="Expected Guest Count">
                   <Input
                     inputMode="numeric"
                     value={form.expected_guest_count}
@@ -373,24 +373,24 @@ export default function BriefVenue() {
                     placeholder="e.g. 150"
                     disabled={isArchived}
                   />
-                </VSPageField>
+                </HQFormField>
               </div>
 
               {/* Row 2: Venue Type full-width */}
               <div>
-                <VSPageField label="Venue Type">
+                <HQFormField label="Venue Type">
                   <ChipMultiSelect
                     value={form.venue_types}
                     onChange={(v) => update("venue_types", v)}
                     disabled={isArchived}
                   />
-                </VSPageField>
+                </HQFormField>
               </div>
 
               {/* Row 3: Min. Square Footage full-width (Sq. Footage Range field
                   retired in Round 4 amendment v2 § D). */}
               <div>
-                <VSPageField label="Min. Square Footage">
+                <HQFormField label="Min. Square Footage">
                   <div className="pt-2">
                     <Slider
                       value={[minPos]}
@@ -406,34 +406,34 @@ export default function BriefVenue() {
                       {minLabel}
                     </p>
                   </div>
-                </VSPageField>
+                </HQFormField>
               </div>
 
               {/* Row 4: Ideal Features | Vibe + Aesthetic (migrated from BriefEvent;
                   binds to the same form.vibe_aesthetic flat key). */}
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <VSPageField label="Ideal Features">
+                <HQFormField label="Ideal Features">
                   <TagInput
                     value={form.ideal_features}
                     onChange={(v) => update("ideal_features", v)}
                     placeholder="catering kitchen, parking, projection mapping…"
                     disabled={isArchived}
                   />
-                </VSPageField>
-                <VSPageField label="Vibe + Aesthetic">
+                </HQFormField>
+                <HQFormField label="Vibe + Aesthetic">
                   <TagInput
                     value={form.vibe_aesthetic}
                     onChange={(v) => update("vibe_aesthetic", v)}
                     placeholder="e.g. Warm, Premium, then Enter"
                     disabled={isArchived}
                   />
-                </VSPageField>
+                </HQFormField>
               </div>
 
               {/* Row 5: Location Priority | Cost Priority (literal "(optional)"
                   suffix in label text per amendment). */}
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <VSPageField label="Location Priority (optional)">
+                <HQFormField label="Location Priority (optional)">
                   <ToggleGroup
                     type="single"
                     value={form.priority_location ?? ""}
@@ -453,8 +453,8 @@ export default function BriefVenue() {
                       Intimate / Destination
                     </ToggleGroupItem>
                   </ToggleGroup>
-                </VSPageField>
-                <VSPageField label="Cost Priority (optional)">
+                </HQFormField>
+                <HQFormField label="Cost Priority (optional)">
                   <ToggleGroup
                     type="single"
                     value={form.priority_cost ?? ""}
@@ -469,7 +469,7 @@ export default function BriefVenue() {
                     </ToggleGroupItem>
                     <ToggleGroupItem value="premium">Premium Venue</ToggleGroupItem>
                   </ToggleGroup>
-                </VSPageField>
+                </HQFormField>
               </div>
 
             </div>

@@ -6,7 +6,7 @@ import {
   IconComment,
   IconDeliverables,
   IconProjects,
-  IconScout,
+  IconTalentScout,
   IconTasks,
   IconTeam,
 } from "@/components/icons/HQIcons";
@@ -44,7 +44,7 @@ function iconFor(type: IconKey): ReactNode {
       return <IconTeam className="ic" style={{ width: 15, height: 15 }} />;
     case "pull_complete":
     case "final_review_ready":
-      return <IconScout className="ic" style={{ width: 15, height: 15 }} />;
+      return <IconTalentScout className="ic" style={{ width: 15, height: 15 }} />;
     default:
       return <IconActivity className="ic" style={{ width: 15, height: 15 }} />;
   }

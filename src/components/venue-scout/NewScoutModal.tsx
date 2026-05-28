@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { VSPageField } from "@/components/venue-scout/VSPageField";
+import { HQFormField } from "@/components/hq/HQFormField";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -91,7 +91,7 @@ export function NewScoutModal({ open, onOpenChange }: NewScoutModalProps) {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <VSPageField label="Client Name" required>
+          <HQFormField label="Client Name" required>
             <Input
               autoFocus
               value={clientName}
@@ -104,8 +104,8 @@ export function NewScoutModal({ open, onOpenChange }: NewScoutModalProps) {
                 }
               }}
             />
-          </VSPageField>
-          <VSPageField label="Event Name" required>
+          </HQFormField>
+          <HQFormField label="Event Name" required>
             <Input
               value={eventName}
               onChange={(e) => setEventName(e.target.value)}
@@ -117,7 +117,7 @@ export function NewScoutModal({ open, onOpenChange }: NewScoutModalProps) {
                 }
               }}
             />
-          </VSPageField>
+          </HQFormField>
         </div>
         <DialogFooter>
           <Button

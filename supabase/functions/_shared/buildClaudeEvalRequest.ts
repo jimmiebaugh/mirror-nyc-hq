@@ -5,15 +5,22 @@
 // Per-pull invariant: buildRoleContext() must produce byte-identical output
 // for every candidate in the same pull so the role-context cache hits.
 
-import { DEFAULT_EVAL_PROMPT } from "./evalPrompt.ts";
+import { DEFAULT_EVAL_PROMPT, LOCATION_RULES } from "./prompts.ts";
 
 export const CLAUDE_EVAL_MODEL = "claude-sonnet-4-6";
 export const CLAUDE_EVAL_MAX_TOKENS = 1600;
 
 export function getClaudeSystemText(systemPromptOverride?: string): string {
-  return systemPromptOverride && systemPromptOverride.trim().length
-    ? systemPromptOverride
-    : DEFAULT_EVAL_PROMPT;
+  if (!systemPromptOverride || !systemPromptOverride.trim().length) {
+    return DEFAULT_EVAL_PROMPT;
+  }
+  // Custom prompt: append location rules if not already present. Prevents
+  // double-injection when a custom prompt was copied from the default and
+  // already contains the section.
+  if (systemPromptOverride.includes("Location Considerations")) {
+    return systemPromptOverride;
+  }
+  return systemPromptOverride + "\n\n" + LOCATION_RULES;
 }
 
 export function buildRoleContext(

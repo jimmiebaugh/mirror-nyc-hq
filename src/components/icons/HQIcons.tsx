@@ -115,10 +115,21 @@ export const IconSearch = (p: IconProps) => (
   </Base>
 );
 
-export const IconScout = (p: IconProps) => (
+export const IconTalentScout = (p: IconProps) => (
   <Base {...p}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M14.9 9.1l-2.1 5.8-5.8 2.1 2.1-5.8z" />
+    <circle cx="9" cy="7" r="3"/>
+    <path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>
+    <circle cx="17" cy="9" r="2.5"/>
+    <path d="M21 21v-1.5a3 3 0 00-3-3h-.5"/>
+  </Base>
+);
+
+export const IconVenueScout = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="4" y="3" width="8" height="18" rx="1"/>
+    <rect x="14" y="9" width="6" height="12" rx="1"/>
+    <path d="M7 7h2M7 11h2M7 15h2"/>
+    <path d="M16 13h2M16 17h2"/>
   </Base>
 );
 

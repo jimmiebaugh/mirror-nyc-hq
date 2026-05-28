@@ -35,32 +35,10 @@ The cross-cutting HQ Core layer that ties Talent Scout and Venue Scout into a si
 - **5.7** DONE 2026-05-18 (`9d2bdc4`). HQ Core UI overhaul: Quick-Add wiring; @-mentions feed (note_mentions); fixed-position StickySaveBar; deliverables status reshape (drop In Progress); global FilterBar distinct-values picker; `project_members` general-team join; Calendar overhaul (Day/Week/Month + My Tasks); Settings Lookup Lists merge + Wiki image upload; Vendor Files & Assets URL list; Profile + Settings split; per-user vendor_ratings.
 - **5.8** DONE 2026-05-19 (`8a468d2`). HQ v1 release + security audit + cleanup + auth hotfixes. v1 changelog written; tech-debt audit closed; security pass (function search_path, RLS init-plan rewrite, credentials column encryption via pgsodium); surface reduction (28 shadcn UI deletes + 23 unused deps); auth pre-provision hotfix; ON UPDATE CASCADE on all 42 FKs pointing at `public.users.id`. `v1.0.0` + `v1.1.0` tags pinned.
 - **5.9** DONE 2026-05-21 (`81cdaf2`). Bulk Import (Projects / Vendors / Venues) shared cross-cutting primitive + per-entity wiring + audit page at `/settings/bulk-import/history` + bulk-import undo (7-day window) + Event Day Rate import + `vendors.nationwide` + `general_email` columns.
-- **5.10** DONE 2026-05-22 (`5d57b26`). `venues.about_venue` rename + AI About Venue generator (`hq-generate-venue-about`, first `callClaude('hq', ...)` consumer, TOOL-LESS evergreen prompt + web_search) + Venue Edit/Detail layout refresh.
-- **Codebase audit (v1) + triage cleanup** DONE 2026-05-22 (`34b32d4`). Standalone (not numbered as 5.X). Slim-down + legibility pass over HQ frontend; ~66 routes converted to `React.lazy` behind Suspense; 23 unused deps dropped; initial bundle 2.24 MB → 586 KB.
-
-**Phase 5.11: UX and structural consistency review.** Design-system audit sequence after the 5.10 venue work. Still tracking at .Y granularity until a future squash combines them.
-
-- **5.11.0 UX/design-system audit + implementation pass.** DONE 2026-05-22 (`a2adbaf`). Focus rings; mobile shell + 44px hit targets; token cleanup; coral link contrast; `hq-` chrome convergence; edit card headers; shadcn radius; docs reconciliation.
-- **5.11.1 Detail-page polish + list-table standardization + managed tags.** DONE 2026-05-23 (`38f5374`). Follow-on smoke fixes; managed Project Tags + Venue Features lookups.
-- **5.11.2 Structural consistency.** DONE 2026-05-23 (`c19b332`). W1/W2 aligned list headers + stacked identifier colors/sizes + count footers + compact detail-page headers + detail crumbs + extracted `DField` / `HQFormField` / `ContactsCard` / `WebsiteActionButton` / `prettyHost` / `ListPageChrome`. W3 product-call: VendorEdit Tags removed; Task/Deliverable/Project edit shells aligned; native multi-selects replaced with `RecordCombobox multi`; PersonDetail Associated Venues = standalone card; editable Blocked By on TaskDetail. W4: canon documented in `docs/design-system.md` + `docs/decisions.md`. Deploy held for next push (`[skip netlify]`).
-- **5.12** DONE 2026-05-27 (`1a01d3e`). Venue Scout review (complete). 28 sub-phases shipped 2026-05-23 → 2026-05-27, collapsed into one squash. Per-sub-phase narrative in `docs/v1-changelog.md` § Phase 5.12. Architectural decisions in `docs/decisions.md` § Phase 5.12. 10 migrations + 9 edge functions touched cumulatively. Closes the VS review cycle.
-
-### Phase 5.13: Talent Scout review. NEXT.
-
-Notes-first pass over Talent Scout post-HQ-Core. Same shape as the VS review (5.12): Jimmie's notes + active bug hunting + HQ data-flow audit. Verifies the candidate pool + pull pipeline + Final Review packet still produce correct rows now that the Phase 5.5 notifications-dispatch + Phase 5.6 / 5.7 / 5.11 chrome changes have settled.
-
-**Scope (locked when the batch arrives):**
-
-1. **Pull pipeline.** End-to-end smoke against the chunked Gmail pull (Phase 3.x) — does it still surface candidates correctly post-HQ-Core?
-2. **Candidate pool + re-eval.** RoleSettings + role-scoped competitor list + re-evaluation behavior (Phase 3.7.5 / 3.8 spend cap infra now landed end-to-end with VS).
-3. **Final Review packet.** Email render + packet send (`_shared/packetRender.ts sendPacketEmail`) still produces correct content. Verify scorecard refresh + manual-review + referral paths.
-4. **Chrome convergence.** Any drift between TS chrome and the HQ Core canon shipped through 5.6 / 5.7 / 5.11 / 5.12 (crumb-in-TopBar from 5.12.14.3 + shared LookupListsCard + design-system tokens applied across HQ + VS). TS Settings page already aligns with VS Settings via shared spend-cap pattern (5.12.14.3 R7 § F.2).
-5. **Pages applicable for cross-cutting lifts:**
-   - TopBar crumb relocation (already applies — TS pages share AppShell).
-   - `.tbl` rule (FinalReviewDetail uses `w-full` not `.tbl`; queued under `code-observations.md` row #47 HQ-wide tbl audit).
-   - LookupListsCard (HQ Settings already serves TS via the shared rendering; no separate TS Settings change needed).
-
-Notes-first kickoff; subphase split locked when Jimmie surfaces the first batch of smoke evidence.
+- **5.10** DONE 2026-05-22 (`55bfee1`). `venues.about_venue` rename + AI About Venue generator (`hq-generate-venue-about`, first `callClaude('hq', ...)` consumer, TOOL-LESS evergreen prompt + web_search) + Venue Edit/Detail layout refresh + v1 codebase triage cleanup (66 routes converted to `React.lazy`, 23 unused deps dropped, initial bundle 2.24 MB → 586 KB).
+- **5.11** DONE 2026-05-23 (`fee051e`). UX/design-system audit + structural consistency + docs reorg. Focus rings; mobile shell + 44px hit targets; token cleanup; coral link contrast; `hq-` chrome convergence; managed Project Tags + Venue Features lookups; aligned list headers + stacked identifier colors + count footers + compact detail-page headers + detail crumbs; extracted `DField` / `HQFormField` / `ContactsCard` / `WebsiteActionButton` / `prettyHost` / `ListPageChrome`. Deferred 5.11.0/5.11.1/5.11.2 sub-phases collapsed into one squash.
+- **5.12** DONE 2026-05-27 (`ed81c38`). Venue Scout review (complete). 28 sub-phases collapsed into one squash. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.12. Architectural decisions in `docs/decisions.md` § Phase 5.12. 10 migrations + 9 edge functions touched cumulatively. Closes the VS review cycle.
+- **5.13** DONE 2026-05-27 (`9e15841`). Talent Scout review (complete). Nav context parity (BrandTS, TS_TOOL_ITEMS, cross-tool links, IconTalentScout/IconVenueScout), HQFormField global consolidation (VSPageField deleted), full chrome convergence across all 11 TS pages, savebar merged into actionbar HQ-wide, Sonnet design-system accuracy audit (13 findings addressed), eval prompt location rule injection, weekly auto-pull Monday anchoring, pipeline smoke (pull + re-eval + final review packet all clear). 7 sub-phases collapsed into one squash.
 
 ### Phase 5.14: Venue photo persistence to HQ Venues DB.
 

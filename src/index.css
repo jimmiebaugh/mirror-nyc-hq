@@ -361,6 +361,8 @@
   /* Phase 5.12.12: coral accent for the VS brand's "Scout" line
      (parallel to .hq-brand-hq for "HQ" on the HQ brand). */
   .hq-brand-vs { color: hsl(var(--primary)); }
+  /* Phase 5.13.1: coral accent for the TS brand's "Scout" line. */
+  .hq-brand-ts { color: hsl(var(--primary)); }
   .hq-rail-nav {
     @apply flex flex-col gap-px overflow-y-auto;
     padding: 10px 0;
@@ -899,6 +901,13 @@
     background:hsl(var(--surface));
     text-align:center;
   }
+  /* Phase 5.13.2c smoke: explicit `.l` opt-out so a column can left-align
+     its header (e.g. TS Index "Role" column) inside the scout-list-tbl
+     center-default. DataTable emits the .l class when align==="l". */
+  .scout-list-tbl .tbl thead th.l,
+  .scout-list-tbl .tbl tbody td.l{
+    text-align:left;
+  }
   .scout-list-tbl .tbl thead th, .scout-list-tbl .tbl tbody td{
     border-right:1px solid hsl(var(--border));
   }
@@ -1121,23 +1130,15 @@
   .kv--pair{gap:10px 16px;}
   .kv--pair dt{padding-top:1px;}
 
-  /* Sticky save bar (Phase 5.2 forms; restyled Phase 5.7.3 followup-2).
-     Switched from sticky to fixed positioning so the bar reliably pins to
-     the viewport bottom (sticky inside .hq-content's overflow:auto + 32px
-     padding-bottom left a 32px dark strip below the bar). `left: 232px`
-     matches the .hq-rail fixed width. Opaque muted-coral background:
-     coral 15% layered on top of solid background so form content doesn't
-     bleed through. Bumped padding + button + dirty-text size for stronger
-     presence. */
-  .savebar{position:fixed;left:232px;right:0;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:linear-gradient(rgba(190,78,68,.18),rgba(190,78,68,.18)),hsl(var(--background));padding:18px 32px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 -12px 28px rgba(0,0,0,.6);}
-  .savebar .dirty{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--warn));}
-  .savebar .btn{font-size:13px;height:44px;}
-  .savebar .btn-tertiary{height:40px;}
-
-  /* Shared chrome for floating bottom action bars (Venue Scout stepper
-     bars). Same shell as .savebar but without the cancel/save flex
-     layout — the consumer owns the inner content layout. */
+  /* Unified sticky bottom action bar (Phase 5.13.2d: .savebar merged into
+     .actionbar). Fixed position, coral border-top, gradient background.
+     Consumer owns the inner content layout. StickySaveBar adds its own
+     flex wrapper with px-6 py-4 and cancel/dirty/save chrome.
+     Sub-rules target StickySaveBar's .dirty / .btn children. */
   .actionbar{position:fixed;left:232px;right:0;bottom:0;z-index:10;border-top:2px solid rgba(190,78,68,.4);background:linear-gradient(rgba(190,78,68,.18),rgba(190,78,68,.18)),hsl(var(--background));box-shadow:0 -12px 28px rgba(0,0,0,.6);}
+  .actionbar .dirty{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--warn));}
+  .actionbar .btn{font-size:13px;height:44px;}
+  .actionbar .btn-tertiary{height:40px;}
 
   /* Phase 5.12.14 HQ Core surfaces */
   /* R7 § C: .hq-explainer flipped to flex-sibling layout. Label sits left
@@ -1409,7 +1410,7 @@
     }
     .hq-rail--open{transform:translateX(0);visibility:visible;}
     .hq-rail-backdrop--show{display:block;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:55;}
-    .savebar,.actionbar{left:0;}
+    .actionbar{left:0;}
     .btn-tertiary,.btn-sm,.hq-qa{min-height:44px;}
     .viewswitch button{height:44px;}
     .savedviews,.fchip{height:40px;}
@@ -1522,6 +1523,56 @@
   .vs-loading-icon--magnifier {
     transform-origin: center;
     animation: vs-loading-magnifier 2.4s ease-in-out infinite;
+  }
+
+  /* Phase 5.13.2c: FinalReviewLoading step indicators + error card border-left.
+     Lifts inline-style background/border switching out of the JSX so the
+     status states are token-driven and reduced-motion / theming friendly. */
+  .fr-step-circle {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--surface-alt));
+    color: hsl(var(--subtle-foreground));
+  }
+  .fr-step-circle--done {
+    background: hsl(var(--success) / 0.15);
+    color: hsl(var(--success));
+    border-color: hsl(var(--success) / 0.3);
+  }
+  .fr-step-circle--active {
+    background: hsl(var(--primary) / 0.15);
+    color: hsl(var(--primary));
+    border-color: hsl(var(--primary) / 0.4);
+  }
+  .fr-error-card {
+    border-left: 3px solid hsl(var(--destructive));
+  }
+  /* Phase 5.13.2c smoke: FinalReviewDetail-scoped table overrides. Compose
+     with `.tbl` (`<table className="tbl fr-table">`). Drops the canon
+     vertical column divider (`::after` pseudo) and slims the per-row
+     status-color left-border from 3px → 2px for a lighter visual weight
+     on the Final Rankings table. */
+  .fr-table tbody tr {
+    border-left-width: 2px;
+  }
+  .fr-table thead th::after,
+  .fr-table tbody td::after {
+    display: none;
+  }
+  /* Shared "Final Review body copy" utility. 15px / 1.55 line-height for
+     long-form prose blocks (Pool Summary body, rationale + considerations,
+     recruiter note bullets). */
+  .fr-body {
+    font-size: 15px;
+    line-height: 1.55;
   }
 }
 

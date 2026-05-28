@@ -22,10 +22,12 @@ export function CriterionCard({
   c,
   onChange,
   onRemove,
+  hideManualBorder = false,
 }: {
   c: Criterion;
   onChange: (p: Partial<Criterion>) => void;
   onRemove: () => void;
+  hideManualBorder?: boolean;
 }) {
   const points = Number(c.weight) || 0;
   // Phase 3.7.6.5: describer is now a textarea so long text wraps onto
@@ -46,7 +48,7 @@ export function CriterionCard({
         // match the larger Scorecard card on RoleSettings (see ScorecardEditor
         // changes). Wizard step 3 picks up the same sizing automatically.
         "flex items-center gap-6 rounded-md border border-border bg-card p-4",
-        c.is_manual && "border-l-2 border-l-primary",
+        c.is_manual && !hideManualBorder && "border-l-2 border-l-primary",
       )}
     >
       {/* Name + describer stack — flex-1 so the describer textbox is as

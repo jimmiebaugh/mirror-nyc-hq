@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { unwrapSecurityWrapper } from "@/lib/unwrapUrl";
 import { ScoreInline } from "@/components/talent-scout/ScoreInline";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,14 +63,14 @@ type Cand = {
   applied_date: string | null;
   total_score: number | null;
   portfolio_path_or_url: string | null;
-  resume_path: string | null; // Storage path for the resume attachment, if present.
+  resume_path: string | null;
 };
 
-const tierStyle: Record<FinalRanking["final_tier"], { color: string; bg: string; border: string; label: string }> = {
-  top_recommendation:   { color: "hsl(var(--success))", bg: "hsl(var(--success) / 0.12)",  border: "hsl(var(--success) / 0.4)",  label: "Top Recommendation" },
-  strong_consideration: { color: "hsl(var(--warn))", bg: "hsl(var(--warn) / 0.12)",  border: "hsl(var(--warn) / 0.3)",  label: "Strong Consideration" },
-  backup:               { color: "hsl(var(--muted-foreground))", bg: "hsl(var(--surface-alt))", border: "hsl(var(--border))", label: "Backup" },
-  not_recommended:      { color: "hsl(var(--destructive))", bg: "hsl(var(--destructive) / 0.12)",   border: "hsl(var(--destructive) / 0.3)",   label: "Not Recommended" },
+const TIER_META: Record<FinalRanking["final_tier"], { label: string; pillToken: string; rbToken: string }> = {
+  top_recommendation:   { label: "Top Recommendation",   pillToken: "p-success",     rbToken: "rb-success" },
+  strong_consideration: { label: "Strong Consideration", pillToken: "p-warn",        rbToken: "rb-warn" },
+  backup:               { label: "Backup",               pillToken: "p-muted",       rbToken: "rb-muted" },
+  not_recommended:      { label: "Not Recommended",      pillToken: "p-destructive", rbToken: "rb-destructive" },
 };
 
 export default function FinalReviewDetail() {
@@ -109,10 +110,6 @@ export default function FinalReviewDetail() {
 
       if (current?.final_rankings?.length) {
         const ids = current.final_rankings.map((r) => r.candidate_id);
-        // Fetch candidates AND their resume attachments in parallel. Resume
-        // path is the first attachment row matching attachment_type='resume'
-        // (or the file_name regex fallback for older candidates that pre-date
-        // the typed enum).
         const [{ data: cs }, { data: atts }] = await Promise.all([
           supabase
             .from("ts_candidates")
@@ -211,13 +208,11 @@ export default function FinalReviewDetail() {
   const downloadPacket = async () => {
     if (!review) return;
     if (review.packet_url) {
-      // Already exists — confirm regen, otherwise re-sign and open.
       const p = review.packet_url;
       if (p.startsWith("http")) {
         window.open(p, "_blank");
         return;
       }
-      // Sign and open existing packet.
       const { data: signed, error } = await supabase.storage.from("packets").createSignedUrl(p, 3600);
       if (error || !signed?.signedUrl) {
         setShowPacketRegen(true);
@@ -238,12 +233,12 @@ export default function FinalReviewDetail() {
   }
   if (!review) {
     return (
-      <div>
+      <div className="mx-auto max-w-5xl">
         <Link to={`/talent-scout/roles/${roleId}`} className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline">
-          ← Back to {roleTitle || "role"}
+          Back to {roleTitle || "role"}
         </Link>
-        <div className="mt-6 rounded-sm border border-border bg-surface p-8 text-center text-muted-foreground text-[13px]">
-          No final review yet for this role.
+        <div className="mt-6 empty">
+          <p>No final review yet for this role.</p>
         </div>
       </div>
     );
@@ -253,26 +248,24 @@ export default function FinalReviewDetail() {
   const isLatest = history[0]?.id === review.id;
 
   return (
-    <div>
-      <Link to={`/talent-scout/roles/${roleId}`} className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline">
-        ← Back to {roleTitle}
-      </Link>
-
-      <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-        <div className="min-w-0">
+    <div className="mx-auto max-w-7xl space-y-6">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="min-w-0 space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="h-page">Final Review</h1>
             {isLatest && (
-              <span className="inline-flex items-center gap-1.5 rounded-sm border border-green-400/30 bg-green-400/10 px-2.5 py-1 text-[13px] font-mono font-bold uppercase tracking-wider text-green-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              <span className="pill pill-sm p-success">
+                <span className="dt" />
                 Latest
               </span>
             )}
           </div>
-          <div className="mt-4 text-[13.5px] text-muted-foreground">
-            {genDate ? `${genDate.getMonth() + 1}/${genDate.getDate()}/${genDate.getFullYear()}` : "—"}
-            <span className="mx-2 text-subtle-foreground">·</span>
-            {review.candidate_count ?? ranked.length} candidates analyzed
+          <div className="detail-meta flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>
+              {genDate ? `${genDate.getMonth() + 1}/${genDate.getDate()}/${genDate.getFullYear()}` : "—"}
+            </span>
+            <span>·</span>
+            <span>{review.candidate_count ?? ranked.length} candidates analyzed</span>
           </div>
         </div>
         {/* Phase 3.6.3: Generate Packet up top with Re-Review inline left.
@@ -280,29 +273,33 @@ export default function FinalReviewDetail() {
              No top-N input — the Final Review pool is the packet pool. */}
         <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-shrink-0 sm:items-end">
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <button
+            <Button
+              variant="outline"
               onClick={() => setShowRegen(true)}
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm border border-border-strong bg-transparent px-4 text-[13px] font-medium text-foreground transition-colors hover:border-foreground hover:bg-white/5 sm:w-auto"
+              className="w-full sm:w-auto"
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
               Re-Review
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={review.packet_url ? () => setShowPacketRegen(true) : downloadPacket}
               disabled={generatingPacket}
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-50 sm:w-auto"
+              className="w-full sm:w-auto"
             >
               {generatingPacket ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Generating…</>
               ) : review.packet_url ? (
-                <><Download className="h-3.5 w-3.5" /> Re-generate Packet</>
+                <><Download className="mr-2 h-3.5 w-3.5" /> Re-generate Packet</>
               ) : (
-                <><Download className="h-3.5 w-3.5" /> Generate Packet</>
+                <><Download className="mr-2 h-3.5 w-3.5" /> Generate Packet</>
               )}
-            </button>
+            </Button>
           </div>
           {review.packet_url && (
-            <button onClick={downloadPacket} className="text-[12px] font-mono font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground">
+            <button
+              onClick={downloadPacket}
+              className="text-[12px] font-mono font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            >
               ↓ Open last packet
             </button>
           )}
@@ -310,152 +307,149 @@ export default function FinalReviewDetail() {
       </div>
 
       {/* Pool Summary */}
-      <div className="mt-6 rounded-sm border border-border bg-surface p-6" style={{ borderLeft: "3px solid hsl(var(--primary))" }}>
-        <div className="text-[16px] font-mono font-bold uppercase tracking-wider text-primary mb-3">Pool Summary</div>
-        <div className="text-[13.5px] text-foreground/90 leading-relaxed whitespace-pre-wrap">{review.pool_summary || "—"}</div>
-      </div>
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Pool Summary</span>
+        </div>
+        <div className="card-pad">
+          <div className="fr-body text-foreground/90 whitespace-pre-wrap">
+            {review.pool_summary || "—"}
+          </div>
+        </div>
+      </section>
 
       {/* Final Rankings */}
-      <div className="mt-6 rounded-sm border border-border bg-surface overflow-hidden">
-        <div className="px-6 py-5 border-b border-border">
-          <div className="text-[16px] font-mono font-bold uppercase tracking-wider text-primary">Final Rankings</div>
+      <section className="card overflow-hidden">
+        <div className="card-headbar">
+          <span className="h-card">Final Rankings</span>
         </div>
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left text-[10.5px] font-mono font-bold uppercase tracking-wider text-muted-foreground py-3 px-5 w-[260px]">Candidate</th>
-              <th className="text-center text-[10.5px] font-mono font-bold uppercase tracking-wider text-muted-foreground py-3 px-3 w-[80px]">Resume</th>
-              <th className="text-center text-[10.5px] font-mono font-bold uppercase tracking-wider text-muted-foreground py-3 px-3 w-[80px]">Portfolio</th>
-              <th className="text-left text-[10.5px] font-mono font-bold uppercase tracking-wider text-muted-foreground py-3 px-5">Rationale & Considerations</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranked.map((r) => {
-              const c = candMap[r.candidate_id];
-              const ts = tierStyle[r.final_tier] ?? tierStyle.backup;
-              const rank = r.final_rank;
-              return (
-                <tr
-                  key={r.candidate_id}
-                  className="border-b border-border align-middle cursor-pointer hover:bg-white/[0.02]"
-                  onClick={() => nav(`/talent-scout/candidates/${r.candidate_id}`)}
-                >
-                  {/* Column 1: candidate identity stack. Final Tier pill +
-                       score sit lower in the cell with breathing room above
-                       (mt-6 — matches the gap between the top of the pill
-                       and the bottom of the applied-date line). */}
-                  <td className="py-5 px-5 align-middle">
-                    <div className="flex items-baseline gap-3">
-                      <span className="font-display text-[20px] font-extrabold tabular-nums text-primary leading-none">{rank}</span>
-                      <span className="text-[16px] font-bold leading-tight">{c?.name ?? "—"}</span>
-                    </div>
-                    {/* Phase 3.7.1.1: email is a mailto link, muted coral. */}
-                    <div className="text-[12px] mt-1 ml-[34px] truncate max-w-[220px]">
-                      {c?.email ? (
-                        <a
-                          href={`mailto:${c.email}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-primary/80 hover:text-primary hover:underline"
+        <div className="tbl-wrap" style={{ border: "none", borderRadius: 0 }}>
+          <table className="tbl fr-table">
+            <thead>
+              <tr>
+                <th style={{ width: 260 }}>Candidate</th>
+                <th className="c" style={{ width: 80 }}>Resume</th>
+                <th className="c" style={{ width: 80 }}>Portfolio</th>
+                <th className="c">Rationale & Considerations</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((r) => {
+                const c = candMap[r.candidate_id];
+                const ts = TIER_META[r.final_tier] ?? TIER_META.backup;
+                const rank = r.final_rank;
+                return (
+                  <tr
+                    key={r.candidate_id}
+                    className={ts.rbToken}
+                    style={{ cursor: "pointer", verticalAlign: "middle" }}
+                    onClick={() => nav(`/talent-scout/candidates/${r.candidate_id}`)}
+                  >
+                    {/* Column 1: candidate identity stack. */}
+                    <td>
+                      <div className="flex items-baseline gap-3">
+                        <span className="font-display text-[20px] font-extrabold tabular-nums text-primary leading-none">{rank}</span>
+                        <span className="text-[16px] font-bold leading-tight">{c?.name ?? "—"}</span>
+                      </div>
+                      {/* Phase 3.7.1.1: email is a mailto link, muted coral. */}
+                      <div className="text-[12px] mt-1 ml-[34px] truncate max-w-[220px]">
+                        {c?.email ? (
+                          <a
+                            href={`mailto:${c.email}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-primary/80 hover:text-primary hover:underline"
+                          >
+                            {c.email}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="text-[12.5px] text-muted-foreground mt-0.5 ml-[34px]">
+                        {c?.applied_date ? `Applied ${new Date(c.applied_date).toLocaleDateString()}` : "—"}
+                      </div>
+                      <div className="mt-5 ml-[34px] space-y-4">
+                        <span className={`pill pill-sm ${ts.pillToken}`}>{ts.label}</span>
+                        <div className="flex items-center gap-2 label-form">
+                          <span>Score:</span>
+                          <ScoreInline value={c?.total_score ?? null} size={14} barWidth={60} />
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Column 2: Resume */}
+                    <td className="c">
+                      {c?.resume_path ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openResume(c.resume_path!); }}
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-sm border border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                          title="Open resume"
                         >
-                          {c.email}
+                          <FileText className="h-5 w-5" />
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground text-[12px]">—</span>
+                      )}
+                    </td>
+
+                    {/* Column 3: Portfolio */}
+                    <td className="c">
+                      {c?.portfolio_path_or_url ? (
+                        <a
+                          href={unwrapSecurityWrapper(c.portfolio_path_or_url)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-sm border border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                          title="Open portfolio"
+                        >
+                          <ExternalLink className="h-5 w-5" />
                         </a>
                       ) : (
-                        <span className="text-muted-foreground" />
+                        <span className="text-muted-foreground text-[12px]">—</span>
                       )}
-                    </div>
-                    <div className="text-[12.5px] text-muted-foreground mt-0.5 ml-[34px]">
-                      {c?.applied_date ? `Applied ${new Date(c.applied_date).toLocaleDateString()}` : "—"}
-                    </div>
-                    <div className="mt-6 ml-[34px] space-y-2">
-                      <span
-                        className="inline-flex items-center px-2.5 py-1 rounded-sm border font-mono text-[12px] font-bold uppercase tracking-wider w-fit"
-                        style={{ color: ts.color, background: ts.bg, borderColor: ts.border }}
-                      >
-                        {ts.label}
-                      </span>
-                      <div className="flex items-center gap-2 font-mono text-[12px] uppercase tracking-wider text-muted-foreground">
-                        <span>Score:</span>
-                        <ScoreInline value={c?.total_score ?? null} size={14} barWidth={60} />
+                    </td>
+
+                    {/* Column 4: Rationale + stacked Recruiter Note (sanctioned coral exception) */}
+                    <td style={{ verticalAlign: "top" }}>
+                      <div className="pl-4 border-l-2 border-border fr-body text-foreground/90">
+                        {r.rationale || <span className="text-muted-foreground">No rationale.</span>}
+                        {(() => {
+                          const notes = Array.isArray(r.recruiter_note)
+                            ? r.recruiter_note.filter(Boolean)
+                            : typeof r.recruiter_note === "string" && r.recruiter_note.trim()
+                              ? [r.recruiter_note]
+                              : [];
+                          if (notes.length === 0) return null;
+                          return (
+                            <div className="mt-3">
+                              {/* Sanctioned coral: Recruiter Note sub-label stays coral
+                                  per Phase 5.13.2c spec. */}
+                              <div className="font-mono text-[11px] font-bold uppercase tracking-wider text-primary mb-1.5">Recruiter Note</div>
+                              <ul className="space-y-1.5">
+                                {notes.map((line, i) => (
+                                  <li key={i} className="flex gap-2 fr-body text-foreground/90">
+                                    <span className="text-primary flex-shrink-0">—</span>
+                                    <span>{line}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })()}
                       </div>
-                    </div>
-                  </td>
-
-                  {/* Column 2: Resume — bigger icon (Phase 3.6.6 — rows
-                       are tall, h-9 looked too small). */}
-                  <td className="py-5 px-3 align-middle text-center">
-                    {c?.resume_path ? (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openResume(c.resume_path!); }}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-sm border border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
-                        title="Open resume"
-                      >
-                        <FileText className="h-5 w-5" />
-                      </button>
-                    ) : (
-                      <span className="text-muted-foreground text-[12px]">—</span>
-                    )}
-                  </td>
-
-                  {/* Column 3: Portfolio — bigger icon */}
-                  <td className="py-5 px-3 align-middle text-center">
-                    {c?.portfolio_path_or_url ? (
-                      <a
-                        href={unwrapSecurityWrapper(c.portfolio_path_or_url)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-sm border border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
-                        title="Open portfolio"
-                      >
-                        <ExternalLink className="h-5 w-5" />
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground text-[12px]">—</span>
-                    )}
-                  </td>
-
-                  {/* Column 4: Rationale + stacked Recruiter Note */}
-                  <td className="py-5 px-5 align-top">
-                    <div
-                      className="pl-4 border-l-2 text-[13px] text-foreground/90 leading-relaxed"
-                      style={{ borderColor: ts.color }}
-                    >
-                      {r.rationale || <span className="text-muted-foreground">No rationale.</span>}
-                      {(() => {
-                        // Coerce string OR array shapes (legacy reviews
-                        // had a single string; Phase 3.6.6+ returns an array).
-                        const notes = Array.isArray(r.recruiter_note)
-                          ? r.recruiter_note.filter(Boolean)
-                          : typeof r.recruiter_note === "string" && r.recruiter_note.trim()
-                            ? [r.recruiter_note]
-                            : [];
-                        if (notes.length === 0) return null;
-                        return (
-                          <div className="mt-3">
-                            <div className="font-mono text-[11px] font-bold uppercase tracking-wider text-primary mb-1.5">Recruiter Note</div>
-                            <ul className="space-y-1.5">
-                              {notes.map((line, i) => (
-                                <li key={i} className="flex gap-2 text-[13px] text-foreground/90 leading-relaxed">
-                                  <span className="text-primary flex-shrink-0">—</span>
-                                  <span>{line}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* History */}
       {history.length > 1 && (
-        <div className="mt-6">
+        <div>
           <button
             onClick={() => setShowHistory((s) => !s)}
             className="w-full flex items-center gap-3 px-5 py-4 rounded-sm border border-border bg-surface hover:bg-secondary/40 text-left font-mono text-[13px] font-bold uppercase tracking-wider"
@@ -465,9 +459,8 @@ export default function FinalReviewDetail() {
           </button>
           {showHistory && (
             // Card grid mirrors RoleDashboard's Pull Rounds treatment.
-            // Phase 3.6.6: up to 5 cards per row (was 3) since cards are
-            // compact and Final Reviews accumulate over time.
-            <div className="mt-3 grid grid-cols-5 gap-3">
+            // Phase 5.13.2c: responsive grid (2 cols mobile, 5 cols md+).
+            <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
               {history.slice(1).map((h, i) => {
                 const reviewNumber = history.length - 1 - i; // FR1, FR2, ...
                 return (
@@ -488,7 +481,7 @@ export default function FinalReviewDetail() {
                           })
                         : "—"}
                     </div>
-                    <div className="mt-3 border-t border-border/60 pt-3 text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
+                    <div className="mt-3 border-t border-border/60 pt-3 label-form">
                       {h.candidate_count ?? 0} candidates · {h.duration_seconds ?? 0}s
                     </div>
                   </Link>

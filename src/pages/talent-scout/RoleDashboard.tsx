@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { Download, Loader2, Settings as SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { RoleStatusPill } from "@/components/talent-scout/RoleStatusPill";
 import { RoundStatusPill } from "@/components/talent-scout/RoundStatusPill";
@@ -168,12 +166,12 @@ export default function RoleDashboard() {
   if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!role) {
     return (
-      <Card className="bg-surface-alt">
-        <CardContent className="space-y-3 p-8 text-center">
+      <section className="card">
+        <div className="card-pad space-y-3 text-center">
           <p className="text-sm">Role not found.</p>
-          <Button variant="ghost" onClick={() => nav("/talent-scout")}>← Back to roles</Button>
-        </CardContent>
-      </Card>
+          <Button variant="ghost" onClick={() => nav("/talent-scout")}>Back to roles</Button>
+        </div>
+      </section>
     );
   }
 
@@ -185,132 +183,121 @@ export default function RoleDashboard() {
 
   return (
     <div className="space-y-6">
-      <Link to="/talent-scout" className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline">
-        ← Talent Scout
-      </Link>
-
-      {/* Top role panel */}
-      <Card className="bg-surface-alt">
-        <CardContent className="space-y-6 p-6">
-          <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-3 sm:flex-1">
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="h-page">{role.title}</h1>
-                <RoleStatusPill status={role.status} latestRound={latestRoundNumber} size="lg" />
-                {rounds[0] && <RoundStatusPill status={rounds[0].status} />}
-              </div>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
-                <span>
-                  <span className="text-muted-foreground/70">Posted</span>{" "}
-                  {role.created_at ? new Date(role.created_at).toLocaleDateString() : "—"}
-                </span>
-                <span>
-                  <span className="text-muted-foreground/70">Hiring manager</span> {managerLabel}
-                </span>
-                <span>
-                  <span className="text-muted-foreground/70">Last pull</span> {fmtRelative(lastPullAt)}
-                </span>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-sm border px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider",
-                    scheduleOn
-                      ? "border-green-400/30 bg-green-400/10 text-green-400"
-                      : "border-border bg-secondary text-muted-foreground",
-                  )}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  {scheduleOn
-                    ? `Scheduled: ${SCHEDULE_LABEL[role.auto_pull_schedule] ?? role.auto_pull_schedule}`
-                    : "Schedule off"}
-                </span>
-              </div>
+      {/* Top role panel. Phase 5.13.2c smoke v2: card-headbar carries h1
+           + status pills only. Card body opens with a single row that
+           pairs the detail-meta caption (left) with the action cluster
+           (right, all 3 buttons same height: Final Review · Pull New ·
+           Settings icon). */}
+      <section className="card">
+        <div className="card-headbar">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <h1 className="h-page">{role.title}</h1>
+            <RoleStatusPill status={role.status} latestRound={latestRoundNumber} size="lg" />
+            {rounds[0] && <RoundStatusPill status={rounds[0].status} />}
+          </div>
+        </div>
+        <div className="card-pad space-y-6">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="detail-meta flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+              <span>
+                Posted{" "}
+                {role.created_at ? new Date(role.created_at).toLocaleDateString() : "—"}
+              </span>
+              <span>·</span>
+              <span>Last pull {fmtRelative(lastPullAt)}</span>
+              <span>·</span>
+              <span
+                className={cn(
+                  "pill pill-sm",
+                  scheduleOn ? "p-success" : "p-muted",
+                )}
+              >
+                <span className="dt" />
+                {scheduleOn
+                  ? `Scheduled: ${SCHEDULE_LABEL[role.auto_pull_schedule] ?? role.auto_pull_schedule}`
+                  : "Schedule off"}
+              </span>
             </div>
-            <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:shrink-0">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                <div className="flex flex-col gap-2">
-                  {/* When a complete final review exists, the button becomes
-                       'View Final Review' linking to the latest. Re-generation
-                       lives on FinalReviewDetail's 'Re-Review' button. */}
-                  {latestFinalReviewId ? (
-                    <Button asChild variant="outline" className="w-full">
-                      <Link to={`/talent-scout/roles/${role.id}/final-review/${latestFinalReviewId}`}>
-                        ↗ View Final Review
-                      </Link>
-                    </Button>
+            {/* Action cluster — all 3 buttons + Top-N input + Settings
+                 square locked to h-10 (shadcn Button default size). Pull
+                 New Candidates is the reference height; Final Review +
+                 Settings stretched up to match it. */}
+            <div className="flex flex-wrap items-center gap-2">
+              {latestFinalReviewId ? (
+                <Button asChild variant="outline">
+                  <Link to={`/talent-scout/roles/${role.id}/final-review/${latestFinalReviewId}`}>
+                    ↗ View Final Review
+                  </Link>
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={startFinalReview}
+                  disabled={startingFinalReview || candidates.length < 3}
+                  title={candidates.length < 3 ? "Need at least 3 candidates to run final review." : undefined}
+                >
+                  {startingFinalReview ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Starting…</>
                   ) : (
-                    <Button
-                      variant="outline"
-                      onClick={startFinalReview}
-                      disabled={startingFinalReview || candidates.length < 3}
-                      className="w-full"
-                      title={candidates.length < 3 ? "Need at least 3 candidates to run final review." : undefined}
-                    >
-                      {startingFinalReview ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Starting…</>
-                      ) : (
-                        <>▶ Generate Final Review</>
-                      )}
-                    </Button>
+                    <>▶ Generate Final Review</>
                   )}
-                  {role.status === "open" &&
-                    (runningRound ? (
-                      <Button asChild className="w-full">
-                        <Link to={`/talent-scout/roles/${role.id}/pulls/${runningRound.id}`}>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          View running pull
-                        </Link>
-                      </Button>
-                    ) : (
-                      <Button onClick={startPull} disabled={pulling} className="w-full">
-                        <Download className="mr-2 h-4 w-4" />
-                        {pulling ? "Starting…" : "+ Pull New Candidates"}
-                      </Button>
-                    ))}
-                </div>
-                <div className="flex gap-2 sm:flex-col">
-                  {/* Top-N only relevant when GENERATING a new review. Hide
-                       it once a review exists; FinalReviewDetail's Re-Review
-                       reruns with the same scope. */}
-                  {!latestFinalReviewId && (
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder="N"
-                      value={finalTopN}
-                      onChange={(e) => setFinalTopN(e.target.value)}
-                      className="h-10 min-w-0 flex-1 text-center sm:w-14 sm:flex-none"
-                      title="Optional: top N candidates by score for final review (cap 50)."
-                    />
-                  )}
-                  <Button asChild variant="outline" size="icon" aria-label="Role settings" className="h-10 flex-1 sm:w-14 sm:flex-none">
-                    <Link to={`/talent-scout/roles/${role.id}/settings`}>
-                      <SettingsIcon className="h-4 w-4" />
+                </Button>
+              )}
+              {role.status === "open" &&
+                (runningRound ? (
+                  <Button asChild>
+                    <Link to={`/talent-scout/roles/${role.id}/pulls/${runningRound.id}`}>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      View running pull
                     </Link>
                   </Button>
-                </div>
-              </div>
+                ) : (
+                  <Button onClick={startPull} disabled={pulling}>
+                    <Download className="mr-2 h-4 w-4" />
+                    {pulling ? "Starting…" : "+ Pull New Candidates"}
+                  </Button>
+                ))}
+              {!latestFinalReviewId && (
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="N"
+                  value={finalTopN}
+                  onChange={(e) => setFinalTopN(e.target.value)}
+                  className="h-10 w-14 text-center"
+                  title="Optional: top N candidates by score for final review (cap 50)."
+                />
+              )}
+              <Button asChild variant="outline" aria-label="Role settings" className="h-10 w-10 p-0">
+                <Link to={`/talent-scout/roles/${role.id}/settings`}>
+                  <SettingsIcon className="h-4 w-4" />
+                </Link>
+              </Button>
             </div>
           </div>
 
           {/* 4-stat grid */}
-          <div className="grid grid-cols-4 gap-6 border-t border-border pt-6">
+          <div className="grid grid-cols-2 gap-6 border-t border-border pt-6 md:grid-cols-4">
             <StatTile label="Total Reviewed" value={stats.total} />
             <StatTile label="In Pool" value={stats.inPool} accent />
             <StatTile label="Fast-Tracked" value={stats.fast} />
             <StatTile label="Rejected" value={stats.rejected} />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* Pull rounds */}
       {rounds.length > 0 && (
-        <Card className="bg-surface-alt">
-          <CardContent className="p-4">
+        <section className="card">
+          <div className="card-headbar">
+            <div className="flex items-baseline gap-3">
+              <span className="h-card">Pull Rounds</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-[13px] text-muted-foreground">Each pull is reviewed as its own batch</span>
+            </div>
+          </div>
+          <div className="card-pad">
             <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-              <div className="shrink-0">
-                <div className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">Pull Rounds</div>
-                <div className="mt-1 text-xs text-muted-foreground">Each pull is reviewed as its own batch</div>
-              </div>
               <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:flex-1 sm:grid-cols-3">
                 {visibleRounds.map((rd, i) => {
                   const isLatest = i === 0;
@@ -336,18 +323,18 @@ export default function RoleDashboard() {
                     >
                       <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
                         {isLatest && (
-                          <span className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/15 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-primary">
-                            <span className="h-1 w-1 rounded-full bg-current" />
+                          <span className="pill pill-sm border-primary/40 bg-primary/15 text-primary">
+                            <span className="dt" />
                             Latest
                           </span>
                         )}
                         {isFailed && (
-                          <span className="inline-flex items-center rounded-sm border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-red-500">
+                          <span className="pill pill-sm border-destructive/40 bg-destructive/10 text-destructive">
                             Failed
                           </span>
                         )}
                         {isStalled && (
-                          <span className="inline-flex items-center rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-amber-500">
+                          <span className="pill pill-sm border-warn/40 bg-warn/10 text-warn">
                             Stalled
                           </span>
                         )}
@@ -392,8 +379,8 @@ export default function RoleDashboard() {
                 )}
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
 
       {/* Phase 3.7.8.7: master-pool header moved INSIDE CandidateTable's
@@ -405,7 +392,6 @@ export default function RoleDashboard() {
         search={search}
         onSearchChange={setSearch}
         title="Master Pool"
-        meta="from all rounds"
         emptyMessage={
           candidates.length === 0
             ? rounds.length === 0
@@ -422,7 +408,7 @@ export default function RoleDashboard() {
 function StatTile({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
     <div>
-      <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="label-form">{label}</div>
       <div
         className={cn(
           "mt-1.5 font-display text-3xl font-extrabold tabular-nums leading-none",

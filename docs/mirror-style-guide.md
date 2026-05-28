@@ -68,7 +68,7 @@ Google Fonts import:
 
 ### Type scale (proposed)
 
-**Note:** the table below captures the deck-canonical brand voice for type. For component sizing canon (page title, section title, card padding, button + input heights), `docs/design-system.md` § 1 is authoritative per `OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 6. This section is the brand-voice reference; design-system.md wins on any conflict.
+**Note:** the table below captures the deck-canonical brand voice for type. It is **approximate** and has not been updated to match shipped CSS values. For all type utility class specs, `docs/design-system.md` § 1 is authoritative (values there match `src/index.css` exactly). Key divergences: `.eyebrow` ships at 14px / Roboto Mono 700 (not 11px 400-weight); `.label-section` ships at 13px 400-weight; `.label-form` ships at 12px 700-weight. `design-system.md` wins on any conflict.
 
 The deck uses 36pt for hero titles and 16pt for accent captions on a presentation slide. For a dashboard at typical viewing distance, scale to:
 

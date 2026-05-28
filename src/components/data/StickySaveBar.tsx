@@ -1,17 +1,13 @@
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 
-/**
- * Phase 5.2.1 Revision: Sticky save bar wired to the lifted `.savebar` class
- * from OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html lines 421-422 (per
- * revision spec § 1 + § 3.C). Replaces the shadcn Button + inline pattern
- * the original 5.2.1 squash shipped. Used by every HQ Core edit form.
- *
- * Phase 5.7.3 § 3.B: added the optional `onDelete` / `deleteLabel` /
- * `deleting` props. When `onDelete` is set, a destructive-tone Delete
- * button renders between Cancel and the right cluster. Consumers own the
- * confirm dialog + the actual DB delete; the bar just wires the click +
- * the disabled-while-deleting state.
- */
+// Phase 5.2.1 Revision: Sticky save bar. Phase 5.13.2d: switched from
+// .savebar (deleted) to .actionbar with an inner flex wrapper so the
+// component owns its px-6 py-4 layout like other actionbar consumers.
+// Used by every HQ Core edit form.
+//
+// Phase 5.7.3 § 3.B: added the optional `onDelete` / `deleteLabel` /
+// `deleting` props. When `onDelete` is set, a destructive-tone Delete
+// button renders between Cancel and the right cluster.
 
 export function StickySaveBar({
   dirty,
@@ -35,37 +31,39 @@ export function StickySaveBar({
   deleting?: boolean;
 }) {
   return (
-    <div className="savebar">
-      <button
-        type="button"
-        className="btn btn-tertiary"
-        onClick={onCancel}
-        disabled={saving || deleting}
-      >
-        <IconArrowLeft className="ic" />
-        {cancelLabel}
-      </button>
-      {onDelete ? (
+    <div className="actionbar">
+      <div className="flex items-center justify-between gap-[14px] px-6 py-4">
         <button
           type="button"
           className="btn btn-tertiary"
-          onClick={onDelete}
+          onClick={onCancel}
           disabled={saving || deleting}
-          style={{ color: "hsl(var(--destructive))", marginLeft: 4 }}
         >
-          {deleting ? "Deleting..." : deleteLabel}
+          <IconArrowLeft className="ic" />
+          {cancelLabel}
         </button>
-      ) : null}
-      <div className="row-c">
-        {dirty ? <span className="dirty">Unsaved changes</span> : null}
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={!dirty || saving || deleting}
-          onClick={onSave}
-        >
-          {saving ? "Saving..." : saveLabel}
-        </button>
+        {onDelete ? (
+          <button
+            type="button"
+            className="btn btn-tertiary"
+            onClick={onDelete}
+            disabled={saving || deleting}
+            style={{ color: "hsl(var(--destructive))", marginLeft: 4 }}
+          >
+            {deleting ? "Deleting..." : deleteLabel}
+          </button>
+        ) : null}
+        <div className="row-c">
+          {dirty ? <span className="dirty">Unsaved changes</span> : null}
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!dirty || saving || deleting}
+            onClick={onSave}
+          >
+            {saving ? "Saving..." : saveLabel}
+          </button>
+        </div>
       </div>
     </div>
   );

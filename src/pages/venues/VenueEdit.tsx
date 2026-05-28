@@ -49,7 +49,7 @@ import { loadLatestVenueRates, type VenueRate } from "@/lib/venues/queries";
  *        that INSERTs into venue_rate_history; existing rows immutable)
  *     5. Exclusive Vendors (multi-select Vendor picker;
  *        writes to venues.exclusive_vendor_ids)
- *   -> .savebar sticky bottom.
+ *   -> .actionbar sticky bottom.
  */
 
 type FormState = {

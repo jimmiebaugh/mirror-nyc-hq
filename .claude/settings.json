@@ -2,6 +2,17 @@
   "permissions": {
     "allow": [
       "Bash(git push origin main)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/credentials*)",
+      "Read(**/*.pem)",
+      "Read(~/.aws/**)",
+      "Read(~/.ssh/**)",
+      "Bash(cat .env*)",
+      "Bash(env)",
+      "Bash(printenv)"
     ]
   },
   "hooks": {
@@ -27,6 +38,12 @@
         ]
       }
     ]
+  },
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    }
   },
   "enabledPlugins": {
     "codex@openai-codex": true

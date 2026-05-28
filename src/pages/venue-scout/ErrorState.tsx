@@ -25,7 +25,6 @@
 
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { ScoutSettingsLink } from "@/components/venue-scout/ScoutChrome";
@@ -404,12 +403,12 @@ export default function ErrorState() {
           {cfg.description({ fileName })}
         </p>
 
-        <Card className="mt-8 w-full max-w-xl bg-surface-alt">
-          <CardContent className="p-6">
+        <section className="card mt-8 w-full max-w-xl">
+          <div className="card-pad">
             <div className="label-section mb-3">{cfg.helpTitle}</div>
             {cfg.help}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
         {/* ---- pipeline_error debug detail (collapsed by default) ---- */}
         {scout?.pipeline_error && (

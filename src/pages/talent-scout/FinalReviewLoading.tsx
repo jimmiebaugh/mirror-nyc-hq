@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Check, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 /**
  * Loading screen for ts-final-review. Subscribes to the ts_final_reviews row
@@ -85,35 +87,19 @@ export default function FinalReviewLoading() {
         </div>
       </div>
 
-      <div className="mt-8 rounded-sm border border-border bg-surface divide-y divide-border">
+      <section className="card mt-8 divide-y divide-border">
         {STEP_DEFS.map((def, i) => {
           const s = progress[def.key];
           const status = s?.status ?? "pending";
           return (
             <div key={def.key} className="flex items-center gap-4 px-6 py-4">
               <div
-                className="w-7 h-7 flex items-center justify-center rounded-full text-[12px] font-bold flex-shrink-0"
-                style={{
-                  background:
-                    status === "done"
-                      ? "hsl(var(--success) / 0.15)"
-                      : status === "active"
-                        ? "hsl(var(--primary) / 0.15)"
-                        : "hsl(var(--surface-alt))",
-                  color:
-                    status === "done"
-                      ? "hsl(var(--success))"
-                      : status === "active"
-                        ? "hsl(var(--primary))"
-                        : "hsl(var(--subtle-foreground))",
-                  border: `1px solid ${
-                    status === "done"
-                      ? "hsl(var(--success) / 0.3)"
-                      : status === "active"
-                        ? "hsl(var(--primary) / 0.4)"
-                        : "hsl(var(--border))"
-                  }`,
-                }}
+                className={cn(
+                  "fr-step-circle",
+                  status === "done" && "fr-step-circle--done",
+                  status === "active" && "fr-step-circle--active",
+                  status === "pending" && "fr-step-circle--pending",
+                )}
               >
                 {status === "done" ? (
                   <Check className="h-4 w-4" />
@@ -135,25 +121,24 @@ export default function FinalReviewLoading() {
             </div>
           );
         })}
-      </div>
+      </section>
 
       {review?.status === "failed" && (
-        <div className="mt-6 rounded-sm border border-border bg-surface p-6" style={{ borderLeft: "3px solid hsl(var(--destructive))" }}>
-          <div className="font-mono text-[13px] font-bold uppercase tracking-wider text-destructive">
-            Final Review Failed
+        <section className="card fr-error-card mt-6">
+          <div className="card-pad">
+            <div className="font-mono text-[13px] font-bold uppercase tracking-wider text-destructive">
+              Final Review Failed
+            </div>
+            <div className="text-[13px] text-muted-foreground mt-2">
+              {review.error_message ?? "Unknown error"}
+            </div>
+            <div className="mt-4">
+              <Button variant="outline" asChild>
+                <Link to={`/talent-scout/roles/${roleId}`}>← Back to role</Link>
+              </Button>
+            </div>
           </div>
-          <div className="text-[13px] text-muted-foreground mt-2">
-            {review.error_message ?? "Unknown error"}
-          </div>
-          <div className="mt-4">
-            <Link
-              to={`/talent-scout/roles/${roleId}`}
-              className="inline-flex items-center h-9 px-4 rounded-sm border border-border-strong text-[13px] font-medium hover:bg-white/5"
-            >
-              ← Back to role
-            </Link>
-          </div>
-        </div>
+        </section>
       )}
 
       <div className="text-center mt-8">

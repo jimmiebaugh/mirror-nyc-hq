@@ -197,7 +197,7 @@ function resolveRoute(pathname: string): RouteInfo {
 
   // VS top-level surfaces.
   if (p === "/venue-scout") {
-    return { label: "Venue Scout", canonicalParent: "/", canonicalParentLabel: "HQ" };
+    return { label: "Venue Scout", canonicalParent: "/home", canonicalParentLabel: "Home" };
   }
   if (p === "/venue-scout/overview") {
     return {
@@ -319,6 +319,49 @@ function resolveRoute(pathname: string): RouteInfo {
       canonicalParent: "/venue-scout",
       canonicalParentLabel: "Venue Scout",
     };
+  }
+
+  // TS top-level + settings.
+  if (p === "/talent-scout") {
+    return { label: "Talent Scout", canonicalParent: "/home", canonicalParentLabel: "Home" };
+  }
+  if (p === "/talent-scout/settings") {
+    return { label: "TS Settings", canonicalParent: "/talent-scout", canonicalParentLabel: "Talent Scout" };
+  }
+
+  // TS per-role surfaces.
+  const tsRoleMatch = p.match(/^\/talent-scout\/roles\/([^/]+)(\/.*)?$/);
+  const tsRoleId = tsRoleMatch?.[1] ?? null;
+  const tsRest = tsRoleMatch?.[2] ?? "";
+  if (tsRoleId) {
+    const idPrefix = `/talent-scout/roles/${tsRoleId}`;
+    if (tsRest === "") {
+      return { label: "Role", canonicalParent: "/talent-scout", canonicalParentLabel: "Talent Scout" };
+    }
+    if (tsRest === "/settings") {
+      return { label: "Role Settings", canonicalParent: idPrefix, canonicalParentLabel: "Role" };
+    }
+    if (tsRest === "/final-review") {
+      return { label: "Final Review", canonicalParent: idPrefix, canonicalParentLabel: "Role" };
+    }
+    if (tsRest.startsWith("/pulls/")) {
+      return { label: "Pull Round", canonicalParent: idPrefix, canonicalParentLabel: "Role" };
+    }
+    const generatingMatch = tsRest.match(/^\/final-review\/([^/]+)\/generating$/);
+    if (generatingMatch) {
+      return { label: "Generating", canonicalParent: `${idPrefix}/final-review/${generatingMatch[1]}`, canonicalParentLabel: "Review" };
+    }
+    const reviewMatch = tsRest.match(/^\/final-review\/([^/]+)$/);
+    if (reviewMatch) {
+      return { label: "Review", canonicalParent: idPrefix, canonicalParentLabel: "Role" };
+    }
+    return { label: "Role", canonicalParent: "/talent-scout", canonicalParentLabel: "Talent Scout" };
+  }
+
+  // TS candidates.
+  const tsCandidateMatch = p.match(/^\/talent-scout\/candidates\/([^/]+)$/);
+  if (tsCandidateMatch) {
+    return { label: "Candidate", canonicalParent: "/talent-scout", canonicalParentLabel: "Talent Scout" };
   }
 
   // Default fallback for any unmapped pathname.

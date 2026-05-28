@@ -2,9 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Loader2, MoreVertical, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -224,14 +222,14 @@ export default function PullDetail() {
   if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!round) {
     return (
-      <Card>
-        <CardContent className="space-y-3 px-6 py-10 text-center">
+      <section className="card">
+        <div className="card-pad space-y-3 text-center">
           <p className="text-sm">Pull round not found.</p>
           <Button variant="ghost" asChild>
-            <Link to={`/talent-scout/roles/${roleId}`}>← Back to role</Link>
+            <Link to={`/talent-scout/roles/${roleId}`}>Back to role</Link>
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     );
   }
 
@@ -303,13 +301,6 @@ export default function PullDetail() {
 
   return (
     <div className="space-y-6">
-      <Link
-        to={`/talent-scout/roles/${roleId}`}
-        className="text-[14px] font-mono uppercase tracking-widest text-primary hover:underline"
-      >
-        ← Back to role
-      </Link>
-
       {/* Failure / pending banners */}
       {isFailed && (
         <div className="rounded-md border border-red-500/40 bg-red-500/5 p-4">
@@ -335,34 +326,32 @@ export default function PullDetail() {
       )}
 
       {/* Top round panel */}
-      <Card>
-        <CardContent className="space-y-6 p-6">
+      <section className="card">
+        <div className="card-headbar">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            {/* Phase 3.7.8.4: RX pill + round status moved to the
+                 RIGHT of the role title. Order: title → RX → round
+                 status (latest/running/failed) → "Latest" badge. */}
+            <h1 className="h-page">{roleTitle || "Role"}</h1>
+            {round.round_number != null && (
+              <span className="pill border-primary/40 bg-primary/15 text-primary">
+                <span className="dt" />
+                R{round.round_number}
+              </span>
+            )}
+            <RoundStatusPill status={round.status} size="large" />
+            {isLatest && (
+              <span className="pill p-success">
+                <span className="dt" />
+                Latest
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="card-pad space-y-6">
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-            <div className="min-w-0 space-y-3">
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Phase 3.7.8.4: RX pill + round status moved to the
-                     RIGHT of the role title. Order: title → RX → round
-                     status (latest/running/failed) → "Latest" badge.
-                     Earlier (3.6.6) the RX pill sat LEFT of the title;
-                     the visual weight ended up competing with the role
-                     name and made the page feel R-pill-led rather than
-                     role-led. */}
-                <h1 className="h-page">{roleTitle || "Role"}</h1>
-                {round.round_number != null && (
-                  <span className="inline-flex items-center gap-2 rounded-sm border border-primary/40 bg-primary/15 px-4 py-2 text-[16px] font-mono font-bold uppercase tracking-wider text-primary">
-                    <span className="h-2 w-2 rounded-full bg-current" />
-                    R{round.round_number}
-                  </span>
-                )}
-                <RoundStatusPill status={round.status} size="large" />
-                {isLatest && (
-                  <span className="inline-flex items-center gap-2 rounded-sm border border-green-400/40 bg-green-400/10 px-4 py-2 text-[16px] font-mono font-bold uppercase tracking-wider text-green-400">
-                    <span className="h-2 w-2 rounded-full bg-current" />
-                    Latest
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+            <div className="min-w-0 space-y-2">
+              <div className="detail-meta flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="text-foreground">
                   {round.started_at
                     ? new Date(round.started_at).toLocaleDateString("en-US", {
@@ -372,15 +361,17 @@ export default function PullDetail() {
                       })
                     : "—"}
                 </span>
-                <span>
-                  <span className="text-muted-foreground/70">Trigger</span> {round.triggered_by ?? "—"}
-                </span>
+                <span>·</span>
+                <span>Trigger {round.triggered_by ?? "—"}</span>
                 {(round.pulled_from || round.pulled_to) && (
-                  <span>
-                    <span className="text-muted-foreground/70">Range</span>{" "}
-                    {round.pulled_from ? new Date(round.pulled_from).toLocaleDateString() : "—"} →{" "}
-                    {round.pulled_to ? new Date(round.pulled_to).toLocaleDateString() : "—"}
-                  </span>
+                  <>
+                    <span>·</span>
+                    <span>
+                      Range{" "}
+                      {round.pulled_from ? new Date(round.pulled_from).toLocaleDateString() : "—"} →{" "}
+                      {round.pulled_to ? new Date(round.pulled_to).toLocaleDateString() : "—"}
+                    </span>
+                  </>
                 )}
               </div>
             </div>
@@ -468,15 +459,15 @@ export default function PullDetail() {
 
           {/* Stat tiles */}
           {isComplete && (
-            <div className="grid grid-cols-4 gap-6 border-t border-border pt-6">
+            <div className="grid grid-cols-2 gap-6 border-t border-border pt-6 md:grid-cols-4">
               <StatTile label="In Round" value={stats.total} />
               <StatTile label="In Pool" value={stats.inPool} accent />
               <StatTile label="Fast-Tracked" value={stats.fast} />
               <StatTile label="Rejected" value={stats.rejected} />
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       {/* Candidate search + table */}
       {isComplete && (
@@ -572,7 +563,7 @@ export default function PullDetail() {
 function StatTile({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
     <div>
-      <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="label-form">{label}</div>
       <div
         className={cn(
           "mt-1.5 font-display text-3xl font-extrabold tabular-nums leading-none",

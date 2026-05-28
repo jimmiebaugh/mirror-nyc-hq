@@ -2,1759 +2,997 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
-## Phase 5.12: Venue Scout review (2026-05-23 → 2026-05-27, complete)
+## Phase 5.13: Talent Scout review (2026-05-27, complete)
 
-Squash SHA `1a01d3e` on `origin/main` (docs reference via documented off-by-one; actual commit `94e2bbb`). 28 sub-phases (5.12.0 through 5.12.14.3) collapsed into one commit. Per-sub-phase narrative in `docs/v1-changelog.md` § Phase 5.12. Per-sub-phase specs archived at `OUTPUTS/historical/phase-5-12-*-spec.md`. 10 migrations + 9 edge functions touched cumulatively across the cycle, all applied out-of-band during the cycle. The decisions below are grouped by topic; sub-phase chronology is preserved as inline source labels.
+Squash SHA `9e15841`. 7 sub-phases plus project doc clean-up, collapsed into one commit. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.13.
+
+### `.savebar` deleted; `.actionbar` is the single sticky-bar class
+
+`.savebar` was a duplicate of `.actionbar` with built-in flex + padding. Removed and folded sub-rules (`.dirty`, `.btn`, `.btn-tertiary`) into `.actionbar`. `StickySaveBar` renders `.actionbar` with an inner flex wrapper. One sticky-bar class HQ-wide eliminates the "which class do I use?" question and guarantees padding parity across all three surfaces (HQ Core, VS, TS).
+
+### `TIER_META` consolidated to a single definition in `scorecard.ts`
+
+Two parallel definitions (CandidateDetail had `token` + `label`; scorecard.ts had `color` + `label` + `subtitle`) became one. `scorecard.ts` is now the source of truth, with `color` renamed to `token` using canonical `.p-{token}` values. NewRoleScorecard + RoleSettings tier-badge spans converted from raw Tailwind to `pill pill-sm` + `meta.token`. Three consumers, one definition, all on design-system tokens.
+
+## Phase 5.12: Venue Scout review (2026-05-23 to 2026-05-27, complete)
+
+Squash SHA `ed81c38`. 28 sub-phases collapsed into one commit. Per-sub-phase narrative in `docs/v1-changelog.md` § Phase 5.12. 10 migrations + 9 edge functions touched cumulatively.
 
 ### Schema + migrations
 
-#### dedupe_meta jsonb shape on `vs_candidate_venues` (5.12.3)
+#### `dedupe_meta` jsonb on `vs_candidate_venues`
 
-`vs_candidate_venues.dedupe_meta` jsonb column captures the points-based dedupe ladder's scoring breakdown on FRESH `pushVenuesToHq` merges only (NOT pre-linked candidates, NOT hq_pool rows, NOT fresh-INSERT no-match rows). Shape: `{ name: { score, signal }, address: { score, signal }, website: { score, signal }, city: { score, signal }, total, threshold, decision }`. Migration `20260603220000` adds the column nullable with no backfill. Why nullable + no backfill: indicator chrome is informational; existing rows without scoring breakdown are fine. UI consumer (`DedupeMetaIndicator`) shipped in 5.12.3, deprecated in 5.12.14 v1, fully pruned in 5.12.14.2; jsonb column + write path stay byte-unchanged because future re-introduction of a UI consumer is a fresh implementation from the still-present jsonb shape.
+Captures dedupe-ladder scoring breakdown on FRESH `pushVenuesToHq` merges only (not pre-linked, not hq_pool, not no-match INSERTs). Nullable, no backfill: chrome is informational. UI consumer shipped then deprecated, but the jsonb shape + write path stay so a future UI re-intro is fresh implementation, not archaeology.
 
-#### brief_data shape lock (5.12.5)
+#### `brief_data` shape lock (5 keys flip to `string[]`)
 
-Five `vs_scouts.brief_data` keys flip from `string` to `string[]` to support array-shape tag entry: `objectives`, `target_audience`, `target_neighborhoods`, `vibe_aesthetic`, `ideal_features`. Migration `20260605000000_phase_5_12_5_brief_data_shape_backfill.sql` normalizes legacy strings to single-element arrays + resets `brief_data.overview_source_hash` to JSON null (accepted: one wasted overview-regenerate on first post-deploy submit against the test scout's throwaway overview). Schema descriptions in `vs-parse-brief`'s tool spec pin inline to `string[]`. New `hashAsStringArray` helper on the overview-hash side coerces single strings to single-element arrays as defense-in-depth for future hand-edits to `brief_data`. New `sanitizeTagArray(raw, maxLen)` parameterized helper backs `sanitizeAudienceTags`, `sanitizeFeatureTags`, and `sanitizeObjectives`. Closes `code-observations.md` Frontend #1 + Edge #2.
+Five keys (objectives, target_audience, target_neighborhoods, vibe_aesthetic, ideal_features) flip from string to string[]. Migration normalizes legacy strings to single-element arrays + resets overview hash. New `sanitizeTagArray` helper backs three sanitizers. `hashAsStringArray` coerces single strings as defense-in-depth.
 
-#### neighborhoods nested in cities (5.12.9)
+#### Neighborhoods nested in cities
 
-New `public.neighborhoods` lookup parent-scoped under `cities`. Schema: `id`, `name`, `city_id FK ON DELETE CASCADE`, `created_by`, `created_at`. Unique `(city_id, LOWER(name))` constraint. Migration `20260606000000` seeded 15 distinct rows from `venues`, `vs_candidate_venues`, `vs_scouts.brief_data.target_neighborhoods`. Consumer columns stay text per the cities precedent (denormalized for query simplicity; the lookup is canonical for picker UI but not joined at query time). `useLookup` extended with a per-table `PARENT_COLUMN_BY_TABLE` map (`neighborhoods → city_id` alongside the existing `vendor_subcategories → parent_category_id`); new `useCityIdForName` helper threads city → city_id for the picker scope. Every neighborhood field across HQ + VS swaps to `<RecordCombobox source={{ kind: "lookup", table: "neighborhoods", parentScopeId, ... }}>`. City-change clears the dependent neighborhood / target_neighborhoods on every consumer (VendorEdit/VendorDetail precedent). New `<NeighborhoodsLookupEditor>` Settings card with native `<details>` collapsible per city + lazy editor mount. Carry-forward: `vs-generate-deck` neighborhood auto-add into `public.neighborhoods` at deck-push time (separate ship; carry-forward from 5.12.13.3).
+New `public.neighborhoods` lookup parent-scoped under cities. Unique `(city_id, LOWER(name))`. Consumer columns stay text per the cities precedent (lookup is canonical for picker UI but not joined at query). `useLookup` extended with `PARENT_COLUMN_BY_TABLE` map. City-change clears dependent neighborhoods.
 
-#### venue_types DB-driven with case-insensitive uniqueness (5.12.10)
+#### `venue_types` DB-driven with case-insensitive uniqueness
 
-VS canonical venue-types now read at runtime from `public.venue_types` via shared `useLookup` cache on the frontend (new `useVenueTypes` hook) and per-request `getVenueTypesCanonicalSet` fetch in 5 edge functions (`vs-research-venues`, `vs-compile-summaries`, `vs-generate-deck`, `vs-parse-brief`, `vs-research-single-venue`). Migration `20260607000000` wraps 5 atomic steps: backfill 9 legacy palette names, prune unreferenced test rows, consolidate case-variants via insert-then-delete on `venue_venue_types` (avoids PRIMARY KEY violations the UPDATE pattern would hit), drop case-sensitive `venue_types_name_key` constraint + add `venue_types_name_lower_unique_idx ON LOWER(name)` (mirrors cities pattern from 5.2.2), `CREATE OR REPLACE bulk_import_commit_venues` with `ON CONFLICT DO NOTHING` + case-insensitive race re-read so a `"retail"` loser still resolves the `"Retail"` winner's id. Legacy `canonicalizeType` + `canonicalizeMultiType` regex helpers DELETED from `_shared/venueTypes.ts` and `src/lib/venue-scout/venueTypes.ts` after grep verified zero residual callers. Schema descriptions + system prompts stay static for prompt-cache stability per `feedback_tool_choice_collapse`; the live list rides in the per-call user message via `buildFillUserMsg` + Phase B requirements block + brief-parser user message. `TYPE_STYLES` palette stays keyed on the 9 legacy names; producer-added types render via `TYPE_FALLBACK_STYLE` (neutral grey). New `paletteForType(name)` non-hook palette helper used by `VenueTypePill`. `parseTypes` signature widened from `CanonicalType[]` to `string[]` with optional runtime `canonicalSet` param so legacy data dropped from the runtime set still surfaces as fallback-styled pills. `TypeTogglePopover` unions runtime types with any stale tokens stored on a venue so producers can uncheck stored-but-removed types.
+Canonical types read at runtime via shared `useLookup` cache (frontend) and per-request `getVenueTypesCanonicalSet` fetch (5 edge functions). Migration consolidates case-variants via insert-then-delete on `venue_venue_types` (avoids PK violations the UPDATE pattern would hit), drops case-sensitive UNIQUE for a `LOWER(name)` expression index (cities pattern). Schema descriptions stay static for prompt-cache stability per `feedback_tool_choice_collapse`; the live list rides in the per-call user message. `TYPE_STYLES` palette stays keyed on 9 legacy names; producer-added types render via `TYPE_FALLBACK_STYLE`.
 
-#### city_aliases lookup (5.12.2)
+#### `city_aliases` + `vs_candidate_venues.source` widening
 
-New `public.city_aliases` table (`alias text`, `city_id uuid FK to cities`, `created_by uuid`) with `LOWER(alias)` unique index, RLS open SELECT/INSERT/UPDATE + admin DELETE. Seeded with 4 LA/NYC mappings. Three migrations (`20260603180000` backfill, `20260603190000` create + seed, `20260603200000` alias-first cleanup across vs_scouts/venues/vendors/projects/clients city columns + DELETE polluting cities rows whose LOWER(name) matches an alias). `vs-parse-brief` resolves through a 6-step alias-first ladder: trim → state-strip → alias-on-trimmed → alias-on-stripped → cities-on-trimmed → cities-on-stripped → insert using stripped value. Auto-creates novel cities at runtime with the state-stripped value so the lookup never accumulates alias-style "City, ST" strings. Frontend `LookupCombobox` consumes `useCityAliases` and surfaces alias rows as a read-only "Aliases" CommandGroup when `source.table === 'cities'`. Aliases never enter `optionLabelById`, keeping form-value display always canonical. Admin alias curation via Settings → Lookup Lists is a carry-forward; new aliases land via SQL today.
+`public.city_aliases` with `LOWER(alias)` unique index. `vs-parse-brief` resolves via 6-step alias-first ladder, auto-creating novel cities with state-stripped value so lookup never accumulates "City, ST" strings. Separately, `vs_candidate_venues.source` CHECK expanded to include `'hq_pool'`; new `SOURCE_PRIORITY`: manual < sheet < hq_pool < research. New "Venues DB" SourcePill state.
 
-#### Two new advisory-lock kickoff RPCs (5.12.1, 5.12.4.1)
+#### Two new advisory-lock kickoff RPCs
 
-Two SECURITY DEFINER RPCs cap the kickoff race for long-running pipelines: `vs_research_try_acquire_kickoff` (5.12.1) and `vs_deck_try_acquire_kickoff` (5.12.4.1, migration `20260604120000`). Shape: `pg_try_advisory_xact_lock` under a per-function namespace (`vs-research:<scout_id>`, `vs-deck:<scout_id>`) + same-transaction read-and-write of the kickoff timestamp + clear `pipeline_error`. REVOKE FROM PUBLIC / anon / authenticated; GRANT TO service_role only. See **Kickoff RPC pattern** under Edge function patterns for the full design rationale.
+`vs_research_try_acquire_kickoff` + `vs_deck_try_acquire_kickoff`. SECURITY DEFINER, service_role only. See **Kickoff RPC pattern** below.
 
-#### vs_candidate_venues.source widened to include 'hq_pool' (5.12.1)
+#### `vs_scouts.shortlist_sync` trigger retired
 
-CHECK constraint expanded to allow `'hq_pool'` alongside `manual`, `sheet`, `research`. New `SOURCE_PRIORITY` ordering: manual (1) < sheet (2) < hq_pool (3) < research (4). New "Venues DB" SourcePill state (teal palette) on SourcingReport + Shortlist.
-
-#### vs_scouts.shortlist_sync trigger retired (5.12.0)
-
-`vs_candidate_venues_shortlist_sync` trigger dropped. HQ Venues match-or-insert moved from the trigger to the top of `vs-generate-deck`, gated by a Generate Deck confirmation modal on DeckPrep (later Review per 5.12.15). Rationale: trigger fired on every shortlist toggle including transient ones; the deck-generate gate is the only producer-confirmed write-to-HQ moment. Name-first dedupe ladder with cross-field conflict check on address + city; `venues.about_venue` written only when the linked HQ row's value is blank so producer-edited paragraphs are preserved. Migration `20260603140000_phase_5_12_0_drop_shortlist_sync_trigger.sql`.
+Trigger dropped. HQ Venues match-or-insert moved to top of `vs-generate-deck`, gated by confirmation modal. Trigger fired on every transient shortlist toggle; the deck-generate gate is the only producer-confirmed write-to-HQ moment. `venues.about_venue` only written when linked row's value is blank, preserving producer edits.
 
 ### Edge function patterns
 
-#### Kickoff RPC pattern: advisory lock + grace window (5.12.1, 5.12.4.1, hardened in 5.12.4.2)
+#### Kickoff RPC pattern: advisory lock + grace window
 
-Long-running pipelines that mutate state on entry are vulnerable to a check-then-write race when invoked twice in rapid succession (producer double-click, retry without backoff). The kickoff-RPC pattern closes the race atomically. Shape:
+Long-running pipelines that mutate state on entry are vulnerable to a check-then-write race (double-click, retry without backoff). RPC closes it atomically: `pg_try_advisory_xact_lock` under per-function namespace + same-transaction read-and-write of kickoff timestamp + clear `pipeline_error`. Grace window MUST exceed function's `WORK_TIMEOUT_MS` so a refresh during in-flight work doesn't acquire a second kickoff. Hardened to `WORK_TIMEOUT_MS + 60_000` across all three VS functions.
 
-```sql
-CREATE OR REPLACE FUNCTION public.vs_research_try_acquire_kickoff(
-  target_scout_id uuid,
-  grace_seconds int DEFAULT 90
-) RETURNS boolean
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  PERFORM pg_try_advisory_xact_lock(hashtext('vs-research:' || target_scout_id::text));
-  -- read brief_data.research_started_at within same transaction
-  -- if recent enough (now() - started_at < grace_seconds), return false (no acquire)
-  -- else UPDATE brief_data, clear pipeline_error, return true
-END;
-$$;
-```
+#### CAS guards on final UPDATE
 
-REVOKE FROM PUBLIC / anon / authenticated; GRANT TO service_role only. The grace window MUST exceed the function's `WORK_TIMEOUT_MS` (decision below) so a producer refresh during in-flight work doesn't acquire a second kickoff. Hardened in 5.12.4.2: `IN_FLIGHT_GRACE_MS` bumped to `WORK_TIMEOUT_MS + 60_000` across all three VS edge functions (vs-research-venues 360→420s, vs-compile-summaries 90→300s, vs-generate-deck 90→240s) so the grace window survives the timeout buffer plus a refresh-margin.
+`Promise.race([work, timeout])` rejects on timeout but losing work() is NOT cancelled: a slow Claude call can resolve later and overwrite the failure stamp with success. Every async pipeline's final success UPDATE must CAS on `current_step=<expected>` AND `pipeline_error IS NULL`. Kickoff RPC clears pipeline_error at acquisition; once writeFailure stamps non-null, late-success UPDATE no-ops cleanly.
 
-#### CAS guards on final UPDATE (5.12.4.2)
+#### Fit-rescue pattern for HQ pool venues
 
-`Promise.race([work, timeoutPromise])` rejects on timeout + writes failure, but the losing work() promise is NOT cancelled: a slow Claude call can resolve after the timeout, then apply per-venue patches, then overwrite the failure stamp with success state. Lesson: every async pipeline's final success UPDATE must CAS on `current_step=<expected>` AND `pipeline_error IS NULL`. The kickoff RPC clears `pipeline_error` at acquisition so the happy path always sees NULL; once writeFailure/failWithCode stamps a non-null pipeline_error, the late-success UPDATE no-ops cleanly. CAS-no-op branch logs + returns without throwing so the outer catch doesn't double-write failure on top of failure. The `vs-generate-deck` CAS extends the existing `.eq("current_step", "deck_prep")` predicate (failWithCode leaves current_step unchanged so name-only CAS was insufficient).
+Pre-Phase-B rescue sends brief + each fit-vetoed or drop-below-threshold HQ city-pool venue's fields + about_venue to Claude via forced `submit_fit_evaluation`. Keep-verdicts INSERT as `source='hq_pool'`. Hard physical vetoes excluded; null about_venue skipped (no rescue signal). Cap 20 venues. Best-effort: Claude failure falls back to deterministic pool; research never blocks on rescue.
 
-#### Fit-rescue pattern for HQ pool venues (5.12.4)
+#### `vs-research-single-venue`: three in-function auth gates
 
-Deterministic fit filter (5.12.3.1) decides first tier of HQ-pool seed inserts; Claude about_venue rescue is a third lane after cross-rail seed-then-drop. Pre-Phase-B rescue pass inside `vs-research-venues` sends brief + each fit-vetoed (wrong_type / aggregate_gaps) and drop-below-threshold HQ city-pool venue's structured fields + `about_venue` to Claude via a forced `submit_fit_evaluation` tool. Each keep-verdict venue INSERTs as `source='hq_pool'` with `linked_venue_id` set. Hard physical vetoes (below_sq_ft_min / above_sq_ft_max / below_capacity) and deterministic keeps are excluded from rescue; venues already linked to the scout skip idempotently; venues with null/empty about_venue skip (no rescue signal). Cap 20 venues per rescue call (sort by `about_venue` length DESC, name ASC). Two ephemeral prompt-cache breakpoints (FIT_RESCUE_SYSTEM + brief block). Rescue is best-effort: every Claude failure path falls back to the deterministic pool; research never blocks on rescue. Closes the 5.12.3.1 first-smoke recall hole where Platform-LA-shape rows (wrong HQ tagging + rich about_venue + brief alignment) couldn't land unless Claude independently surfaced them via cross-rail seed-then-drop.
+VS RLS is open-authenticated, so identity verification at the edge layer needs explicit gates. Pattern: `venue.scout_id === scout_id` (probe-defense), `venue.source ∈ {manual, hq_pool}`, scout state ∈ forward-only set. Both 404 on miss to avoid probe disclosure.
 
-#### vs-research-single-venue: three in-function auth gates (5.12.7)
+#### `vs-regenerate-venue-overview`: synchronous single-venue Pass 2
 
-VS `vs_*` RLS is open-authenticated, so identity verification at the edge-function layer needs explicit in-function gates. Pattern: `venue.scout_id === scout_id` (probe-defense per the vs-research-single-venue + vs-regenerate-venue-overview pattern), `venue.source ∈ {'manual', 'hq_pool'}` (research is only valid for producer-added or HQ-pool venues; research-source venues are already enriched), scout state ∈ `{sourcing_report, shortlist, review_selects, deck_prep}` (forward-only). Both 404 on miss to avoid probe disclosure.
+Mirrors vs-compile-summaries Pass 2 byte-for-byte. Two auth gates: `venue.scout_id === scout_id` + `scout.current_step === 'deck_prep'`. Frontend passes producer notes explicitly so edit-then-regenerate doesn't race the debounce. Why a new function vs single-venue mode of vs-compile-summaries: latter is async + CAS-guarded + kickoff-locked; bypassing means explaining everywhere, honoring means producer waits ~30s for an unneeded kickoff window. New function is cheaper.
 
-#### vs-regenerate-venue-overview: synchronous single-venue Pass 2 (5.12.15)
+#### Non-mutating-prereq reorder in `vs-generate-deck`
 
-New synchronous edge function mirrors vs-compile-summaries Pass 2 byte-for-byte (tool-less, web_search auto with max_uses=2, ABOUT_VENUE_SYSTEM with 1h ephemeral cache, max_tokens 2000). Two auth gates: `venue.scout_id === scout_id` + `scout.current_step === 'deck_prep'`. Frontend passes producer notes explicitly in the request body so producer-edit-then-immediately-regenerate doesn't race the 600ms notes debounce. Function substitutes the body's notes value into the synthetic venue row before calling `buildOverviewUserMsgForVsRow`. Server-side UPDATE; returns `{ ok, venue_overview }`. No confirm dialog (per-regen cost ~$0.05-$0.15; producer iterates on notes). Per-venue in-flight state map disables the button + flips label to "Regenerating…" during the wall (~10-20s). Why a new function instead of single-venue mode of vs-compile-summaries: vs-compile-summaries is async + CAS-guarded + has the kickoff lock; bolting a synchronous single-venue branch onto it means either bypassing the kickoff machinery (then explaining the bypass everywhere) or honoring it (then the producer waits ~30s for a kickoff window that wasn't needed). The new function file is cheaper.
+`pushVenuesToHq` previously ran before env-var check + template copy, so a missing-env failure left HQ state mutated for a deck producer was told wasn't generated. Fix: env-var check pulled up immediately after venues load + before push. Push is idempotent on `linked_venue_id` so re-generate runs cleanly. Moving push after Slides success is logged as carry-forward.
 
-#### Non-mutating-prereq reorder in vs-generate-deck (5.12.4.2)
+#### `vs-delete-scout`: per-bucket storage cleanup
 
-Pre-5.12.4.2 `pushVenuesToHq` ran immediately after the venues load, BEFORE the env-var check + template copy + Slides API. A TEMPLATE_COPY_FAILED on a missing-env-var path would leave HQ state mutated (new `venues` rows + `linked_venue_id` writes) for a deck the producer was told was NOT generated. Fix: env-var existence check pulled up to immediately after the venues load + before `pushVenuesToHq`. Remaining HQ-mutated-but-deck-failed window: Drive `copyTemplate` throw or Slides API throw AFTER the push. Both fail the deck via the appropriate code; `pushVenuesToHq` is idempotent on `linked_venue_id` so the producer's Re-Generate path re-runs without re-INSERTing. The stronger guarantee (move HQ push after Slides success) is logged as carry-forward.
+Synchronous, `verify_jwt = true`, service-role, no extra gate (single scout_id, no cross-entity surface). Order: enumerate paths → DB DELETE (cascades) → per-bucket batched `storage.remove([...])`. Partial cleanup degrades to orphans rather than rolling back; the scout is already gone. HQ venues (`ON DELETE SET NULL`) and Drive deck files stay by design.
 
-#### vs-delete-scout: per-bucket storage cleanup (5.12.6)
+### Prompt audit
 
-New synchronous edge function. `verify_jwt = true`, service-role client, no extra in-function gate (single `scout_id` input + no cross-entity surface to poison; counter-example to vs-research-single-venue's three-gate posture). Order: enumerate paths (read `vs_scouts.brief_data.uploaded_files` + `sheet_storage_path` + JOIN `vs_venue_photos.storage_path` via `vs_candidate_venues.scout_id`) → DB DELETE on `vs_scouts` (cascades to `vs_sourcing_rounds` + `vs_candidate_venues` + `vs_venue_photos` rows) → per-bucket batched `storage.from(bucket).remove([...paths])` against `briefs` + `sourcing_sheets` + `vs_venue_photos` (chunks of 100; errors collected into the response payload, never thrown). Partial-cleanup failures degrade to orphans rather than rolling back; the scout is already gone. HQ `venues` rows (referenced via `linked_venue_id ON DELETE SET NULL`) and Drive deck files stay permanently by design.
+#### `key_features` as evergreen tags, not narrative
 
-### Prompt audit (5.12.13.X)
+Shift from address-anchored sentences to 2-10 short evergreen tags (1-4 words). Three surfaces in lockstep: FILL_TOOL schema, Phase B TOOL schema, ABOUT_VENUE_SYSTEM input-fields label sync. New `sanitizeTagShape` helper (drops non-strings, digits, > 4 words, > 35 chars, dupes) composes with `stripPlaceholders` at 5 write sites. SYSTEM bodies stay byte-for-byte per `feedback_tool_choice_collapse`. Post-impl: Features matrix column swaps textarea for `TagInput` pills; manual + HQ-picker rows default `shortlisted: true` for auto-research; `pushVenuesToHq` write-when-blank extends to features + total_sq_ft + capacity + website_url.
 
-#### key_features as evergreen tags, not narrative (5.12.13.1)
+#### `ABOUT_VENUE_SYSTEM` cap widen to 100-150 words
 
-Shift the `key_features` field from address-anchored narrative sentences to 2-10 short evergreen reusable feature tags (1-4 words each, usually 1-2) across every consumer that writes it. Three surfaces in lockstep: (a) shared `FILL_TOOL.key_features` schema rewrite in `_shared/venueFill.ts` (consumed by vs-research-venues Phase A + Pass 1 backfill + vs-research-single-venue), (b) Phase B `vs-research-venues TOOL.venues[].key_features` schema mirroring the FILL_TOOL shape, (c) `_shared/venueOverview.ts <input_fields>` line + both `buildOverviewUserMsgFromVenue` and `buildOverviewUserMsgForVsRow` user-message label sync (`Key features:` → `Key features (tags):`). New `sanitizeTagShape` deterministic helper in `_shared/venueTypes.ts` (drops non-strings, empty strings, items with digits, items > 4 whitespace-separated words, items > 35 chars, case-insensitive dupes) composes with `stripPlaceholders` at five write sites. `FILL_SYSTEM` and `ABOUT_VENUE_SYSTEM` bodies stay byte-for-byte per `feedback_tool_choice_collapse`. Historical data backfill explicitly out of scope. Closes Edge #3 + Edge #14. **Post-impl amendments folded into the same squash:** (A) Features matrix column swaps `EditableTextarea` for `<TagInput compact>` pills; (B) `addManualRow` + HQ Venue picker INSERT payload default `shortlisted: true` so manual + HQ-picker rows get auto-researched on Continue; (C) `vs-generate-deck pushVenuesToHq` match-path write-when-blank extends from `about_venue` only to also cover `features` + `total_sq_ft` + `capacity` + `website_url`, so VS enrichment backfills HQ-side gaps at deck-generation time (preserves producer HQ edits).
+Two-step widen (90-110 → 90-120 → 100-150). Smoke showed quality of longer outputs was right; tighter cap was wrong. 6 example outputs stay byte-for-byte (voice anchors; variance is itself signal that paragraph length adapts). New tag-priority guidance: favor most appealing/distinctive tags when expanding more would push above cap.
 
-#### ABOUT_VENUE_SYSTEM cap widen 90-110 → 100-150 (5.12.13.2 → 5.12.13.2.1)
+#### Retail bias soften + search-scope flexibility
 
-Two-step widen. 5.12.13.2 widened the cap from 90-110 to 90-120 words and reshaped the 6 example INPUT lines from long narrative `Key features:` strings to short tag-shaped `Key features (tags):` lists matching the post-.1 user-message label. Post-deploy smoke (Jimmie 2026-05-25, ~5-6 fresh regenerates) showed 5 of 6 outputs landing 130-175 words against the 120 cap. Producer call: quality of the longer outputs is right; the 120 cap was too tight for venues with material to work with. 5.12.13.2.1 widened again to 100-150 (numerical-only edit across `<task>` and `<output_format>` blocks; cut-or-merge fallback + count-before-returning nudges retained at 150). New tag-priority guidance on the `<input_fields>` line: "Not every tag has to make the paragraph; favor the ones most appealing or distinctive for this specific venue, especially when expanding on more would push the paragraph above the 150-word cap." All 6 example outputs stay byte-for-byte (Jimmie's hand-revised voice anchors; the variance across 92-112 is itself a signal to the model that paragraph length adapts to the venue's material). Server-side `trimToWordCap` helper deferred; re-open as 5.12.13.2.2 only if post-.2.1 smoke shows 3+ of 5 overshoot the new 150 ceiling. Two edge functions redeployed each step out-of-band (`hq-generate-venue-about` + `vs-compile-summaries`); one-time prompt-cache invalidation per consumer accepted per `feedback_tool_choice_collapse` (SYSTEM edit acceptable when the lever IS in SYSTEM).
+Five edits across Phase B SYSTEM, Phase B userMsg, `FILL_SYSTEM`, and `requirementLines` (both call sites). Brief's venue-type preference allows 1-2 high-aligning outliers; neighborhood-strict toggle produces sharper guidance on both sides. Always-soften, no new flag.
 
-#### Retail bias soften + search-scope flexibility (5.12.13.3)
+#### Event Overview voice tuning
 
-Softens three Retail anchors across the VS write paths AND reshapes the existing `requirementLines` block in `vs-research-venues` so the brief's venue-type preference allows 1-2 high-aligning outliers and the neighborhood-strict toggle produces sharper guidance to Claude on both sides of the flag. Five edits across two files: (1) Phase B `SYSTEM` block in `vs-research-venues/index.ts` lines 1811-1818 drops the "Strongly prioritize ground-floor commercial" framing in favor of "Mirror often books storefronts" + "Equal-weight the other canonical venue types"; (2) Phase B userMsg "Return X net-new" line drops "Weight... heavily in ranking_score" in favor of brief-criteria-balanced ranking; (3) `_shared/venueFill.ts FILL_SYSTEM` drops the "Prefer Retail" sentence; (4) `requirementLines` strict-neighborhoods ternary in BOTH call sites tightens both branches (strict: allow 1-2 adjacent; non-strict: explicit "adjacent + reasonable radius within the city"); (5) `requirementLines` venueTypes "must be one of" softens to "should be" with 1-2 outliers permitted only when the venue ranks very high on the brief's other criteria. No new brief-stepper flag; always-soften. Three edge functions redeploy (`vs-research-venues`, `vs-research-single-venue`, `vs-compile-summaries`). Closes Edge #12. Carry-forward: `vs-generate-deck` neighborhood auto-add into `public.neighborhoods` at deck-push time (separate ship).
+`vs-generate-brief-overview SYSTEM_PROMPT` rewrites to a four-block `<voice>` + `<must_not>` + `<rules>` + `<examples>` structure modeled on `ABOUT_VENUE_SYSTEM`. Hierarchy inverts from "stay faithful to facts" to "creative extrapolation is welcome," with hard-fact lockdown moved to `<must_not>` as the binding constraint. User-message reshapes from flat dump into three labeled blocks (FACTS, CONTEXT, NOTES). The most-felt producer change of the audit.
 
-#### Event Overview voice tuning (5.12.13.4)
+#### ParsedPreview selective-apply checkboxes
 
-`vs-generate-brief-overview SYSTEM_PROMPT` rewrites from a short bullet rule list to a four-block `<voice>` + `<must_not>` + `<rules>` + `<examples>` structure modeled on `ABOUT_VENUE_SYSTEM`'s pattern. Hierarchy inverts from "stay faithful to facts" to "creative extrapolation is welcome," with the hard-fact lockdown (client/event/dates/venues/neighborhoods/budgets/headcount) moved to a dedicated `<must_not>` block so it anchors at the top as the binding constraint. `<voice>` block names 5 structural beats distilled from 4 reference past-deck overviews (concept-first opener, why-this-exists-for-the-brand, hero beat, guest-experience verb beat, scene-setting via metaphor or branded vocabulary). Three post-smoke amendments folded into the same squash: (i) beats reframe from "checklist" to "illustrative" to loosen the structural template-pull; (ii) active-verbs rule with stop list pulled directly from the Cooper Flagg drift; (iii) closing-clean-clause rule and vary-openings rule. User-message construction reshapes from flat `BRIEF FIELDS` key/value dump into three labeled blocks: BRIEF FACTS (precision fields), BRIEF CONTEXT (paragraph-shaped segments joining voice-driving arrays), PRODUCER NOTES (free-text `additional_notes` as discrete block). One edge function redeploys (`vs-generate-brief-overview`). Spec at `OUTPUTS/historical/phase-5-12-13-4-spec.md`. The most-felt producer change of the audit.
+Per-row checkbox so producer can opt out of any parsed field before applying. Default checked. Post-impl: ParsedPreview hides Event overview row (downstream owns final value); multi-option dates via three optional array fields with server-side `collapseDateOptions` enforcing mutual exclusion.
 
-#### ParsedPreview selective-apply checkboxes (5.12.13.6)
+### UX + chrome
 
-`<ParsedPreview>` in `src/pages/venue-scout/BriefEvent.tsx` adds a per-row checkbox so the producer can opt out of any parsed field before applying. Default state every row checked (one-click Apply preserved as the happy path; deselect is the deliberate action). Selection state lives in `useState<Set<keyof ParsedBriefFields>>` lazy-initialized to the full row-key set. `onApply` signature changes from `() => void` to `(filteredParsed: ParsedBriefFields) => void`; the component owns the build-the-filter step. **Three post-implementation amendments folded into the same squash:** (A) Date + budget parse-prompt tightening in `vs-parse-brief/index.ts` schema descriptions; (B) ParsedPreview hides the `Event overview` row entirely (vs-parse-brief still emits `event_overview`, but downstream `vs-generate-brief-overview` owns the final value); (C) Multi-option dates with inline radio group via three new optional array fields (`live_dates_options`, `install_dates_options`, `strike_dates_options`); server-side `collapseDateOptions` helper enforces a mutual-exclusion contract with the singular fields; ParsedPreview row model becomes a discriminated union (`SingleRow` + `OptionsRow`).
+#### `.tbl` matrix decouple
 
-### UX + chrome (5.12.14.X)
+R7 attempted to make matrix the HQ-wide table canon via `.tbl --matrix` composition. `.tbl` base rules carry specificity (0,2,2)+ beating every matching Tailwind utility (0,1,1) on the matrix's bespoke primitives. Decision: detach matrix tables from `.tbl` entirely. HQ Core consumers remain on original canon. Future HQ-wide canon flip would rewrite `.tbl` to match matrix primitives then re-couple.
 
-#### `.tbl` matrix decouple (5.12.14.3)
+#### Back-crumb relocation to TopBar
 
-R7 attempted to make Sourcing's matrix table the HQ-wide table canon via `.tbl` composition + `.tbl--matrix` modifier. The composition produced cascade conflicts: `.tbl` base rules (`.tbl thead th{text-align:left}`, `.tbl tbody td{padding:12px 14px;border-bottom:...;font-size:13px}`, `.tbl tbody tr:hover{background:rgba(255,255,255,.025)}`, plus the `::after` cell-divider pseudo) carry specificity (0,2,2)+ which beats every matching Tailwind utility (0,1,1) on the matrix's bespoke Th/Td/tr primitives. The `.tbl--matrix` modifier's selective-neuter approach didn't fully work. **Decision (R7 amendment v1 § 2):** detach matrix tables from `.tbl` entirely. The matrix `<table>` className is just `tbl--matrix` (no `.tbl`). `.tbl--matrix` carries only `width:100%; border-collapse:collapse; min-width:1280px; table-layout:fixed;` — matrix primitives in `src/components/venue-scout/matrix/primitives.tsx` drive all chrome via Tailwind utilities. HQ Core `.tbl` consumers (Settings, Wiki, ProjectDetail, TeamList, NotificationPreferences, etc.) remain on the original canon. **Future:** a planned HQ-wide canon flip (logged at `code-observations.md` row #47) would rewrite `.tbl` to match the matrix primitives' visual contract, then re-couple matrix tables to `.tbl` and keep `.tbl--matrix` as a min-width/table-fixed-only modifier.
+21 pages each mounted their own `.crumb` with inconsistent styling. Decision: render once globally in TopBar's left zone via `useReferrerCrumb` + canonical-parent route table. Predicate hides crumb when href is "/" so root-tier pages don't show a useless "Back to HQ". Hidden below md. BriefReport stage-aware override: hook fires a supabase query for `current_step` only on that one route. VS pages bypass sessionStorage and always use canonical-parent table (VS is linear, not a graph). HQ Core keeps three-layer resolution.
 
-#### Back-crumb relocation page-chrome → TopBar (5.12.14.1 → 5.12.14.3)
+#### Lookup Lists shared component
 
-Every HQ page mounted its own `.crumb` element in its page header (21 pages total: 10 VS, 7 HQ Core detail pages, 3 bulk-import + notification surfaces, 1 BulkImportPage component). Each call site set its own fallback prop with cross-cutting inconsistency in rendered styling and route resolution. **Decision:** render the back-crumb once, globally, in TopBar's left zone via the existing `useReferrerCrumb` hook + the canonical-parent route table in `src/hooks/useReferrerCrumb.ts`. Per-page `<ReferrerCrumb>` mounts removed across all 21 pages/components. The TopBar applies a `showCrumb = referrerCrumb.href !== "/"` predicate so root-tier pages don't surface a useless "Back to HQ" affordance. Hidden below md (768px) so mobile TopBar stays clean alongside search + bells + avatar. **BriefReport stage-aware override:** BriefReport is a hub reachable from any post-intake stage, so its back-target depends on the scout's `current_step` (Sourcing/Shortlist/Review/Brief Intake). Implemented via a pathname-matched fetch inside `useReferrerCrumb` — when `pathname` matches `/venue-scout/scouts/:id/brief/report`, the hook fires a supabase query for the scout's `current_step` and routes accordingly. Only fires on that one route; every other page skips the query. Decoupled and self-contained; no context plumbing or page-level publishing needed. **VS-side simplification (5.12.14.1 revision round):** every `/venue-scout/*` page bypasses the sessionStorage referrer and ALWAYS uses the canonical-parent table (or caller's `fallback` prop if set). Rationale: VS is a linear scout flow, not a graph. HQ Core keeps the full three-layer resolution (state.from → sessionStorage → canonical-parent table).
+Extracted HQ Settings' inline table-of-lists into `LookupListsCard` with `lookups` filter prop. HQ Settings (7 entries) + VS Settings (3 entries) render same chrome. Neighborhoods joins via expansion-content branching with `inline?: boolean` prop. Adding a new lookup HQ-wide is one filter entry.
 
-#### Lookup Lists shared component pattern (5.12.14.3)
+#### Shared VS primitives + intake restructure
 
-R7 § F.1 built a VS-specific `LookupListEditor` for VS Settings, reinventing the inline table-of-lists UI already shipped on HQ Settings. **Decision:** extract HQ Settings' inline table-of-lists block into a shared `src/components/settings/LookupListsCard.tsx` component with a `lookups` filter prop. Both HQ Settings (consuming the full `HQ_LOOKUPS` 7-entry list: Project Categories / Cities / Neighborhoods / Venue Types / Vendor Capabilities / Vendor Categories / Departments) and VS Settings (consuming the 3-entry `VS_LOOKUPS` subset: Cities / Neighborhoods / Venue Types) render the same chrome. Neighborhoods (parent-scoped by city) joins the table-of-lists row pattern via expansion-content branching — when `entry.key === "neighborhoods"`, the expansion row mounts `<NeighborhoodsLookupEditor inline />` (new `inline?: boolean` prop on the editor that drops the outer card chrome so it reads cleanly inside a table-row context). VS-specific duplicate deleted (`-323 LOC`). Adding a new lookup table HQ-wide = one entry in the consumer's filter array.
+`ScoutPageHeader` 3-zone primitive (empty-left | stepper centered | gear icon right) consumed by 8 in-scout pages. `VSPageField` canonical primitive (12px coral mono uppercase label) replaces 4 local Field helpers; `ui/Field.tsx` stays as matrix-cell variant. Intake restructure: BriefEvent + BriefVenue land full-width with `.card` canon; vibe + aesthetic migrated from Event to Venue. `sq_ft_max` retired with `sq_ft_min` legacy fallback.
 
-#### ScoutPageHeader 3-zone primitive (5.12.14.3)
+#### Honest loading progress + DateRangePicker
 
-New `src/components/venue-scout/ScoutPageHeader.tsx` primitive. 3-zone top row: empty-left (back-crumb relocated to TopBar) | stepper centered | gear icon (settings) right. Consumed by 8 in-scout VS pages (Sourcing/Shortlist/Review/BriefEvent/BriefVenue/BriefReport/SheetPrompt/ScoutSettings). `grid-cols-3` so the stepper stays centered regardless of right-zone width. Companion: brief intake pages' `Stepper.tsx` becomes informational (24→20px circles, inline with title row on BriefEvent + BriefVenue, hidden on BriefReport).
+Replace timed-fake `setInterval` step bumps with server-emitted `brief_data.progress_step`. Backend writes 4 progress markers in each of three VS pipelines; frontend reads via Realtime. Timed fakes mislead when real operation runs faster or slower than the timer. DateRangePicker wraps `react-day-picker` + `date-fns`; storage unchanged (formatted strings into text columns).
 
-#### VSPageField primitive + intake restructure (5.12.14.1 → 5.12.14.3)
+#### Matrix shared 7-column layout
 
-New `src/components/venue-scout/VSPageField.tsx` (canonical VS page-form field primitive: 12px coral mono uppercase label + optional required asterisk). Replaces 4 local Field helpers in NewScout (was 13px), BriefEvent (12px), BriefVenue (12px), ScoutSettings (13px). Drift normalized to 12px canon. `src/components/ui/Field.tsx` stays as the matrix-cell variant. **5.12.14.3 widening:** label prop accepts `ReactNode` (was `string`) to support composite labels like Neighborhoods + Strict checkbox split. **Intake restructure (5.12.14.3 R4):** BriefEvent + BriefVenue land full-width with `.card` canon adoption (nested-card hierarchy: outer Event/Venue card → Upload Brief + Details nested). Vibe + aesthetic migrated from BriefEvent → BriefVenue. `sq_ft_max` retired across the data layer with `sq_ft_min` legacy fallback at 4 call sites in `vs-research-venues`.
+Both Sourcing + Shortlist render through same `VenueMatrixRow`; per-page differences collapse to col-1 label/handler + page-level source-of-truth. Columns: Shortlist/Pitch+Source | Venue | Location | Website | Features | Recommendations | Considerations. ~1440px. Notes/Feedback column dropped.
 
-#### ScoutPhaseBreadcrumb single-row + responsive scale (5.12.14 → 5.12.14.3)
+#### Final Review + Deck Prep consolidation
 
-New `src/components/venue-scout/ScoutPhaseBreadcrumb.tsx` replaces the previous bulky filled-box chip-strip chrome. 20px numbered circles + mono labels + chevron `›` separators, no card/border/background container. Color states mirror Stepper.tsx semantics (active = white-filled + coral label; reached = coral-filled with check + white label; unreached = grey + grey). 5.12.14.3 enforces single-row layout (flex-nowrap + responsive scale text-[11/12/13px] + h-5/h-5/h-6 circles + hidden below md). Vertical footprint shrinks from ~70px to ~28px.
-
-#### Stage 2 single combined squash, not three (5.12.14.1)
-
-Stages 2A + 2B + 2C originally landed as three stacked WIP commits on `claude/ux-vs-audit-stage2` with the original plan calling for one squash to main at end of 2C. Decision held throughout: one squash, full Stage 2 scope in the subject + body. Rationale: cleaner main history; the staged structure was a working-session convenience, not a release boundary. (Same principle applied to the full 5.12 squash on 2026-05-27 — 28 sub-phases collapsed into one commit.)
-
-#### Loading shell honest server-driven progress (5.12.14.1)
-
-Replace timed-fake `setInterval` step bump with server-emitted `brief_data.progress_step`. Backend writes 4 progress markers in each of `vs-research-venues` (brief_loaded / phase_a_enrichment / phase_b_research / finalizing), `vs-compile-summaries` (loading_pitched / pass_1_fill / pass_2_overview / handoff), `vs-generate-deck` (copying_template / populating_slides / inserting_photos / finalizing). Frontend reads via existing Realtime subscription; falls back to step 0 when the field is absent (pre-deploy scouts mid-flight). Cost ~50-100ms per write; 9-12 writes total per pipeline. Rationale: timed fakes mislead the producer when the real operation runs faster or slower than the 12s-per-step timer assumes.
-
-#### DateRangePicker on shadcn Calendar + react-day-picker + date-fns (5.12.14)
-
-New `src/components/ui/DateRangePicker.tsx` wrapper. Three VS free-text date fields (live_dates, install_dates, strike_dates) swap from plain `<Input>` to range-mode pickers. Storage shape unchanged: formatted strings ("Oct 15-17, 2026") into existing `text` columns; downstream string consumers (Claude prompts, Slides text, UI display) consume as-is. Picker holds internal `DateRange | undefined` state during popover open. New dependencies: `react-day-picker` + `date-fns`. Multi-date (non-consecutive) explicitly carry-forward.
-
-#### Matrix shared 7-column layout via VenueMatrixRow (5.12.14)
-
-Both Sourcing + Shortlist render through the same row primitive (`src/components/venue-scout/matrix/VenueMatrixRow.tsx`); per-page differences collapse to col-1 label (Shortlist vs Pitch) + col-1 handler + page-level source-of-truth (shortlisted vs pitched). Column shape: Shortlist/Pitch+Source (col 1, 110px, checkbox top + SourcePill bottom stacked) | Venue (230px, name + venue_type pills horizontal max 2 per row) | Location (180px, neighborhood + address stacked) | Website (130px, InlineEditText with prettyHost tlink) | Features (230px, compact TagInput) | Recommendations (280px, Bullets) | Considerations (280px, Bullets). Total ~1440px. Notes/Feedback column drops from both pages.
-
-#### Final Review + Deck Prep consolidation (5.12.15)
-
-DeckPrep.tsx wins the rename slot; today's Review.tsx (FinalReview) deletes at squash time. Producer flow on Deck Prep is the load-bearing one (Generate fires from there). Route segment `/review` is shorter and producer-friendlier than `/deck/prep`. Producer flow drops the standalone `review_selects` step: Shortlist Continue flips `current_step` directly to `'compiling'`. `review_selects` enum value stays in the DB for back-compat; `stepToRoute("review_selects")` resolves to `/review` so any legacy scout routes forward without a backfill migration. Per-venue card layout wins over wide-matrix (producer's job on this surface is content tuning, not at-a-glance row scanning). Numbered "Venue 01 / 02 / ..." pill recomputes against the included set only (matches slide order on the actual generated deck). Per-card body extracts to `src/components/venue-scout/ReviewCard.tsx` sibling so the parent stays ~600-700 lines.
+DeckPrep wins the rename slot; FinalReview deletes. Generate fires from Deck Prep (load-bearing surface). Producer flow drops standalone `review_selects` step: Shortlist Continue flips current_step directly to `'compiling'`. Enum value stays for back-compat; `stepToRoute("review_selects")` resolves to `/review` so legacy scouts forward without backfill. Per-venue card layout wins (job is content tuning, not row scanning). Per-card body extracts to `ReviewCard.tsx`.
 
 ### Cut + retired
 
-#### Phase 5.12.8 cut (2026-05-24): Brief client-logo web search
+#### Phase 5.12.8 cut: Brief client-logo web search
 
-Cut by Jimmie 2026-05-24: producer value low, busy-work shape; upcoming HQ-alignment styling pass on the brief surface is likely to drop the client logo display entirely, mooting the work.
+Cut 2026-05-24: producer value low, busy-work shape; upcoming HQ-alignment styling pass on brief surface is likely to drop client logo display entirely.
 
-### Carry-forwards (still open after Phase 5.12 closes)
+### Carry-forwards
 
-- **HQ-wide `.tbl` canon flip** (`code-observations.md` row #47, queued). Rewrites `.tbl` to match matrix primitives + rolls out HQ-wide; recouples matrix tables if the visual contract matches end-to-end.
-- **Phase 5.14 venue photo persistence** (queued in roadmap during 5.12.14.3 wrap). Round-trips HQ Venue photos to the deck generator + persists final state at deck-time.
-- **VS research-accuracy audit** (C1 La Cienega/Helms hallucination concerns, C2 tag verifiability + name canonicalization + neighborhood canonicalization + address precision, C3 URL accuracy / Heights District base-URL rule walk-back). Logged in archived 5.12.14.3 spec.
-- **Phase 5.15 Anthropic per-tool call-log infra** (queued during R7 § F.2). New `anthropic_call_log` table/view + `callClaude()` log write + VS/TS Settings per-tool breakdown render. R7 § F.2 stubbed the card surface; infra lands separately.
-- **`vs-generate-deck` neighborhood auto-add into `public.neighborhoods`** (5.12.13.3 carry-forward, still open).
-- **Review-as-cards canon** (`code-observations.md` row #48). Producer-locked: Review stays a `<ReviewCard>` list, not a table; revisit if a future producer call surfaces real need.
-- **System Prompts editor** (R7 § F.3 placeholder card on VS Settings). Deferred future sub-phase.
-- **BriefReport stage-aware crumb scope.** Hook-internal fetch fires once on mount; if scout state mutates while producer is on the page, crumb won't update until next navigation. Acceptable for now; revisit if smoke flags.
+- HQ-wide `.tbl` canon flip (rewrite to match matrix primitives, recouple).
+- Phase 5.14 venue photo persistence.
+- VS research-accuracy audit (hallucinations, tag verifiability, name/neighborhood canonicalization, URL accuracy).
+- Phase 5.15 Anthropic per-tool call-log infra.
+- `vs-generate-deck` neighborhood auto-add at deck-push time.
+- Review-as-cards canon (producer-locked).
+- System Prompts editor (deferred sub-phase).
+- BriefReport stage-aware crumb scope (revisit if smoke flags).
 
 ---
 
-## Phase 5.11.2 (2026-05-23) — HQ Core structural consistency
+## Phase 5.11: UX/design-system audit + structural consistency (2026-05-23)
 
-Frontend-only structural pass after the parallel 5.11.2 audits. The goal was chrome convergence and shared primitives, not a redesign. Product-call items were limited to the Wave 3 changes Jimmie approved during local smoke.
+Frontend-only structural pass after parallel audits. Goal: chrome convergence and shared primitives, not redesign.
 
-**Project "Status Notes" title override stays.** ProjectDetail uses the shared `<InternalNotesEditor />`, but its card title remains "Status Notes" instead of generic "Notes." That editor is the successor to the old project status-notes field, and the title tells producers these notes are about current project state, not arbitrary attachments or project history.
+### Detail-page editing patterns stay dual-path
 
-**Inline detail editing and pencil-to-edit form both stay.** Detail pages keep inline edits for the high-frequency fields producers tweak while reading a record. The pencil button remains the escape hatch to the full edit form for broader edits, grouped fields, deletes, and relationship rewrites. This dual path is intentional, not a transition state.
+Detail pages keep inline edits for high-frequency fields; pencil button stays the escape hatch to the full edit form for broader edits, grouped fields, deletes, relationship rewrites. Dual path is intentional. ProjectDetail's card title stays "Status Notes" (not generic "Notes") because the editor is the successor to the old status-notes field.
 
-**FilterBar `allowIsNot` remains opt-in.** The global FilterBar default is "is" only to keep chips simple and consistent. Surfaces that genuinely need a negative lifecycle filter opt in with `allowIsNot` (Tasks and Deliverables today). New surfaces should not expose "is not" unless a real workflow needs it.
+### FilterBar `allowIsNot` remains opt-in
 
-**VendorEdit Tags dropped, Capabilities is the vendor tag-like surface.** Vendor raw `tags` stays in the database for now, but VendorEdit no longer exposes it. Producers manage vendor classification through Capabilities, which is backed by the managed lookup pattern and appears consistently on vendor surfaces.
+Default is "is" only. Surfaces that need a negative lifecycle filter (Tasks, Deliverables) opt in. New surfaces should not expose "is not" unless a real workflow needs it.
 
-**Client, Person, and Vendor detail tags remain hidden.** The audit noted that those rows are loaded but not rendered. Jimmie's call for this pass was to document the divergence rather than reintroduce tag chips on these detail pages. Project Tags and Venue Features stay visible because they are active managed-lookup fields.
+### VendorEdit Tags dropped; Capabilities is the vendor tag surface
 
-**PersonDetail title-row pill routes to edit.** A person's type is derived from affiliation state (`client_id`, `vendor_id`, or venue-contact joins). Changing it inline would need a purpose-built reassignment UI that clears and sets the right relationship atomically. Until that exists, the title-row pill sends producers to the edit form.
+`vendors.tags` stays in DB but VendorEdit no longer exposes it. Producers manage classification through Capabilities (managed-lookup, consistent on vendor surfaces). Client/Person/Vendor detail tags remain hidden (loaded but not rendered); decision was to document divergence rather than reintroduce. Project Tags + Venue Features stay visible (active managed-lookup fields).
 
-**PersonDetail Associated Venues uses the standalone relationship-card pattern.** Venue-contact people now get a sibling Associated Venues card with `combo-as-link`, hidden in-trigger chips, and bullet-separated coral venue links. The Affiliation field reads "Venue contact" so the venue list appears once.
+### PersonDetail patterns
 
-**ProjectDetail Vendors sidebar stays as an exception.** Standalone relationship cards normally use the headbar `combo-as-link` pattern, but the ProjectDetail Vendors sidebar keeps its add-Popover flow because vendor add/discoverability is better there and the sidebar already carries vendor-specific detail. Documented exception, not a precedent for new relationship cards.
+Title-row pill routes to edit because type derives from affiliation state; changing inline needs purpose-built reassignment UI that clears + sets relationship atomically. Until that exists, pill sends to edit form. Venue-contact people get a sibling Associated Venues card with `combo-as-link`, hidden in-trigger chips, bullet-separated coral venue links.
 
-**Venue Slide stays a header action.** VenueDetail keeps the Venue Slide button in the title-row action cluster and VenueEdit keeps the Master Venue Deck Slide card. Do not move Venue Slide into a generic Links card unless Venue gains enough distinct link types to justify a card.
+### ProjectDetail Vendors sidebar exception
 
-## Phase 5.10.0 (2026-05-21) — venues.about_venue rename + AI About-paragraph generator
+Standalone relationship cards normally use headbar `combo-as-link`, but Vendors keeps its add-Popover because discoverability is better there and sidebar carries vendor-specific detail. Documented exception, not precedent.
 
-Standalone follow-on after the Phase 5.9 close, opening Phase 5.10. Two related venue-side additions ship in **one squash, one Netlify deploy** (rename + generator + buttons together; the edge function targets `about_venue` from day one). NOT a `[skip netlify]` ship.
+### Venue Slide stays a header action
 
-**Rename `venues.notes` -> `venues.about_venue`** for clarity. The column has always been the "About Venue" deck-copy body on Surface 09 detail; the `notes` name was misleading because HQ already has the polymorphic `notes_log` Internal Notes table. `RENAME COLUMN` is OID-preserving (indexes, FKs, triggers, views, and the realtime publication all auto-track; RLS policies don't reference column names), so no data migration and no dependent-object changes. The `bulk_import_commit_venues` RPC `CREATE OR REPLACE` rebased onto the 5.9.7 body with the three `notes` references swapped to `about_venue`; the importer commit payload + CSV template header changed in lockstep.
+VenueDetail keeps Venue Slide in title-row action cluster, VenueEdit keeps Master Venue Deck Slide card. Don't move into a generic Links card unless Venue gains enough distinct link types.
 
-**Breaking-rename coordination.** Because a column rename breaks the currently-deployed frontend's `venues.notes` SELECTs (and local dev hits the live Supabase project), the migration apply + edge-function deploy + Netlify frontend deploy MUST land together as one coordinated ship. The migration is held until Jimmie approves the push rather than applied out-of-band during feature work (the usual "migrations are fine to apply early" guidance assumes additive, non-breaking changes).
+## Phase 5.10: `venues.about_venue` rename + AI About-paragraph generator (2026-05-21)
 
-**HQ generator is TOOL-LESS with its own evergreen prompt (revised 2026-05-21).** Initial cut lifted VS `vs-compile-summaries` Pass 2's `write_overview` tool + `OVERVIEW_SYSTEM` verbatim and shared them. On review with Jimmie we recognized the venue overview is one reusable artifact generated in two places, and the VS prompt's brief-tailoring ("specific to the brief", "5-8 sentences", "serves the specific event") is wrong for an evergreen, reused About paragraph. Decision: HQ gets its **own** prompt, `ABOUT_VENUE_SYSTEM` (evergreen, brief-less, voice + web-research rules baked in), and runs **tool-less** — no custom tool, web_search only, Claude replies with the paragraph as plain text and the function reads `result.text` (stub fallback on empty). Tool-less was chosen as the more robust path: it eliminates the `feedback_tool_choice_collapse` failure class outright (no forced tool to collapse) and matches the existing `vs-generate-brief-overview` plain-text pattern. The legacy `OVERVIEW_TOOL` + `OVERVIEW_SYSTEM` stay in `_shared/venueOverview.ts` FROZEN for VS (which still forces the tool). **VS convergence is deferred to Phase 5.12** (the VS overview generation relocates to deck-prep, adopts `ABOUT_VENUE_SYSTEM`, drops the brief, cuts considerations from the input, adds web_search, and pushes to `venues.about_venue` on Generate Deck — full plan in `docs/roadmap.md` § 5.12). Jimmie gave explicit approval to deviate from the spec's "do not edit OVERVIEW_SYSTEM" rule for this. The user-message builder is HQ-specific (venue-data block only; VS keeps its own).
+Standalone follow-on opening Phase 5.10. Rename + generator + buttons ship in one squash with one Netlify deploy.
 
-**`'hq'` Claude spend bucket — first consumer.** `hq-generate-venue-about` is the first `callClaude('hq', ...)` caller in HQ; the `KEY_BY_APP` map in `_shared/anthropic.ts` already routes `'hq'` to the `ANTHROPIC_API_KEY_HQ` secret (set 2026-05-06).
+### Rename `venues.notes` to `venues.about_venue`
 
-**web_search included; `tool_choice: auto`.** The call includes `web_search_20250305`, `max_uses=2` so Claude can pull concrete detail when the venue row is sparse, gated by the prompt's strict verify-from-authoritative-sources / never-invent rules. `tool_choice: auto` lets the model decide whether to search; with no custom tool present it then replies in plain text. Empty reply -> deterministic "name in city" stub so the producer always lands on a non-empty, editable paragraph.
+Column has always been the deck-copy body on Surface 09; `notes` was misleading because HQ already has the polymorphic `notes_log` table. `RENAME COLUMN` is OID-preserving (indexes, FKs, triggers, views, realtime publication auto-track). `bulk_import_commit_venues` rebased; importer commit payload + CSV template header changed in lockstep.
 
-**Generate AND Regenerate both ship; button always renders.** Empty `about_venue` -> "Generate About Paragraph", click goes straight to the call (nothing to lose). Populated -> "Regenerate About Paragraph" + an AlertDialog confirm ("The current About paragraph will be cleared and overwritten. This cannot be undone.") before the call. Applies to ALL populated venues, including hand-typed paragraphs (the dialog protects every overwrite, AI-generated or not). Buttons live on BOTH VenueDetail (card header) and VenueEdit (About Venue section header). On VenueEdit the button is DISABLED while the form is dirty (tooltip: "Save your changes first to generate based on current data.") so the generator never runs against stale-saved values; post-generation, both form state and the initial snapshot sync to the returned value so `dirty` stays false.
+### Breaking-rename coordination
 
-## Phase 5.9.7 (2026-06-02) — Import Event Day Rate + venues.general_email
+A column rename breaks the deployed frontend's `venues.notes` SELECTs (local dev hits live Supabase). Migration apply + edge-function deploy + Netlify frontend deploy MUST land as one coordinated ship. Held until push approval rather than applied out-of-band (the usual "additive migrations are safe to apply early" guidance doesn't cover breaking changes).
 
-Two related venue-importer additions in one squash. The RPC `CREATE OR REPLACE` was rebased onto the 5.9.6 undo body (both compose: 5.9.6 tracks created records/People for undo; 5.9.7 adds the rate write + general_email field — different parts of the function, no conflict).
+### HQ generator is TOOL-LESS with its own evergreen prompt
 
-**Event Day Rate seeds an append-only `venue_rate_history` row, not a venue column** (locked 2026-05-20). Event Day Rate is not a venue column; it lives in `venue_rate_history` (most-recent-wins on the detail page). So the importer appends one `event_day` row per imported venue with `effective_from = current_date` (the import date — no CSV date column) and `created_by = actor`. **Insert only when the amount changed:** the RPC reads the venue's current most-recent `event_day` amount and inserts only if `IS DISTINCT FROM` the imported value, so a repeat import is a no-op (the table is append-only; this prevents duplicate-rate clutter). **`prod_day` is NOT importable this phase** — little historical prod-day data, so only Event Day Rate flows through. The grid uses the existing `MoneyCell` (`kind: "money"`); the RPC strips `$`/commas defensively even though the cell sends bare digits, because a hand-crafted POST might not. Rates are whole dollars (`amount_usd` is int); the validator's `checkNonNegInt` rejects decimals.
+Initial cut lifted VS `vs-compile-summaries` Pass 2's `write_overview` tool + `OVERVIEW_SYSTEM` verbatim. On review we recognized the venue overview is one reusable artifact in two places, and VS's brief-tailoring ("specific to the brief", "serves the specific event") is wrong for an evergreen About paragraph. Decision: HQ gets its own `ABOUT_VENUE_SYSTEM` (evergreen, brief-less, voice + web-research rules baked in) and runs tool-less. Tool-less eliminates the `feedback_tool_choice_collapse` failure class outright (no forced tool to collapse). Legacy `OVERVIEW_TOOL` + `OVERVIEW_SYSTEM` stay frozen for VS; VS convergence deferred to Phase 5.12.
 
-**Venues get `general_email` ONLY — no `general_phone` on venues OR vendors** (locked 2026-05-20 PM). Mirrors the 5.9.3.2 vendor decision against a company "main phone": only the company-level email lands. `venues.general_email` is nullable text (same `ALTER TABLE` shape as `vendors.general_email`), written through on BOTH the create + update RPC paths via `NULLIF(v_row->>'general_email','')`. A re-import with an empty cell on the update path CLEARS the field (the standard nullable-text-column behavior on the importer's update path; not a regression).
+### `'hq'` Claude spend bucket, first consumer
 
-**DEVIATION (Jimmie-approved 2026-05-21): no "Email"/"Phone" rename on VenueDetail.** The spec (§6) mirrored the 5.9.3.2 vendor change, which renamed VendorDetail's "Email"/"Phone" to "Contact Email"/"Contact Phone" and slotted "General Email" above. But venues surface contacts ONLY through the `venue_contact_people` join (the Contacts sidebar) — VenueDetail/VenueEdit never expose `venues.contact_email`/`contact_phone` as fields, so there was nothing to rename. Confirmed with Jimmie: drop the rename step entirely and place "General Email" in the Details section (VenueEdit) and in the Venue Details card (VenueDetail; see the reorder below). The venue `contact_*` columns still exist and the importer still writes them (creating the join contact); they're just not edited inline on the detail surface.
+`hq-generate-venue-about` is the first `callClaude('hq', ...)` caller in HQ; `KEY_BY_APP` already routes `'hq'` to `ANTHROPIC_API_KEY_HQ`.
 
-**Venue Details card reorder + always-shown General Email (Jimmie 2026-05-21).** The VenueDetail "Venue Details" card was reordered to read left-to-right, top-to-bottom across its two `kv` columns: City, Venue Type, Neighborhood, Address, Website, General Email, Total Sq Ft, Capacity, Event Day Rate, Prod Day Rate (left column = City, Neighborhood, Website, Total Sq Ft, Event Day Rate; right column = Venue Type, Address, General Email, Capacity, Prod Day Rate). Exclusive Vendors and Features moved to full-width rows below. **General Email is now always shown** (a `-` placeholder when empty, clickable to add), superseding the initial hidden-when-empty call — it's a fixed slot paired with Website, so hiding it would break the two-column pairing. **The Venue Slide hyperlink row was removed** from the card: the page header already has a Venue Slide button, so the inline "Open" link was redundant (`venue_slide_url` stays editable on VenueEdit and still drives the header button).
+### web_search included; `tool_choice: auto`
 
-## Phase 5.9.4 (2026-06-02) — Venues importer
+Includes `web_search_20250305` with `max_uses=2` so Claude can pull concrete detail when the venue row is sparse, gated by strict verify-from-authoritative-sources rules. Auto mode lets the model decide whether to search; with no custom tool present it replies in plain text. Empty reply gets a deterministic "name in city" stub.
 
-Plugged the Venue entity into the 5.9.1 bulk-import primitive. The RPC mirrors `bulk_import_commit_vendors`; three deltas drove the decisions worth recording.
+### Generate AND Regenerate both ship; button always renders
 
-**`venue_types` is a two-step ref (lookup-create + join-write), not an FK column.** Unlike Vendor's `category_id`/`subcategory_id` (single FK columns set directly on the row), a venue carries many types through the `venue_venue_types` join. So resolution + write is two-step: queued types are created first (building a `_queued:N` → uuid translation array), then per row each resolved `venue_type_id` is INSERTed into the join `ON CONFLICT DO NOTHING`. On the dedupe-update path the join is REPLACED (DELETE all rows for the venue, then re-INSERT the CSV's set) — the importer owns the join, matching the Project `project_venues` precedent. **`venue_types` queued-create uses a case-insensitive existence probe before INSERT**, not `ON CONFLICT (lower(name))`: `venue_types.name` is a real UNIQUE *constraint* (case-sensitive), not a `LOWER(name)` expression index like `vendor_categories`. So to let an admin who types "outdoor" reuse an existing "Outdoor", the RPC runs `IF NOT EXISTS (SELECT 1 ... WHERE LOWER(name)=LOWER(...))` then `INSERT ... ON CONFLICT (name) DO NOTHING` (the constraint name arbiter covers the exact-case race). `venue_types` also has NO `created_by` column, so that stamp is omitted (it is still applied to `cities` + `people`).
+Empty `about_venue` is "Generate" (no confirm); populated is "Regenerate" with AlertDialog confirm (overwrite warning). Applies to all populated venues including hand-typed paragraphs. Buttons on both VenueDetail and VenueEdit. On VenueEdit the button disables while form is dirty so generator never runs against stale-saved values.
 
-**`exclusive_vendor_ids` is NOT importable at all** (Jimmie's call, 2026-05-20). The first cut of this sub-phase shipped it as a `uuid[]` ref against vendors with allowCreate=false (template-omitted but available via the column picker). Jimmie clarified during the pre-squash review that exclusive vendors should never be set through bulk import — only on the manual VenueEdit surface. So the column, ref kind, validator check, and all RPC read/write of `exclusive_vendor_ids` were removed in a follow-up `CREATE OR REPLACE` migration (`20260602190000_phase_5_9_4_drop_exclusive_vendor_import.sql`) that also dropped the now-unused `_bulk_import_resolve_exclusive_vendor_ref` helper. **Load-bearing reason the RPC had to change, not just the frontend:** the prior RPC wrote `exclusive_vendor_ids = v_excl_vendors` on the dedupe-update path, so an importer that stopped sending the column would have resolved it to `{}` and WIPED a venue's manually-curated exclusive vendors on every re-import. The corrected RPC never touches the column (the `'{}'` column default applies on create; the update path leaves it alone).
+## Phase 5.9: Bulk Import (2026-05-21)
 
-**Contact-People links through the `venue_contact_people` JOIN, not `people.venue_id`.** This is where Venue diverges materially from the 5.9.3.3 vendor pattern. Vendor's contact surfaces because VendorDetail reads `people.vendor_id` directly. Venues are many-to-many (one person can be a contact at many venues) and the entire app (`PersonEdit`, `VenueDetail`, `PersonDetail`, `PeopleList`) reads venue contacts through `venue_contact_people`; `people.venue_id` is a dead legacy column nothing reads or writes. So the RPC creates (or reuses) a `people` row with `affiliation_type='Venue'` (client_id + vendor_id NULL per the mutex; `venue_id` left NULL to match the app) AND inserts a `venue_contact_people (venue_id, person_id)` row — the join row is what makes the contact appear on VenueDetail. **Venue-scoped contact dedupe matches THROUGH the join, NAME-first then email** (reverses the 5.9.3.3 email-first order): venue contacts more often share a venue-aliased inbox like `bookings@` than a name across records, so the name disambiguates better. The join is **additive** on the update path (`ON CONFLICT DO NOTHING`, never wiped) so a manually-added contact survives a re-import — in deliberate contrast to `venue_venue_types`, which IS replaced on update.
+The Projects → Vendors → Venues importer trio, plus follow-on enhancements (vendor nationwide flag, vendor general_email, vendor contact-People creation, venues importer additions). All on the 5.9.1 bulk-import primitive.
 
-**Locked sub-decisions (2026-05-20):** (a) `venue_types` validation accepts zero or more entries — a venue can land type-less and be tagged later in VenueEdit; the validator does NOT require ≥ 1. (b) `exclusive_vendor_ids` is not importable at all (see the paragraph above); the template header ships as-is and the EntityConfig has no exclusive-vendor column or ref kind.
+### SECURITY DEFINER RPC is the source of atomicity
 
-## Phase 5.9.3.3 (2026-06-02) — Vendor importer creates contact People
+PostgREST can't run a multi-statement transaction that rolls back together (memory `feedback_postgrest_no_multi_statement_tx`). Chained `supabase.from().insert()` would leave partial writes on mid-chain failure. So the whole commit lives in one `bulk_import_commit_<entity>(payload jsonb)` plpgsql function. Any `RAISE` rolls everything back. Convention: each entity gets its own RPC. `EntityHandler.commit()` is a thin wrapper. The RPC owns `bulk_import_sessions` + activity_log writes and signals via a returned `session_id`; the edge function skips its own session inserts when present (otherwise double-inserts).
 
-The vendor importer wrote `vendors.contact_name/email/phone` as plain text but never created a `people` row, so an imported vendor showed contact text yet had no Primary Contact (the picker resolves a real vendor-affiliated `people` row by matching `vendor.contact_email`/`name`) and nothing appeared in People. Surfaced during the smoke. The 5.9.3 spec had said "no people-roster handling," but that was about project staff roster (`users`); a vendor *contact* is an external `people` row, and the contact_* columns were always meant as a denormalized copy of one. Reversed the exclusion for vendor contacts: the per-row commit now creates a `people` row (`full_name`=contact_name, email, phone, `vendor_id`, `affiliation_type='Vendor'`, `created_by`=actor) which the existing VendorDetail derivation surfaces as Primary Contact automatically. **Dedupe is scoped to the same vendor**, not global: the `people_affiliation_type_mutex_check` (Vendor => client_id null, Client => vendor_id null, ...) plus the one-org-per-person model make it unsafe to relink a Client/Venue/other-vendor person by email — doing so would either violate the mutex or silently move them off their existing org. So a contact with the same email at a different vendor is a distinct person row by design; vendor-scoped dedupe still prevents the real problem (re-import duplicates for the same vendor). A name is required (people.full_name NOT NULL); rows with no contact_name skip person creation. Already-imported vendors backfill their contact on a re-import via the dedupe-update path.
+### Auth pattern matches `promote_outlook_to_project`
 
-## Phase 5.9.3.2 (2026-06-02) — Vendor general email
+RPC re-checks `permission_role='admin'` (raises 42501) as defense in depth on top of the route gate + edge function re-check. `actor_id` passed in payload because edge invokes via service-role (so `auth.uid()` is NULL inside). Per-cell parse coercion server-side; browser passes strings.
 
-Added `vendors.general_email` (nullable text), a company-level email distinct from the primary contact's `contact_email`. Discovered during the 5.9.3 smoke: a vendor's detail-page "Email" was actually the primary contact's, and Jimmie wanted a separate general/company inbox. Considered also adding a company "main phone" but dropped it (only the email lands); the existing `contact_phone` stays the contact's. To keep the distinction legible, VendorDetail relabeled the contact fields from "Email"/"Phone" to "Contact Email"/"Contact Phone" and added "General Email" + "Website" under the company-level group. Wired into VendorEdit (Details section), VendorDetail (inline-edit dl), and the importer (template column + validator email-shape check + RPC write-through). No badge, no list column, no index.
+### EntityConfig owns resolution + payload shape
 
-## Phase 5.9.3.1 (2026-06-02) — Vendor nationwide flag
+5.9.1 invented the registry; 5.9.2 locks three optional hooks: `buildUnresolved(parsed)`, `buildDedupe(rows)`, `buildCommitPayload(gridRows, mappings, decisions)`. Plus optional `validateRows`. Host stays generic; per-entity branches never grow.
 
-### Nationwide is a bool column + a generic filter hook, not a sentinel city or tag
+### Projects: people roster not importable
 
-Discovered during the 5.9.3 importer smoke: some vendors work nationwide and should surface under every city filter on `/vendors`. Two data-entry options were on the table (set `city = 'National'`, or a `'National'` tag), but neither would actually work: the city filter matches a row's single `city` string against the chip value, so a "Brooklyn" chip never matches a "National"-city or National-tagged vendor. The real enabler is a filter-logic change, so the data model follows from that. Chosen: a real `vendors.nationwide bool NOT NULL DEFAULT false` column (parallel to `preferred`), keeping the vendor's true base city intact. The filter behavior lives in a new generic `applyFilters` param `fieldMatchAll?: Record<string, (row) => boolean>` — a per-field "this row always satisfies this chip" predicate. VendorsList passes `{ city: (row) => row.nationwide }`, so a nationwide vendor auto-passes any `city` chip while still being subject to every other chip (AND) or surfacing on any chip (OR). Nationwide vendors appear normally when unfiltered. A green "National" pill (`pill pill-sm p-success`) renders next to the vendor name on VendorsList, alongside the existing blue "Internal" pill (Jimmie reversed the initial no-pill call during the smoke). No index (read only by the client-side filter). Editable via a VendorEdit "Nationwide" checkbox + the importer's `nationwide` true/false column (same enum-cell + bool-coercion pattern as `preferred`). The same pass added a VendorEdit "Preferred" checkbox (FormState + load + save), closing a pre-existing gap where `vendors.preferred` had no edit UI at all — it was previously settable only via the importer or direct DB. Rejected the sentinel-tag route despite the `INTERNAL_PARTNER_TAG` precedent: a first-class bool is typo-proof and the filter override is cleaner than special-casing a magic string.
+Account Lead / Designer / Team Members dropped. Set retroactively on edit page after import. Roster columns added friction (every row needed a resolvable pre-provisioned staff email; account_lead was required) for data quick to attach by hand. No DB constraint forces a project to have an Account Lead.
 
-## Phase 5.9.3 (2026-06-02) — Vendors importer
+### Projects: dedupe-update replaces venue roster, never merges
 
-### Subcategory parent resolution uses a plain `parent_category` text field, not a typeahead
+CSV is authoritative on update path: RPC UPDATEs columns and DELETEs + re-INSERTs `project_venues`. People roster joins deliberately left untouched (importer doesn't manage them; re-import must not wipe what a producer set by hand).
 
-Vendor's `category` and `subcategory` are FK columns (`category_id` / `subcategory_id`), and a subcategory only makes sense under a parent category (the `vendor_subcategories` UNIQUE is on `(parent_category_id, name)`). The MapStep resolves each *distinct* raw subcategory value once, but its distinct-value model carries no per-row parent context, so it can't auto-populate a dependent's inline-create form from the row's category cell. Two options: (a) a sophisticated typeahead inside the subcategory inline-create form that knows about queued category refs, or (b) a plain `parent_category` text input the admin types. **Locked (b) for v1.** The admin types e.g. "Lighting" in both the row's Category cell and the subcategory's `parent_category` inline-create field. Small redundancy, clean architecture. The RPC matches `parent_category` case-insensitively against the queued categories from *this* batch first, then existing categories; unresolvable raises 23503 with the row's name + the bad parent value. `dependsOn: ['category']` keeps Categories at the top of the MapStep resolution list. If admins hit this redundancy in real backfills, a future polish can add the queued-aware typeahead. (Locked spec § 14 open question #1.)
+### Vendors: subcategory parent uses plain text field, not typeahead
 
-### `preferred` is an enum cell coerced to bool, not a new boolean cell kind
+Subcategory only makes sense under a parent. MapStep resolves each distinct value once but carries no per-row parent context, so can't auto-populate a dependent's inline-create form. Two options: sophisticated queued-aware typeahead, or plain `parent_category` text. Locked plain text for v1. Small redundancy, clean architecture. RPC matches case-insensitively against queued then existing categories; unresolvable raises 23503.
 
-`vendors.preferred` is `NOT NULL DEFAULT false`. Rather than add a `boolean` `ColumnKind` + cell editor to the shared ImportGrid for one column, the importer reuses the existing `enum` cell with `enumValues: ['true', 'false']`. The RPC coerces via `lower(value) = 'true'`; an empty string defaults to false. A real boolean cell is deferred; promote later if the true/false dropdown UX proves clumsy. (Locked spec § 14 open question #2.)
+### Vendors: `preferred` is enum cell coerced to bool
 
-### Capabilities auto-create mirrors the Project Category/City lookup pattern
+Rather than add a `boolean` ColumnKind for one column, importer reuses enum cell with `enumValues: ['true', 'false']`. RPC coerces via `lower(value) = 'true'`. Real boolean cell deferred.
 
-`vendors.capabilities` is a `text[]` of capability NAMES; the `vendor_capabilities` lookup table backs autocomplete only. The importer treats it exactly like Project's `category`/`city` free-text lookups: the cell is a free-text multi-value `lookup` (datalist suggestions, no forced choice), and the RPC lazily auto-creates any novel `vendor_capabilities` row (with `created_by = v_actor`) while writing the name straight into `vendors.capabilities[]`. So capabilities are NOT a MapStep ref kind — no resolution step, just server-side novelty creation during the per-row commit loop. (Locked spec § 14 open question #3.)
+### Vendors: Capabilities auto-create mirrors Project category/city lookup
 
-### Dedupe key is `lower(name) + lower(coalesce(city, ''))`
+`vendors.capabilities` is `text[]` of names; lookup table backs autocomplete only. Cell is free-text multi-value with datalist suggestions; RPC lazily auto-creates novel rows. NOT a MapStep ref kind.
 
-Vendors have no natural unique key (no job-number analog, and `vendors` itself has no unique constraint on name). The composite `lower(name)|lower(city)` is the dedupe match used both client-side (`buildDedupe`) and re-run inside the RPC for atomicity. If franchise-style legitimate duplicates surface later, tighten the key in a follow-up. (Locked spec § 14 open question #4.)
+### Vendors: dedupe key + ON CONFLICT correction
 
-### ON CONFLICT names the expression index, not a constraint (spec-SQL correction)
+Dedupe key is `lower(name) + lower(coalesce(city, ''))` (vendors have no natural unique key). Spec wrote `ON CONFLICT ON CONSTRAINT vendor_categories_name_unique_idx` but that's a `LOWER(name)` expression index, not a `pg_constraint` row; clause raises "constraint does not exist". Implementation uses `ON CONFLICT (lower(name)) DO UPDATE SET name = EXCLUDED.name RETURNING id`. `vendor_subcategories` uses `ON CONFLICT (parent_category_id, name)` which IS a real UNIQUE constraint.
 
-The spec body wrote `ON CONFLICT ON CONSTRAINT vendor_categories_name_unique_idx` for the queued-category insert, but `vendor_categories_name_unique_idx` is a `LOWER(name)` expression *unique index* (`CREATE UNIQUE INDEX`), not a `pg_constraint` row — so `ON CONFLICT ON CONSTRAINT <that name>` raises "constraint does not exist" and would abort the transaction whenever a queued category already exists. The implementation uses `ON CONFLICT (lower(name)) DO UPDATE SET name = EXCLUDED.name RETURNING id` (the spec's documented intent: idempotent re-runs that recover the existing id), keeping the `SELECT id` fall-back the spec specified as belt-and-suspenders. `vendor_subcategories` uses `ON CONFLICT (parent_category_id, name)`, which is a real UNIQUE constraint and needs no correction.
+### Vendor nationwide flag: bool column + generic filter hook, not sentinel city
 
-## Phase 5.9.2 (2026-06-02) — Projects importer
+Some vendors work nationwide. Sentinel city or tag wouldn't work because the city filter matches a row's city string against the chip; a "Brooklyn" chip never matches "National". Real enabler is filter-logic change. Chosen: `vendors.nationwide bool NOT NULL DEFAULT false`. Filter behavior in generic `applyFilters` param `fieldMatchAll?: Record<string, (row) => boolean>` (per-field "always satisfies" predicate). VendorsList passes `{ city: (row) => row.nationwide }`. Green "National" pill on list. Same pass added VendorEdit "Preferred" checkbox, closing a pre-existing gap. First-class bool is typo-proof and the filter override is cleaner than sentinel-tag.
 
-### SECURITY DEFINER RPC is the source of atomicity for bulk import
+### Vendor general_email: company-level email, distinct from contact_email
 
-The Projects bulk commit writes across nine tables (queued client/venue creates, novel category/city lookups, the project row, four roster joins, the session audit row, the session activity row) and must be all-or-nothing. PostgREST cannot run a multi-statement transaction that rolls back together (memory `feedback_postgrest_no_multi_statement_tx`): a chain of `supabase.from(...).insert()` calls from the edge function would leave partial writes on a mid-chain failure. So the whole commit lives in one `plpgsql` function, `bulk_import_commit_projects(payload jsonb)`, invoked once by the edge function. Any `RAISE` inside it rolls the entire transaction back; the edge function's catch block then writes a `failed_rollback` audit row (outside the rolled-back work) for traceability.
+Discovered during 5.9.3 smoke: a vendor's detail-page "Email" was actually the primary contact's. Considered a company "main phone" but dropped (only email lands; `contact_phone` stays the contact's). VendorDetail relabeled "Email"/"Phone" to "Contact Email"/"Contact Phone" and added "General Email" + "Website" under company-level group.
 
-**Locked as the convention for 5.9.3 (Vendor) + 5.9.4 (Venue):** each entity gets its own `bulk_import_commit_<entity>` SECURITY DEFINER RPC. The `EntityHandler.commit()` in the edge function is a thin wrapper that calls the RPC and returns `{ created_ids, created_refs, session_id }`. **The RPC owns the `bulk_import_sessions` + session `activity_log` writes**, and signals that by returning a `session_id`; the edge function skips its own session/activity inserts whenever `session_id` is present (otherwise it double-inserts). This is the one non-obvious contract a future entity handler must honor.
+### Vendor importer creates contact People
 
-**Auth pattern matches `promote_outlook_to_project`:** the RPC re-checks the actor is `permission_role='admin'` (raises 42501) as defense in depth on top of the route gate + the edge function's admin re-check. `actor_id` is passed in the payload because the edge function invokes via the service-role client, so `auth.uid()` is NULL inside the function (unlike `promote_outlook_to_project`, which is called with the user JWT and reads `auth.uid()`). All per-cell parse coercion (`NULLIF + ::cast`) happens server-side in the RPC; the browser passes strings.
+Vendor importer wrote `vendors.contact_*` as plain text but never created a `people` row, so imported vendors had no Primary Contact (picker resolves a real vendor-affiliated `people` row). Reversed original spec's "no people-roster handling" exclusion (that was about project staff). Per-row commit creates a `people` row with `affiliation_type='Vendor'`. Dedupe scoped to same vendor, not global: `people_affiliation_type_mutex_check` plus one-org-per-person makes relinking by email unsafe. Rows with no contact_name skip person creation.
 
-### People roster is not importable (5.9.2.1)
+### Venues: `venue_types` is two-step ref (lookup-create + join-write)
 
-Account Lead / Designer / Team Members were dropped from the Projects importer (migration `20260602120000`). They're set retroactively on the project's edit page after import. Reason: the roster columns added friction (every row needed a resolvable pre-provisioned staff email, and `account_lead` was required) for data that's quick to attach by hand post-import, and there's no DB constraint forcing a project to have an Account Lead (only an app-level convention). The importer now owns only the `project_venues` join.
+Unlike vendor's FK columns, a venue carries many types through `venue_venue_types`. Resolution is two-step: queued types created first (building `_queued:N` → uuid map), then per row each resolved id INSERTs into join `ON CONFLICT DO NOTHING`. On dedupe-update the join is REPLACED (importer owns it, matching `project_venues` precedent). Queued-create uses case-insensitive existence probe before INSERT, not `ON CONFLICT (lower(name))`: `venue_types.name` is a real UNIQUE constraint (case-sensitive), not an expression index. `venue_types` has NO `created_by`; stamp omitted.
 
-### Dedupe-update replaces the venue roster, never merges
+### Venues: `exclusive_vendor_ids` is NOT importable
 
-When an import row matches an existing project and the admin picks "Update existing", the RPC UPDATEs the project columns and then DELETEs + re-INSERTs the `project_venues` join from the CSV row. CSV is the authoritative source of truth on the update path for venues: a blank venue column means no venues after the update. The people roster joins (`project_account_managers` / `project_designers` / `project_members`) are deliberately left untouched on the update path — the importer doesn't manage them (see above), so a re-import must not wipe a roster a producer set by hand. Merge-vs-replace for venues: replace, because a corrected-CSV re-import is the primary use case. (Locked spec § 14.1, narrowed to venues in 5.9.2.1.)
+First cut shipped it; Jimmie clarified it should only be set on manual VenueEdit. Removed in follow-up. Load-bearing reason RPC had to change, not just frontend: prior RPC wrote `exclusive_vendor_ids = v_excl_vendors` on dedupe-update, so a stopped-sending importer would have wiped manually-curated values on every re-import.
 
-### EntityConfig owns resolution + payload shape; the host stays generic
+### Venues: contact-People link through `venue_contact_people` JOIN
 
-5.9.1 invented the `EntityConfig` registry; 5.9.2 is the first real consumer and locks three optional hooks on the config so the generic `BulkImportPage` / `BulkImportEntityPage` host never grows per-entity branches: `buildUnresolved(parsed)` (sync, enumerates distinct ref values per kind), `buildDedupe(rows)` (async, queries the live table), and `buildCommitPayload(gridRows, mappings, decisions)` (translates grid + map resolutions into the RPC payload: resolved refs, `_queued:N` markers, pipe-split arrays, single-email `account_lead`, per-row `dedupe_action`). Plus an optional `validateRows`. The spec did not anticipate these hooks; they are the discovered shape of the convention 5.9.3 / 5.9.4 must implement.
+Vendor's contact surfaces because VendorDetail reads `people.vendor_id` directly. Venues are many-to-many; entire app reads through the join; `people.venue_id` is a dead legacy column. RPC creates a `people` row with `affiliation_type='Venue'` AND inserts join row. Venue-scoped dedupe matches THROUGH the join, NAME-first then email (reverses vendor's email-first): venue contacts more often share a venue-aliased inbox than a name. Join is additive on update (never wiped), in deliberate contrast to `venue_venue_types` which IS replaced.
 
-## Phase 5.8.5 (2026-05-18) — security pass
+### Venues: Event Day Rate seeds append-only `venue_rate_history`
+
+Event Day Rate isn't a venue column; lives in `venue_rate_history` (most-recent-wins on detail). Importer appends one `event_day` row per imported venue with `effective_from = current_date`. Insert only when amount changed: RPC reads current most-recent and inserts only if `IS DISTINCT FROM`. Re-import with same value is a no-op (prevents clutter). `prod_day` not importable (little historical data). Whole dollars.
+
+### Venues: `general_email` only; no VenueDetail label rename
+
+Mirrors 5.9.3.2 vendor decision. Nullable text; re-import with empty cell on update path clears the field. Unlike the vendor pass, NO "Email"/"Phone" rename on VenueDetail: venues surface contacts ONLY through `venue_contact_people` sidebar; VenueDetail/VenueEdit never expose `venues.contact_*` as fields, so nothing to rename. Venue Details card reordered + General Email always shown (paired with Website; hiding when empty would break two-column pairing).
+
+## Phase 5.8: HQ v1 release + security audit + cleanup (2026-05-19)
 
 ### Open-authenticated RLS posture (HQ Core baseline)
 
-The Supabase advisor's full scan on 2026-05-18 emitted 54 `rls_policy_always_true` warnings across roughly 5 categories of tables. Reviewed each category; the open-authenticated posture is intentional and matches HQ Core's threat model (a single trusted Google-OAuth-gated tenant). Recording the decision here so future advisor scans can be cross-checked instead of mistaken for drift.
+Supabase advisor's full scan emitted 54 `rls_policy_always_true` warnings across 5 categories. The open-authenticated posture is intentional and matches HQ Core's threat model (single trusted Google-OAuth-gated tenant). Recording here so future scans can be cross-checked, not mistaken for drift. Categories: lookup tables (cross-team reference data, writes gated on `is_admin()`), top-level domain tables (open SELECT/INSERT/UPDATE; DELETE either admin-only or open-authenticated, audit log captures every delete), join tables (inherit parent openness), file/history tables (read-everyone, write-gated), VS tables (collaborative agency-wide workflow).
 
-The five categories, and why each opts out of row-level scoping:
+The 2 `authenticated_security_definer_function_executable` warnings on the credentials RPCs are an intentional carve-out: SECURITY DEFINER to access `pgsodium.key`, gated on the same predicate as RLS, no alternative non-RPC path because the client never sees the encrypted column.
 
-- **Lookup tables.** `departments`, `cities`, `project_categories`, `venue_types`, `vendor_capabilities`, `vendor_categories`, `mirror_holidays`. Cross-team reference data; SELECT `(true)` is the entire point. Writes still gate on `is_admin()`.
-- **Top-level domain tables.** `projects`, `clients`, `venues`, `vendors`, `people`, `organizations`, `tasks`, `deliverables`, `outlook_entries`. Open SELECT + open INSERT/UPDATE; DELETE either admin-only or open-authenticated depending on the domain (see Jimmie's 2026-05-18 call on DELETE: open-authenticated is acceptable — the team is small and audit log captures every delete via `activity_log`).
-- **Join tables.** `project_account_managers`, `project_designers`, `project_venues`, `project_members`, `vs_candidate_venues`. Membership data inherits the parent record's openness; per-row scoping would force every screen to JOIN through the parent.
-- **File and history tables.** `notes_log` SELECT, `note_mentions` SELECT, `activity_log` SELECT, `vendor_files` SELECT, `wiki_pages` SELECT (authenticated), `wiki_images` SELECT. Read-only-to-everyone, write-gated.
-- **VS (Venue Scout) tables.** `vs_scouts`, `vs_candidate_venues`, `vs_venue_photos`, `vs_scout_settings`. Producer-driven workflow; open-authenticated SELECT lets any team member observe state. Writes scoped per producer/admin per the existing VS RLS.
+### RLS helper EXECUTE carve-out
 
-The 2 `authenticated_security_definer_function_executable` warnings the advisor emits on `credentials_set_password` and `credentials_reveal_password` are an intentional carve-out: the RPCs are SECURITY DEFINER (to access `pgsodium.key`), gate on the same `permission_role IN ('admin', 'standard')` predicate the existing RLS uses, and have no alternative non-RPC path because the client never sees the encrypted column.
+`is_admin()`, `is_producer_or_admin()`, `current_user_role()` MUST stay EXECUTE-callable by `authenticated`. They're invoked inside RLS predicates on ts_roles, ts_candidates, ts_evaluations, ts_pull_rounds, ts_final_reviews, vs_scouts, tier-gated DELETE on users/clients/projects/venues/venue_types, and users UPDATE WITH CHECK. The 5.8.5 migration REVOKE'd from PUBLIC without re-GRANTing on the assumption that SQL-function inlining would skip the permission check; that was wrong (SECURITY DEFINER blocks inlining, every RLS caller needs EXECUTE), and production TS open-roles went empty within seconds. Hotfix re-GRANTs to `authenticated`. These 3 helpers join `promote_outlook_to_project(uuid)` and 3 credentials RPCs as 7 permanent advisor hits. Spec-drafting lesson preserved in `feedback_revoke_execute_check_rls_callers.md`: before REVOKE'ing EXECUTE on any SECURITY DEFINER function, grep for callers.
 
-**RLS helper EXECUTE carve-out.** `public.is_admin()`, `public.is_producer_or_admin()`, and `public.current_user_role()` MUST stay EXECUTE-callable by the `authenticated` role. They are invoked inside RLS USING / WITH CHECK predicates on `ts_roles`, `ts_candidates`, `ts_evaluations`, `ts_pull_rounds`, `ts_final_reviews`, `vs_scouts`, the tier-gated DELETE policies on `users` / `clients` / `projects` / `venues` / `venue_types`, and the `users` UPDATE WITH CHECK on admin columns. The 5.8.5 migration #7 (`20260531160000_phase_5_8_5_revoke_from_public.sql`) REVOKE'd from PUBLIC without re-GRANTing on the assumption that SQL-function inlining would skip the permission check; that was wrong (SECURITY DEFINER blocks inlining, and every RLS caller needs EXECUTE), and production TS open-roles went empty within seconds. Hotfix `20260531170000_phase_5_8_5_1_hotfix_grant_rls_helpers.sql` re-GRANTs to `authenticated` and locks the decision: these 3 helpers join `promote_outlook_to_project(uuid)` and the 3 credentials RPCs (`credentials_create`, `credentials_set_password`, `credentials_reveal_password`) as the 7 permanent entries in the `authenticated_security_definer_function_executable` advisor family. Future advisor scans should expect 7 hits in that family and treat additions as drift. Spec-drafting lesson preserved in memory `feedback_revoke_execute_check_rls_callers.md`: before REVOKE'ing EXECUTE on any SECURITY DEFINER function, grep the migration tree for the function name to enumerate RLS callers; never trust function-inlining assumptions.
+### React Query partial adoption stays as-is
 
-### React Query partial adoption (tech-debt audit F042 correction)
-
-The 2026-05-18 tech-debt audit's F042 claimed `QueryClient` was instantiated but `useQuery` was never called. Live grep on the same date contradicted this: three files use React Query for roughly 13 call sites. `src/pages/outlook/OutlookPage.tsx` runs the full pattern (queries + mutations + invalidate-on-write); `src/pages/calendar/CalendarPage.tsx` uses three queries; `src/components/home/OutlookCondensedCard.tsx` uses one query. Every other page (around 25 of them) is on the legacy `useState + useEffect + supabase.from()` pattern.
-
-Two options on the table: rip React Query out, or convert the remaining pages to it. Both are valid; both are out of scope for any audit-integration phase. The decision documented here is to defer the commit-or-migrate call to a future refactor phase. F015 (the audit's "data-layer centralization" finding) is the natural home for that conversation; doing it as part of a security pass would balloon the diff and force a hand-on-every-page review without delivering security value. F042 is closed as "audit was wrong; no action this ship."
+The 2026-05-18 audit's F042 claimed `QueryClient` was instantiated but `useQuery` was never called. Live grep contradicted: three files use it for ~13 call sites. Every other page (~25) is on the legacy `useState + useEffect` pattern. Two options: rip out, or convert remaining. Both valid; both out of scope for a security pass. F042 closed as "audit was wrong."
 
 ### Auth: HIBP password leak check N/A
 
-The Supabase advisor flags `auth_leaked_password_protection` as a recommended setting. The toggle integrates with HaveIBeenPwned to reject passwords that appear in known breach corpora. HQ Core does not store passwords. Auth is Google Workspace OAuth restricted to `@mirrornyc.com`; the only "password" in the system is the user's Google account password, which Google itself protects (with HIBP and many other checks). The advisor warning is moot for this project and will remain in scan output indefinitely. Documenting here so future advisor reviews don't relitigate it.
+Advisor flags `auth_leaked_password_protection`. HQ Core doesn't store passwords; auth is Google Workspace OAuth restricted to `@mirrornyc.com`. The warning is moot and will remain in scan output indefinitely.
 
-### `rls_auto_enable` defensive event trigger (do not drop)
+### `rls_auto_enable` defensive trigger (do not drop)
 
-`public.rls_auto_enable()` is wired to an `ensure_rls` event trigger (`ddl_command_end` on `CREATE TABLE` / `CREATE TABLE AS` / `SELECT INTO`). It iterates the newly-created `public.*` tables and runs `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on each. SECURITY DEFINER, fail-safe (logs instead of raising), owned by `postgres`, not exposed to caller EXECUTE.
+`public.rls_auto_enable()` is wired to `ensure_rls` event trigger. Iterates newly-created `public.*` tables and runs `ALTER TABLE ENABLE ROW LEVEL SECURITY`. SECURITY DEFINER, fail-safe. Load-bearing safety net for the open-authenticated baseline: any future migration that creates a public table without enabling RLS is caught automatically. The 5.8.5 spec misread the advisor framing as Phase 3 cruft; the DROP attempt failed with a dependency error. Do not drop.
 
-This is a load-bearing safety net for the open-authenticated RLS baseline: any future migration that creates a public table without explicitly enabling RLS is caught automatically. The 5.8.5 spec misread the advisor framing and called it Phase 3 cruft; the 5.8.6 DROP attempt failed with a dependency error.
+### `tmp_5_8_5_probe` pgsodium key (accept-risk)
 
-**Do not drop.** The function exists in prod but not in the migration tree; reify in a future schema-baseline ship. Future advisor scans flagging it as `*_security_definer_function_executable` should add it to the existing carve-out paragraph alongside `is_admin`, `is_producer_or_admin`, `current_user_role`, and the credentials RPCs.
+A probe key remains in `pgsodium.valid_key` from a spec-deviation migration rewrite. Never used in any encrypt call. pgsodium restricts DELETE on `pgsodium.key` to internal role by design (append-only). Functionally inert. Accept-risk: leave in place.
 
-### `tmp_5_8_5_probe` pgsodium key (accept-risk, leave in place)
+## Phase 5.7: HQ Core UI overhaul (2026-05-18)
 
-A probe key named `tmp_5_8_5_probe` remains in `pgsodium.valid_key` from the 5.8.5 spec-deviation #3 migration rewrite. The UUID `399d53c0-ebcd-4cad-8c51-57fb6a26dd97` was never used in any `crypto_aead_det_encrypt` call; live encryption uses the `credentials` key (UUID `b5b8bfea-01ce-41e3-a5e2-8fea96c2b9a0`).
+### Wiki images: private bucket + 1-year signed URLs
 
-pgsodium restricts DELETE on `pgsodium.key` to its own internal role by design, because encryption keys are append-only in the intended workflow ("rotate, don't delete"). Supabase Dashboard SQL editor lacks the required role. The probe key is functionally inert: not referenced by any encrypted data, not exposed via RLS, negligible storage.
-
-**Accept-risk: leave in place.** If pgsodium ever exposes a key-rotate or key-delete primitive at the dashboard level, the probe key is the first candidate for cleanup. Until then it sits.
-
-## Phase 5.7.10 (2026-05-18)
-
-### Wiki images: private bucket + 1-year signed URLs (not public bucket)
-
-The drafted spec offered public bucket as the "simple" path. Locked PRIVATE on 2026-05-18 to keep wiki-image confidentiality consistent with `wiki_pages` table RLS (admin write, authenticated read). SELECT policy lets any authenticated user fetch the object, so signed URLs work for every reader tier. Inserts/updates/deletes gate on `is_admin()`.
-
-The TTL tradeoff is the cost: signed URLs are bearer-token-style and have a Supabase maximum of 1 year. URLs embed directly into `wiki_pages.body` HTML at upload time. After ~365 days, an unedited page's `<img>` tags 403. Acceptable for a v1 wiki where every page is touched often enough; if it bites, the carry-forward is the render-time URL-swap pattern (store `data-storage-path` attr, generate a fresh signed URL on mount).
+Drafted spec offered public bucket as the simple path. Locked PRIVATE to keep wiki-image confidentiality consistent with `wiki_pages` RLS (admin write, authenticated read). SELECT lets any authenticated user fetch the object so signed URLs work. TTL tradeoff: signed URLs are bearer-token-style with a Supabase max of 1 year. After ~365 days an unedited page's `<img>` tags 403. Acceptable for v1; if it bites, carry-forward is render-time URL-swap (store `data-storage-path`, generate fresh URL on mount).
 
 ### Browser-side resize cap = 1200px
 
-Canvas resize ceiling sits at 1200px max width. Big enough that a typical wiki diagram or photo renders crisp on a 13" laptop without distortion; small enough that a 4K original (8-12MB) drops to ~200KB. JPEG quality fixed at 0.85 (canvas `toBlob` ignores it for PNG). Easy to tune later; only one caller today.
+Canvas resize ceiling at 1200px max width. Big enough that a typical wiki diagram renders crisp on a 13" laptop, small enough that a 4K original drops to ~200KB. JPEG quality 0.85.
 
-### Diff-on-save cleanup (no orphan-image sweep job)
+### Diff-on-save cleanup (no orphan-image sweep)
 
-On save, diff the old `body` HTML against the new one and `storage.remove()` any image paths that left the document. On page-delete, sweep every embedded path. On editor-cancel / unmount, sweep this-session uploads via a `makeSessionUploadTracker()` ref. Pattern avoids needing a periodic cleanup cron. Tradeoff: a hard browser refresh mid-edit can't reliably fire async storage deletes from `beforeunload`, so a small orphan window exists — accept and document. If it grows, future carry-forward is a nightly job that diffs `storage.objects` against `extractWikiImagePaths()` over all `wiki_pages.body` rows.
+On save, diff old body HTML against new and `storage.remove()` any paths that left the document. On page-delete sweep every embedded path. On editor-cancel sweep this-session uploads via `makeSessionUploadTracker()` ref. Avoids needing a periodic cleanup cron. Tradeoff: a hard browser refresh mid-edit can't reliably fire async storage deletes from `beforeunload`, so a small orphan window exists. If it grows, future carry-forward is a nightly job that diffs storage against extracted paths.
 
-### `TiptapImage` alias for the TipTap Image extension
+### `TiptapImage` alias
 
-`@tiptap/extension-image`'s default export is named `Image`, which collides with the global `Image` constructor used inside `resizeImage()` (`new Image()` to read pixel dimensions for the canvas resize). Aliased the import as `TiptapImage` so the resize helper keeps using the native constructor without a `window.Image` indirection. Documented inline.
+`@tiptap/extension-image`'s default export is named `Image`, colliding with the global `Image` constructor used in `resizeImage()` (`new Image()` for pixel dimensions). Aliased the import.
 
-### Lookup Lists merge: single unified card, no standalone Project Categories / Cities pair
+### Lookup Lists merged into single card + inline editor under its own row
 
-Pre-5.7.10 Settings split Project Categories + Cities into their own `g2`-grid card pair above an "Other Lookup Lists" table. Merged into one "Lookup Lists" card holding all six (project_categories + cities + venue_types + vendor_capabilities + vendor_categories + departments) with the inline `layout="tags"` editor. Two reasons: the two highlighted lookups don't deserve special chrome (they're not used more often than venue_types or departments in practice); and the unified table is easier to scan when an admin is hunting for the right list.
+Pre-5.7 Settings split Project Categories + Cities into their own pair above "Other Lookup Lists". Merged into one "Lookup Lists" card holding all six with inline tags editor. First cut rendered expanded `<tr>` after the loop so editor opened at bottom of `<tbody>` regardless of row clicked; refactored each row + conditional expanded into a `<Fragment>` so editor renders immediately below.
 
-### Inline editor renders directly under its own row (not at table bottom)
+### Integrations card collapsed to header-only Coming Soon
 
-First-cut implementation rendered the expanded `<tr>` after the `OTHER_LOOKUPS.map(...)` loop, so the editor always opened at the bottom of `<tbody>` regardless of which row was clicked. Smoke surfaced the visual mismatch: clicking Edit on Cities popped an editor down under Departments. Refactored to wrap each row + its conditional expanded row in a `<Fragment>`, so the editor renders as the next row immediately below the one being edited. Spatial parity matches how admins read the table (top-to-bottom; the editor for row N belongs under row N, not at the end).
+Smoke ask: drop the three disabled IntegrationRows, reduce to one-line "Integrations, Coming Soon" header. Shipping disabled toggles advertises features that don't work and invites "why is my toggle stuck?". Notification wiring is future-phase scope.
 
-### Integrations card collapsed to a header-only Coming Soon stub
-
-Pre-followup the card carried three `<IntegrationRow>` children (Google Calendar push / Slack DM notifications / Google Drive link integration) with disabled toggles + a "display-only in this release" caption. Smoke ask 2026-05-18: drop the body entirely and reduce the card to a one-line `Integrations — Coming Soon` header with no expand affordance. Reason: shipping the toggles + descriptions visually advertises features that don't actually work and invites the support question "why is my toggle stuck?". A muted "Coming Soon" label sets the right expectation in fewer pixels. The notification dispatch wiring (which would make at least the Slack DM toggle real) is a future-phase scope; restore the row primitives at that point.
-
-## Phase 5.5 (2026-05-16)
+## Phase 5.5: Notifications + Activity Feed + Search (2026-05-16)
 
 ### `notifications-dispatch` is internal-only (no user-JWT path)
 
-First instinct was the standard `requireInternalOrUserAuth` pattern most edge functions use. Security audit caught it as a MUST FIX: any signed-in Standard or Freelance user could POST with a crafted `recipient_user_ids` array to spoof in-app notifications + trigger Slack DMs to admins. The function reads with the service role, so authorization is replaced by the internal-secret gate at the entry point.
-
-Switched to `requireInternalSecret` only. All legitimate callers (the `notifications_dispatch_writer` trigger, `handle_new_user`, the three `hq-cron-*` functions) already send `x-internal-secret` via `public.invoke_edge_function`. No browser path needs direct dispatch access. If a future UI feature ever needs to trigger a notification directly, gate it behind an admin-role check at that call site rather than weakening dispatch.
+First instinct was `requireInternalOrUserAuth`. Security audit caught it: any signed-in Standard or Freelance user could POST with a crafted `recipient_user_ids` to spoof in-app notifications + trigger Slack DMs to admins. The function reads with service role, so authorization is replaced by internal-secret gate at entry. All legitimate callers (notifications_dispatch_writer trigger, handle_new_user, hq-cron-*) already send `x-internal-secret`. No browser path needs direct dispatch access.
 
 ### `user_pending` in-app row stays inline, dispatch only handles email + Slack
 
-`handle_new_user` writes the durable `notifications` row for every active admin BEFORE invoking dispatch. Dispatch then receives the same `recipient_user_ids` and would normally insert a second row per recipient. To avoid the duplicate, dispatch special-cases `event_type='user_pending'` and skips the in-app insert (the trigger's inline write covers it). The email + Slack paths still run.
-
-Rationale: the in-app signal is the most important guarantee, and putting it inline in the trigger means it lands even if the dispatch edge function 500s. The duplicate-prevention has no unique-constraint backstop on `notifications`, so the simpler "skip in dispatch" is robust without a schema change.
+`handle_new_user` writes the durable `notifications` row for every active admin BEFORE invoking dispatch. To avoid duplicate, dispatch special-cases `event_type='user_pending'` and skips the in-app insert. The in-app signal is the most important guarantee; putting it inline in the trigger means it lands even if dispatch 500s. No unique-constraint backstop on notifications, so the simpler "skip in dispatch" is robust without a schema change.
 
 ### `auth.uid()` for trigger actor, fallback to `created_by`
 
-`notifications_dispatch_writer` reads `auth.uid()` to set `actor_id` so dispatch can exclude self-notification. When a user updates a task from the UI (RLS-scoped client carries the JWT), `auth.uid()` resolves to the acting user. When the trigger fires from a service-role write (cron, edge function chain), `auth.uid()` returns null. For `task_assigned` the COALESCE uses `NEW.created_by` as fallback so we still have some "who" to attribute. For `task_blocked` and `project_status_changed` we let `actor_id` be null when there's no JWT (dispatch then doesn't filter anyone out — better to notify everyone than skip silently).
+`notifications_dispatch_writer` reads `auth.uid()` for `actor_id` so dispatch can exclude self-notification. RLS-scoped client carries the JWT, resolving to the acting user. Service-role writes (cron, edge function chain) return null. For `task_assigned` COALESCE uses `NEW.created_by` as fallback. For `task_blocked` and `project_status_changed` we let `actor_id` be null when no JWT (better to notify everyone than skip silently).
 
-### CSS reuse: `.activity-row` + `.actdot` already lived in `src/index.css`
+### CSS reuse + cron naming
 
-Project Detail's activity sidebar shipped these classes in Phase 5.1/5.2. The Activity Feed page reuses them verbatim — the spec called for lifting them again but they were already canonical. Only `.notif` block (bell-panel rows) was net-new from the wireframe lift.
+Project Detail's activity sidebar shipped `.activity-row` + `.actdot` in 5.1/5.2; Activity Feed reuses verbatim. Only `.notif` was net-new. Cron naming: `hq-cron-*` not `cron-*` (three daily crons cross multiple tables so no single-module prefix fits); `hq-cron-*` keeps `<module>-cron-<purpose>` convention spirit. DataTable's centralized `<div className="empty">` retained; swapping for shared `<EmptyState>` would require threading an icon prop through 7+ sites for zero visual change.
 
-### Cron naming: `hq-cron-*` not `cron-*`
+## Phase 5.4: Wiki + Account Logins + Users + Settings (2026-05-16)
 
-`docs/conventions.md` § Naming requires `<module>-cron-<purpose>`. The three new daily crons cross multiple HQ Core tables (`deliverables`, `tasks`, `projects`) so no single-module prefix fits cleanly. Used `hq-cron-*` to keep the convention's spirit (the HQ Core surface area) without inventing a fake module per cron.
-
-### States polish: kept DataTable's centralized empty render
-
-DataTable already routes every list-page empty state through a single `<div className="empty">` render with the canonical CSS class. Swapping it for the shared `<EmptyState>` would require threading an icon prop through 7+ call sites and accept zero visual change (same DOM, same class). Spec § 7 verification (3+ list pages, 2+ LoadError uses) is satisfied organically by the new pages (NotificationBellPanel, ActivityFeed, SearchPage, NotificationPreferences) + WikiPage's two `PermissionDenied` swaps. DataTable stays as-is until a future deviation justifies the cost.
-
-## Phase 5.4 feedback round 2 (2026-05-16)
-
-Third pass on `claude/zen-mestorf-940d7f`, after Jimmie's follow-up smoke. New migration: `20260516180000_phase_5_4_feedback_round_2.sql`.
-
-### Wiki Delete surfaced from the read view
-
-The Delete Page button still lives at the bottom of the edit form, but it was easy to miss. Added a second Delete button to the wiki read-view header, right next to "Edit Page". Same `isSpecialPageType` guard (special pages can't be deleted). Same `AlertDialog` confirmation. Both buttons hit the same supabase `.delete()` and navigate back to `/wiki`.
-
-### Account Logins writes open to Standard
-
-Original 5.4 spec gated INSERT/UPDATE/DELETE on credentials to admin only. Jimmie's smoke pass clarified the intent: writes should be available to everyone except Freelance, matching the SELECT posture. Migration drops the three admin-only policies and replaces them with non-freelance variants (admin + standard can write; freelance still blocked from SELECT entirely). The AccountLoginsPage component prop swapped from `isAdmin` to `canWrite` (always true at the call site, since WikiPage already blocks freelance from reaching it).
-
-### Preferred Vendors curated via `vendors.preferred` flag
-
-Original 5.4 spec rendered ALL vendors grouped by capability on the Wiki "Vendors at a Glance" page. Feedback round 1 renamed the page to "Preferred Vendors". Round 2 makes the list actually curated.
-
-- Migration adds `vendors.preferred boolean NOT NULL DEFAULT false` + a partial index where `preferred = true`.
-- `VendorsGlanceEmbed` filters to `preferred = true` rows. The file + component name stay because the wiki `page_type` enum value is still `vendors_glance`; renaming the enum would be a separate migration with no visible benefit.
-- Admin gets a "Manage Preferred List" button (top right of the embed) that opens a `<ManagePreferredDialog />` with a search input + scrollable list of every vendor in the DB. Each row is a checkbox toggle bound to the desired-set. Save diffs against the initial-set and only writes the rows that flipped — minimizes the bulk UPDATE size.
-- Empty state ("No preferred vendors selected yet.") includes the same Manage CTA so first-time setup is one click away.
-- Rejected alternatives: a dedicated `preferred_vendors(vendor_id)` junction table (overkill for a single curated list) and managing the flag from the Vendor detail page (the wiki page is the discovery surface, so the toggle belongs there).
-
-## Phase 5.4 feedback round (2026-05-16)
-
-Live-smoke feedback from Jimmie after the spec-implementation cut. Wrapped into a second migration (`20260516170000_phase_5_4_feedback.sql`) plus app-side updates. All on the same `claude/zen-mestorf-940d7f` branch.
-
-### Wiki editor switched from markdown to rich-text (TipTap)
-
-The spec shipped a markdown textarea + Preview toggle. Jimmie wanted a WYSIWYG visual editor with bold / italic / underline / headings / lists / link. Picked TipTap (`@tiptap/react` + `@tiptap/starter-kit` + `@tiptap/extension-underline` + `@tiptap/extension-link`) as the standard React rich-text choice. Storage shifts from markdown to HTML.
-
-The 11 seeded prose pages were rewritten to HTML in the feedback migration so the renderer doesn't see literal markdown characters in the new HTML world. The renderer changed from `react-markdown` to `dangerouslySetInnerHTML` (admin-authored, trusted-source content). The `react-markdown` dep stays in `package.json` for now — not referenced anywhere — and can be pruned in a polish pass.
-
-### Wiki visibility gained `admin_only`
-
-The original CHECK was `('all', 'no_freelance')`. Widened to add `'admin_only'`. The wiki nav filters admin_only pages from non-admins (lock glyph reused, same as no_freelance); component-level visibility gate in `WikiPage` blocks direct slug nav. RLS on `wiki_pages` is still open-SELECT (no DB-level visibility enforcement); the user-facing block is the component check + the nav filter.
-
-### `credentials.related_note` dropped
-
-Jimmie wanted the Related column gone entirely. Migration drops the column. UI + dialog updated to remove it. AccountLogins Updated column also gained the day component (`MMM D, YYYY` instead of `MMM YYYY`) and the trailing "admins add new ones inline" caption was removed.
-
-### Vendors at a Glance -> Preferred Vendors
-
-Updated the seeded `wiki_pages` row: slug `vendors-at-a-glance` -> `preferred-vendors`, title `Vendors at a Glance` -> `Preferred Vendors`. The page component (`<VendorsGlanceEmbed />`) was not renamed; its docstring still references "Vendors at a Glance" because it's keyed to `page_type = 'vendors_glance'` which is the DB-level enum value. Renaming the enum would be a bigger migration.
-
-### `/team` route renamed to `/users`
-
-Page label + URL slug. LeftRail says "Users", page heading is "USERS", primary button is "Add User", toasts say "User added / deactivated / not found", Back link says "Back to Users". `/team*` URLs redirect to `/users*` (Navigate components) so pre-feedback notification links (`link_url = '/team'`) and any bookmarks still land. `handle_new_user` was rewritten to emit `link_url = '/users'` going forward.
-
-The page file paths stayed at `src/pages/team/*.tsx` to limit churn; only the route + UI labels moved. Future polish pass can rename the directory + queries lib.
-
-### Settings reorder + Mirror Holidays collapsible
-
-Integrations card moved above Mirror Holidays. Mirror Holidays card is now collapsed by default with a chevron in the headbar; click to expand. Rows lazy-load on first expand (no `mirror_holidays` query fires until the user opens the section).
-
-### Calendar holidays render yellow
-
-`.cal-ev.hol` now uses an amber/yellow background tinted with the existing `--warn` token (`rgba(245,158,11,.22)` + warn-colored italic text), replacing the prior gray. Distinct from `.cal-ev.rem` (Removal, same color family but normal-weight foreground), distinct from `.cal-ev.olk` (Outlook, gray).
-
-## Phase 5.4 (Wiki + Account Logins + Team + Settings)
-
-Spec: `OUTPUTS/phase-5-4-spec.md` (drafted 2026-05-16). Four surfaces lifted from Wireframe Surfaces 12, 17, 18, 20. One feature branch, one squash. One migration (`20260516160000_phase_5_4_wiki_team_settings.sql`) that adds four tables + extends `public.users` + amends `handle_new_user` + drops the auth FK + drops `department_tags`.
+Spec: `OUTPUTS/phase-5-4-spec.md`. Four surfaces lifted from Wireframe Surfaces 12, 17, 18, 20. One squash, with two follow-on feedback rounds.
 
 ### ID-swap on pre-provisioned users
 
-The Team Add form needs to insert a `public.users` row for a teammate who hasn't signed in yet. The shipped FK `users.id REFERENCES auth.users(id)` blocked that (no auth user, no row). Three options were considered:
+Team Add needs to insert a `public.users` row for a teammate who hasn't signed in. Shipped FK `users.id REFERENCES auth.users(id)` blocked that. Three options considered: (A) drop FK, keep id-swap on first sign-in; (B) add `auth_user_id` column (every RLS policy comparing against `auth.uid()` would need updating); (C) skip pre-provisioning. Locked A. Tradeoff: hard delete in auth.users no longer cascades; Mirror rarely hard-deletes auth users. Migration amends `handle_new_user` to perform id-swap (idempotent: matching id is no-op stamp; matching email with different id triggers swap; no match triggers fresh-pending insert + admin notification).
 
-- **A. Drop the FK; keep id-swap.** Pre-provisioned rows get random UUIDs. On first sign-in, `handle_new_user` checks for a `public.users` row matching the auth user's email and, if found, swaps that row's `id` to the auth uid. Safe because pre-provisioned users have no FK references yet (created_by / updated_by / etc.).
-- **B. Add `auth_user_id` column.** Bigger refactor; every RLS policy comparing against `auth.uid()` would need updating.
-- **C. Skip pre-provisioning.** Team Add becomes a stub until the person signs in.
+### `department_tags` dropped in favor of `departments` lookup + single FK
 
-Locked **A** (Jimmie's call on 2026-05-16). Trade-off accepted: the FK to `auth.users` is gone, so a hard delete in `auth.users` no longer cascades to `public.users` automatically. Mirror rarely hard-deletes auth users; if it ever does, a manual cleanup function can be added later. The Phase 5.4 migration drops the FK + amends `handle_new_user` to perform the id-swap (idempotent: matching id is treated as a no-op stamp; matching email with different id triggers the swap; no match triggers the fresh-pending insert + admin notification flow).
-
-### department_tags dropped in favor of departments lookup + single FK
-
-Phase 5.1 shipped `public.users.department_tags text[]` with four hardcoded values (`Account Manager`, `Production`, `Design`, `Creative`). The wireframe Surface 12 surfaces ONE department per person from a richer list (Leadership, Accounts, Creative, Design, Event Production). The four old values were never surfaced in any current UI (zero usages in `src/` outside `types.ts`).
-
-Phase 5.4 drops `department_tags` + its CHECK constraint and adds `department_id uuid REFERENCES departments(id) ON DELETE SET NULL`. The `departments` lookup table seeds with the five wireframe-matching values. Inline-add from the Team Edit form goes through the existing `useLookup` hook (extended to know about `departments`).
+Phase 5.1 shipped `users.department_tags text[]` with four hardcoded values. Wireframe Surface 12 surfaces ONE department from a richer list. The four old values were never surfaced in any current UI. Drop column + CHECK; add `department_id uuid REFERENCES departments(id) ON DELETE SET NULL`. Lookup table seeds with five wireframe-matching values. Inline-add via existing `useLookup` hook (extended to know about departments).
 
 ### Credentials stored plaintext-at-rest
 
-The `credentials` table stores `password text NOT NULL` plaintext. This is intentional:
+The `credentials` table stores `password text NOT NULL` plaintext. Intentional: access control is RLS-enforced (Freelance blocked, admins write, standard + admin read), Supabase provides encryption at rest at the storage layer, the reveal-and-copy UX is convenience pattern not security boundary, the data is operational team credentials (shipping accounts, vendor portals) not user secrets. Application-level encryption rejected (client-side keys = fresh problem each session; server-side endpoint = latency + RLS duplication). Matches industry baseline for internal team password vault.
 
-- Access control is RLS-enforced: Freelance blocked entirely, only admins write, only standard + admin read.
-- Supabase provides encryption at rest at the storage layer.
-- The reveal-and-copy UX (eye toggle + 30-second idle re-mask) is a convenience pattern for shoulder-surfing protection, not a security boundary.
-- The data is operational team credentials (shipping accounts, vendor portals), not user secrets. Hash-and-compare doesn't apply because admins need to read the cleartext to populate forms on external sites.
+### Wiki `page_type` enum + special pages
 
-Application-level encryption was considered and rejected: it would require either client-side keys (a fresh key-management problem on each session) or a server-side decryption endpoint (latency + RLS duplication). The current shape matches industry baseline for an internal team password vault and keeps the surface simple.
-
-### Wiki page_type enum + special pages
-
-The `wiki_pages.page_type` column carries one of four values: `prose`, `team_directory`, `vendors_glance`, `account_logins`. Prose pages store markdown in `body` and render via `react-markdown`. The three special types render hardcoded components (TeamDirectoryEmbed, VendorsGlanceEmbed, AccountLoginsPage) and ignore `body`.
-
-The three special pages are seeded by the migration and cannot be created from the UI (create mode is locked to `page_type = 'prose'`). They also cannot be deleted from the UI (the Edit form hides the Delete button when `page_type != 'prose'`). This keeps the special-page surface tightly coupled to the migration so the Calendar / Account Logins / Vendors pages can rely on their slugs existing.
+`wiki_pages.page_type` ∈ `prose | team_directory | vendors_glance | account_logins`. Prose stores markdown (later HTML) in `body`. The three special types render hardcoded components and ignore body. Special pages are seeded by migration and can't be created or deleted from UI (Edit hides Delete when not prose). Keeps special-page surface tightly coupled to the migration so Calendar/Logins/Vendors pages can rely on their slugs existing.
 
 ### Wiki accessible to Freelance (except Account Logins)
 
-`/wiki` and `/wiki/:slug` use `<ProtectedRoute>` (all tiers including Freelance) rather than `<StandardOrAdminRoute>`. Operational docs (How We Work, Shipping & Messengers, Pricing, etc.) are useful for freelance contractors who also need to know how Mirror runs jobs. Account Logins is the only exclusion: the wiki page row carries `visibility = 'no_freelance'` (filtered from nav), the wiki page component shows an access-restricted state if Freelance navigates directly, and the underlying `credentials` RLS rejects the SELECT.
+`/wiki` and `/wiki/:slug` use `<ProtectedRoute>` (all tiers including Freelance). Operational docs are useful for freelance contractors. Account Logins is the only exclusion: page row carries `visibility = 'no_freelance'` (filtered from nav), component shows access-restricted state if direct nav, underlying `credentials` RLS rejects the SELECT.
 
-### mirror_holidays replaces hardcoded constant
+### `mirror_holidays` replaces hardcoded constant
 
-The `MIRROR_HOLIDAYS` array in `src/lib/calendar/holidays.ts` (shipped Phase 5.3) is replaced with a `mirror_holidays` table + `useMirrorHolidays()` hook. The migration seeds the table with the previous constant values exactly so Calendar behavior is unchanged on deploy. The Settings page exposes a CRUD editor (`<MirrorHolidaysEditor />`) so admins can add 2027+ holidays without a code change.
+`MIRROR_HOLIDAYS` array (shipped Phase 5.3) replaced with a table + `useMirrorHolidays()` hook. Migration seeds with previous values exactly so Calendar behavior is unchanged on deploy. Settings exposes CRUD editor so admins can add 2027+ holidays without a code change.
 
-### Integrations card display-only for 5.4
+### GRANT fixes carried in this migration
 
-The Settings Integrations card renders three toggles (Google Calendar push, Slack DM notifications, Google Drive link integration) in the "on" state but they are `disabled` and non-interactive. No backend config table backs them in 5.4. They become functional when the corresponding features ship in a later phase (notification dispatch + Google Calendar push are tracked for 5.5+).
+`GRANT INSERT ON users TO authenticated` (admin pre-provisioning; RLS still gates to admin), `GRANT DELETE ON cities TO authenticated` (admin-only DELETE RLS was unreachable), `GRANT DELETE ON project_categories TO authenticated`. Same posture fix as Phase 5.2 did for `vendor_capabilities`.
 
-### GRANT fixes (cleanup carried in this migration)
+### Feedback round amendments (folded into squash)
 
-Three GRANT gaps blocked Phase 5.4 functionality and got fixed alongside the new tables:
+- **Wiki editor switched from markdown to TipTap WYSIWYG.** Storage shifted from markdown to HTML. 11 seeded prose pages rewritten. Renderer changed to `dangerouslySetInnerHTML` (admin-authored trusted content). `react-markdown` dep stays in package.json unreferenced.
+- **Wiki visibility gained `admin_only`.** Widened CHECK. Nav filters; component-level gate blocks direct slug nav.
+- **Vendors at a Glance → Preferred Vendors.** Slug + title updated. Component file not renamed (still keyed to `page_type = 'vendors_glance'` enum).
+- **`/team` route renamed to `/users`.** `/team*` redirects so pre-feedback notification links still land. `handle_new_user` rewritten to emit `/users`. Page file paths stayed at `src/pages/team/*` to limit churn.
+- **Calendar holidays render yellow.** `.cal-ev.hol` uses amber `--warn` token replacing prior gray.
+- **Account Logins writes open to Standard.** Original spec gated writes to admin only. Intent was writes available to everyone except Freelance, matching SELECT posture.
+- **Preferred Vendors curated via `vendors.preferred` flag.** Migration adds bool + partial index. `VendorsGlanceEmbed` filters to `preferred = true`. Admin gets "Manage Preferred List" dialog with search + scrollable list; save diffs against initial-set and only writes flipped rows.
 
-- `GRANT INSERT ON public.users TO authenticated`: required for admin pre-provisioning. RLS still gates to admin via the new `users_insert_admin` policy.
-- `GRANT DELETE ON public.cities TO authenticated`: the admin-only DELETE RLS was unreachable for authenticated. Settings needs the path. Same posture fix as the Phase 5.2 cleanup that did this for `vendor_capabilities`.
-- `GRANT DELETE ON public.project_categories TO authenticated`: same as cities.
+## Phase 5.3: Calendar + Outlook (2026-05-16)
 
-### Team "Cards" view deferred
+Spec: `OUTPUTS/phase-5-3-spec.md`. Surfaces 15 (unified Calendar) + 16 (admin-only Outlook).
 
-The wireframe Surface 12 ViewSwitch shows List + Cards. 5.4 ships List only; the Cards button is rendered but disabled. The shipped list table with inline tier dropdown + active toggle covers the operational need (assign tiers, deactivate, find the pending users) without the Cards view. Cards lands as a polish item in a later pass.
+### Outlook Confidence color override
 
-## Phase 5.3 (Calendar + Outlook)
+Locked wireframe defined `.ol-rad` / `.ol-like` / `.ol-conf` / `.ol-comp` with colors that disagree with the locked mapping (`OUTPUTS/phase-5-locked-decisions-2026-05-15.md`). Mapping is source of truth: On Radar → amber, Likely → cyan, Confirmed → green, Complete → gray. CSS block lifted to `src/index.css` flips the four rules in place so class names match semantic meaning. Alternative (lift verbatim, let JS assign "wrong" class for right color) rejected: "Confirmed gets `.ol-conf` which renders amber" is cognitive dissonance.
 
-Spec: `OUTPUTS/phase-5-3-spec.md`. Surfaces 15 (unified Calendar) + 16 (admin-only Outlook). One feature branch, one squash. Three migrations: `outlook_entries` + RPC, projects install/removal date columns, saved_views.entity_type CHECK widen.
+### Shared toggle drives Calendar visibility, not Outlook page visibility
 
-### Outlook Confidence color override (locked-decisions § 4)
+`outlook_entries.shared_with_team` is the gate for whether an entry surfaces on the unified Calendar for non-admins. Outlook page itself is admin-only via `<AdminRoute>`. Standard / freelance only path to an Outlook entry is the shared banner on the Calendar, which is non-clickable. Admins see same banner clickable, routing to `/outlook?year=YYYY&month=MM#entry=<uuid>`. Locked non-clickable over hide-from-standard so producers can see "team has a planning event that week" without drilling into admin-only page.
 
-The locked wireframe HTML (`OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html`) defined the `.ol-rad` / `.ol-like` / `.ol-conf` / `.ol-comp` CSS classes with colors that disagree with the locked confidence-color mapping in `OUTPUTS/phase-5-locked-decisions-2026-05-15.md` § 4 (and `docs/design-system.md` § 5b). The locked mapping is the source of truth:
+### Promote vs Unlink vs Delete
 
-- `On Radar` -> amber (`--warn`) -> `.ol-rad`
-- `Likely` -> cyan (`--info`) -> `.ol-like`
-- `Confirmed` -> green (`--success`) -> `.ol-conf`
-- `Complete` -> gray (`--border-strong`) -> `.ol-comp`
+Three distinct actions: Promote to Project (RPC creates `projects` row from entry, sets `linked_project_id`), Unlink Project (clears `linked_project_id` only; project stays), Delete entry (removes `outlook_entries`; linked project stays unlinked; FK is `ON DELETE SET NULL`). Intentionally separate so producer can detach a speculative entry from a real project without nuking either.
 
-Reads as a step-up ladder: speculative -> looking good -> locked -> done.
+### Mirror Holidays seeded as static constant
 
-**The CSS block lifted into `src/index.css` flips the four color rules in place** so the class names match their semantic meaning. Spec § 12 + § 11.9 (brand rule) call this out. The alternative (lift verbatim + let JS assign the "wrong" class name for the right color) was rejected because it produced "Confirmed gets `.ol-conf` which renders amber" cognitive dissonance for any reader of the wireframe vs the shipped code.
+`MIRROR_HOLIDAYS` is hardcoded in `src/lib/calendar/holidays.ts`, sourced from official 2026 PDF. Multi-day windows expanded into one entry per non-weekend closed day. 5.4 will ship the CRUD editor against a `mirror_holidays` table; static approach is intentional 5.3 scope (a CRUD editor without a Settings page is premature).
 
-### Outlook entries: shared toggle drives Calendar visibility, not Outlook page visibility
+### Per-user Calendar visibility persists via `saved_views`
 
-`outlook_entries.shared_with_team` is the gate for whether an entry surfaces on the unified Calendar for non-admins. The Outlook page itself is admin-only via the `<AdminRoute>` gate; standard / freelance users never see it. Their only path to an Outlook entry is the shared banner on the Calendar, which is non-clickable (cursor default, no hover, no-op on click). Admins see the same banner clickable, with click routing to `/outlook?year=YYYY&month=MM#entry=<uuid>` with the panel pre-opened.
+Four toggles persist via single implicit `saved_views` row (`entity_type='calendar'`, `is_default=true`). One row per user; no naming UI. Migration extends CHECK to include `'calendar'`. `useCalendarVisibility` handles lazy-INSERT + debounced UPDATE. `?source=projects`/`?source=tasks` first-visit defaults only apply when no saved row exists. Filter chips stay component-local (same convention as `<FilterBar />`); Calendar doesn't ship a saved-views dropdown in 5.3.
 
-Locked-decisions § 3 explicitly chose non-clickable over hide-from-standard so producers can see "the team has a planning event in that week" without being able to drill into the admin-only Outlook page.
+## Phase 5.2: Projects/Tasks/Deliverables + Organizations/People/Venues + clients-vendors split (2026-05-16)
 
-### Promote vs Unlink vs Delete (locked-decisions § 1)
+Spec: `OUTPUTS/phase-5-2-spec.md`. Shipped across 5.2.1 (HQ Core databases + cross-cutting components + rail amendment), 5.2.2 (entity trio + schema reshapes), 5.2.1-revision (wireframe-fidelity rebuild).
 
-Three distinct actions on an Outlook entry:
+### Project + Task status enum reshape
 
-- **Promote to Project:** runs `promote_outlook_to_project(target_entry_id)` RPC. Creates a `projects` row from the entry's name + client + city + `status='Queued'` + caller as `created_by`. Sets `outlook_entries.linked_project_id` to the new project id. Atomic; SECURITY DEFINER; admin-gated.
-- **Unlink Project:** clears `outlook_entries.linked_project_id` only. The Project row stays untouched and visible to the team.
-- **Delete entry:** removes the `outlook_entries` row. The linked Project (if any) stays in the system, just unlinked. The FK is `ON DELETE SET NULL` from the entry's side; `projects` has no FK back to `outlook_entries` so deleting the entry can't cascade to the project.
+Both Postgres enums rebuilt to match locked canonical labels rather than label-mapping in UI. `project_status` went from 14 legacy to 14 locked values: 6 dropped (Awaiting FB, Awaiting Files, Awaiting Approval, Event Live, Proof Out, In Review), 6 added (Approved, Install, Removal, Queued, Awaiting Feedback, Cancelled). Catch-all backfills: Awaiting Files → In Progress; Proof Out → In Production; In Review → In Progress. `task_status` went lowercase to mixed case; `tasks_completed_at_set` trigger CREATE OR REPLACE'd in same migration so the literal `'done'` comparison flipped to `'Done'`. `taskStatusLabel()` is gone.
 
-These are intentionally separate so the producer flow can detach a speculative entry from a real project (e.g. project repurposed) without nuking either record.
+### Deliverables table
 
-### Mirror Holidays seeded as a static constant (5.4 Settings editor lands later)
+New 4-value `deliverable_status` enum (Upcoming, In Progress, Complete, Skipped). Skipped renders strikethrough + opacity-60. Multi-assignee via `assigned_user_ids uuid[]` (matches wireframe first-name stack) rather than join table. `completed_at` set by parallel trigger to tasks. RLS open-authenticated. Added to `supabase_realtime` for Board drag-drop.
 
-`MIRROR_HOLIDAYS` is a hardcoded array in `src/lib/calendar/holidays.ts`, sourced from Mirror's official 2026 Holiday Calendar PDF. Multi-day windows (Christmas / New Year's: Thu Dec 24 - Fri Jan 1) expanded into one entry per non-weekend closed day so the Calendar renders a banner on every closed day.
+### `activity_log_writer` extended to handle DELETE
 
-5.4 will ship a Settings-page CRUD editor against a `mirror_holidays` table. The static-constant approach is intentional 5.3 scope: a real CRUD editor without a Settings page surface to host it would be premature.
+Pre-5.2.1 the function initialized `action_val` + `payload_val` inside INSERT/UPDATE branches only; a DELETE invocation would leave both NULL and violate `activity_log.action NOT NULL`. Existing triggers fired only on INSERT OR UPDATE so the gap was invisible. The 5.2.1 deliverables trigger fires on INSERT OR UPDATE OR DELETE, so function CREATE OR REPLACE'd (same OID, triggers keep resolving) with DELETE branch: `action_val := 'deleted'`, `payload_val := jsonb_build_object('old', to_jsonb(OLD))`. DELETE logs `actor_id = auth.uid()` which is NULL for server-context / cascade-delete; actor_id is nullable, and server-initiated delete is correctly attributed to null actor.
 
-### Per-user Calendar visibility persists via saved_views (locked-decisions § 6)
+### `saved_views` per-user table
 
-The four toggles on the Calendar right rail (Deliverables / Mirror Holidays / Shared Outlook / per-project) persist per-user via a single implicit `saved_views` row (`entity_type='calendar'`, `name='__calendar_default'`, `view_kind='calendar'`, `is_default=true`). One row per user; no naming UI (Calendar has exactly one persisted preference state, unlike Projects / Tasks / etc. which support multiple named views).
+Persisted per-user filter/sort/view-kind snapshots. Per-user RLS scoped to `user_id = auth.uid()` (only HQ Core table that doesn't follow shared open-authenticated posture; saved views are personal not team state). `is_default` per `(user_id, entity_type)` enforced in app via transactional "clear then set" upsert (`createSavedView`); no DB unique partial index because a multi-row write would have to dodge constraint mid-flight.
 
-The migration extends `saved_views.entity_type` CHECK to include `'calendar'`. The `useCalendarVisibility` hook handles the lazy-INSERT on first visit + debounced UPDATE on toggle change.
+### Tasks priority + blocked_by
 
-`?source=projects` / `?source=tasks` first-visit defaults (Deliverables + Holidays + Outlook-shared off, per-project on) only apply when no saved row exists yet. Saved state wins on subsequent visits.
-
-### Filter chips stay component-local (not persisted)
-
-Lead + Category filter chips on the Calendar reset each visit. Same convention as `<FilterBar />` everywhere else in HQ: chip state is per-session, saved views capture chip state only when explicitly saved. The Calendar doesn't ship a saved-views dropdown in 5.3, so chip state has nowhere to persist to.
-
-### Branch name cosmetic deviation
-
-Spec called for `claude/phase-5-3-calendar-outlook`. The worktree was created as `claude/priceless-jang-b6de74` (auto-generated). Since the branch squash-merges to main, the branch label has no shipping impact; the worktree branch name was not renamed.
-
-## Phase 5.2.1 Revision (wireframe-fidelity rebuild)
-
-Spec: `OUTPUTS/phase-5-2-1-revision-spec.md`. Forward-fix pass on top of the shipped 5.2.1 squash (`15511af`). Schema + routes + queries stay intact; the visual layer rebinds to the locked wireframe (`OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html`) as the binding source.
-
-### Why the revision
-
-The original 5.2.1 surfaces shipped with parallel Tailwind utility groups (`bg-surface-alt border border-border-strong rounded px-3 py-2 text-xs font-mono`) instead of consuming the wireframe's canonical CSS class names (`.input`, `.viewswitch`, `.fchip`, `.tbl`, `.bcol`, `.tl`, `.calgrid`, `.kv`, `.savebar`, `.stat`, `.pill p-<token>`). The result looked close-but-off against the wireframe across the board (view-switcher rendered as pills instead of the icon-segmented button group; filter bar missed the `.fchip` structure; tables missed the `.tbl thead` mono header; board cards reinvented layout; save bar used inline classes instead of `.savebar`). This pass rebuilds the visual layer against the wireframe DOM byte-for-byte.
-
-### DB reconciliation as a prereq (Step 0)
-
-A halted Phase 5.2.2 attempt left the live linked Supabase DB at the 5.2.2 schema state (organizations rename + people + venues extensions + projects extensions + types regenerated mid-flight) but the worktree was deleted before the .sql files made it onto a branch. Step 0 recreates the four 5.2.2 .sql files locally matching the canonical SQL in `phase-5-2-spec.md` § 4e-4h, uses `supabase migration repair --status applied` to register them as matching the already-applied remote without rerunning, regenerates types, and flips every `clients` / `client_id` / `client:clients` reference in src/ to the renamed `organizations` / `organization_id` / `organization:organizations`. Same commit flips `projects.notes` -> `projects.status_notes` and adds the new `projects.client_notes` body to ProjectDetail + ProjectEdit. This unblocks the live app (which was broken on main while shipping queries pointed at the renamed table) before the visual rebuild.
-
-### CSS lift block (revision spec § 1)
-
-A new "Phase 5.2 HQ Core surfaces" block at the bottom of `@layer components` in `src/index.css`, lifted byte-for-byte from the wireframe's `<style>` section. UNPREFIXED class names so components can be authored against the wireframe markup and DOM-diff for parity. Coexists with the 5.1 chrome classes (`.hq-rail`, `.hq-card`, `.hq-pill`, etc.) which keep the `hq-` prefix; no class collisions by design.
-
-### Data component DOM rewrites (revision spec § 2)
-
-Seven components rewritten:
-- `<ViewSwitch />` -> `.viewswitch > button[.on]` icon-segmented group (was: shadcn-like pill bar).
-- `<FilterBar />` -> `.filterbar > .fchip > .k/.op/.v/.x` chip pattern with `.andor` connector + `.fchip--add` trailing chip.
-- `<SavedViewsDropdown />` -> `.savedviews` chip trigger. Also gains an `onNavigate?: (viewKind) => void` prop fired alongside `onPick` so picking a saved view lands on the right view variant (closes original-5.2.1 code-reviewer C1).
-- `<DataTable />` -> `.tbl-wrap > .tbl[.tbl--flat] > thead/tbody > tr.rb-<token>` shape. Added `flat?: boolean` prop (top-level list pages pass it to strip the row left-border; detail-page inner tables omit it so per-row status colors show).
-- `<BoardView />` -> two layouts via `layout: "horizontal" | "stacked"` prop. Stacked = `.board-stack > .board-rowhead + .board-row > .bcol` (Projects 4-row layout). Horizontal = `.board > .bcol` flex scroll (Tasks; Deliverables one-col-per-project).
-- `<TimelineView />` -> `.tl > .tl-head + .tl-row > .tl-name + .tl-track > .tl-bar` 8-month gantt.
-- `<CalendarMonthView />` -> `.calgrid > .caldow + .calcell > .cal-ev.<kind>` month grid; 140px cell min-height; banner kinds `.in / .live / .rem / .del / plain`.
-
-`<StickySaveBar />` updated to render the wireframe-canonical `.savebar` class instead of the inline `sticky bottom-0 ...` pattern from original 5.2.1.
-
-### Deliverables Board: one column per project (revision spec § 4.C.2)
-
-Build notes Surface 14 says "one column per project (horizontal scroll)." The original 5.2.1 shipped a rows-per-project layout with status columns inside each row, which code-reviewer C2 flagged as a divergence. This revision flips to the build-notes layout: `<BoardView layout="horizontal">` with columns grouped by `project_id`. Drag-drop is intentionally NOT wired on this view -- moving a card between columns would imply re-parenting the deliverable, which is a heavier intent than drag-drop conveys. Status changes happen via the deliverable detail page (or via the future inline status pill on each card).
-
-### Inline-style allowance
-
-The revision uses inline `style={{ ... }}` props in spots where the wireframe HTML uses inline styles and the lifted CSS doesn't cover them (status-color border-left on `.tl-name`, percentage `left/width` on `.tl-bar`, the right-stack 172px width in ProjectDetail header). Acceptable per revision spec § 0d ("when in doubt, copy the wireframe").
-
-### What did NOT change
-
-Schema, routes, queries (beyond the rename flips), edge functions, 5.1 chrome (`AppShell`, `LeftRail`, `TopBar`, `Home`, `home/*` components, `RailFooter`), rail amendment, sticky-rail hot fix. The Phase 5.2.1 squash's data-loading shape, hooks, and lifecycle stay intact; only the JSX they emit gets rewritten.
-
-## Phase 5.2.2 (entity trio: Organizations + People + Venues)
-
-Spec: `OUTPUTS/phase-5-2-spec.md` §§ 4e-4h + § 13 Q3 + Q8 + Q9 + Q10. The four migrations applied to the linked Supabase project during a halted worktree attempt and were re-registered locally during the 5.2.1 Revision (`supabase migration repair --status applied`). Frontend surfaces (Org / People / Venue list / detail / edit) + `<InternalNotesEditor />` + `<StarRating />` are still pending; they land in a later sub-phase.
-
-### Clients -> Organizations rename (locked Q3)
-
-`ALTER TABLE clients RENAME TO organizations` + `ALTER TABLE projects RENAME COLUMN client_id TO organization_id` + index rename `idx_projects_client_id -> idx_projects_organization_id`. RLS / GRANTs / triggers carry through by table OID; policy identifiers stay `clients_*` (Postgres doesn't auto-rename them) but the access posture is preserved. Existing rows backfill as `type = 'Client'` (the new `org_type` enum default). The shipped `notes` column was renamed to `legacy_notes` so any existing client-row notes survive while Internal Notes flips to the polymorphic `notes_log` table.
-
-### org_type enum (Client / Vendor / Internal)
-
-Venue Owner intentionally dropped per build notes Surface 10. Venues owned by clients live directly on the venues record without a separate org-type.
-
-### internal_rating: Vendor-only field, admin-write-only RLS deferred to 5.4
-
-`internal_rating int CHECK (BETWEEN 0 AND 5)` on organizations. Visible to all standard+admin users per Surface 10 detail. Admin-write-only RLS gating deferred to 5.4 when the Team / Settings tier polish lands. Until then any authenticated user can set the rating via the open-authenticated UPDATE policy inherited from the clients RLS.
-
-### people table
-
-External humans only. Internal Mirror staff stay in `public.users` and surface on the Team page (Surface 12, lands 5.4). Multi-affiliation via `affiliations person_affiliation[]` (GIN-indexed); a single person can be both a Client and a Venue contact (build notes Surface 11 "Dana Whitfield" example). `created_by NOT NULL` with default ON DELETE RESTRICT matches the deliverables created_by posture from 5.2.1.B.
-
-### venues: multi-select venue type + new columns + rate history
-
-The single `venues.venue_type_id` FK is dropped in favor of the `venue_venue_types` join table (existing rows backfilled before drop). New venue columns: `city`, `venue_slide_url`, `total_sq_ft`, `exclusive_vendors_org_ids` (uuid[]). New `venue_rate_history` append-only table (SELECT + INSERT only for authenticated; no UPDATE / no DELETE) drives the "Event Day Rate $X as of <date>" display via the most-recent row per `(venue_id, rate_kind)`. The shipped `square_footage` column coexists with the new `total_sq_ft` per spec § 4g.
-
-### notes_log CHECK widened to include 'venue' (Q9)
-
-`ALTER TABLE notes_log DROP CONSTRAINT notes_log_parent_type_check; ADD CONSTRAINT ... CHECK (parent_type IN ('organization', 'person', 'venue'))`. Lets the shared `<InternalNotesEditor />` component serve Venue detail too.
-
-### people.venue_id (Q8)
-
-Nullable FK to venues for venue-contact attribution. Simpler than a `venue_contact_people` join table; venue contacts typically tie to one venue. Added in the 5.2.2.C migration so it can reference venues after that table exists.
-
-### projects.status_notes / client_notes rename + add (Q10)
-
-`projects.notes` renamed to `status_notes` (Surface 07 detail Status Notes sidebar card body). New `client_notes text` column added for the parallel Surface 07 Client Notes card. Two distinct fields per the wireframe; the single shipped `notes` column was carrying the Status Notes role in 5.2.1 and gets the cleaner identifier in 5.2.2.
-
-### projects.job_number / category / city / tags / budget
-
-Added in the 5.2.2.D migration. Surface 04 List view columns + Surface 07 detail title row (coral `#2604` job number, "Pop-Up · LA" meta row, "Summer 2026 / CPG / Outdoor" tag chips, `$185,000` budget reference). Budget rule: planning reference figure, NOT an invoice amount; never renders on pipeline-summary surfaces (Pipeline counts, Billing tile, List view columns, board cards, timeline labels, calendar event banners). Stays compatible with locked-decisions Q6.
-
-## Phase 5.2.1 (HQ Core databases: Projects + Tasks + Deliverables + cross-cutting components + rail amendment)
-
-Spec: `OUTPUTS/phase-5-2-spec.md` §§ 0-5.B + 5.C + 7 + 11 + 12 (5.2.1 row) + 13 (Q1-Q4 LOCKED, Q5-Q10 RECOMMENDED) + 14. Rail amendment: `OUTPUTS/phase-5-2-rail-amendment.md`. Locked Phase 5 decisions: `OUTPUTS/phase-5-locked-decisions-2026-05-15.md`.
-
-### Project + Task status enum reshape (locked Q2)
-
-Both Postgres enums were rebuilt to match the locked-decisions canonical labels rather than label-mapping in the UI. `project_status` went from 14 legacy values to 14 locked values with six dropped (`Awaiting FB`, `Awaiting Files`, `Awaiting Approval`, `Event Live`, `Proof Out`, `In Review`) and six added (`Approved`, `Install`, `Removal`, `Queued`, `Awaiting Feedback`, `Cancelled`); the rename `Awaiting FB -> Awaiting Feedback` is the obvious one. Catch-all backfills: `Awaiting Files -> In Progress`, `Proof Out -> In Production`, `In Review -> In Progress`; spot-check rows that came from those legacy values if the catch-all is wrong for a specific project. `task_status` went from lowercase `(todo, in_progress, blocked, done)` to mixed case `(To Do, Doing, Blocked, Done)`; the `tasks_completed_at_set` trigger function was `CREATE OR REPLACE`'d in the same migration so its literal `'done'` comparison flipped to `'Done'`. Index dependents (`idx_projects_status`, `idx_tasks_status`) auto-rebuild during `ALTER COLUMN TYPE ... USING (...)`. `taskStatusLabel()` is gone.
-
-### Deliverables table (locked Q1)
-
-New 4-value `deliverable_status` enum (`Upcoming`, `In Progress`, `Complete`, `Skipped`) per locked-decisions § 4. Skipped renders strikethrough + opacity-60. Multi-assignee via `assigned_user_ids uuid[]` rather than a join table (matches the wireframe Surface 14 first-name stack on board cards). `completed_at` set by a parallel trigger to `tasks_completed_at_set`. RLS open-authenticated to match HQ Core posture. Added to `supabase_realtime` for Board drag-drop.
-
-### activity_log_writer extended to handle DELETE
-
-Pre-Phase 5.2.1 the function initialized `action_val` + `payload_val` inside the INSERT / UPDATE branches only; a DELETE invocation would have left both NULL and violated `activity_log.action NOT NULL`. The existing projects / venues / tasks triggers fired only on INSERT OR UPDATE so the gap was invisible. The 5.2.1 `deliverables` trigger fires on INSERT OR UPDATE OR DELETE per spec § 4b, so the function was `CREATE OR REPLACE`'d (same OID, existing triggers keep resolving unchanged) with a DELETE branch: `action_val := 'deleted'`, `payload_val := jsonb_build_object('old', to_jsonb(OLD))`. The DELETE branch logs `actor_id = auth.uid()` which is NULL in a server-context / cascade-delete write. This is correct: `activity_log.actor_id` is nullable (FK with ON DELETE SET NULL), and a server-initiated delete is the right thing to attribute to a null actor.
-
-### saved_views per-user table (recommended Q5 -> built)
-
-Persisted per-user filter / sort / view-kind snapshots for every HQ Core database list page. Per-user RLS scoped to `user_id = auth.uid()` (the only HQ Core table that doesn't follow the shared open-authenticated posture; saved views are personal preferences, not team state). `is_default` per `(user_id, entity_type)` is enforced in app via a transactional "clear then set" upsert (`createSavedView` in `src/lib/hq/savedViews.ts`); the DB carries no unique partial index for it because a single multi-row write would have to dodge a constraint mid-flight.
-
-### tasks priority + blocked_by (recommended Q7 -> built)
-
-`tasks.priority text NOT NULL DEFAULT 'Normal' CHECK IN ('Urgent', 'High', 'Normal', 'Low')` and `tasks.blocked_by uuid[] NOT NULL DEFAULT '{}'` with a GIN index. uuid[] beats a join table for simplicity; downside is Postgres can't FK-enforce array elements, so the app validates that entries reference valid task ids before write. The Surface 13 "Notes / Blocks" cell renders `description` + `blocked_by` together; the migration kept them as distinct columns so future surfaces can split them.
-
-### tasks_completed_at_set rewrite
-
-`CREATE OR REPLACE` rather than `DROP FUNCTION` + recreate. Same lesson as the Phase 5.1 `is_producer_or_admin` rewrite (memory `feedback_enum_storage_policy_dep.md`): plpgsql function bodies defer name resolution to first execution, so the safest swap is to keep the OID, rewrite the body, and let next-execution pick up the new literal `'Done'`. No CASCADE drops; no trigger re-attaches.
+`tasks.priority text NOT NULL DEFAULT 'Normal' CHECK IN (Urgent, High, Normal, Low)` + `tasks.blocked_by uuid[] DEFAULT '{}'` with GIN index. uuid[] beats join table for simplicity; Postgres can't FK-enforce array elements so app validates entries before write.
 
 ### Rail amendment: single Tools group + tool-app variant
 
-`OUTPUTS/phase-5-2-rail-amendment.md`. The shipped split between Tools (Standard + Admin) and admin-only items collapsed into a single ordered list with per-item `adminOnly?: boolean`. Locked ordering: Wiki, Talent Scout, Venue Scout, Team, Outlook, Settings. Tool-app variant detected via `pathname.startsWith('/talent-scout') || pathname.startsWith('/venue-scout')` swaps the Primary group for `[HQ Home, Activity Feed]`. Route-based, not state-based: clicking a non-tool-app rail item flips the route and the rail returns to default on next render. `/pending` still renders no rail.
+Tools (Standard + Admin) + admin-only items collapsed into one ordered list with per-item `adminOnly?: boolean`. Locked order: Wiki, Talent Scout, Venue Scout, Team, Outlook, Settings. Tool-app variant detected via `pathname.startsWith('/talent-scout')|...('/venue-scout')` swaps Primary group for [HQ Home, Activity Feed]. Route-based not state-based.
 
-### Out of scope for 5.2.1 (lands 5.2.2 or later)
+### Clients → Organizations rename
 
-Organizations / People / Venues surfaces (5.2.2). `<InternalNotesEditor />` (5.2.2, since it's the Org / Person / Venue Internal Notes pattern). `<StarRating />` (5.2.2). Quick-add cluster on `/home` flipping placeholders to real "+ New Project / Task / Deliverable" routes (deferred until 5.2.2 lands the People route). Project Detail attachments (storage; future sub-phase). Status Notes uses existing `projects.notes`; Client Notes is rendered as a "lands in 5.2.2" empty-state placeholder. The `notes_log` Realtime publication stays deferred until simultaneous-author UX surfaces. Per-surface Calendar tabs (Projects / Tasks) route to the unified `/calendar?source=...` stub; the unified Calendar surface lands in 5.3.
+`ALTER TABLE clients RENAME TO organizations` + `client_id → organization_id` + index rename. RLS/GRANTs/triggers carry through by OID; policy identifiers stay `clients_*` (Postgres doesn't auto-rename) but access posture preserved. Rows backfill as `type='Client'`. Shipped `notes` renamed to `legacy_notes`; Internal Notes flips to polymorphic `notes_log`. `org_type` enum: Client/Vendor/Internal (Venue Owner intentionally dropped).
 
-## Phase 4 cutover + port plan locked decisions (folded in 2026-05-18 from the deleted `docs/venue-scout-port-plan.md`)
+### People table + internal_rating
 
-The Venue Scout port plan doc was deleted in the Phase 5.8.3 doc audit. The six locked decisions Jimmie confirmed 2026-05-11 (port plan § 8) and the cutover sequence rationale (port plan § "Done when") are captured here as the canonical record.
+External humans only in `people`; internal staff stay in `public.users`. Multi-affiliation via `affiliations person_affiliation[]` (GIN-indexed). `created_by NOT NULL` with ON DELETE RESTRICT matches deliverables posture. `organizations.internal_rating int CHECK (BETWEEN 0 AND 5)` is vendor-only; admin-write-only RLS gating deferred to 5.4.
 
-### Port plan § 8 — six locked decisions
+### Venues: multi-select type + new columns + rate history
 
-- **§ 8.1 Single-round sourcing per scout.** One scout has one sourcing flow. No `vs_sourcing_rounds` table. Matches VS Pro 1:1. Re-research uses Start Over (Scout Settings; Phase 4.9-port), which wipes the candidate pool and resets `current_step` to `sheet_prompt`. Revisit only if real producers ask for multi-round.
-- **§ 8.2 Brief inline on `vs_scouts`.** No separate `vs_briefs` table. All brief fields live on `vs_scouts`: named columns for `client_name`, `event_name`, `live_dates`, `city`, `budget`, `event_overview`, plus `brief_data jsonb` for flexible additional fields per VS Pro's shape. Simpler queries, fewer joins, matches the state-machine model where the brief belongs to the scout.
-- **§ 8.3 `EdgeRuntime.waitUntil` + Realtime for Researching, Compiling, Generating.** All three loading pages subscribe to `vs_scouts.current_step` via Realtime instead of awaiting the edge function response synchronously. Edge functions return the scout_id immediately and run the AI work in the background. Requires `vs_scouts` in the `supabase_realtime` publication with `REPLICA IDENTITY FULL` (one line in the Phase 4.1-port migration). The only place the port intentionally diverges from VS Pro's exact behavior; consistent with HQ's `ts-final-review` pattern.
-- **§ 8.4 `current_step` state machine as canonical workflow state.** 9 values lifted verbatim from VS Pro: `sheet_prompt`, `sheet_upload`, `researching`, `sourcing_report`, `shortlist`, `review_selects`, `compiling`, `deck_prep`, `completed`. (Phase 4 Revision Intake added `brief` as a 10th value; see the Revision section below.) No `phase` enum concept. `stepToRoute()` helper from `src/lib/venue-scout/format.ts` drives every page's continue logic.
-- **§ 8.5 Deck history as `vs_scouts.generated_decks` jsonb array.** No separate `vs_pitch_decks` table. Each entry: `{deck_id, deck_name, version, generated_at, venue_count, slide_count, edit_url, embed_url}`. Matches VS Pro exactly. Deck history is small (typically 1-3 versions per scout), access pattern is "give me all decks for this scout," no query against deck fields. The jsonb array embeds cleanly in the scout-load query.
-- **§ 8.6 RLS open to all authenticated users.** `FOR ALL TO authenticated USING (true) WITH CHECK (true)` on every `vs_*` table. Collaborative model: any authenticated `@mirrornyc.com` user can read or write any scout, candidate venue, or photo. Venue Scout is an agency-wide workflow, not personal data scoped to a single producer.
+Single `venue_type_id` FK dropped in favor of `venue_venue_types` join. New columns: city, venue_slide_url, total_sq_ft, exclusive_vendors_org_ids. New `venue_rate_history` append-only table (SELECT + INSERT only) drives "Event Day Rate $X as of <date>" via most-recent row per `(venue_id, rate_kind)`. `notes_log` CHECK widened to include 'venue' so shared `<InternalNotesEditor />` serves Venue detail.
 
-### Cutover sequence (executed 2026-05-13)
+### `projects` schema additions
 
-Main was hard-reset to `vs-port-fresh` HEAD via `git push origin vs-port-fresh:main --force-with-lease`. Sequence:
+`projects.notes` renamed to `status_notes`; new `client_notes text` for parallel Client Notes card. Surface 04 list columns + Surface 07 detail: `job_number`, `category`, `city`, `tags`, `budget`. Budget is planning reference, NOT invoice amount; never renders on pipeline-summary surfaces.
 
-1. Cherry-picked `6775429` (TS Final Review re-enable Generate Packet) and `f24d3f5` (TS Final Review packet email template + layout fixes + email-as-cover-letter fallback) from origin/main onto `vs-port-fresh`; both diffstats verified byte-equal to source via `git show --stat`.
-2. Considered `4a8a5c6` (TS wizard migrates to canonical Stepper) for cherry-pick but dropped it: it imports from `src/components/ui/Stepper.tsx`, a file introduced by the failed Phase 4.3.1 squash (`564ff9e`) that the cutover discards. Carrying the file standalone was the alternative; chose the cleaner zero-contamination path. The TS wizard pages keep their import of the local `talent-scout/Stepper.tsx`.
-3. `npx tsc --noEmit` and `npm run build` both clean.
-4. Verified `git log --cherry-pick --left-only --no-merges main...vs-port-fresh` listed only the 42 commits we intended to drop (failed Phase 4 squashes 4.1 through 4.6 + URL-quality hot patches + their backfills + `4a8a5c6` + Phase 4.3.1 follow-ups + assorted doc-only commits). Cherry-picked `6775429` and `f24d3f5` were correctly excluded as patch-equivalent.
-5. Push fired Netlify deploy on `hq.mirrornyc.com`. Production VS went live as the build completed.
-6. Post-cutover cleanup: `vs-start-sourcing` orphan edge function deleted via `supabase functions delete`. The 4.1-port migration's DROP TABLE statements for `vs_briefs` / `vs_sourcing_rounds` / `vs_pitch_decks` were already applied (migration `20260512200000` is on the production ledger), so no additional DB cleanup migration was needed.
+### CSS lift block + data component DOM rewrites (revision)
 
-Main HEAD after cutover: `7cd27ed`. The cutover verification check is `git show --stat <new-sha>` vs `git show --stat <source-sha>` for each cherry-pick, NOT the naive `git log main --not vs-port-fresh --oneline` empty check (which is impossible by design since `vs-port-fresh` branched from `dd38577`, has archived commits on main below it, and cherry-picks produce new SHAs).
+Original 5.2.1 shipped parallel Tailwind utility groups instead of consuming wireframe canonical class names (`.input`, `.viewswitch`, `.fchip`, `.tbl`, `.bcol`, `.tl`, `.calgrid`, `.kv`, `.savebar`, `.stat`, `.pill p-<token>`). Result looked close-but-off. Revision rebuilds visual layer byte-for-byte. UNPREFIXED so components author against wireframe markup. Coexists with 5.1 chrome (`.hq-*`). Components rewritten: `<ViewSwitch />` to icon-segmented, `<FilterBar />` to chip pattern with `.andor` connector, `<DataTable />` to `.tbl-wrap > .tbl[.tbl--flat]` with `flat?: boolean` prop, `<BoardView />` to two layouts via `layout` prop, `<TimelineView />` to 8-month gantt, `<CalendarMonthView />` to `.calgrid`.
 
-## Phase 4 Revision - Intake (3-step brief stepper)
+### Deliverables Board: one column per project
 
-Follow-on revision correcting the Phase 4.3-port + 4.9-port surfaces. Phase 4 stays DONE; this rebuilt the single-page Brief into a 3-step stepper (Event -> Venue -> Review) and gathered the venue-side fields the AI sourcing prompt needs. Spec: `OUTPUTS/phase-4-revision-intake-spec.md`. The five decision points below were resolved by Jimmie on 2026-05-14 and are binding.
+Build notes Surface 14 says "one column per project (horizontal scroll)." Original 5.2.1 shipped rows-per-project, which code-reviewer flagged. Revision flips to `<BoardView layout="horizontal">` grouped by `project_id`. Drag-drop intentionally NOT wired (moving between columns would imply re-parenting, heavier intent than drag-drop conveys).
 
-### A. Generated Decks section on the Brief report -> INCLUDE
+## Phase 4 cutover + port plan locked decisions
 
-The Step 3 Brief report renders a Generated Decks section (newest-first, primary styling on the most recent, "Open in Google Slides" per entry, hidden when empty). `vs_scouts.generated_decks` already persists every field needed (`deck_name`, `version`, `generated_at`, `venue_count`, `slide_count`, `edit_url`); no schema change.
+Venue Scout port plan doc was deleted in the 5.8.3 audit. The six locked decisions confirmed 2026-05-11 and cutover sequence rationale captured here as canonical record.
 
-### B. New `brief` current_step value + default -> APPLY
+### Port plan locked decisions
 
-Migration `20260514110000` adds `brief` to the `vs_scouts_current_step_check` constraint and flips the new-row default from `sheet_prompt` to `brief`. `brief` is the in-flight intake step; Step 3 Confirm & Continue flips it to `sheet_prompt`. The rest of the state machine is unchanged. Existing scouts on `sheet_prompt` are treated as post-intake (they passed the old single-page Brief) and the `/brief` redirect index sends them straight to the report view.
+- **Single-round sourcing per scout.** One scout, one sourcing flow. No `vs_sourcing_rounds` table. Re-research via Start Over.
+- **Brief inline on `vs_scouts`.** Named columns for structured fields, `brief_data jsonb` for flexible additional fields. Simpler queries, matches state-machine model.
+- **`EdgeRuntime.waitUntil` + Realtime for Researching/Compiling/Generating.** All three loading pages subscribe to `vs_scouts.current_step` via Realtime instead of awaiting synchronously. Edge functions return scout_id immediately. Requires `vs_scouts` in supabase_realtime with REPLICA IDENTITY FULL. Only place the port diverges from VS Pro; consistent with HQ's `ts-final-review` pattern.
+- **`current_step` state machine as canonical workflow state.** 9 values lifted from VS Pro: sheet_prompt, sheet_upload, researching, sourcing_report, shortlist, review_selects, compiling, deck_prep, completed. Revision Intake added `brief` as a 10th value. `stepToRoute()` helper drives every page's continue logic.
+- **Deck history as `vs_scouts.generated_decks` jsonb array.** No separate `vs_pitch_decks` table. Deck history is small (1-3 versions per scout), access pattern is "all decks for this scout," no query against deck fields. jsonb embeds cleanly.
+- **RLS open to all authenticated users.** `FOR ALL TO authenticated USING (true) WITH CHECK (true)` on every `vs_*` table. Collaborative agency-wide workflow, not personal data.
 
-### C. `city` is required -> REQUIRED
+### Cutover sequence (2026-05-13)
 
-Step 2's Submit Brief is disabled until `city` is non-empty, same blocking treatment as `client_name` / `event_name` on Step 1. Downstream sourcing needs the city; the old single-page Brief left it optional. Existing scouts with an empty city block on Step 2 the first time the brief is reopened.
+Main hard-reset to `vs-port-fresh` HEAD via `--force-with-lease`. Cherry-picked TS Final Review commits (verified byte-equal via `git show --stat`). Considered TS-wizard Stepper-migration but dropped (imported from a file introduced by the failed 4.3.1 squash being discarded; carrying file standalone was the alternative; chose zero-contamination path). Verification check is `git show --stat <new-sha>` vs `<source-sha>`, NOT the naive `git log` empty check (impossible by design since cherry-picks produce new SHAs). Post-cutover: `vs-start-sourcing` orphan deleted; the 4.1-port DROP TABLE statements were already applied to production ledger.
 
-### D. Client logo on the hero band -> INITIALS PLACEHOLDER
+## Phase 4 Revision: Intake (3-step brief stepper)
 
-The Step 3 hero band shows the first two letters of `client_name` in a white logo block. Web-search-for-logo is a post-revision follow-up, not built here.
+Follow-on correcting Phase 4.3-port + 4.9-port surfaces. Rebuilt single-page Brief into 3-step stepper (Event → Venue → Review) and gathered venue-side fields the sourcing prompt needs.
 
-### E. One "Brief" label everywhere -> RENAME
+### New `brief` current_step + Generated Decks section
 
-`currentStepToLabel("brief")` and `currentStepToLabel("sheet_prompt")` both return "Brief". The Revisit chip, the Scout Index Phase column, and the canonical surface all read "Brief". The old "Brief & Setup" (`sheet_prompt`) and "Brief Report" wordings are gone. `sourcing_report` relabeled "Sourcing Report" -> "Sourcing" for chip parity; `Shortlist.tsx` breadcrumb updated to match.
+Migration adds `brief` to CHECK constraint and flips new-row default from `sheet_prompt` to `brief`. Step 3 Confirm flips to `sheet_prompt`. Existing scouts on `sheet_prompt` treated as post-intake; `/brief` redirect sends them to the report. Step 3 renders Generated Decks (newest-first, "Open in Google Slides" per entry, hidden when empty). `vs_scouts.generated_decks` already persists every field; no schema change.
 
-### briefForm.ts strips the 16 form-backed keys from the brief_data passthrough
+### `city` is required
 
-`fromScout` pulls the form-backed jsonb keys into dedicated form fields and keeps only the non-form keys (`uploaded_files`, the `*_started_at` idempotency flags, the legacy `notes`) in the `brief_data` passthrough; `toUpdate` rebuilds the form-backed keys from the form fields. This keeps `fromScout(toUpdate(state)) === state` a clean round-trip regardless of how `state` is constructed. The retired `notes` key is NOT stripped (it has no form field) so `toUpdate` preserves it on existing scouts.
+Step 2 Submit disabled until city is non-empty. Downstream sourcing needs the city; old single-page Brief left it optional.
 
-### Cross-step form state lives in a module store, not per-page DB reloads
+### `briefForm.ts` strips 16 form-backed keys
 
-`src/lib/venue-scout/briefIntakeStore.ts` is a plain module-object store (same pattern as `src/lib/talent-scout/wizardStore.ts`), keyed by `scoutId`. Step 1's Continue persists to the DB before navigating, but Step 2's Back must "preserve form state in memory" -- so a producer who edits Step 2, clicks Back, then Continue doesn't lose the Step-2 edits. The store carries the working form + the dirty-tracking baseline across the three page mounts. The spec didn't enumerate this file; it's the conventions.md-mandated wizard-state mechanism the architecture required.
+`fromScout` pulls form-backed jsonb into dedicated fields and keeps non-form keys (`uploaded_files`, `*_started_at` flags, legacy `notes`) in passthrough; `toUpdate` rebuilds. Round-trips cleanly. Retired `notes` key NOT stripped (no form field) so `toUpdate` preserves on existing scouts.
 
-### Stepper / TagInput / ChipMultiSelect built VS-side, not generalized
+### Cross-step form state lives in a module store
 
-`src/components/venue-scout/Stepper.tsx` is a 1:1 visual lift of the Talent Scout Stepper, parameterized to a 3-element steps array but kept VS-side. `TagInput.tsx` and `ChipMultiSelect.tsx` are new VS components. Generalizing the Stepper into a shared cross-surface component is deferred until a third surface needs it (spec § 2 out-of-scope).
+`briefIntakeStore.ts` (same pattern as TS `wizardStore.ts`), keyed by scoutId. Step 1's Continue persists before navigating, but Step 2's Back must preserve form state in memory so a producer who edits Step 2, clicks Back, then Continue doesn't lose edits.
 
-### Event Overview is generated, with a deterministic stub fallback
+### Event Overview is generated with deterministic stub fallback
 
-`vs-generate-brief-overview` is a new `verify_jwt = true` edge function. It fires on first arrival at the Brief report (when `event_overview` is empty) and is re-invokable via a Regenerate link. On a Claude failure or empty response it writes a deterministic stub so the producer always lands on a non-empty, editable overview. The producer-facing intake form dropped the old Event Overview input and the Additional Notes input entirely; the overview is now produced + edited on Step 3.
-
-### Report-card editing uses explicit Save / Cancel, not pure blur-commit
-
-The Step 3 report cards flip to edit mode on click. The spec described "commits on blur or Enter," but the editor types are mixed (text input, textarea, TagInput, ChipMultiSelect, Slider, ToggleGroup) and blur doesn't map cleanly across all of them, so every card's edit mode uses an explicit Save / Cancel button pair plus Escape-to-cancel. The Event Overview block (a single textarea) keeps the spec's blur-or-explicit-Save behavior.
-
-### Pass 2: chip restructure, objectives tightening, Stepper hidden on the report
-
-Three corrections to what pass 1 shipped (`OUTPUTS/phase-4-revision-2-spec.md`, 2026-05-14). **Chip restructure:** the Brief chip now routes into the intake stepper at `/brief/event` ("edit brief" mode -- `briefIntakeStore` carries unsaved state across mounts), and a new Overview chip pinned last routes to the canonical Brief report at `/brief/report` (reachable once `current_step >= sheet_prompt`). The redundant trailing "Generated Deck" link is gone -- the deck is already linked from the report's Generated Decks section. Active-chip resolution flipped from step-based (furthest-reached) to route-based (`useLocation` prefix match): the highlight reflects where the producer is looking right now, not how far the scout has progressed, so a producer editing the Brief on a Shortlist-stage scout sees Brief highlighted, not Shortlist. **Objectives tightening:** `vs-parse-brief` (deployed v16) was returning narrative paragraphs instead of the tag-style phrases the report's `TagInput` expects; fixed via the tool schema description + a dedicated system-prompt rule + a `sanitizeObjectives` post-parse pass (split joined items on `; ` / ` and `, drop >60-char paragraph items, trim/dedupe). The lever stays on schema description + post-emission sanitization per `feedback_tool_choice_collapse`. **Stepper hidden on the report:** `BriefReport.tsx` dropped the `<Stepper active={3} />` line; the stepper belongs to the intake walkthrough (Steps 1-2 on `BriefEvent` / `BriefVenue`), and the report is now reached via the Overview chip / direct URL / post-Submit confirm, not as a visible "step 3 of 3."
+`vs-generate-brief-overview` fires on first arrival when `event_overview` is empty; re-invokable via Regenerate. On Claude failure writes deterministic stub so producer always lands on non-empty editable overview. Report-card editing uses explicit Save/Cancel because editor types are mixed and blur doesn't map cleanly.
 
 ### Pass 3: Event Overview generation moves to Submit Brief, hash-gated
 
-`OUTPUTS/phase-4-revision-3-spec.md`, 2026-05-14. Pass 1/2 auto-fired `vs-generate-brief-overview` from a `BriefReport.tsx` first-render `useEffect` whenever `event_overview` was empty. Two failure modes against what the producer actually wants: (1) a producer who edited the AI-parsed objectives / target audience / aesthetic and then reached the report via the Brief chip never got a regenerated overview, because the report only fired on *empty*; (2) report entry could burn a Claude call on every fresh mount. The rule: generate on Submit Brief, regenerate only when the brief fields that drive the overview changed since the last generation.
+Pass 1/2 auto-fired from a first-render `useEffect` when `event_overview` was empty. Two failure modes: (1) a producer who edited AI-parsed objectives then reached report via Brief chip never got regen because report only fired on empty; (2) report entry could burn a Claude call on every fresh mount. Rule: generate on Submit Brief, regenerate only when brief fields that drive overview changed.
 
-**Hash-gated regen.** `computeOverviewSourceHash` (a 16-char SHA-256 prefix over the 15 overview-driving brief fields, arrays sorted, empty-to-null normalized) lives in `src/lib/venue-scout/briefForm.ts` and is recomputed identically server-side in `vs-generate-brief-overview` (v2). The hash is stored in `brief_data.overview_source_hash`. Submit Brief (`BriefVenue.tsx`) persists the form, then invokes the function only when the overview is empty, the stored hash is missing, or the stored hash != a freshly-computed one. Two-stage spinner ("Submitting..." -> "Generating overview...") when a regen runs; single-stage when it's skipped. The function writes `event_overview` + `brief_data.overview_source_hash` in one atomic UPDATE and returns both so the caller's local state stays in sync.
+Hash-gated regen via `computeOverviewSourceHash` (16-char SHA-256 prefix over 15 overview-driving fields, arrays sorted, empty-to-null normalized), recomputed identically server-side. Submit invokes only when overview is empty, stored hash missing, or stored != fresh. Why content hash not dirty flag: a boolean flag would need every brief-field write path to remember to set it and would drift; content hash is derived state that can't drift. The 15-field set matches exactly what the prompt consumes; hash inputs and prompt inputs move in lockstep. `BriefReport` dropped auto-fire `useEffect`; empty-state "Generate overview" button is manual fallback.
 
-**Why a content hash, not a dirty flag.** A boolean "brief changed" flag would need every brief-field write path (the 3-step stepper, the report's inline cards, `vs-parse-brief` apply) to remember to set it, and would drift the first time one forgot. A content hash is derived state: it can't drift. The 15-field set matches exactly what the overview prompt consumes; the hash inputs and the prompt inputs must move in lockstep, and the client + server hash implementations must stay byte-for-byte reproducible (same field set, same canonical form, same object key order).
+### `overview_source_hash` is `brief_data` passthrough, not hoisted
 
-**Trigger model after pass 3.** `BriefReport.tsx` dropped the auto-fire `useEffect` entirely. The Overview block renders an empty-state "Generate overview" button when `event_overview` is empty (manual fallback for legacy scouts or function failures); the Regenerate link on a populated overview is unchanged (unconditional re-invoke). Inline edits to the overview text do NOT touch the hash -- a producer can polish wording without the next Submit Brief treating it as stale; conversely, resubmitting after a field change overwrites an inline edit by intent.
-
-**`overview_source_hash` is a `brief_data` passthrough key, not a hoisted form field.** It is machine-written metadata with no producer-facing form field, the same shape as the `*_started_at` idempotency flags, so it rides in the `brief_data` passthrough untouched by `fromScout` / `toUpdate`. (Spec § 7 was ambiguous between "extend `BriefFormState`" and "passthrough"; Jimmie confirmed pure passthrough on 2026-05-14.)
-
-**No backfill migration.** Scouts that shipped under pass 1/2 carry no hash; their first post-pass-3 Submit Brief sees a missing hash and regenerates once. One Claude call per in-flight scout at cutover, bounded, documented.
+Machine-written metadata with no producer-facing form field, same shape as `*_started_at` flags. Rides in passthrough untouched by `fromScout` / `toUpdate`.
 
 ## Phase 4.10.6-port (URL acquisition fallbacks + deck flow polish)
 
 ### URL extraction fallback layered onto Claude's tool output
 
-Producer-visible problem: every Phase B-sourced venue was landing in `vs_candidate_venues` with `website_url=NULL`, even for well-known venues whose URLs were clearly in Claude's `web_search_tool_result` blocks. Root cause: `FILL_SYSTEM` / research SYSTEM instructs Claude not to use listing-database URLs as the website_url output field, so Claude was conservatively returning null on the tool call even when usable URLs were visible in the search results.
+Phase B-sourced venues landed with `website_url=NULL` even when URLs were in `web_search_tool_result` blocks. Root cause: SYSTEM tells Claude not to use listing-database URLs, so Claude conservatively returned null even when usable URLs were visible. Two-stage fix as post-emission layers per `feedback_tool_choice_collapse`: (1) `extractWebSearchResults` walks response content for `{url, title}`; (2) `findVenueWebsite` runs a fresh focused Claude call per venue. Phase A + Pass 1 use cheaper `findBestSearchResultUrl` token-overlap heuristic (already venue-scoped per-row).
 
-Two-stage fix, both as post-emission layers (per `feedback_tool_choice_collapse` memory rule; schema descriptions + post-emission sanitization are the levers, not SYSTEM):
+### Schema tightening + new FILL_TOOL fields
 
-1. **`extractWebSearchResults(content)` in `_shared/anthropic.ts`** walks the response content blocks and pulls every `{ url, title }` from `web_search_tool_result` blocks.
+Tightened `submit_research.name` description to forbid descriptive suffixes ("Vacant Ground-Floor Retail - 10250 Santa Monica Blvd") with concrete BAD examples. Added `address` + `neighborhood` to FILL_TOOL (Phase A wasn't filling for sheet rows where producer left them blank). Patch guards only fill when existing value is null/empty so producer-entered values stay authoritative.
 
-2. **`findVenueWebsite(app, { name, address, city })` in `_shared/anthropic.ts`** runs a fresh, focused Claude call per venue with `web_search` + a tight "find the official website URL for {name} at {address}" prompt. Returns the first non-listing-database URL via `sanitizeWebsiteUrl` validation. Used as Phase B's URL fallback after the initial `validateWebsiteUrls` returns null.
+### Post-deck-generation flow + atomic regenerate reset
 
-Phase A (per-row enrichSheetVenue) and `vs-compile-summaries` Pass 1 use the cheaper `findBestSearchResultUrl(venueName, results)` heuristic that scores results by token overlap with the venue name; these calls are already venue-scoped per-row so the broad-match risk is lower. Phase B uses the more expensive targeted approach because its batch `submit_research` returns a single mixed pool of search results.
+Open just-generated deck's `edit_url` in new tab via `window.open(_blank, noopener noreferrer)`, then navigate back to /deck/prep. Producer can immediately review AND has the matrix to regenerate/tweak. `handledTerminalRef` guards duplicate deliveries; `initialDeckCountRef` snapshot prevents regenerate from re-opening prior deck. Regenerate frontend reset was a read-then-write on `brief_data` with TOCTOU. Replaced with `reset_scout_for_deck_regenerate` RPC that does `brief_data - 'deck_generation_started_at'` atomically + `current_step='deck_prep'` + clear failure. SECURITY INVOKER.
 
-### Schema tightening on `submit_research.name`
+### `updateSlidesPosition` per-slide moves
 
-Producers were seeing venue names polluted with descriptive suffixes ("Vacant Ground-Floor Retail - 10250 Santa Monica Blvd", "Platform - West Hollywood Flagship Storefront"). Tightened the `name` field description to explicitly forbid descriptive suffixes with concrete BAD examples, telling Claude to use the venue's brand / property name and fall back to address-only for unbranded vacancies. Those descriptive bits belong in `venue_type` / `key_features`.
-
-### `address` + `neighborhood` added to `FILL_TOOL`
-
-Phase A wasn't filling addresses for sheet rows where the producer left address blank; because `FILL_TOOL` didn't have an `address` field at all (only `venue_type`, `website_url`, `size_sq_ft`, `capacity`, `key_features`, etc.). Common case: producer enters an address-style venue name like "238 N Canon Drive" and leaves the address column blank. Added `address` + `neighborhood` to FILL_TOOL with descriptions that explicitly call out the address-as-name case + the brief's city as context. Patch guards in Phase A + Pass 1 only fill when the existing row value is null/empty so producer-entered values remain authoritative.
-
-### Post-deck-generation flow: open in new tab, return to Deck Prep
-
-Previously: success on Generating navigated to /brief (the completed-scout landing). Changed to: open the just-generated deck's `edit_url` in a new tab via `window.open(..., "_blank", "noopener,noreferrer")`, then navigate back to /deck/prep. Producer can immediately review the deck in Drive AND has the Deck Prep matrix in front of them to regenerate / tweak. `handledTerminalRef` guards against duplicate Realtime / polling deliveries. `initialDeckCountRef` snapshot prevents a regenerate from re-opening the prior deck when the deck count is unchanged.
-
-### Regenerate-from-Deck-Prep fix: atomic state reset via RPC
-
-Previously clicking Generate Deck on a scout with `current_step='completed'` silently no-opped vs-generate-deck's idempotency guard and Generating.tsx then reopened the prior deck. Frontend reset was a read-then-write on `brief_data` which has a TOCTOU race. Replaced with new `reset_scout_for_deck_regenerate(target_scout_id)` Postgres RPC (migration `20260514100000`) that does `brief_data - 'deck_generation_started_at'` atomically in a single SQL statement, alongside `current_step='deck_prep'` + clear failure state. SECURITY INVOKER; GRANT EXECUTE TO authenticated.
-
-### `updateSlidesPosition` per-slide moves for venue slide ordering
-
-Slides API rejected a single `updateSlidesPosition` request with all duplicates listed in desired-final order: "The slides should be in presentation order, with no duplicates." The parameter requires `slideObjectIds` to match current presentation order; it relocates a contiguous already-ordered block, it doesn't reorder. Fixed by emitting one `updateSlidesPosition` per slide (a single-element list is trivially in order). `insertionIndex = FRONT_MATTER_SLIDES + K` for each slide's target final position. Slides API processes batchUpdate requests sequentially, so cumulative result = canonical interleaved-forward layout `[V1_detail, V1_fp, V2_detail, V2_fp, ...]`.
+Slides API rejected single request with all duplicates: "should be in presentation order, no duplicates." Parameter requires `slideObjectIds` to match current order; it relocates a contiguous already-ordered block, doesn't reorder. Fixed by emitting one request per slide (single-element list is trivially in order). Slides processes batchUpdate sequentially; cumulative = canonical interleaved layout.
 
 ### Slide 2 ALL CAPS via scoped pre-pass
 
-`{{client_name}}`, `{{event_name}}`, `{{event_live_date}}`, `{{event_location}}` need to appear UPPERCASE on slide 2 specifically (producer's deck-design preference) but keep original casing on other front-matter slides. Did this by inserting scoped `replaceAllText` requests with `pageObjectIds: [slide2Id]` at the head of `globalReqs`, with uppercased values. They run BEFORE the case-preserving global pass; once slide 2's tokens are replaced, the global pass can't find them there anymore but still touches the other slides.
+Slide 2 needs uppercase but other front-matter slides keep original casing. Scoped `replaceAllText` with `pageObjectIds: [slide2Id]` at head of globalReqs with uppercased values. Runs BEFORE case-preserving global pass; once slide 2's tokens are replaced, global pass can't find them there but still touches other slides.
 
-### Photo dnd: `rectSortingStrategy` (was `verticalListSortingStrategy`)
+### `vs-generate-deck` success path CAS guard
 
-Photos render in a `grid grid-cols-4` layout, not a vertical list. The vertical-only sort strategy was suppressing neighbor animations on horizontal drags, making the interaction feel broken even though the underlying `swapPhotoSlots` persistence was working. `rectSortingStrategy` handles arbitrary grid arrangements.
-
-### "Contact the team" button removed from deck error states
-
-The four deck-side error configs (`TEMPLATE_COPY_FAILED`, `SLIDES_API_FAILED`, `NO_VENUES_INCLUDED`, `UNKNOWN`) rendered a "Contact the team" ghost button that routed back to `/deck/prep`; same destination as the primary "← Back to Deck Prep" button. Misleading affordance; the label promised a contact path that didn't exist. `Cfg.secondaryLabel` + `secondaryHref` are now optional; help-text bullets mentioning team contact remain as informational guidance.
-
-### vs-generate-deck success path CAS guard
-
-Mirror of the `writeFailure` CAS pattern from 4.10.5-port. Two parallel invocations that both succeed would otherwise both append to `generated_decks` with a TOCTOU window on the `freshExisting` re-read. The success UPDATE now uses `.eq("current_step", "deck_prep")` so only the first-to-complete wins the append. CAS-loss path logs warn + leaves the orphaned in-Drive deck behind (not fatal; producer sees a working deck either way).
-
-### Carry-forward debt: duplicate-invocation race in vs-research-venues
-
-Smoke testing revealed that vs-research-venues can be invoked twice in quick succession (likely React 18 strict-mode dev double-mount or Realtime hiccup) and both invocations execute Phase A + Phase B independently. The 4.10.5-port `writeFailure` CAS guards mask the symptom (failure-overwrites-success) and 4.10.6-port's success CAS on vs-generate-deck masks success-overwrites-success; but both invocations still burn Claude credits. Proper fix is a Postgres advisory lock or a kickoff CAS on `brief_data.research_started_at`. Deferred to cutover follow-up.
-
-### Carry-forward debt: pause_turn continuation cap is conservative
-
-`MAX_PAUSE_CONTINUATIONS = 1` in `callClaude` keeps long-running calls bounded but means some legitimate multi-turn workloads will fail with "no structured output" if they need more than one continuation. If we see this in prod logs, the next move is to raise the cap to 2-3 with a per-call wall-clock budget rather than a continuation-count cap.
+Two parallel successful invocations would both append to `generated_decks` with TOCTOU on `freshExisting` re-read. Success UPDATE now uses `.eq("current_step", "deck_prep")` so only first-to-complete wins. (Duplicate-invocation race in vs-research-venues acknowledged as carry-forward debt; eventually landed in 5.12 kickoff RPC.)
 
 ## Phase 4.10.5-port (AI surface stabilization)
 
 ### Model + web_search pivot: `claude-sonnet-4-6` + `web_search_20250305`
 
-Smoke testing 2026-05-13 surfaced `server_tool_uses=0` across every Phase A enrichment + Phase B sourcing call on the prior `claude-sonnet-4-5 + web_search_20250305` combo. Anthropic docs confirm the newer `web_search_20260209` tool (with dynamic filtering) lists Claude Sonnet 4.6, Opus 4.6+, and Mythos as supported models; 4.5 isn't on the list. Combined with web_search being enabled at the org level (Anthropic Console), pivoting to **4.6 restored web_search invocation**.
-
-Settled on the OLDER `web_search_20250305` tool version with the NEW model (4.6) after smoke showed the newer `20260209` dynamic-filter tool was billing 80k+ tokens per Phase A call (each web_search invocation runs a code_execution sandbox internally and bills cumulative context across multi-turn rounds). The simpler 20250305 tool with 4.6 invokes web_search reliably AND keeps per-turn token bloat bounded.
+Smoke 2026-05-13 surfaced `server_tool_uses=0` across every Phase A + Phase B call on prior `4-5 + web_search_20250305`. Anthropic docs confirm newer `web_search_20260209` lists 4.6, Opus 4.6+, and Mythos; 4.5 isn't on the list. Pivoting to 4.6 restored invocation. Settled on OLDER `web_search_20250305` with NEW model after smoke showed newer dynamic-filter tool was billing 80k+ tokens per call (each web_search runs a code_execution sandbox internally and bills cumulative context across rounds). Simpler 20250305 with 4.6 invokes reliably AND keeps per-turn bloat bounded.
 
 ### `pause_turn` continuation in `callClaude`
 
-Anthropic's server-tool loop (web_search, web_fetch, code_execution) can return `stop_reason=pause_turn` when a long-running turn hits an internal pause point. The caller is expected to send another request with the prior assistant content appended as a message; Claude continues the turn. Without this, callers that emit a custom tool after multi-step web_search research saw "no structured output" failures because the tool_use block hadn't emitted yet.
-
-`_shared/anthropic.ts callClaude` now wraps a continuation loop. On `stop_reason="pause_turn"`, the wrapper appends the assistant's content blocks as the next message and re-calls. Accumulates content + usage across cycles. Capped at `MAX_PAUSE_CONTINUATIONS = 1` to keep total latency bounded under the app-level WORK_TIMEOUT_MS.
+Server-tool loop can return `stop_reason=pause_turn` when a long-running turn hits internal pause. Caller expected to send another request with prior assistant content appended; Claude continues. Without this, callers emitting a custom tool after multi-step web_search saw "no structured output" because tool_use block hadn't emitted. `callClaude` wraps a continuation loop. Capped at `MAX_PAUSE_CONTINUATIONS = 1` to keep latency bounded under app-level WORK_TIMEOUT_MS.
 
 ### `writeFailure` CAS guards prevent failure-overwrites-success
 
-Smoke testing surfaced a race: two parallel invocations of vs-research-venues (e.g., from React 18 strict-mode dev double-mount) both run Phase A + Phase B; first succeeds (writes `current_step='sourcing_report'`), second hits a different code path and fails (was writing `status='failed' + pipeline_error=...`, overwriting the first's success state).
+Two parallel invocations: first succeeds, second hits different code path and fails (was writing `status=failed + pipeline_error`, overwriting success). All three AI functions now CAS on `.eq("current_step", <expected_pre_success_step>)` on failure UPDATE. Failure no-ops when another invocation has advanced past pre-success step.
 
-All three AI edge functions now CAS via `.eq("current_step", <expected_pre_success_step>)` on the failure UPDATE:
-- `vs-research-venues.writeFailure`: `.eq("current_step", "researching")`
-- `vs-compile-summaries.writeFailure`: `.eq("current_step", "compiling")`
-- `vs-generate-deck.failWithCode`: `.eq("current_step", "deck_prep")`
+### Timeout sizing for Supabase Pro
 
-Failure no-ops when another invocation has already advanced past the pre-success step.
-
-### Timeout sizing for Supabase Pro plan
-
-Supabase Edge Function wall clock is plan-level (150s Free, 400s Pro) and is NOT settable via `config.toml`. After the project upgraded to Pro, settled on:
-
-- `WORK_TIMEOUT_MS = 360_000` (40s buffer under Pro's 400s cap so `writeFailure` UPDATE lands before any platform kill)
-- `IN_FLIGHT_GRACE_MS = 360_000` (matched so re-invoke idempotency window covers the upper bound of in-progress work)
-- Phase B `web_search max_uses = 4`
-- Phase A + Pass 1 `web_search max_uses = 2`
-- `MAX_PAUSE_CONTINUATIONS = 1`
-
-`supabase/config.toml` documents the plan-level setting + the Free-plan fallback sizing recipe.
+Edge Function wall clock is plan-level (150s Free, 400s Pro), NOT settable via config.toml. After Pro upgrade: `WORK_TIMEOUT_MS = 360_000` (40s buffer under cap so writeFailure UPDATE lands before platform kill), `IN_FLIGHT_GRACE_MS = 360_000` (matched), Phase B `web_search max_uses = 4`, Phase A + Pass 1 `max_uses = 2`, `MAX_PAUSE_CONTINUATIONS = 1`.
 
 ### Trim `brief_data` JSON dump from Claude user messages
 
-`Brief: ${JSON.stringify(scout.brief_data ?? {})}` was dumping the entire `brief_data` JSONB into every Claude call, including internal state flags (`research_started_at`, `compile_started_at`, `deck_generation_started_at`, `uploaded_files`). Pure noise to the model and inflated input token count.
-
-Replaced with selective field extraction in three call sites (`buildFillUserMsg`, vs-research-venues Phase B, vs-compile-summaries briefBlock): `expected_guest_count` + `brief_data.notes` as named fields, rest of brief_data dropped. ~30-70% input token reduction per call.
+`Brief: ${JSON.stringify(scout.brief_data ?? {})}` dumped entire jsonb into every call including internal state flags. Pure noise to the model + inflated input tokens. Replaced with selective field extraction in three call sites. ~30-70% input token reduction.
 
 ### Placeholder string sanitizer
 
-After tightening FILL_TOOL schema to make `key_features` + `recommendations` + `considerations` required with minItems, Claude started filling arrays with literal `<UNKNOWN>` / `TBD` / `N/A` / `None` / `TODO` placeholder tokens when it didn't have real data; satisfying the schema structurally while signaling "I don't know."
-
-Two-layer fix:
-1. **Schema-description layer** (primary, per `feedback_tool_choice_collapse` rule): tool descriptions + per-field descriptions + user-message trailer all explicitly forbid placeholder tokens with a list of common offenders.
-2. **Post-emission sanitizer** (defense): new `isPlaceholderString` + `stripPlaceholders` in `_shared/venueTypes.ts`. Pattern: strip whitespace + punctuation, lowercase, compare against a set of placeholder tokens (unknown, tbd, na, none, null, notavailable, notprovided, todo, pending, etc.). 32-char length cap so real short observations don't accidentally match. Wired into Phase A patch builder, Phase B venue sanitize, and vs-compile-summaries Pass 1 patch builder.
-
-If the cleaned array is empty post-strip, skip the write so the row keeps its null state rather than getting a junk-filled column.
+After tightening FILL_TOOL schema to require key_features / recommendations / considerations with minItems, Claude started filling arrays with literal `<UNKNOWN>` / `TBD` / `N/A` / `None` / `TODO` tokens (satisfying schema structurally while signaling "I don't know"). Two-layer fix: schema-description layer (primary per `feedback_tool_choice_collapse`) explicitly forbids placeholders with concrete offender list; post-emission `isPlaceholderString` + `stripPlaceholders` (strip whitespace + punctuation, lowercase, compare against set). 32-char length cap so real short observations don't accidentally match. If cleaned array is empty post-strip, skip the write so row keeps null state.
 
 ### Drop forced `tool_choice` on Phase A
 
-Smoke testing showed Phase A `fill_venue` calls collapsing to out=94-115 minimal payloads under the schema description hardening + forced `tool_choice: { type: "tool", name: "fill_venue" }`. Same pattern Phase B saw (4.10.3 retrospective). Mirror Phase B's fix: changed Phase A's `tool_choice` to `{ type: "auto" }`. `FILL_SYSTEM` still says "fill structured fields" (strong directive); auto mode lets Claude use web_search freely before committing to the tool with real findings.
+Smoke showed Phase A `fill_venue` calls collapsing to out=94-115 minimal payloads under forced tool_choice. Same pattern as Phase B (4.10.3 retrospective). Changed to `{ type: "auto" }`. FILL_SYSTEM still says "fill structured fields" (strong directive); auto mode lets Claude use web_search freely before committing to the tool with real findings.
 
 ## Phase 4.10.4-port (pre-cutover smoke polish)
 
 ### Rank hidden in UI; column stays in DB
 
-Smoke walk 2026-05-13 surfaced rank as visual noise (producer doesn't trust the 0-100 number day-to-day; the source pill + sort tier already conveys the relevant grouping). Decision: hide rank from the matrix render but keep the DB column + the tool emission paths (FILL_TOOL, SUBMIT_RESEARCH) + the patch-write paths (vs-compile-summaries, vs-research-venues, vs-parse-sheet). Reversible by adding the prop back to `VenueIdentityStack` and dropping `<RankDisplay />` back into the stack. Locked 2026-05-13.
+Producer doesn't trust the 0-100 number; source pill + sort tier convey relevant grouping. Hide from matrix but keep DB column + tool emission + patch-write paths. Reversible. With rank no longer visible, secondary sort flipped to `name.localeCompare` with `sensitivity: base` + `numeric: true`.
 
-### Secondary sort flipped to alphabetical-by-name
+### Photo upload column removed from Shortlist
 
-With rank no longer the visible signal, the rank-desc tiebreaker after `SOURCE_PRIORITY` tier had no anchor to the producer's mental model. Flipped to `name.localeCompare` with `sensitivity: "base"` (case-insensitive) + `numeric: true` (so "Studio 10" sorts after "Studio 2", not before). Within-tier ordering is now stable and producer-readable.
+Photos are deck-prep concern. Column added affordance noise + made matrix wider. Review keeps the full photo grid. VS Pro kept both surfaces; HQ collapses to one.
 
-### Photo upload column removed from Shortlist; photos live on Review only
+### Notes/Feedback editor added to Review
 
-Producer-flow simplification: photos are a deck-prep concern, not a shortlist concern. The Shortlist column added affordance noise + made the matrix wider (1740 -> 1580 in 4.10.2 -> 1450 in 4.10.4). Drop the column, drop the modal, drop the photoCounts state. Review.tsx keeps the full photo grid + PhotoUploadModal per 4.7.1-port. VS Pro divergence: VS Pro kept both surfaces; HQ collapses to one.
-
-### Notes/Feedback editor added to Review Selects
-
-VS Pro never surfaced `vs_candidate_venues.notes` for producer edit (notes always landed via the SourcingReport / Shortlist NotesModal). Phase 4.10.4 adds a per-row textarea on Review bound to the same column via debounceSave. Already factored into the venue_overview prompt as `Producer notes: ${v.notes ?? "(none)"}` on vs-compile-summaries:452 (so the producer's last-minute context shapes Pass 2 output without ever landing on the deck itself). Coral descriptor + a title-descriptor sentence make the contract explicit ("not displayed on the deck but is considered in generating the Overview paragraph").
-
-### Confirm + Compile flush widened to include `notes`
-
-`confirmCompile` already flushes pending debounce timers before navigating to /compiling. The flush payload's column list now includes `notes` so a producer who types into the textarea, hits Confirm immediately, and races the 600ms debounce doesn't lose the edit (the optimistic state already updated, but the DB UPDATE hadn't fired yet). Matches the pattern for the other inline-edit fields on Review.
+VS Pro never surfaced `vs_candidate_venues.notes` for producer edit on Review. Added per-row textarea bound via debounceSave. Already factored into venue_overview prompt as `Producer notes: ${v.notes ?? "(none)"}` so producer's last-minute context shapes Pass 2 without landing on deck. Coral descriptor makes the contract explicit.
 
 ### Venue Overview prompt tuned via schema descriptions; OVERVIEW_SYSTEM untouched
 
-Per memory rule `feedback_tool_choice_collapse`, system prompts on the venue-scout AI surfaces stay frozen. Tuning levers are (1) `OVERVIEW_TOOL.description`, (2) `OVERVIEW_TOOL.input_schema.properties.venue_overview.description`, (3) `maxLength`. Phase 4.10.4 swaps the description from "5-8 sentences" to "3-4 sentences, ~80 words" and embeds positive examples from Jimmie's reference set (standout-features snippets + three full overview paragraphs). `maxLength: 600` is a soft signal but Claude generally honors it. If smoke output stays too long, the next lever is dropping maxLength to 500/450 OR adding more concrete examples; NOT editing the system prompt.
+Per `feedback_tool_choice_collapse`, system prompts stay frozen. Tuning levers: tool description, field description, maxLength. Swapped "5-8 sentences" to "3-4 sentences, ~80 words"; embedded positive examples from reference set. maxLength is soft signal; next lever is dropping further OR more examples, NOT editing SYSTEM.
 
-### Compiling + Generating loading copy refined
-
-Compiling: "~ 60 seconds" replaces "30 to 60 seconds" (real-world variance from smoke testing closes around the 60s mark; the producer reads the lower end as a commitment, not an estimate). Generating: "2-5 minutes" replaces "1 to 2 minutes" (Google Slides API + photo-insert latency runs longer than the VS Pro source's optimistic estimate). Both updates also resolve copy ambiguities surfaced during smoke.
-
-### Deck Prep bottom nav: venue-name list replaces slide count
-
-The "X slides will be generated" string was redundant with the in-page slide tally above the matrix. Replaced with a bulleted list of each INCLUDED venue's name (in pitched/order sequence) underneath a bumped "X Venues" count. The list scrolls internally (max-h-40 + overflow-y-auto) when long, so the floating-nav footprint stays predictable. Producer can now confirm at-a-glance which venues are going into the deck without scrolling the matrix.
-
-### Deck Prep notes consolidated above the table
-
-The four asterisk-prefixed amber pills below the table required scrolling past the matrix to read. Consolidated into a single bulleted card above the table (white text on bg-input, coral bullet markers). Copy preserved verbatim; the visual restructure is the only change. Below-table block deleted.
-
-### Deck Prep cell line-breaks for neighborhood / size / capacity
-
-VS Pro rendered these three meta fields inline with `·` separators in the venue summary cell. Producer feedback during smoke: hard to scan, harder to edit because the contenteditable spans bleed into each other on narrow widths. Switched to flex-col with explicit `Field:` labels. Null fields skip their row entirely (no orphan "Neighborhood:" line); when all three are null, the stack container itself doesn't render. VS Pro divergence. Editing surfaces stay (Review owns the canonical input path; DeckPrep allows on-the-fly tweaks).
-
-## Phase 4.10.3-port (URL validation + Recs/Considerations tuning + 3-tier sort + venue_type popover + pipeline_error rename + storage reconciliation + AI surface consolidation)
+## Phase 4.10.3-port (URL validation + AI surface consolidation + 3-tier sort + pipeline_error rename)
 
 ### AI surface consolidation: sheet enrichment moves into vs-research-venues
 
-Smoke testing 2026-05-13 surfaced a structural collapse pattern: forced `tool_choice: {type: "tool", name: "fill_venue"}` combined with server-side `web_search_20250305` caused Claude (both 4-6 and the 4-5 pivot) to emit empty tool calls (out=113-139 tokens, server_tool_uses=0) on every per-row sheet enrichment. Same shape collapse on vs-research-venues' submit_research call: out=2304-2610 but server_tool_uses=0, returning venues with null URLs from training knowledge.
+Smoke surfaced structural collapse: forced `tool_choice` + server-side web_search caused Claude to emit empty tool calls (out=113-139, server_tool_uses=0) on every per-row sheet enrichment AND vs-research-venues' submit_research (out=2304-2610 but server_tool_uses=0, returning training-knowledge venues with null URLs).
 
-Locked option (2026-05-13, Path B): consolidate all AI venue work into `vs-research-venues`. New shape:
+Locked Path B: consolidate AI venue work into vs-research-venues. vs-parse-sheet becomes parse-only (sub-second). vs-research-venues runs two phases inside `EdgeRuntime.waitUntil`: Phase A (parallel per-row enrich with patch guards) + Phase B (existing submit_research sourcing). Both kick off inside `work()`; Phase A awaits its loop, Phase B awaits Claude + INSERT, then function awaits Phase A before final state flip. vs-compile-summaries Pass 1 unchanged as backstop. Per-row enrichment no longer synchronous parse-blocker. SheetUpload's "Enriching N/M" UI dropped (no work at upload time now). One Claude surface for AI venue work, one web_search budget, one validation layer.
 
-- **vs-parse-sheet** becomes parse-only. Strips the per-row Claude fill pass. Returns `{ count }`. Sub-second response. Producer sees Sheet Upload -> Done immediately.
-- **vs-research-venues** runs two phases inside the existing `EdgeRuntime.waitUntil`:
-  - **Phase A (parallel):** SELECT `vs_candidate_venues WHERE scout_id=? AND source='sheet'`. For each row, `callClaude(fill_venue + web_search, model=claude-sonnet-4-5)`. Per-row patch guards prevent overwriting producer values. Per-row failures tolerated.
-  - **Phase B (parallel):** Existing sourcing pattern -- `callClaude(submit_research + web_search)` for net-new venues.
-  - Both kick off inside `work()`; Phase A awaits its loop, Phase B awaits its Claude call + INSERT, then the function awaits Phase A before the final scout state flip.
-- **vs-compile-summaries Pass 1** unchanged. Stays as the backstop for any rows that miss Phase A (compile is always a second AI surface that produces overviews).
+### `research_error` → `pipeline_error` column rename
 
-Why this fixes the collapse: per-row enrichment is no longer a synchronous parse-blocker. The sheet upload returns instantly. The "Researching" page handles both new-venue sourcing AND existing-row enrichment under a single producer wait state. Phase A's per-row calls are still subject to the same forced-tool + web_search collapse risk, but they at least live in `EdgeRuntime.waitUntil` (not blocking the user-visible upload) and the failures fall through to vs-compile-summaries Pass 1 backfill. The architectural win is one Claude surface for AI venue work, one web_search budget posture, one validation layer. SheetUpload's "Enriching N/M" UI was dropped (no Claude work happening at upload time now).
+Added at 4.5-port for vs-research-venues failures. 4.7.2-port (compile) and 4.8.2-port (deck) reused the column without renaming. Name has been misleading since 4.7.2; rename aligns with actual usage as single AI-pipeline error channel. Plain `ALTER RENAME COLUMN` preserves values. Two migrations: column rename + `CREATE OR REPLACE FUNCTION start_over_scout` to clear new name. Cross-cutting rename touches 3 edge functions + 4 page files, all in same squash so build stays green.
 
-Cost / latency tradeoffs: Sheet upload is now sub-second (was 30-90s for 5-15 rows). Researching is longer (was ~60-90s for sourcing alone; now ~60-120s for parallel sourcing + sheet enrich at N/5 chunks). Net producer wall-time unchanged or slightly faster (sheet wait moved to research wait).
+### URL HEAD validation (post-emission gate)
 
-### Sheet parser fills website_url + capacity (was dropping both)
+Smoke surfaced URL fabrication: Claude returns LoopNet/Crexi listing URLs with invented path segments that 4xx or soft-404 to homepage. `sanitizeWebsiteUrl` catches search pages + bare-homepage but not fabricated URLs matching syntax. New `_shared/urlValidation.ts` wraps with HEAD-request check + redirect-host + redirect-path comparison. 4xx rejects; 5xx + network errors keeps (transient); host mismatch rejects (soft 404); final path significantly shorter than request path rejects (listing-gone redirect). 5s timeout. Parallel via Promise.all inside vs-research-venues (~2-3s additional). Memory rule `feedback_tool_choice_collapse`: AI output quality lives on schema descriptions + post-emission validation.
 
-Pre-4.10.3 the VS Pro `parse-sheet` pick chain extracted name + neighborhood + address + venue_type + size_sq_ft + key_features. `website_url` and `capacity` columns were dropped at parse time even when the producer entered them, then re-derived by the AI enrichment pass. Fix: add both to the pick chain. URL passes through `sanitizeWebsiteUrl` (catches search pages + listing-DB bare homepages) but no HEAD check at parse time (producer input is trusted; HEAD-checking hundreds of rows would slow parse to a crawl). Keyword lists also expanded for natural producer header variants -- `borough`, `hood`, `web`, `homepage`, `pax`, `headcount`, `seats`, `square footage`, `feet`, `amenities`, `highlights`, `description`, etc.
+### Schema tuning for Recommendations + Considerations + website_url
 
+Bullets too long. Added per-array description (2-4 short observations, 10-15 words), per-item description with concrete examples, `maxLength: 150` recs / `maxLength: 200` considerations. Soft signal but Claude generally honors. website_url description updated to "verbatim URL from web search result. Do NOT fabricate" (positive-only redirect against verbatim-from-search lever; no forbidden URL list). Memory rule reaffirmed: no SYSTEM edits.
 
+### 3-tier source priority sort
 
-### Final pre-cutover polish phase
-
-11 items bundled because every one is small (under 50 lines) and they all share validation surface (smoke testing 2026-05-13 + carry-forward debt from 4.5 / 4.7.2 / 4.10.2). Shipping as one squash keeps the rename pass (`research_error` -> `pipeline_error`, 7 file edits) atomic so no commit in the history compiles with a half-renamed column.
-
-### `research_error` -> `pipeline_error` column rename
-
-The column was added at 4.5-port for `vs-research-venues` failures. 4.7.2-port (`vs-compile-summaries`) and 4.8.2-port (`vs-generate-deck`) reused the same column for compile + deck errors without renaming. Name has been misleading since 4.7.2; this rename brings it in line with actual usage as the single AI-pipeline error channel. Plain `ALTER ... RENAME COLUMN` preserves all existing values. Two migrations: (1) the column rename; (2) `CREATE OR REPLACE FUNCTION start_over_scout` to clear `pipeline_error` instead of `research_error`. Cross-cutting rename touches 3 edge functions + 4 page files; all done in the same squash so the build stays green.
-
-### URL HEAD validation (post-emission gate against AI fabrication)
-
-Smoke testing 2026-05-13 surfaced URL fabrication: Claude returns LoopNet / Crexi listing URLs with invented path segments that 4xx or soft-404 to a homepage. The existing `sanitizeWebsiteUrl` catches search pages + listing-DB bare-homepage URLs but not fabricated URLs that match the syntax pattern. Locked option: new `_shared/urlValidation.ts` wraps `sanitizeWebsiteUrl` with a HEAD-request check + redirect-host + redirect-path comparison. 4xx -> reject. 5xx + network errors -> keep (transient; producer can edit). Host mismatch -> reject (soft 404). Final path significantly shorter than request path -> reject (listing-gone redirect to root). 5s timeout per URL. Parallel via `Promise.all` inside vs-research-venues (~2-3s additional latency for 15-20 URLs); per-row sequential inside vs-parse-sheet enrichOne + vs-compile-summaries Pass 1 (already chunked-parallel at the venue level, so per-chunk latency stays bounded). Memory rule `feedback_tool_choice_collapse`: AI output quality lives on schema descriptions + post-emission validation. This is the post-emission layer.
-
-### Recommendations + Considerations schema tuning (length cap + positive examples)
-
-Carry-forward from continued smoke testing: bullets too long. Tuning lives on schema descriptions in both `FILL_TOOL` (`_shared/venueFill.ts`) and `SUBMIT_RESEARCH` (`vs-research-venues/index.ts`). Added: per-array description ("2-4 short venue-specific observations ... 10-15 words"), per-item description with concrete examples lifted from Jimmie's reference set, `maxLength: 150` on recommendations / `maxLength: 200` on considerations. `maxLength` is a soft signal in JSON Schema; Claude generally honors but doesn't strictly enforce, so set generously. Memory rule `feedback_tool_choice_collapse` reaffirmed: no system-prompt edits. The two tool definitions stay independent (vs-research-venues has unique fields like `derived_columns`); inline duplication is fine over a full extraction at this stage.
-
-### Website_url schema description tuning (lifted from URL-quality hot patch lesson)
-
-Companion to HEAD validation. Updated `website_url` description in both `FILL_TOOL` and `SUBMIT_RESEARCH` to "Must be a verbatim URL from a web search result. Examples: ... Do NOT fabricate URLs or guess listing IDs." The "Do NOT fabricate" phrasing is a positive-only redirect framed against the verbatim-from-search-results positive lever (no forbidden-URL list; same posture as the URL-quality hot patch).
-
-### 3-tier source priority sort (manual -> sheet -> research)
-
-Carry-forward extension of the 4.10.2-port 2-tier (manual top / rest mixed) sort. Smoke testing surfaced that the producer wanted uploaded sheet rows visually separated from AI-research rows. New `SOURCE_PRIORITY` constant in `src/lib/venue-scout/format.ts` (single source of truth shared by SourcingReport + Shortlist). Within each tier, rank desc with nulls last. Unknown / null source falls back to lowest priority (sorts to the bottom). DeckPrep stays on producer-controlled dnd-kit order (4.6-port lock; producer-controlled order is the entire point of the DeckPrep surface).
-
-### Per-venue enrichment progress (static post-completion count)
-
-Locked option (b): SheetUpload reads `enriched_count` + `count` from the `vs-parse-sheet` response and renders "N / M enriched" when N < M. When all rows enriched (N === M), no ratio shown (redundant). Zero migration cost; ~10 line frontend addition. Realtime sub-progress option (publication add for `vs_candidate_venues` + Realtime subscription) deferred -- not worth the schema bloat for an enrichment pass that typically completes in 30-60s. If sheet sizes routinely run 60s+ in real use, revisit in a future polish phase.
+Carry-forward from 4.10.2-port 2-tier. New `SOURCE_PRIORITY` constant in `src/lib/venue-scout/format.ts` (single source of truth shared by SourcingReport + Shortlist): manual → sheet → research. Within each tier rank desc with nulls last. DeckPrep stays on producer-controlled dnd-kit order.
 
 ### venue_type inline editing UX (popover with checkboxes)
 
-4.10.2-port collapsed the manual-row `<input>` for type into the shared `<VenueIdentityStack>` and the producer's path to set `venue_type` disappeared on manual rows. Per port-plan locked "all rows editable except recs/considerations": type editing should be available on all rows (manual + sheet + research). UX: click the type-pills cell -> popover with 8 canonical types as toggleable checkboxes; toggle returns a new `CanonicalType[]`; the caller serializes to `${types.join(" / ")}` or null and persists via debounceSave. New `TypeTogglePopover` primitive in `matrix/primitives.tsx` (shadcn `Popover` was already in the repo). Replaces static type-pills in col3 on SourcingReport + Shortlist. DeckPrep doesn't render type pills today; no change.
+4.10.2 collapsed manual-row input into shared `VenueIdentityStack` and producer's path to set venue_type disappeared. Per port-plan locked "all rows editable except recs/considerations": click type-pills cell → popover with 8 canonical types as toggleable checkboxes; caller serializes to `${types.join(" / ")}` or null. New `TypeTogglePopover` primitive.
 
 ### VS storage policy reconciliation (open-authenticated, match table RLS)
 
-Pre-4.10.3 state: `briefs` + `sourcing_sheets` + `vs_venue_photos` buckets all gated `is_producer_or_admin()` while the vs_* table RLS is open-authenticated per port plan § 8.6. Member-tier users could read/write vs_* tables but couldn't upload files, breaking the "collaborative agency-wide workflow" the port plan locks. Locked option: relax storage policies to authenticated; matches table RLS posture. `docs/auth-model.md` updated in the same squash so the role-tier definitions reflect "members can use Venue Scout end-to-end." `vs_venue_photos` collapsed from 4 split policies to a single `FOR ALL` policy. `IF EXISTS` on the DROPs handles any Studio-side rename drift.
+Pre-4.10.3 buckets gated `is_producer_or_admin()` while vs_* table RLS is open-authenticated. Member-tier could read/write tables but couldn't upload files. Relaxed storage to authenticated; matches table RLS posture. `docs/auth-model.md` updated to reflect "members can use Venue Scout end-to-end." `vs_venue_photos` collapsed from 4 split policies to single FOR ALL.
 
-### design-system § 3 Field label color (text-foreground -> text-primary)
+## Phase 4.10.2-port (matrix UX overhaul)
 
-Doc-implementation drift. Doc said `text-foreground`; every implementation (TS NewRoleDetails + RoleSettings + 4.3-port Brief + 4.9-port ScoutSettings) used `text-primary` (coral). Single-line doc fix to match the actual canonical implementation.
+### Alignment column removed; `EditableField` + `SourcePill`
 
-### Cutover plan update (cherry-pick before hard reset)
+Alignment column took ~200px for signal producers don't act on; rank conveys the same in less space. `derived_attrs` jsonb persists (deck may consume it). `EditableField` generalized from name-only contenteditable with `name|address|neighborhood` variants; `EditableTextarea` added for DeckPrep's `venue_overview`. `SourcePill` palette: sheet→"Uploaded" (amber), research→"Sourced" (muted), manual→"Manual" (electric blue, matches TS ReferralPill). NOT rendered on DeckPrep.
 
-Per port plan § "Done when" rewrite: cherry-pick the must-carry set from main onto `vs-port-fresh` before the hard-reset. Known must-carry: `f24d3f5` (2026-05-13 TS Final Review packet template + layout fixes + email-as-cover-letter fallback). Everything else on main since `dd38577` is the archived failed-Phase-4 stack + URL-quality hot patches, which we DISCARD on cutover. No conflicts expected for must-carry items since TS files are disjoint from VS port files. Verification check is `git show --stat <new-sha>` vs `git show --stat <source-sha>`, not the naive `git log main --not vs-port-fresh --oneline` empty check (which is impossible by design since vs-port-fresh branched from `dd38577`, has archived commits on main below it, and cherry-picks produce new SHAs). Dry-run 2026-05-13 confirmed `git cherry-pick f24d3f5` applies cleanly (2 files, 184+/17-, no conflicts).
+### Manual venues pin to TOP; Features editable on ALL rows
 
-### Side-by-side reconciliation pass (small fixes inline, larger items deferred to 4.10.4)
-
-Final pre-cutover walk of VS Pro vs HQ surface-by-surface. Locked option: fold small fixes (5 line change or less) inline as part of 4.10.3 squash; defer larger items to 4.10.4 with logged rationale. Expected intentional divergences (page wrapper widths, Alignment column gone, Source pills present, inline editing extensions, Settings page, ErrorState debug detail) stay as-is per port-plan locks; not regressed. Walk surfaced no unknown divergences that block cutover.
-
-## Phase 4.10.2-port (matrix UX overhaul: inline editing + Source pill + Alignment column removal + manual-at-top sort)
-
-### Three matrix changes bundled
-
-Inline-editing extension + Source pill + column rearrange all edit the same four files (SourcingReport, Shortlist, DeckPrep, matrix/primitives.tsx). Shipping them as one squash keeps the diff coherent and lets the new `<VenueIdentityStack>` primitive land alongside the column-rearrange that needs it. Splitting would require either a placeholder Alignment column on the first ship or staging the primitive twice; both are worse.
-
-### Alignment column removed from UI; `derived_attrs` jsonb stays in DB
-
-Deliberate divergence from VS Pro per Jimmie's 2026-05-12 producer-smoke call. The Alignment column took up ~200px of horizontal real estate for a signal producers don't act on day-to-day; rank already tells them the same thing in less space. `vs_candidate_venues.derived_attrs` jsonb persists in the schema (deck generation may consume it; cleanup deferred to cutover). Both SourcingReport + Shortlist still `select(derived_attrs)` and hold the `columns` state from `vs_scouts.derived_columns`; the data is just no longer rendered. `feedback_port_fidelity` exception applies (port-plan-locked frontend change per § 9 4.10.2 entry, expanded 2026-05-13).
-
-### `EditableVenueName` generalized to `EditableField` with variants
-
-The 4.6-port contenteditable was name-only. 4.10.2 needs the same shape for address + neighborhood across all matrix rows + DeckPrep's full venue summary. Generalized into `EditableField` with `name | address | neighborhood` style variants. `EditableVenueName` kept as a thin backward-compat wrapper so any future import outside the matrix continues to work. `EditableTextarea` added for DeckPrep's `venue_overview` (contenteditable handles single-line poorly for long text; `<textarea>` is right).
-
-### `VenueIdentityStack` (new primitive) replaces the col2 VStack
-
-Four-element vertical stack: name -> divider -> address (+ optional website link) -> divider -> rank -> source pill. Replaces the two-element `VStack` for the Venue|Address cell on SourcingReport + Shortlist. `VStack` stays untouched for the Neighborhood|Type column (still two-element). `RankDisplay` reused as-is inside the new stack (no sizing tweaks; the rank-bar at 50% width of the cell reads cleanly inside the narrower col2 widths 220 / 230).
-
-### `SourcePill` three-label palette with subtle color hints
-
-Three values map to three labels: `sheet -> "Uploaded"` (amber `bg-amber-400/10 text-amber-400`), `research -> "Sourced"` (muted `bg-input text-muted-foreground`), `manual -> "Manual"` (electric blue `bg-blue-400/10 text-blue-300`). Locked option (b) over a single-neutral palette: amber pulls producer attention to sheet rows that may have producer-entered values worth verifying, manual blue matches the ReferralPill convention from Talent Scout (design-system § 12 brand rule 8). Defensive fallback: any non-canonical / null source reads as "Manual". `SourcePill` is NOT rendered on DeckPrep -- producer is past sourcing-origin distinction by then.
-
-### Manual venues pin to the TOP of SourcingReport + Shortlist
-
-VS Pro's 4.6-port lift sorted manual venues to the BOTTOM. Producer's 2026-05-13 call: manual rows are the ones the producer added by hand and most wants to verify / fix; pinning them to the top mirrors the producer's attention order. Within each group (manual / non-manual), rank desc with nulls last. SourcingReport gains a new `useMemo` sort step (was SQL-`.order("rank")`-only); Shortlist's existing client-side sort inverts the manual-vs-rest comparator. Sheet vs research within the non-manual group stay mixed and sorted by rank only; producer disambiguates by Source pill color.
-
-### Features column is editable on ALL rows; Recs + Considerations stay AI-only
-
-Locked: drop `<Bullets>` for the Features column entirely. Use `<EditableTextarea>` with comma / semicolon / pipe / newline split-and-trim across both pages. Manual rows on Shortlist no longer have a special `ghost-input` branch -- one path, all rows. Recommendations + Considerations stay `<Bullets>` everywhere; per Jimmie's 2026-05-13 call: "recommendations and considerations should always be generated by AI." The visual asymmetry IS the affordance signal: Features looks like an input (textarea) so producer knows it's editable; Recs/Considerations look like bullets so producer knows they're AI-generated read-only.
-
-### Type pills stay static (canonical-type editing deferred to 4.10.3)
-
-Manual rows on Shortlist previously had a `<input>` for `venue_type` (free-text). 4.10.2 drops that input -- type column reads as static canonical-type pills for ALL rows, including manual. Manual rows with empty type now read as "-". Producer-edit of canonical types is a 4.10.3 polish item if at all (parseTypes-style multi-select would be the obvious shape, but the matrix's narrow Type subcell isn't a great surface for it).
-
-### DeckPrep gains a `debounceSave` helper + a new editable address field
-
-DeckPrep previously had only the row-order debounce (`orderTimer`); no per-field debounce. Added the same shape as Shortlist's existing `debounceSave` (600ms, optimistic, error -> toast + reload). Address surfaced as a new editable field in the venue summary stack (was hidden previously; producer only saw name + neighborhood + size + cap + website). Size + capacity inputs accept raw strings with unit suffixes ("25,000 sq ft" / "~500 cap") and coerce to int via `parseIntOrNull` at the save boundary so the in-memory Venue keeps its number shape.
-
-### Manual-row autofocus: signal-driven, not query-driven
-
-Shortlist's `addManualRow` previously focused the new row via `setTimeout(50ms) + document.querySelector('input[data-manual-name=...]')`. That only worked when manual rows rendered as `<input>` elements. 4.10.2 collapses manual rows into the same `<VenueIdentityStack>` everyone else uses; the focus path becomes a `lastManualId` state + `autoFocusName` prop -> EditableField's mount-effect calls `ref.current.focus()` once. Same producer outcome, no DOM-queries, no timer.
+VS Pro sorted manual to BOTTOM. Producer call: manual rows are the ones added by hand and most wants to verify; top mirrors attention order. Features uses `<EditableTextarea>` with comma/semicolon/pipe/newline split-and-trim; manual rows no longer have special branch. Recs + Considerations stay AI-only per producer ("should always be generated by AI"). Visual asymmetry IS the affordance signal.
 
 ## Phase 4.10.1-port (sheet upload AI enrichment)
 
-### Sheet upload enrichment is synchronous, not waitUntil
+### Synchronous, not waitUntil; parallel-chunked at CHUNK_SIZE = 5
 
-vs-parse-sheet now does parse + insert + AI enrichment in a single call. SheetUpload awaits the full response before navigating. Locked over `EdgeRuntime.waitUntil` because the producer's mental model is "drop sheet -> wait -> ready." Backgrounding the enrichment would let the producer click Continue mid-enrichment and land on SourcingReport with half-enriched rows next to fully-enriched ones. One coherent waiting state on SheetUpload is cleaner than two-stage navigation with a Realtime subscription.
-
-### Parallel-chunked Claude calls, CHUNK_SIZE = 5
-
-15 venues sequentially at ~5s/call would be ~75s. All-parallel risks Anthropic rate-limit and concurrent-connection issues. Chunks of 5 with `Promise.all` inside, sequential across chunks, lands at ~15-20s for a 15-venue sheet and scales linearly to ~50-65s for 50 venues -- well under the Supabase Edge Function ~150s soft cap. Tuning lever in `supabase/functions/vs-parse-sheet/index.ts`: drop to 3 if rate-limit errors show up in logs.
-
-### Per-row Claude failures tolerated; never fail the whole call
-
-Each enrichOne() returns `{ enriched: boolean }`; failures are logged + counted but the loop continues. SourcingReport renders sheet-only data for failed rows next to fully-enriched siblings; no crashes. compile-summaries Pass 1 (extended condition below) catches the orphans at pitch time. Response includes `enriched_count` + `failed_count` for future telemetry / debug UI without grep'ing logs.
-
-### `derived_attrs` filled later, not at parse-sheet time
-
-`vs_scouts.derived_columns` doesn't exist until `vs-research-venues` runs (the next step in the producer flow). vs-parse-sheet has no way to know which derived-attr keys to fill, so the FILL_TOOL output's `derived_attrs` is dropped at parse time. vs-compile-summaries Pass 1 condition extended to fire for `source='sheet' AND derived_attrs IS EMPTY` so the backfill happens at compile time after the producer pitches.
-
-### `FILL_TOOL` + `FILL_SYSTEM` + `buildFillUserMsg` extracted to `_shared/venueFill.ts`
-
-Both vs-parse-sheet (4.10.1) and vs-compile-summaries Pass 1 (4.7.2 + 4.10.1) use the same Pass-1 prompt + schema. Pulling them into a shared module is single-source-of-truth: a future schema-description tweak (the `feedback_tool_choice_collapse` lever) lands once, applies everywhere. `OVERVIEW_TOOL` + `OVERVIEW_SYSTEM` stay local to vs-compile-summaries because only compile uses them.
-
-### Inline `canonicalizeMulti` in vs-parse-sheet (not lifted to venueTypes.ts)
-
-`_shared/venueTypes.ts` already exports a `canonicalizeMultiType` helper, but it returns the trimmed input on no-match (so the frontend matrix can render an unknown-type fallback pill). Server-side enrichment wants null-on-no-match so the patch-guard skips the venue_type write rather than persisting non-canonical strings. Different semantics; kept inline in vs-parse-sheet matching the existing inline copies in vs-compile-summaries and vs-research-venues. Consolidating these three inline copies into a strict `canonicalizeMultiTypeStrict` shared helper is queued for a future cleanup; out of scope for 4.10.1.
-
-### HQ port-side improvement over VS Pro
-
-VS Pro's `parse-sheet` does not enrich. Sheet rows land with sheet-only data and the matrix renders them next to fully-populated research rows. The producer's 2026-05-12 first-run test surfaced the gap; port plan § 9 locked enrichment as part of 4.10.1. Per `feedback_port_fidelity`, this is a port-plan-locked backend improvement, not a fidelity regression -- the exception the memory rule explicitly carves out.
-
-### Frontend `enriching` state is optimistic, not signal-driven
-
-SheetUpload toggles its visible status from "parsing" to "enriching" via a 3-second timer (`PARSING_TO_ENRICHING_MS`), not a Realtime signal from vs-parse-sheet. The function is usually past parse + insert by that point and into the Claude phase, so the producer sees a smooth Parsing -> Enriching -> Done sequence. A real progress channel (per-venue "enriched N/M") would need `vs_candidate_venues` added to `supabase_realtime` publication + a frontend subscription; deferred to 4.10.3 polish if producers ask for it.
+vs-parse-sheet does parse + insert + AI enrichment in single call. SheetUpload awaits full response. Producer's mental model is "drop sheet → wait → ready." Chunks of 5 with Promise.all, sequential across chunks: ~15-20s for 15-venue sheet (well under Edge cap). Per-row failures tolerated; compile-summaries Pass 1 catches orphans at pitch time. `derived_attrs` filled later (compile-summaries Pass 1 condition extended to fire for `source='sheet' AND derived_attrs IS EMPTY`). `FILL_TOOL` + `FILL_SYSTEM` + `buildFillUserMsg` extracted to `_shared/venueFill.ts` as single source of truth (both parse-sheet and compile-summaries Pass 1 use the same shape).
 
 ## Phase 4.9-port (Scout Settings + full ErrorState + per-scout chrome)
 
-### Settings page is HQ-from-scratch
+### Settings page is HQ-from-scratch; `start_over_scout` is an RPC
 
-VS Pro has no Settings analog; it surfaces Start Over inside `PageHeader.tsx` as a per-page button. Port plan § 9 directs an HQ-from-scratch consolidation: rename + project link + Start Over all live in one Settings surface, reached via a persistent gear icon. Same arch decision as 4.3-port Brief (also HQ-from-scratch where VS Pro had a stub). Closest HQ analog used as a layout template: `RoleSettings.tsx` (Talent Scout) for the edit-form + sticky-save-bar + cancel-leave dialog + danger-zone pattern.
-
-### `start_over_scout` is an RPC, not inline supabase calls
-
-A single transactional reset replaces three sequential client-side writes (DELETE candidate venues + UPDATE scout + clear brief_data timestamps). Atomic + cleaner. Pattern matches HQ's other RPCs. `SECURITY INVOKER` so caller RLS applies; no separate grant work.
-
-### Start Over keeps `generated_decks`
-
-History is preserved across resets. If a producer Starts Over after generating a deck, the previous deck row stays in the jsonb array. Re-completion appends another row; the post-completion nav strip surfaces the latest one. Avoids destroying audit trail just because the producer is iterating.
-
-### Storage objects NOT cleaned up inline
-
-Photos in `vs_venue_photos` bucket and sheets in `sourcing_sheets` bucket orphan after the table DELETEs run. Future cron sweep handles cleanup. Same precedent as 4.7.1-port photo storage and TS `candidate_attachments`. Trade-off: simpler RPC + faster Start Over vs slightly delayed reclaim of bucket bytes.
-
-### ErrorState surfaces `research_error` in a `<details>` section (renamed to `pipeline_error` in Phase 4.10.3-port)
-
-Producer can expand the collapsed-by-default summary to see the raw `<CODE>: <message>` from `vs_scouts.pipeline_error` (column renamed from `research_error` in Phase 4.10.3-port). Copy + forward to team for triage. Not auto-expanded; subtle. Replaces the stub's "static message" with the actual error text. Single column carries research / compile / deck errors as of 4.7.2-port.
-
-### Per-scout chrome (gear + step-through nav) on every action page, NOT on loading screens
-
-The shared `<ScoutSettingsLink />` + `<ScoutStepThroughNav />` components land in `src/components/venue-scout/ScoutChrome.tsx` and import into 8 pages: Brief, SheetPrompt, SheetUpload, SourcingReport, Shortlist, Review, DeckPrep, ErrorState. Loading screens (Researching, Compiling, Generating) are excluded by design: producers wait on mid-flight AI work, they can't take Settings or step-through actions during those phases. Producer's read 2026-05-12.
-
-### Step-through nav strip conditional on `current_step === 'completed'`
-
-Always-mounted (the chrome lives on every action page) but only renders when the scout is finished. Pre-completion: silent. Post-completion: 5 step chips + 1 latest-deck chip. The deck chip is an `<a target="_blank">` to the Drive `edit_url`; absent if `generated_decks` is empty or the latest entry has no edit URL.
-
-### Pages without an existing `vs_scouts` query let the chrome self-query
-
-SheetPrompt + SheetUpload don't already read the scout. Rather than forcing them to wire up a meta-fetch they don't otherwise need, the `<ScoutStepThroughNav />` component supports an optional `scout` prop: pages that have the data pass it; pages that don't omit the prop and the component fires its own select(`current_step, generated_decks`). One small extra round-trip on those two pages, but they're navigation surfaces where producers rarely linger.
+VS Pro has no Settings analog. Port plan directs HQ-from-scratch: rename + project link + Start Over in one Settings surface via gear icon (same arch decision as 4.3-port Brief). `start_over_scout` is a single transactional RPC reset replacing three sequential client-side writes. SECURITY INVOKER. Start Over keeps `generated_decks` (preserves audit trail). Per-scout chrome (`ScoutSettingsLink` + `ScoutStepThroughNav`) imports into 8 pages; loading screens excluded by design. Storage objects orphan after Start Over DELETEs; future cron sweep handles cleanup.
 
 ## Phase 4.8.3-port (deck-output correctness hotfix)
 
 ### Slide-index mismatch fix
 
-VS Pro's `generate-deck` was written against a template with 5 front-matter slides (cover, project info, event overview, section title, venue map at slide 5), where slide 6 = per-venue detail and slide 7 = per-venue floor plan. Phase 4.8.2-port lifted the function verbatim per port-fidelity and shipped feature-complete without exercising the deck output against Mirror's actual template until first real producer test 2026-05-12. Mirror's production template (verified via .pptx parse) has 6 front-matter slides with the venue map at slide 6, per-venue detail at slide 7, per-venue floor plan at slide 8. The off-by-one meant the function duplicated slide 6 (venue map) thinking it was per-venue detail, wrote per-venue tokens to those duplicates (silent no-ops because slide 6 doesn't have the body tokens), wrote photo replacements against alt text that doesn't exist on the legend slide, and never duplicated slide 8 at all. Hotfix shifts every slide-index reference by one: `legendSlideId = slides[5]` (venue map), `templateSlide7 = slides[6]` (detail), `templateSlide8 = slides[7]` (floor plan). Legend repText calls scoped to `legendSlideId` while we're touching them, both because that's the correct shape and so the new variable doesn't sit unused.
+VS Pro's generate-deck was written against a template with 5 front-matter slides. 4.8.2-port lifted verbatim per port-fidelity. Mirror's production template has 6 front-matter slides with venue map at slide 6, detail at 7, floor plan at 8. Off-by-one duplicated slide 6 thinking it was detail, wrote tokens to duplicates (silent no-ops because slide 6 doesn't have body tokens), wrote photo replacements against alt text that doesn't exist on legend slide, never duplicated slide 8. Hotfix shifts every slide-index reference by one.
 
 ### `{{venue_name}}` uppercase treatment
 
-Producer feedback at first-run: venue names in deck headers feel weak in mixed case; ALL CAPS reads cleaner against the Mirror brand visual hierarchy. Single `(v.name ?? "").toUpperCase()` call before the `repText` write. Only on `{{venue_name}}`; other tokens (`{{venue_address}}`, `{{venue_neighborhood}}`, `{{venue_overview}}`, etc.) keep their original casing. Applies to both the per-venue detail slide and the per-venue floor plan slide (both share the same `{{venue_name}}` header).
+Producer feedback: venue names in deck headers feel weak in mixed case; ALL CAPS reads cleaner against Mirror brand. Single `.toUpperCase()` before repText. Only on `{{venue_name}}`.
 
 ### Loading-page copy refresh
 
-"Compiling Pitch Deck" → "Compiling Deck Preview" (Compiling.tsx); "Generating Pitch Deck" → "Generating Venue Deck" (Generating.tsx). Closer match to what the producer is actually waiting for. The output is a preview deck for internal venue review, not a fully designed pitch deck handed to a client. Description paragraphs underneath unchanged.
+"Compiling Pitch Deck" → "Compiling Deck Preview"; "Generating Pitch Deck" → "Generating Venue Deck". Output is preview deck for internal venue review, not fully designed pitch deck handed to client.
 
 ## Phase 4.8.2-port (Generating + vs-generate-deck)
 
-### Phase 4 port feature-complete after 4.8.2
-
-The 4.8 split shipped 4.8.1 (Deck Prep + `googleServiceAccount` infra) and 4.8.2 (Generating + `vs-generate-deck` + four new ErrorStateStub keys). End-to-end producer flow now works: Brief → Sheet Prompt → Sheet Upload / Researching → Sourcing Report → Shortlist → Review → Compiling → Deck Prep → Generating → `/brief` landing for completed scouts. Remaining sub-phases (4.9-port Settings + Start Over + full ErrorState, 4.10-port polish + side-by-side reconciliation) are non-blocking for the core workflow.
-
 ### `vs-generate-deck` uses `getGoogleAccessToken` without impersonation
 
-VS Pro's inline ~60 lines of JWT-mint + token-exchange code deleted; the function imports `getGoogleAccessToken(["https://www.googleapis.com/auth/presentations", "https://www.googleapis.com/auth/drive"])` from `_shared/googleServiceAccount.ts` (cherry-picked in 4.8.1-port). No `impersonateUser` parameter because the service account itself owns the Drive + Slides calls and is a member of the Mirror Shared Drive that holds the template + output folder. Matches the `googleServiceAccount.ts` header-comment design intent. Cache-keyed by `${impersonateUser ?? ""}|${sortedScopes}` means the Gmail token and the Drive+Slides token coexist in the same module-level cache without collisions.
+VS Pro's inline ~60 lines of JWT-mint deleted; imports `getGoogleAccessToken([presentations, drive])` from `_shared/googleServiceAccount.ts`. No impersonateUser because service account itself owns Drive + Slides calls and is a member of the Mirror Shared Drive holding template + output folder. Cache-keyed by `${impersonateUser ?? ""}|${sortedScopes}` so Gmail token and Drive+Slides token coexist without collisions.
 
-### Error code surfacing pattern: `research_error` formatted as `<CODE>: <message>`
+### Error code surfacing pattern: `pipeline_error` as `<CODE>: <message>`
 
-VS Pro returned `{ error, code }` synchronously to a sync caller. The port uses `EdgeRuntime.waitUntil` so the response is gone before failure surfaces; the only channel back to the page is `vs_scouts.research_error`. Encoding shape: `${ErrCode}: ${message}` where `ErrCode ∈ { AUTH_FAILED, TEMPLATE_COPY_FAILED, SLIDES_API_FAILED, NO_VENUES_INCLUDED, UNKNOWN }`. The Generating page parses with `^([A-Z_]+):` regex and routes to `/deck/error/<code>`. Fall-through is `UNKNOWN`. Simple, no schema change, no separate `research_error_code` column. Alternative considered: a typed jsonb column. Rejected as over-engineering for five error codes; the regex parse is one line and the column is already in place.
+VS Pro returned `{error, code}` synchronously. Port uses `EdgeRuntime.waitUntil` so response is gone before failure surfaces; only channel back is `vs_scouts.pipeline_error`. Encoding: `${ErrCode}: ${message}` where ErrCode ∈ {AUTH_FAILED, TEMPLATE_COPY_FAILED, SLIDES_API_FAILED, NO_VENUES_INCLUDED, UNKNOWN}. Generating page parses with regex and routes to `/deck/error/<code>`. Simple, no schema change. Alternative typed jsonb column rejected as over-engineering.
 
-### Failure path leaves `current_step='deck_prep'` (matches 4.7.2 pattern)
+### Failure path leaves `current_step='deck_prep'`
 
-On any failure, `vs-generate-deck` writes `status='failed'` + `research_error=<CODE>: <message>` but does NOT touch `current_step`. The producer can re-trigger Generate from DeckPrep without manually walking the scout back through the funnel. Same disposition as 4.7.2-port leaving at `compiling` on failure: the loading/error page is a transient state, not a step the producer dwells in.
+On any failure, function writes `status='failed' + pipeline_error=...` but does NOT touch `current_step`. Producer can re-trigger Generate without manually walking back through funnel. Same disposition as 4.7.2 leaving at `compiling` on failure.
 
-### `vs_scouts.status='complete'` is the final state
+### Deck name uses hyphen, not em dash
 
-4.8.2-port is the first sub-phase that writes `status='complete'`. The text column already accepts arbitrary values; the documented enum (`draft / in_progress / complete / failed`) gains its third reachable value here. Sticks until Start Over (4.9-port) resets the scout to `draft`. Scout Index status pill (4.2-port) reads from this column and will need a `complete` pill style alongside the existing `draft` / `in_progress` / `failed`.
-
-### `brief_data.deck_generation_started_at` canonical jsonb idempotency key
-
-Joins the canonical `brief_data` jsonb key list alongside `expected_guest_count`, `notes`, `uploaded_files`, `research_started_at`, `compile_started_at`. 90-second grace window matches 4.5 / 4.7.2. Cleared on next successful run (the success write sets `research_error: null` but does NOT delete this key; left in place so a future audit can reconstruct kickoff timing). Schema-flex jsonb means no migration.
-
-### Deck name hyphen, not em dash
-
-VS Pro deck name template used a literal em dash (U+2014) between `event_name` and the static suffix: `${event_name} [em dash] Venue Pitch Deck v${version}`. Voice rule (design-system § 12 rule 1) bans em dashes. Port template: `${event_name} - Venue Pitch Deck v${version}` (hyphen). The deck file itself, named at copy time, carries the hyphen.
-
-### `failWithCode` writes are idempotent on the row
-
-The outer `try { Promise.race(generateWork, timeout) } catch` calls `failWithCode("UNKNOWN", ...)` even if `generateWork` already wrote a more specific code before throwing into the outer scope. The double-write is fine: each call replaces `status` and `research_error` atomically, the latest write wins, and `last_touched_at` advances. No state is lost. Simplifies the error path; no need to thread a "did-we-already-fail" flag.
+VS Pro template used literal em dash. Voice rule bans em dashes. Port: `${event_name} - Venue Pitch Deck v${version}`. `failWithCode("UNKNOWN")` writes are idempotent: outer catch may double-write but each call replaces status + error atomically, latest wins.
 
 ## Phase 4.8.1-port (Deck Prep + googleServiceAccount infra)
 
-### Phase 4.8-port split into two passes (4.8.1 frontend + infra, 4.8.2 generate flow)
+### `_shared/googleServiceAccount.ts` cherry-picked from failed-attempt
 
-Combined 4.8-port scope was ~1,000 lines of source across DeckPrep + Generating + `vs-generate-deck` (the largest single function in the port). Splitting isolates the Google Slides population logic for its own review cycle, lets the `googleServiceAccount` cherry-pick land independently of slide-template complexity, and lets 4.8.2 wait on secrets verification (`GOOGLE_TEMPLATE_FILE_ID`, `GOOGLE_OUTPUT_FOLDER_ID`) without blocking 4.8.1. 4.8.1-port ships DeckPrep + the shared service-account helper + the gmailServiceAccount delegation refactor. 4.8.2-port ships Generating + `vs-generate-deck` + the four new ErrorStateStub keys.
-
-### `_shared/googleServiceAccount.ts` cherry-picked from failed-attempt main `be30168`
-
-The failed-attempt Phase 4.6 already built the generic Google access-token helper with the exact shape the port needs: module-level cache keyed by `${impersonateUser ?? ""}|${sortedScopes}`, optional `impersonateUser` for domain-wide-delegation flows, supports both Gmail (impersonates `jobs@mirrornyc.com`) and Drive + Slides (no impersonation; service account owns the API call). Rewriting from scratch would produce the same file. Cherry-picked verbatim with header comment refreshed to reference Phase 4.8.1-port and em-dashes swapped to comma per voice rule. No behavioral changes.
-
-### `gmailServiceAccount.ts` refactored to delegate
-
-Pre-4.8.1 file was ~130 lines with its own copy of `loadServiceAccountKey` / `importRsaPrivateKey` / `signJwt` / `base64Url*` helpers and a private token cache. Post-refactor: ~30 lines. Public API (`getGmailAccessToken(): Promise<string>`) preserved exactly; all four callers (`ts-pull-candidates`, `ts-evaluate-candidate`, `_shared/sendEmail.ts`, `_shared/packetRender.ts`) keep their existing import. Internal implementation delegates to `getGoogleAccessToken(SCOPES, { impersonateUser: 'jobs@mirrornyc.com' })`. Smoke-tested against TS pull/evaluate to confirm no regression before squash.
-
-### DeckPrep `current_step` writes deferred to server-side (vs-generate-deck, 4.8.2-port)
-
-VS Pro's DeckPrep has a stub `current_step='deck_generated'` write inside an unreachable `try` block; the live flow already deferred to server-side. Port matches: 4.8.1-port frontend only writes `deck_order` + `include_in_deck` flags. `current_step='completed'` is written by `vs-generate-deck` on success (lands in 4.8.2-port), parallel to 4.5-port and 4.7.2-port EdgeRuntime.waitUntil patterns where server-side state transitions are atomic with the actual work.
+Failed-attempt Phase 4.6 already built the generic helper with exact shape: module-level cache keyed by `${impersonateUser ?? ""}|${sortedScopes}`, optional impersonateUser for delegation. Cherry-picked verbatim. `gmailServiceAccount.ts` refactored from ~130 lines (own JWT helpers) to ~30 (delegates to new helper). Public API preserved.
 
 ## Phase 4.7.2-port (Compiling + vs-compile-summaries)
 
-### Reuse `vs_scouts.research_error` column for compile errors (renamed to `pipeline_error` in Phase 4.10.3-port)
+### Reuse `vs_scouts.pipeline_error` column
 
-Adding a `compile_error` column would split the AI-pipeline failure channel into two physically-separate state machines for what is conceptually a single producer-facing concern ("something in the AI pipeline went wrong"). Keeping one channel means both Researching and Compiling pages subscribe to the same Realtime payload shape, ErrorStateStub keys (`research-timeout`, `compile-failed`) co-locate, and Scout Index can render a single "had a problem" indicator without joining two columns. The column rename to `pipeline_error` (more accurately describing the dual usage) is deferred to cutover doc sweep or 4.9-port polish; renaming is cheap, splitting later is not.
+Adding a `compile_error` column would split AI-pipeline failure into two physically-separate state machines for a single producer-facing concern. One channel means Researching + Compiling subscribe to same payload shape, ErrorStateStub keys co-locate, Scout Index renders single "had a problem" indicator without joining two columns. (Rename from `research_error` deferred to 4.10.3.)
 
-### Compile timeout raised to 180 seconds (vs 4.5-port research's 120)
+### Compile timeout raised to 180 seconds
 
-Compile arithmetic is per-venue, not per-call. 5 pitched venues with all manual rows triggers up to 10 sequential Claude calls (Pass 1 fill + Pass 2 overview each). At ~15 seconds per call, that's 150s of work; ceiling at 180s gives a 30s buffer. Research is a single Claude call regardless of venue count (the tool returns a batched array), so its 120s ceiling stays appropriate.
+Compile arithmetic is per-venue. 5 pitched manual venues triggers up to 10 sequential Claude calls (Pass 1 fill + Pass 2 overview). At ~15s each = 150s of work; 180s gives 30s buffer. Research is a single call regardless of venue count, so its 120s ceiling stays appropriate.
 
-### Two-pass compile-summaries through `callClaude` (first multi-tool-choice consumer)
+### Notes flow + payload simplified
 
-VS Pro's compile-summaries was the first function in the source repo with two distinct `tool_choice`-forced tools in a single function (`fill_venue` for Pass 1, `write_overview` for Pass 2). HQ's port is the first port-side function with that shape; the `callClaude` wrapper already supports per-call `tools` + `tool_choice` so no wrapper changes needed. Pattern documented inline in `vs-compile-summaries/index.ts` for the next multi-tool consumer.
-
-### Notes flow collapsed: inline `vs_candidate_venues.notes` (vs VS Pro's separate `venue_notes` table query)
-
-VS Pro reads `from("venue_notes").select(...)` separately to build a `noteMap`. 4.3-port already inlined producer notes into `vs_candidate_venues.notes`; vs-compile-summaries's venues query selects `notes` directly. Both Pass 1 and Pass 2 user messages substitute `Producer notes: ${v.notes ?? "(none)"}` from the inline field. Saves one round-trip per compile call and avoids the extra `notes_by_venue_id` mapping step.
-
-### `vs-compile-summaries` payload simplified from `{ project_id, venue_ids }` to `{ scout_id }`
-
-VS Pro requires the page to fetch pitched venue IDs first and pass them in. Port flips: the function queries pitched venues itself via `eq("scout_id", scout_id).eq("pitched", true)`. Smaller payload, matches the rest of the port-side functions (`vs-parse-brief`, `vs-research-venues` both take `{ scout_id }` only), and centralizes "which venues to compile" in one place (server-side, atomic with the load) instead of split between page and function. Pitched-venues query is fast (indexed on `(scout_id, pitched)` via the implicit FK + boolean column).
-
-### Testing `claude-sonnet-4-6` on compile-summaries (independent test from 4.5-port research-venues)
-
-Same posture as research-venues: take the wrapper default and watch the diagnostic log for the collapse signature. Different prompts may behave differently; research's `submit_research` with `web_search` had a known May 11 collapse pattern (out<200 + server_tool_uses=0); compile's `fill_venue` and `write_overview` are pure text-tool flows with no server tools, so the signal narrows to `out<200`. Pivot procedure to `claude-sonnet-4-5` is inline in the function. The memory note `project_sourcing_model_pin` covers the failed-attempt `vs-start-sourcing` and does NOT carry over to port-side functions.
+VS Pro reads `venue_notes` separately + requires `{project_id, venue_ids}` payload. 4.3-port already inlined notes into `vs_candidate_venues.notes`; vs-compile-summaries selects directly. Function queries pitched venues itself via `.eq("scout_id", scout_id).eq("pitched", true)`. Smaller payload, matches rest of port-side functions, centralizes "which to compile" server-side.
 
 ## Phase 4.7.1-port (Review + PhotoUploadModal + Shortlist photo unstub)
 
-### Phase 4.7 split into two passes (4.7.1 frontend, 4.7.2 backend)
+### `vs_venue_photos` bucket private + signed URLs
 
-The combined 4.7-port scope (Review + PhotoUploadModal + storage bucket + Shortlist unstub + Compiling page + `vs-compile-summaries` edge function + `compile-failed` error key) was ~2,000+ lines across 4 artifacts. Splitting into 4.7.1 (frontend + storage) and 4.7.2 (compile flow) gives each pass a 4.6-port-sized scope, isolated code-reviewer cycles, smaller blast radius if the storage bucket migration needs revision, and keeps PhotoUploadModal complexity ("most complex single component in the port" per port plan) in its own pass. After 4.7.1, Review's Confirm + Compile Deck button writes `current_step='compiling'` and navigates to `/sourcing/compiling`, which 404s until 4.7.2-port. Same intentional 404 window pattern as 4.2→4.3, 4.3→4.4, 4.4→4.5, 4.5→4.6, 4.6→4.7.
+VS Pro's public `venue-photos` would expose deck photos to anyone with URL. HQ's bucket is private with RLS gated on `is_producer_or_admin()`. Display via `createSignedUrl(path, 3600)`. Storage path format includes a timestamp segment so re-uploads to a slot whose old object was just deleted don't serve a stale CDN image.
 
-### `vs_venue_photos` bucket private + signed URLs (renamed from VS Pro `venue-photos` public)
+### HQ canonical `Field` at `src/components/ui/Field.tsx`
 
-VS Pro's public `venue-photos` bucket would expose deck photos to anyone with the URL. HQ's `vs_venue_photos` bucket is private (`storage.buckets.public = false`) with storage RLS gated on `is_producer_or_admin()`, parallel to `sourcing_sheets` + `briefs`. Display reads go through `supabase.storage.from("vs_venue_photos").createSignedUrl(path, 3600)` (1-hour TTL); URLs regenerate on every Review mount and every PhotoUploadModal open. Privacy + bucket rename is the locked port-plan § 2 decision; HQ Core's existing public `venue_photos` bucket (used by the master `venues` table) stays for HQ Core reads downstream.
+VS Pro's inline Field (10px uppercase muted label) lifted to HQ canonical. Distinct from heavier page-form Field shape used in Brief, NewScout, etc. (13px font-mono coral). Those pages keep inline definitions; consolidating into one with `variant` prop is a future job.
 
-### Storage path format `${scoutId}/${candidateVenueId}/slot-${N}-${timestamp}.${ext}`
+### PhotoSlot renders signed URL when `hasPhoto`
 
-Lifted from VS Pro verbatim (hyphen + timestamp). The 4.1-port `docs/schema.md` spec read `slot_${N}.${ext}` (underscore, no timestamp) as a placeholder; this sub-phase updates the doc to the landed format. The timestamp cache-busts when a producer re-uploads to a slot whose old storage object was just deleted in the same save (otherwise the CDN can serve the stale image for that path's lifetime). Scout-id and candidate-venue-id segments rename from VS Pro's `${projectId}/${venueId}` per the HQ table rename.
-
-### HQ canonical `Field` created at `src/components/ui/Field.tsx`
-
-VS Pro's Review.tsx defined a small inline `Field` (10px uppercase muted-foreground label above child). The spec locks the inline definition gets dropped in favor of an HQ canonical primitive. Created `src/components/ui/Field.tsx` with that compact shape. Deliberately distinct from the heavier page-form Field shape used inline in `Brief`, `NewScout`, `NewRoleDetails`, `RoleSettings` (13px font-mono `text-primary` Label primitive). Those pages keep their inline definitions; consolidating both into one canonical isn't 4.7.1-port's job and the styles diverge enough that a single component would need a `variant` prop.
-
-### PhotoSlot renders actual signed URL when `hasPhoto`
-
-VS Pro's Review.tsx PhotoSlot at line 272 hardcoded the placeholder for both states (`backgroundImage: hasPhoto ? "url(/mirror-placeholder.jpg)" : "url(/mirror-placeholder.jpg)"`); appears to be a stub awaiting real signed-URL wiring. Port fixes it: when `hasPhoto && photoUrl`, render `url(${photoUrl})`. Producers expect to see their photos at a glance on Review; a placeholder-for-everything makes the page useless for the "confirm photos" task. `photoUrls` state is populated on mount + refreshed via `refreshVenuePhotos(activeVenueId)` after PhotoUploadModal save.
-
-### Shortlist photo column unstub: real query + real modal open
-
-4.6-port stubbed `photoCounts` to always 0 and the click handler to a toast. 4.7.1-port replaces the stub query with a real `select("candidate_venue_id").in(...)` against `vs_venue_photos`, replaces the toast with `setActiveVenue(v) + setPhotosOpen(true)`, and mounts `<PhotoUploadModal />` at the bottom alongside `<NotesModal />`. The button state machine (Locked / + Upload / ✓ Complete) stays verbatim from 4.6-port.
+VS Pro's Review.tsx hardcoded placeholder for both states (apparent stub awaiting wiring). Port fixes: when `hasPhoto && photoUrl`, render `url(${photoUrl})`.
 
 ## Phase 4.6-port (Sourcing Report + Shortlist + matrix primitives)
 
-### Frontend `venueTypes.ts` mirror landed; lock-step with `_shared/venueTypes.ts`
+### Frontend `venueTypes.ts` mirror; lock-step with `_shared/venueTypes.ts`
 
-Port plan § 6 primed the server-side `_shared/venueTypes.ts` in Phase 4.1-port ahead of consumers (`vs-parse-sheet` at 4.4-port and `vs-research-venues` at 4.5-port). 4.6-port lands the frontend mirror at `src/lib/venue-scout/venueTypes.ts` for the matrix. Same `CANONICAL_TYPES`, `TYPE_STYLES`, `canonicalizeType`, `canonicalizeMultiType`, `parseTypes`, `sanitizeWebsiteUrl` exports; any change touches both files in the same commit. Header comments on both files flag the rule. Drift produces mismatched venue type pills between the matrix UI and the AI / sheet source data.
+Same exports; any change touches both files in same commit. Header comments flag the rule. Drift produces mismatched type pills between matrix UI and AI/sheet source data.
 
-### Notes table dropped; notes inline on `vs_candidate_venues.notes`
+### Notes inline on `vs_candidate_venues.notes`
 
-VS Pro carries a separate `venue_notes` table with a row per venue and a separate query at mount. The port collapses it into a single nullable `notes text` column on `vs_candidate_venues` (already on schema as of 4.1-port). Saves a round-trip on the matrix page mount, simplifies the NotesModal save path (single UPDATE instead of an UPSERT against a child table), and matches the inline-on-parent pattern HQ uses for Talent Scout `internal_notes`.
+VS Pro carries separate `venue_notes` table with row per venue. Port collapses to single nullable `notes text` column. Saves a round-trip, simplifies NotesModal save (single UPDATE), matches inline-on-parent pattern HQ uses for TS `internal_notes`.
 
-### Photo upload column stubbed for visual parity
+### Matrix inside AppShell's `max-w-7xl` with horizontal scroll
 
-VS Pro's `UploadPhotosButton` renders three states (Locked / + Upload / ✓ Complete) gated on `pitched` and a count from `venue_photos`. 4.6-port lifts the button verbatim but always passes `count=0` and routes the click handler to a toast pointing to Phase 4.7-port. Producer sees the full column + state machine so the Shortlist page reads complete; the upload modal + `vs_venue_photos` reads land in 4.7-port. Alternative was to hide the column entirely until 4.7, which would have masked the visual layout and made the column-width audit harder.
+VS Pro's matrix wraps in `max-w-[1860px]`. HQ's AppShell scopes every authenticated route to `max-w-7xl` (1280px), so matrix scrolls horizontally on most viewports rather than breaking out. Less optimal on wide monitors but stays inside AppShell idiom and avoids negative-margin escapes.
 
-### Matrix renders inside AppShell's `max-w-7xl` container with horizontal scroll
+### Type-pill palette lifted verbatim from VS Pro
 
-VS Pro's matrix wrappers in `max-w-[1860px]` page-level container; the table itself is `min-w-[1740px]` and scrolls horizontally inside its own `overflow-x-auto` wrapper. HQ's AppShell scopes every authenticated route to `max-w-7xl` (1280px), so the matrix scrolls horizontally on most viewports rather than breaking out of the AppShell container. Tradeoff acknowledged: less optimal on wide monitors than VS Pro's layout, but stays inside the AppShell idiom (same as every other HQ surface) and avoids negative-margin escapes. Revisit at the 4.10-port polish pass if it actually bites.
+Per-type rgba palette is intentional desaturated brand-context color set with one tone per type. HQ design tokens don't define equivalent type-specific accents; substituting would lose at-a-glance signal. Lift literal rgba into `TYPE_STYLES`. Matrix column-header strip uses `bg-surface` (opaque) not `bg-secondary/30`: sticky col1+col2 headers, so 30% alpha lets horizontally-scrolled content bleed THROUGH the sticky cells.
 
-### Inline header pattern (no `PageHeader` component lift)
+### `Shortlist.debounceSave` widens patch type, splits `key_features` eagerly
 
-VS Pro uses a `PageHeader` component with `crumbs`, `label`, `title`, `description`, `actions` props. HQ port has inlined the equivalent pattern on every Venue Scout surface (Phase 4.2 through 4.5). 4.6-port stays consistent: `crumb` link + eyebrow + `h-page` heading + right-aligned counter + optional description, all inline. Extraction to a shared `PageHeader` component is a candidate for a doc-only cleanup commit once enough surfaces have shipped that the pattern is stable.
-
-### Type-pill palette lifted verbatim from VS Pro (no HQ token substitution)
-
-VS Pro's per-type `bg-[rgba(181,133,136,0.18)] text-[#D89BA0]`-style rgba palette is an intentional desaturated brand-context color set with one tone per venue type. HQ design tokens don't define equivalent type-specific accents and substituting `text-foreground / muted-foreground` would lose the at-a-glance type signal. Lift the literal rgba values into `TYPE_STYLES` and keep them out of the HQ token chain. Same rationale applies to the rank-tier hex colors (`#4ade80`, `#f59e0b`, `#ef4444`, `#555`): VS Pro picked them deliberately and they're the same colors HQ uses inline elsewhere (`tier-badge--3` etc.), so leave them as literals in `RANK_TEXT` / `RANK_BAR`.
-
-### Matrix column-header strip uses `bg-surface` (opaque), not `bg-secondary/30`
-
-4.2-port (ScoutIndex) and 4.4-port (SheetUpload) both use `bg-secondary/30` for their list-view header strips because no sticky columns are in play and the translucent backdrop reads cleanly over `bg-background`. The matrix has sticky col1 + col2 headers, so the 30% alpha lets horizontally-scrolled column content bleed THROUGH the sticky cells, producing a visual smear. Surfaced by code-reviewer cold pass on `272a077`. Swapped to opaque `bg-surface` (`0 0% 4%`), which also matches VS Pro `--bg-elevated` (`0 0% 4%`) byte-for-byte. Header strip now reads slightly darker than the matrix body (`bg-surface-alt` = `0 0% 8%`), preserving VS Pro's intended elevation contrast.
-
-### `Shortlist.debounceSave` widens its patch type and splits `key_features` eagerly
-
-The manual-row `<input>` emits a raw delimited string ("warehouse, gallery, …") on each keystroke. The original implementation cast that string into the `key_features: string[] | null` slot via `as unknown as string[]`, leaving a string in the in-memory Venue. Surfaced by code-reviewer as a type-lie that would crash any consumer reading `v.key_features` as an array (`.join` / `.map` on string vs. array). Fix: `debounceSave` now accepts a `VenuePatch` union (`key_features?: string[] | string | null`) and normalizes to an array BEFORE writing state, so the Venue type stays honest and the eventual DB UPDATE writes the array directly (the previous deferred split inside the setTimeout became dead code).
-
-### Alignment pills use Tailwind `green-400` / `amber-400` instead of `--success` / `--warning` tokens
-
-VS Pro reads `bg-[hsl(var(--success))]/15` and `bg-[hsl(var(--warning))]/13` on the Alignment column pills. HQ defines `--success` (matches: 4ade80) but uses `--warn`, not `--warning`. Rather than introduce a `--warning` alias or two-track the pill backgrounds across HQ files, swap both pills to fixed Tailwind palette colors that resolve to the same hex (green-400 = #4ade80, amber-400 = #f59e0b). One-line substitution; no token-naming follow-up needed.
-
-### Shortlist sync trigger simplified to one condition
-
-The failed-attempt trigger fired on `(shortlisted false→true) OR (added_manually=true AND research_status='complete')`. Port schema doesn't carry `added_manually` (collapsed into `source='manual'`) or `research_status`. The 4.6-port re-introduction fires only on `shortlisted false→true`. Manual venues added on Shortlist enter with `shortlisted=false, source='manual'`; the page's `v.shortlisted || v.source==='manual'` filter makes them visible regardless. If a producer pitches a manual venue but never toggles shortlisted, the sync trigger never fires and no HQ `venues` row is created; known gap, acceptable for 4.6-port. A future migration could extend the trigger to also fire on `pitched false→true` or on `source='manual'` INSERT, but that's out of scope here.
-
-### Manual venue add row inserts `shortlisted: false`
-
-VS Pro's behavior. The page filter `v.shortlisted || v.source==='manual'` makes manual rows visible on Shortlist regardless, so auto-shortlisting them wouldn't change visibility; it would just fire the sync trigger on insert before the producer has confirmed details. Keeping `shortlisted=false` matches VS Pro and defers the sync to an explicit producer action (toggling shortlist back on `SourcingReport`, or extending the trigger later per the prior decision).
+Manual-row input emits raw delimited string. Original cast string into `key_features: string[]` via `as unknown as`, leaving a string in in-memory Venue. Type-lie that would crash consumers reading `.join`/`.map`. Fix: `debounceSave` accepts `VenuePatch` union and normalizes to array BEFORE writing state.
 
 ## Phase 4.5-port (Researching + vs-research-venues)
 
-### `EdgeRuntime.waitUntil` + Realtime replaces VS Pro's sync-await
+### `EdgeRuntime.waitUntil` + Realtime replaces sync-await
 
-Port plan § 8.3 calls this out. VS Pro's Researching page awaits a synchronous fetch on `research-venues` for 30 to 90 seconds before navigating. HQ port flips the handshake: `vs-research-venues` returns 200 immediately, the AI work runs inside `EdgeRuntime.waitUntil`, and the Researching page Realtime-subscribes to `vs_scouts` (`REPLICA IDENTITY FULL` was set on the table during 4.1-port) plus 3-second polling fallback. Faster perceived UX, graceful navigation-away (kicking off then closing the tab still completes the research). Same pattern as `ts-final-review` + `FinalReviewLoading`.
+Port plan § 8.3. VS Pro awaits synchronous fetch for 30-90s. Port flips: function returns 200 immediately, work runs inside `EdgeRuntime.waitUntil`, page Realtime-subscribes (REPLICA IDENTITY FULL set in 4.1-port) + 3-second polling fallback. Faster perceived UX, graceful navigation-away.
 
-### `vs_scouts.research_error text` column added for the EdgeRuntime.waitUntil failure channel
+### `pipeline_error` column for failure channel
 
-Because the page no longer reads failure off the HTTP response, the function needs a persistent channel to signal "research failed". `status='failed'` alone doesn't carry a message; `research_error text` (nullable) does. Function clears it at kickoff so a retry from a prior failure starts clean, then writes the message on any error path. The Researching page navigates to `/sourcing/error/research-timeout` (the existing 4.4-port stub keyspace) on non-null `research_error` + `status='failed'`.
+Because page no longer reads failure off HTTP response, function needs persistent channel. `status='failed'` doesn't carry a message; `pipeline_error text` (nullable) does. Function clears at kickoff so retry starts clean, writes on any error path.
 
-### Testing `claude-sonnet-4-6` (wrapper default) on `vs-research-venues`
+### URL quality lever stays off SYSTEM prompt
 
-Existing memory note `project_sourcing_model_pin` pins the failed-attempt `vs-start-sourcing` function to `claude-sonnet-4-5` after the 2026-05-11 `web_search` degradation. The port-side `vs-research-venues` is a NEW function name (does not slot-replace anything) and we're starting fresh on `claude-sonnet-4-6`. Diagnostic log line on every call captures `input_tokens`, `output_tokens`, and `server_tool_use` block count: the collapse signature is `out<200 AND server_tool_uses=0`. If the first real round in production reproduces that, the pivot procedure is documented in `supabase/functions/vs-research-venues/index.ts` (single-line `model: "claude-sonnet-4-5"` override on the `callClaude` call) and the memory note gets updated to add `vs-research-venues` alongside `vs-start-sourcing`.
+Per `feedback_tool_choice_collapse`: per-item gating in SYSTEM (or minItems under forced tool_choice) collapses output. SYSTEM lifted verbatim. URL quality enforced by two post-emission gates: (a) website_url schema description nudge (positive-only with examples), (b) `sanitizeWebsiteUrl` rejecting search pages + listing-DB homepages while letting deep links through.
 
-### URL quality lever stays off the SYSTEM prompt
+### Idempotency via `brief_data.research_started_at` 90-second grace
 
-Per memory rule `feedback_tool_choice_collapse`: per-item gating in SYSTEM prompts (or `minItems` constraints on the array under forced `tool_choice`) collapses output. The SYSTEM string is lifted verbatim from VS Pro: the type-constraint paragraph and the listing-DB callout are unchanged. URL quality is enforced by two deterministic post-emission gates: (a) the `website_url` schema description nudge (positive-only with concrete examples; no forbidden-URL list), and (b) `sanitizeWebsiteUrl` from `_shared/venueTypes.ts` rejecting search pages + listing-DB homepages while letting deep links through. Same two-gate chain the failed-attempt URL-quality hot patch settled on.
+`EdgeRuntime.waitUntil` runs after response, so page hard-refresh while research is in flight fires kickoff again. Without guard, doubles spend + INSERTs duplicates. Function checks: (a) `current_step !== 'researching'` skips, (b) `research_started_at` less than 90 seconds old skips. Otherwise stamps and proceeds.
 
-### Idempotency via `brief_data.research_started_at` 90-second grace window
+### Empty sanitized result writes failure
 
-`EdgeRuntime.waitUntil` runs after the response, which means a page hard-refresh while research is in flight will fire the kickoff invoke again. Without a guard, that doubles the Anthropic spend and INSERTs duplicates. Function checks two conditions before doing work: (a) `current_step !== 'researching'` skips (page already moved on), and (b) `brief_data.research_started_at` less than 90 seconds old skips (kickoff still in flight). Otherwise it stamps `research_started_at = now()` and proceeds. 90 seconds is slightly longer than typical Anthropic response time so a normal completion clears the window naturally.
-
-### 120-second hard ceiling on Claude work
-
-`Promise.race(callClaude, timeout)` inside `work`. If the call hangs (network stall, server-side issue), writes `status='failed' + research_error='timed out after 120s'` instead of leaving the page spinning forever. Defense-in-depth; the AI typically returns in 60 to 90 seconds.
-
-### Empty sanitized result writes failure (does not silently advance)
-
-After `canonicalizeType` + `sanitizeWebsiteUrl` + nameless-row filter, if `cleanVenues.length === 0` we treat it as a research failure (`research_error='AI returned no usable venues. Try again.'`) rather than INSERTing zero rows and flipping to `sourcing_report`. Surfaces the issue to the producer; silent zero-result would leave them on a Sourcing Report with no candidates and no obvious "what now".
-
-### `vs_scouts.status='in_progress'` on research success
-
-VS Pro's `projects.status` semantics were undefined; HQ port locks them down. `draft` (initial) goes to `in_progress` (research complete, in the AI funnel through deck generation), then to `complete` (4.8-port deck generated) or `failed` (any AI pipeline error). The ScoutIndex pill (4.2-port) reads from this column; writing `in_progress` on research success lets the pill distinguish "started" from "researched" at a glance.
-
-### `vs-research-venues` is a NEW function name (does NOT slot-replace `vs-start-sourcing`)
-
-VS Pro's research function was named `research-venues`; the failed-attempt HQ function is named `vs-start-sourcing`. The port plan's renames put the new function at `vs-research-venues`, which is unused. After 4.5-port deploys, `vs-start-sourcing` stays on the cutover deletion list (different from how 4.3-port / 4.4-port slot-replaced existing functions).
+After canonicalizeType + sanitizeWebsiteUrl + nameless-row filter, if `cleanVenues.length === 0` treat as research failure rather than INSERTing zero rows and flipping to `sourcing_report`. Surfaces issue to producer; silent zero-result would leave them on Sourcing Report with no candidates and no obvious "what now".
 
 ## Phase 4.4-port (Sheet Prompt + Sheet Upload + vs-parse-sheet)
 
-### Bucket name `sourcing_sheets` (underscore), not VS Pro's `sourcing-sheets` (hyphen)
+### `type` → `venue_type` rename + naive PDF parse
 
-VS Pro uses `sourcing-sheets`. HQ uses `sourcing_sheets` per the port plan § 2 storage table and the existing initial-schema bucket name. The port adapts (frontend upload target, edge function download source) but the bucket itself is unchanged.
-
-### `type` column renamed to `venue_type` in `vs_candidate_venues`
-
-VS Pro's `venues.type` reads as a Postgres / TS reserved word. Rename landed in the 4.1-port migration; vs-parse-sheet writes the new column name on every INSERT. Frontend ports (Sourcing Report, Shortlist, etc.) read `venue_type` from the row going forward.
-
-### PDF parse stays intentionally naive (lifted verbatim from VS Pro)
-
-VS Pro's `parse-sheet` returns 0 venues for PDF uploads (the `pdfjs` / `unpdf` parse-the-table path is unreliable). Port plan § 6 marks parse-sheet as Lift, so HQ keeps the same behavior: PDF -> empty rows -> frontend routes to `/sourcing/error/empty-sheet`. Real PDF table extraction is a post-cutover enhancement, not a port-sub-phase fix.
-
-### Error route handled by a 4.4-port stub; full ErrorState lands in 4.9-port
-
-VS Pro `ErrorState.tsx` is in scope for Phase 4.9-port per port plan § 9. To avoid a five-sub-phase 404 window for parse-fail / empty-sheet conditions, 4.4-port ships a ~30-line `ErrorStateStub.tsx` that reads `:errorKey` from the URL and renders a key-keyed message + back-to-Sourcing link. Stub gets replaced (in place at the same route) when 4.9-port ports the full version. Stub-vs-full divergence is contained to the message rendering; the route + nav target stays put.
-
-### `vs-parse-sheet` slot replacement in production
-
-Failed-attempt `vs-parse-sheet` function is still in production. The 4.4-port version deploys to the same slot, same name, different shape (`{ scout_id, storage_path }` payload, INSERT into `vs_candidate_venues` not `venues`, `venue_type` not `type`). After cutover, the cleanup task reduces from "delete vs-parse-sheet" to "verify the port version is the current deployment". Parallel to how 4.3-port handled `vs-parse-brief`.
-
-### `sourcing_sheets` storage policy tier mismatch is pre-existing drift; not 4.4-port's job
-
-Storage policy on `sourcing_sheets` bucket is `is_producer_or_admin()` while the `vs_*` table RLS is open-authenticated (4.1-port). A `member` user could create a scout via the open-RLS table path but couldn't upload a sheet (storage denies). `docs/auth-model.md` line 13-15 also says members get no VS access, contradicting the table RLS. Reconciliation belongs in the cutover doc sweep, not a 4.4-port sub-phase fix.
+VS Pro's `venues.type` reads as reserved word. Rename in 4.1-port migration. PDF parse stays naive: VS Pro returns 0 venues for PDF (pdfjs/unpdf path unreliable); port keeps same behavior, routes to `/sourcing/error/empty-sheet`. Real PDF table extraction is post-cutover. ErrorState full version lands in 4.9-port; 4.4 ships ~30-line `ErrorStateStub` to avoid 5-sub-phase 404 window.
 
 ## Phase 4.3-port (Brief)
 
-### Brief is a single-page form; PDF parse is an affordance on that form
+### Brief is a single-page form; PDF parse is an affordance
 
-VS Pro had no real brief surface (`/projects/:projectId/brief` was a `ComingNext` placeholder). Port plan § 9 explicitly directs HQ-from-scratch design. We shipped `/venue-scout/scouts/:id/brief` as a single-page form modeled after `RoleSettings.tsx` (dirty-state tracking, sticky save bar, beforeunload guard, cancel-leave AlertDialog). PDF upload + parse lives ABOVE the field stack as an affordance: drop a PDF, `vs-parse-brief` extracts structured fields via a forced `submit_brief` tool call, producer reviews in a preview panel, clicks Apply to merge into the form. No multi-step wizard. The failed-attempt 4.3.1 path tried a wizard and the carry-along cost wasn't worth it when there's only one card.
+VS Pro had no real brief surface. Port plan directs HQ-from-scratch. Shipped as single-page form modeled after `RoleSettings.tsx` (dirty-state, sticky save, beforeunload guard, cancel-leave dialog). PDF upload + parse lives ABOVE field stack as an affordance. No multi-step wizard. The failed-attempt 4.3.1 tried a wizard and carry-along cost wasn't worth it when there's only one card.
 
-### NewScout post-create navigation flips from `sheet_prompt` route to `/brief`
+### `brief_data` canonical jsonb keys
 
-4.2-port shipped `NewScout` routing to `stepToRoute(id, 'sheet_prompt')`, an intentional 404 window until the sourcing flow lands. 4.3-port supersedes that: post-create lands on `/venue-scout/scouts/:id/brief`, which is the first per-scout page producers should hit. Brief's Continue button still calls `stepToRoute(id, 'sheet_prompt')` after saving, so the 404 window simply moves one step downstream until 4.4-port lands.
+Per port plan § 8.2 every brief field on `vs_scouts`. Three canonical 4.3 keys: `expected_guest_count` (consumed by vs-generate-deck), `notes` (freeform stringified into downstream prompts), `uploaded_files` (storage paths, append-only for audit/re-parse). Additional keys passed through from parse ride along; downstream prompts stringify whole jsonb so anything producer adds gets seen.
 
-### `brief_data` canonical jsonb keys: `expected_guest_count`, `notes`, `uploaded_files`
+### `vs-parse-brief` (port) replaces failed-attempt in place
 
-Port plan § 8.2 puts every brief field on `vs_scouts`: named columns for the structured ones (`client_name`, `event_name`, `live_dates`, `city`, `budget`, `event_overview`) and `brief_data jsonb` for everything else. We locked three canonical keys for 4.3-port:
-- `expected_guest_count` (number): consumed by `vs-generate-deck` slide templating.
-- `notes` (string): freeform context that downstream prompts (`vs-research-venues`, `vs-compile-summaries`) stringify wholesale.
-- `uploaded_files` (string[]): storage paths under the `briefs` bucket. Append-only; future audit / re-parse can re-read source documents.
-
-Additional keys passed through from parse ride along inside `brief_data` without a dedicated form field, and downstream prompts stringify the entire jsonb so anything the producer manages to add gets seen by the AI.
-
-### `vs-parse-brief` (port version) replaces the failed-attempt function in place
-
-Same name, same deployment slot, different signature (`{ scout_id, storage_path }` vs the failed `{ session_id, storage_paths[] }`) and different output shape (matches port-plan `brief_data` keys, not the failed `vs_briefs` columns). After cutover, the failed-attempt cleanup task reduces from "delete vs-parse-brief" to "verify the port version is current" (it will be). Uses Claude's native PDF reading via a `document` content block (no `unpdf` round-trip); modern HQ pattern for any single-PDF parse.
-
-### `vs-parse-brief` is `verify_jwt = true`: explicit entry in config.toml
-
-Default is true, so the entry is technically optional, but every prior `vs-*` / `ts-*` function in `config.toml` flipped it OFF for self-invocation. `vs-parse-brief` is the first VS function that keeps the default, and the explicit entry advertises that as a deliberate choice rather than a missed config row.
+Same name, same slot, different signature + output shape. Uses Claude's native PDF reading via `document` content block (no unpdf round-trip). `verify_jwt = true` as explicit entry in config.toml: default is true but every prior `vs-*`/`ts-*` flipped OFF for self-invocation. Explicit entry advertises this as a deliberate choice rather than a missed config row.
 
 ## Phase 4.2-port (Scout Index + New Scout entry)
 
-### `current_step` derives the producer-facing phase label; no schema column
+### `current_step` derives phase label; no schema column
 
-VS Pro carried a `projects.phase` text column maintained in lockstep with `current_step`. The port drops the column and derives the label from `current_step` via `currentStepToLabel()` in `src/lib/venue-scout/format.ts`. One source of truth, no drift, cheaper writes downstream. Label table lives in the helper; tweak in one file when copy needs to shift.
+VS Pro carried `projects.phase` text column maintained in lockstep with current_step. Port drops the column and derives via `currentStepToLabel()`. One source of truth, no drift.
 
-### NewScout post-create navigates to the eventual sheet-prompt route
+### NewScout post-create navigates to eventual sheet-prompt route
 
-`/venue-scout/scouts/:id/sourcing/sheet-prompt` doesn't exist yet (lands in Phase 4.4-port). Post-create still navigates there because that's the correct eventual UX -- producer fills brief, then immediately walks into the sheet-prompt flow. The 404 window is short (4.3-port and 4.4-port land soon) and the alternative (bouncing back to `/venue-scout` and forcing a row click) reads as a regression once the sheet-prompt page exists.
+`/venue-scout/scouts/:id/sourcing/sheet-prompt` doesn't exist yet (lands in 4.4). Post-create still navigates there because that's the correct eventual UX. 404 window is short; alternative (bouncing back to /venue-scout and forcing a row click) reads as regression once sheet-prompt exists.
 
 ## Phase 4.1 (Scout Dashboard; first Venue Scout surface)
 
-### Venue Scout RLS: one permissive FOR ALL policy per vs_* table, no creator or role scoping
+### Venue Scout RLS: one permissive FOR ALL policy per vs_* table
 
-All five vs_* tables (`vs_scouts`, `vs_briefs`, `vs_sourcing_rounds`, `vs_candidate_venues`, `vs_pitch_decks`) got their original four-per-table producer/admin-gated policies dropped and replaced with a single `FOR ALL TO authenticated USING (true) WITH CHECK (true)` policy each. Any authenticated HQ user can now read, create, edit, or delete any scout regardless of who created it.
+All five vs_* tables got original four-per-table producer/admin-gated policies dropped and replaced with single `FOR ALL TO authenticated USING (true) WITH CHECK (true)`. Any authenticated HQ user can read/create/edit/delete any scout. VS is collaborative agency-wide workflow, not personal data. Creator scoping was default-safe starting point; this migration is the intentional unlock.
 
-Rationale: Venue Scout is a collaborative, agency-wide workflow -- a scout isn't personal data owned by one producer. Every team member being able to jump into any open scout and make edits is the right operating model. Creator scoping was carried over from the initial schema as a default-safe starting point; this migration is the intentional unlock.
+### `vs_sourcing_rounds` added to supabase_realtime in 4.1.1
 
-### vs_briefs.ideal_features text → text[]
+Researching page (4.x) subscribes via postgres_changes. Added REPLICA IDENTITY FULL + ALTER PUBLICATION in 4.1.1 rather than deferring; deferring would require follow-up migration + re-deploy window. Precedent: `ts_pull_rounds` and `ts_final_reviews` both went into Realtime in same migration as table.
 
-Column was `text` in the initial schema. Changed to `text[]` in the same 4.1.1 migration to match the sibling `neighborhoods` column's type and the spec's tagging behavior (multiple distinct features, not a prose blob). Folded into the RLS migration since we were already touching vs_* tables and production had zero vs_briefs rows.
+### `inDeck` stat uses `pitched && include_in_deck`
 
-### vs_sourcing_rounds added to supabase_realtime in 4.1.1, not deferred
+Spec text said `venues.filter(v => v.include_in_deck)` but the column defaults to true, so that would show every candidate as "in deck". Tightened so stat is meaningful from day one.
 
-The migration-reviewer subagent caught that the Researching page (4.x) will subscribe to `vs_sourcing_rounds` via `postgres_changes`. Added `REPLICA IDENTITY FULL` + `ALTER PUBLICATION supabase_realtime ADD TABLE` to the 4.1.1 migration rather than deferring to the Researching page's phase -- deferring would have required a follow-up migration and a re-deploy window when that phase lands. Precedent: `ts_pull_rounds` and `ts_final_reviews` both went into Realtime in the same migration that established the table.
+### Field.tsx extracted as canonical form label
 
-### Spec/wireframe conflict resolutions for Scout Dashboard UI
+12px Roboto Mono foreground label, coral required asterisk. Side effect: NewRoleDetails labels changed from 13px coral to 12px white. Old version was non-canonical.
 
-The Code session resolved several places where the spec and wireframe diverged. Final decisions, locked before 4.1.2:
+### `venueTypes.ts` ported verbatim from VS Pro
 
-| Element | Decision | Source |
-|---|---|---|
-| Stat tiles | Total Found / Shortlisted / In Deck / Pitched | Spec |
-| Hero meta row | Project / event / dates / last sourcing, no icons | Spec |
-| Edit-brief link | Coral "Edit Brief →" | Wireframe |
-| Settings button | Icon button in CTA cluster below primary action | Spec |
-| Shortlist row | 38px image thumbnail included | Wireframe |
-| "+ New Round" affordance | Header link only; no dashed "+ Add Round" tile | Wireframe minus the tile |
-
-### "View All N" shortlist link count uses shortlistedCount, not totalVenues
-
-Initial implementation used `totalVenues` for the count in "View All N →". Fixed in 4.1.4 to use `shortlistedCount` -- the link routes to `/shortlist`, which only shows shortlisted venues, so showing the total candidate count was misleading. Small bug, caught by code-reviewer.
-
-### PrimaryScoutCTA "deck exists" branch is evaluated before funnel branches
-
-The 8-state decision tree checks for an existing deck before checking pitched/shortlisted counts. Rationale: once a deck exists, that's the most valuable thing to surface regardless of where the funnel stands. Burying it below the pitched/shortlisted branches would hide the deck if the producer later goes back and adjusts shortlist state.
-
-### PrimaryScoutCTA "failed" branch is narrow by design
-
-The failed branch only fires when the latest round failed AND no shortlisted venues AND no pitched venues exist. If any prior-round work exists, the producer gets the appropriate resume CTA for where they left off rather than a generic "start over." The code-reviewer flagged that a secondary "Retry sourcing" might be useful when work exists from a prior successful round -- deferred to a later phase once the full sourcing flow is in and the UX can be evaluated with real data.
-
-### inDeck stat uses pitched && include_in_deck, not include_in_deck alone
-
-Spec text said `venues.filter(v => v.include_in_deck)` but `include_in_deck` defaults to `true`, so that would show every candidate venue as "in deck" until DeckPrep ships and the user actually filters. Tightened to `pitched && include_in_deck` so the stat is meaningful from day one: it counts venues the producer has explicitly selected AND flagged for the deck. A code comment documents the deviation from spec text. Can be revisited when DeckPrep lands if the semantics need to change.
-
-### RoundTile uses "AI" / "SHEET" hero label, not "Round N"
-
-Sourcing round tiles on the Scout Dashboard show the round type (AI-researched vs. sheet-uploaded) as the dominant label rather than a sequential number. Round number is still visible in the card as secondary metadata. The type label is more useful at a glance -- "Round 2" tells you nothing about what the round was; "SHEET" tells you it was a manual upload.
-
-### Shortlist card hidden entirely when scout has zero rounds
-
-When `rounds.length === 0`, the shortlisted venues card doesn't render at all. The hero CTA already handles that state ("Start Sourcing" or "Upload Brief"), so a visible-but-empty shortlist card would be redundant noise. Once rounds exist but nothing is shortlisted, the card renders with a dashed-border empty state and a "Review Candidate Venues" CTA pointing to `/matrix`.
-
-### Venue photo thumbnails deferred to Phase 4.5
-
-Shortlisted venue rows show a literal `IMG` placeholder box in 4.1.3. Real photo plumbing (`vs_venue_photos` table + storage reads) is deferred to Phase 4.5 (Shortlist + Review Selects phase), which is the first phase where photo management is actually part of the workflow. A TODO comment is in place.
-
-### Field.tsx extracted to src/components/ui/; canonical design-system form label
-
-Extracted a shared `Field.tsx` rather than letting each area define its own label pattern. Canonical form: 12px Roboto Mono foreground label, coral required asterisk, optional muted hint suffix. Two call sites updated in 4.1.2: `NewRoleDetails.tsx` and `RoleSettings.tsx`.
-
-Side effect: NewRoleDetails labels changed from 13px coral to 12px white. That's the correct design-system form; the old version was non-canonical. Visual change is minor but worth eyeballing in the new-role wizard at 4.1.4 before squash-merge.
-
-Rule: any future form label should use `Field.tsx`, not a local copy.
-
-### venueTypes.ts ported verbatim from VS Pro source; heuristics intentionally unchanged
-
-`CANONICAL_TYPES`, `TYPE_STYLES`, `TYPE_FALLBACK_STYLE`, `canonicalizeType()`, and `parseTypes()` were copied without modification from `mirror-nyc-venue-scout-pro/src/components/sourcing/matrix/primitives.tsx`. The canonicalization heuristics (regex patterns that map raw strings to canonical types) are intentionally preserved byte-for-byte so that AI research output from the existing VS Pro edge functions canonicalizes identically in HQ. Any future change to the heuristics needs to be coordinated across both repos until VS Pro is retired.
-
-### SourcingStatusPill returns null on "complete"; same convention as RoundStatusPill
-
-When a sourcing round's status is `complete`, no pill renders. The assumption is that a complete round's status is conveyed by context (venue counts, CTA state) rather than a redundant "done" badge. `researching` = amber + pulsing dot; `failed` = red static. This matches `RoundStatusPill`'s null-on-complete behavior in Talent Scout.
-
-### RankBadge uses bg-input track, not bg-secondary
-
-The score bar track inside `RankBadge` is `bg-input` (Mirror grey, the correct track surface on dark cards). `bg-secondary` is lighter and visually wrong on `bg-surface-alt` cards. This is the same gotcha that bit us in Talent Scout's score bars and is now codified in `src/components/talent-scout/CLAUDE.md`. Added `showBar={false}` prop for surfaces that only need the numeric digit.
-
-### Optional vs_candidate_venues columns deferred to the consuming phase
-
-Columns `key_features`, `derived_attrs`, `venue_overview`, `size_sq_ft`, `capacity`, `source`, and the `vs_venue_photos` table are not added in Phase 4.1. The Scout Dashboard doesn't render any of them. Adding columns before any code consumes them creates drift between schema and implementation. Each will be migrated in the phase that first reads or writes it.
+CANONICAL_TYPES, TYPE_STYLES, TYPE_FALLBACK_STYLE, canonicalizeType, parseTypes copied without modification. Canonicalization heuristics preserved byte-for-byte so AI research output from existing VS Pro edge functions canonicalizes identically. Any future change to heuristics needs to be coordinated across both repos until VS Pro is retired.
 
 ## Phase 3.11 (Scorecard substance restoration + summary field)
 
 ### Restored substantive `full_points_rubric` and added separate `summary` field
 
-The Phase 3.7 squash-merge (`2ab37c3`) added a "≤ 12 words, one sentence" cap to `full_points_rubric` in `scorecardGenerationPrompt`. The intent was good; block tiered point breakdowns inline like "10 pts: 5+ yrs · 5 pts: 2-4 yrs"; but the cap was over-aggressive and stripped concrete-signal evidence the per-candidate evaluator actually relies on. Recently-generated scorecards came back thin and abstract ("Strong portfolio") instead of rich and actionable ("5+ years of professional experience in graphic design with meaningful exposure to environmental, experiential, or spatial design contexts. Portfolio includes spatial graphics, signage systems, or large-scale environmental work.").
+The 3.7 squash added a "≤ 12 words, one sentence" cap to `full_points_rubric` to block tiered point breakdowns like "10 pts: 5+ yrs · 5 pts: 2-4 yrs". Intent was good; cap was over-aggressive and stripped concrete-signal evidence the per-candidate evaluator relies on. Outputs came back thin and abstract ("Strong portfolio") instead of rich and actionable.
 
-Phase 3.11 fixes this additively, the way it should have been done in 3.7:
+Fix additively: `full_points_rubric` restored to 1-3 sentences (25-60 words) of concrete signals; bad-example block keeps the "no tiered point breakdowns" prohibition. New `summary` field (≤ 14 words) condensed recap for compact UI surfaces. Generated alongside in same Claude pass; never replaces. Both fields stored on the criterion (jsonb scorecard, no migration). Existing roles have only `full_points_rubric` (post-3.7 short); UI falls back to truncating it when summary is empty.
 
-1. **`full_points_rubric` restored to the substantive form**; 1-3 sentences (typically 25-60 words) of concrete signals: years expected, named tools, types of work / clients, where the signal lives in the candidate's materials. The per-candidate evaluator reads this field. Bad-example block keeps the "no tiered point breakdowns" prohibition since that was a real design constraint.
-2. **New `summary` field**; short (≤ 14 words) condensed recap used in compact UI surfaces (candidate detail score breakdown, packet matrix headers, recap views). Generated alongside `full_points_rubric` in the same Claude pass, never replaces it. The evaluator never reads `summary`.
-
-Both fields are stored on the criterion (jsonb scorecard, no migration needed). Existing roles have only `full_points_rubric` populated (the post-3.7 short version); UI surfaces that want compact display fall back to truncating it when `summary` is empty. Re-running scorecard generation OR clicking "Process scorecard" on the wizard / Edit Role page (Phase 3.10) re-populates both fields with the new substantive shape.
-
-The defense-in-depth merge in `ts-refine-scorecard` was extended: model is trusted for `name` / `full_points_rubric` / `summary`; everything else (tier, weight, is_disqualifier, is_manual) is restored from user input regardless of model output.
+The defense-in-depth merge in `ts-refine-scorecard` extended: model trusted for name/full_points_rubric/summary; everything else (tier, weight, is_disqualifier, is_manual) restored from user input.
 
 ## Phase 3.10 (Scorecard refinement step)
 
-### Refinement is a separate manual step, not auto-triggered on edit
+### Refinement is a separate manual step, not auto-triggered
 
-When the user edits or adds criteria on the wizard step-3 page, the refine pass doesn't fire automatically. The bottom-bar button morphs from **Approve & lock** to **Process scorecard**, and the user has to actively click it. Two reasons:
+When user edits or adds criteria, refine pass doesn't fire automatically. Bottom-bar button morphs from "Approve & lock" to "Process scorecard". Two reasons: user is often making one edit in a stream of edits (auto-firing would burn spend and force redraw mid-edit); refinement is a non-trivial AI call (a few seconds, a few cents) so making it explicit ties cost to clear intent.
 
-1. The user is often making one edit in a stream of edits (typing a describer, then adjusting a weight, then adding another criterion). Auto-firing refine on every change would burn Anthropic spend and force a UI redraw mid-edit. A manual step lets them queue up everything they want to revise, then commit to a single Claude pass.
-2. The refinement is a non-trivial AI call (a few seconds, a few cents). Making it explicit means the cost is tied to a clear intent ("I'm done editing for now"), not to keystrokes.
+### Refinement preserves user scoring decisions via post-Claude merge
 
-### Refinement preserves user scoring decisions via post-Claude merge, not prompt discipline alone
+Prompt asks Claude to leave tier/weight/is_disqualifier/is_manual untouched, but `mergeRefinedIntoOriginal` re-applies user input regardless of what model returned. Belt + suspenders. Model trusted only for name + full_points_rubric. Worth lifting if we ever build other "refine user input via Claude" features: trust model for the field you're asking it to refine, mechanically restore the rest.
 
-The prompt asks Claude to leave `tier`, `weight`, `is_disqualifier`, and `is_manual` untouched, but the edge function's `mergeRefinedIntoOriginal` re-applies the user's input values for all four fields regardless of what the model returned. Belt + suspenders. The model is only trusted for `name` and `full_points_rubric`. A model that ignores the prompt and tries to "improve" weights (or add/remove criteria) can't break the user's intent; the merge silently restores the user values. Output count is also enforced at the same length as input.
+### Dead-criterion drop is server-side, before prompt
 
-This pattern is worth lifting if we ever build other "refine user input via Claude" features: trust the model for the field you're asking it to refine, mechanically restore the rest from input.
-
-### Dead-criterion drop is server-side, before the prompt
-
-Criteria with `weight=0` OR with both `name` and `full_points_rubric` empty/whitespace get dropped before `scorecardRefinementPrompt` ever sees them. Two reasons:
-
-1. The prompt is told to preserve every entry. Asking it to also "drop dead ones" is conflicting guidance; the model would either silently leave them in or aggressively remove things the user wanted to keep. Better to handle removal mechanically before the model is even asked.
-2. Burning tokens to refine an empty entry is waste.
-
-The response includes `removed_count` so the wizard / RoleSettings toast can surface it. If a user has every criterion zeroed or empty, the function returns 400 ("nothing to refine") rather than crashing; the user fixes the input and re-tries.
+Criteria with weight=0 OR both name + full_points_rubric empty get dropped before refinement sees them. Prompt is told to preserve every entry; asking it to also drop dead ones is conflicting guidance. Burning tokens on empty refines is waste.
 
 ### Same edge function powers both scorecard surfaces
 
-`ts-refine-scorecard` is called by the wizard step-3 page (`NewRoleScorecard.tsx`) AND the Edit Role page (`RoleSettings.tsx`). Both surfaces share the wizard's "scorecard edited since last refine → Process button" pattern; on the Edit Role page, post-refine the button flips back to the existing **Save changes** flow that fires `ts-bulk-reevaluate`. One function, two call sites; no duplicated prompt or merge logic.
+`ts-refine-scorecard` called by wizard step-3 (`NewRoleScorecard`) AND Edit Role (`RoleSettings`). Both share "scorecard edited since last refine → Process button" pattern.
 
-### Tier re-sort happens client-side, not in the prompt
+### Tier re-sort happens client-side, not in prompt
 
-After every refine, the frontend re-sorts each tier highest-weight first. The prompt is told to preserve order, but the visual reorganization is the client's job. Reasoning: the model's order discipline is unreliable and we want a predictable display contract regardless of what came back. Client-side sort is cheap and idempotent (no-op if weights didn't change).
+After every refine, frontend re-sorts each tier highest-weight first. Model's order discipline is unreliable; we want predictable display contract regardless of what came back.
 
 ## Phase 3.8 + 3.9 (Cron, watchdogs, pull notification)
 
 ### Watchdog stall thresholds
 
-Pull = 5 min (Phase 3.11.1, was 60). Re-eval = 30 min. Final review = 20 min.
+Pull = 5 min (was 60). Re-eval = 30 min. Final review = 20 min. Pull pipeline updates `ts_pull_rounds.updated_at` at every per-candidate completion via the `updated_at_auto` trigger, so updated_at = "last candidate completed at"; heartbeats fire per candidate not per pool. A single candidate hanging >5 min is always a stall regardless of pool size. Earlier 60-min threshold was set under misconception that large pools legitimately sit between heartbeats; they don't.
 
-The pull pipeline updates `ts_pull_rounds.updated_at` at every per-candidate completion (the `updated_at_auto` trigger fires on each row update). So `updated_at` = "last candidate completed at"; heartbeats fire per candidate, not per pool. A single candidate hanging >5 min is always a stall, regardless of total pool size. The earlier 60-min threshold was set under the misconception that large pools legitimately sit between heartbeats; they don't.
+Bulk re-eval writes `ts_roles.reeval_last_progress_at` per chunk (slower cadence than per-candidate), so 30 min is right. Final review is one call wrapped in `EdgeRuntime.waitUntil`; at HARD_CAP=50 lands in 5-10 min, so 20 catches dead workers without false-positives.
 
-Bulk re-eval and final review keep the looser thresholds. Bulk re-eval writes `ts_roles.reeval_last_progress_at` per chunk completion (a slower cadence than per-candidate), so 30 min is right. Final review is one Anthropic call wrapped in `EdgeRuntime.waitUntil`; at HARD_CAP=50 it lands in 5-10 min, so 20 catches dead workers without false-positives.
+Pull-watchdog cadence bumped from every 5 to every 2 min so detection lands within 5-7 min of stall (vs 5-10). False-positive cost low because threshold is the actual signal of trouble. Status name aligned: pull-watchdog flips to `failed` (was `stalled`); user-facing surface treats both identically.
 
-Pull-watchdog cadence also bumped from every 5 min to every 2 min so detection lands within 5-7 min of stall onset (vs 5-10 min before). False-positive cost is low because the threshold is the actual signal of trouble; a candidate stuck >5 min won't recover on its own.
+### Cron cadences + cap-alert recipient
 
-Status name aligned with the other two watchdogs: pull-watchdog now flips to `failed` (was `stalled`). The user-facing surface treats both identically (manual retry decision) so the distinction wasn't earning its keep.
+Watchdogs every 5 min. Scheduled pulls daily 12:00 UTC. Storage cleanup daily 03:00 UTC. Spend reset 1st of month 00:01 UTC. `getAdminEmail(sb)` returns oldest active admin, falls back to `jobs@mirrornyc.com`. Oldest-admin over hardcoded so alert routes correctly if Jimmie transfers admin ownership without updating env vars.
 
-### Cron cadences
+### Pull-completion notification: standalone in 3.9, fold later
 
-Watchdogs every 5 minutes. Scheduled pulls daily at 12:00 UTC (8am ET). Storage cleanup daily 03:00 UTC. Spend reset 1st of month 00:01 UTC.
+Ships as standalone edge function to unblock TS's happy path. Unified `notifications-dispatch` is Phase 5 work; building 3.9 against future API would gate TS on Phase 5. Standalone lets Phase 5 swap the call site (one-line replacement). Fire-and-forget via `EdgeRuntime.waitUntil`.
 
-5-minute watchdog cadence is fine; they're cheap (one indexed query each). Faster cadence would catch stalls a few minutes earlier but pg_net call volume scales with cron firings, and the SLA on stalled-pull recovery is "before the user notices and asks", not seconds. The 12:00-UTC schedule for `ts-cron-scheduled-pulls` is intentionally early-morning ET and accepts the EDT/EST-drift hour: this is internal hiring tooling, not customer-facing, so a 1-hour shift twice a year doesn't matter.
+### `pg_cron` through SECURITY DEFINER helper
 
-### Cap-alert recipient lookup
-
-`getAdminEmail(sb)` returns the oldest active admin in `public.users` (ORDER BY `created_at` ASC LIMIT 1). Falls back to `jobs@mirrornyc.com` if no admin row exists.
-
-Picked oldest-admin over a hardcoded address so the alert routes correctly if Jimmie ever transfers admin ownership without anyone updating env vars. The fallback to `jobs@` means a misconfigured database (no admin user) still notifies *someone* who can act. This is one piece of plumbing that should be self-healing; the cap alert is what tells you something else is wrong.
-
-### Pull-completion notification path: standalone in 3.9, fold into `notifications-dispatch` later
-
-`ts-send-pull-notification` ships as a standalone edge function in 3.9 to unblock Talent Scout's "happy path" (manager forwards a candidate to jobs@ and gets an email back when the round completes). The unified `notifications-dispatch` (in-app bell + email + per-user prefs) is Phase 5 work that depends on the HQ Notifications system landing. Building 3.9 against the future API would gate Talent Scout shipping on Phase 5; building it standalone lets Phase 5 swap the call site later (one-line replacement in `ts-pull-candidates`'s `dispatchPullCompleteNotification`).
-
-The notification is fired fire-and-forget via `EdgeRuntime.waitUntil` so a Gmail outage never fails the upstream pull. The `ts_pull_rounds` row is already at `status='complete'` before the notification dispatch starts.
-
-### Storage cleanup is cron-only, no UI trigger
-
-`ts-cron-storage-cleanup` runs daily at 03:00 UTC with conservative retention windows (rejected attachments >30d, closed-role attachments >90d, hard-delete closed roles >60d). No Settings-page manual trigger; the daily cadence catches garbage well before it becomes a problem, and exposing a button to admins to run an aggressive out-of-cycle purge invites mistakes. If the admin ever needs to force-clean (post-recruiting-cycle Storage cleanup, etc.), the function can be invoked manually from the Supabase Functions dashboard with the cron defaults; no special API surface needed.
-
-### `pg_cron` invocation through a SECURITY DEFINER helper, not inline `net.http_post`
-
-`public.invoke_edge_function(fn_name, body)` reads two GUCs (`app.supabase_url`, `app.internal_api_secret`) at call time and POSTs to `${base_url}/functions/v1/${fn_name}` with the internal-secret header. Cron schedules call this single helper.
-
-Rationale: keeps secrets out of `cron.job` rows (which are queryable by anyone with `pg_cron` permissions). GUC values stick around in the database config but require a separate `ALTER DATABASE` to inspect. Also makes the schedule SQL readable; `SELECT public.invoke_edge_function('ts-cron-pull-watchdog')` reads as "fire pull watchdog", not as a 6-line `net.http_post(url := ..., headers := ..., body := ...)`. Adding a new cron job is one line.
-
-The GUCs are set out-of-band (Supabase SQL editor) before the migration applies in production. Without them, the helper warns and no-ops; the schedule rows still exist; they just don't actually call anything. This means the migration is safe to apply before the GUCs are populated.
+`public.invoke_edge_function(fn_name, body)` reads two GUCs and POSTs with internal-secret header. Keeps secrets out of `cron.job` rows (queryable by anyone with pg_cron permissions). Makes schedule SQL readable; adding a new cron is one line. GUCs set out-of-band; without them helper warns and no-ops, so migration is safe to apply before GUCs populated.
 
 ## Phase 3.7 (Candidates UX + referral ingestion)
 
 ### `manually_reviewed` boolean as one-way flip; `auto_rejected` enum value deprecated
 
-Hiring managers needed a way to lock candidate decisions against future re-evals. Adding a per-candidate `manually_reviewed` (default false) on `ts_candidates` is the cleanest split: AI eval / re-eval leaves it false; user actions (status-dropdown change, re-select-same, AUTO-pill click, bulk action) flip it to true. Re-eval respects the flag; when true, score / strengths / gaps / overview update but status doesn't. Bulk re-eval defaults to `not_manually_rejected` (`status.neq.reject,manually_reviewed.eq.false`) so manually-rejected candidates aren't reconsidered.
+Hiring managers needed a way to lock candidate decisions against future re-evals. Adding per-candidate `manually_reviewed` (default false) is the cleanest split: AI eval/re-eval leaves it false; user actions flip to true. Re-eval respects the flag (when true, score/strengths/gaps/overview update but status doesn't). Bulk re-eval defaults to `not_manually_rejected` (`status.neq.reject,manually_reviewed.eq.false`). The `auto_rejected` enum became redundant once `manually_reviewed=false + status=reject` carries same semantics. Backfilled existing rows. Enum value kept (dropping requires full enum rebuild, not worth it). New writes never use it.
 
-The `auto_rejected` enum value (originally distinguishing AI-confirmed rejections from human ones) became redundant once `manually_reviewed=false + status=reject` carries the same semantics. Backfilled all existing `auto_rejected` rows in migration `20260507092912`. Enum value kept in place; dropping it requires a full enum rebuild, not worth it. New writes never use it.
+### Referral identity = original applicant; `referrer_email` captures manager
 
-### Referral identity = original applicant; `referrer_email` captures the manager
-
-When a Mirror manager forwards a candidate to jobs@, the candidate row's identity is the **original applicant's** name + email; not the manager's. The manager's email goes on a separate `referrer_email` column, paired with `is_referral=true`. Eval is **blind** to referral status (same prompt). Referrals get a UI affordance (electric-blue ReferralPill) but no scoring lift. This keeps the dashboard's master-pool ordering meaningful regardless of source path.
-
-Tried `referral` as a status enum value first; rejected because referral isn't an outcome state, it's a source flag. A referred candidate can still be in any status.
+When manager forwards to jobs@, the candidate row's identity is the original applicant's name + email, NOT the manager's. Manager goes on separate `referrer_email`, paired with `is_referral=true`. Eval is blind to referral status (same prompt). Referrals get UI affordance (electric-blue ReferralPill) but no scoring lift. Keeps master-pool ordering meaningful regardless of source. Tried `referral` as status enum first; rejected because referral isn't an outcome state, it's a source flag.
 
 ### Forward parser walks every chain segment, picks deepest non-Mirror
 
-A single regex looking for the FIRST `From:` header would lock onto the manager (who's `@mirrornyc.com`) instead of the original applicant. So the parser collects every `From:` header AND every `On <date> <Name> <<email>> wrote:` reply-quote attribution into a positions-sorted hits list, then walks in reverse to pick the deepest sender whose email isn't `@mirrornyc.com`. When every hit is `@mirrornyc.com`, returns null and the message is skipped (better to skip than misattribute). Apple Mail iPhone forwards (which represent the original applicant as a quoted reply rather than a re-headered forward) covered by the wrote-attribution branch.
+Single regex looking for first `From:` header would lock onto manager (`@mirrornyc.com`) instead of original applicant. Parser collects every `From:` AND every `On <date> <Name> wrote:` attribution into positions-sorted hits list, then walks in reverse to pick deepest sender whose email isn't `@mirrornyc.com`. When every hit is Mirror, returns null and message is skipped. Apple Mail iPhone forwards (original applicant as quoted reply not re-headered forward) covered by wrote-attribution branch.
 
-### Capture every `@mirrornyc.com` manager's commentary into `internal_notes`
+### Capture every Mirror manager's commentary into `internal_notes`
 
-Phase 3.7.8.16: managers often forward with their own context ("strong fit, schedule a call" / "borderline, lmk what you think"). When that commentary lands in jobs@'s body, it's the most reliable signal we have about the candidate. `extractManagerNote` walks every explicit-forward segment in the chain (Gmail's `---------- Forwarded message ---------` and Apple Mail's `Begin forwarded message:`), parses each segment's `From:` header, and for any `@mirrornyc.com` sender captures the body with Mirror signatures stripped (bolded-name + brand-marker heuristic) and "from-mobile" Apple Mail tags filtered. Multi-manager chains attribute each note with `Note from <email>:`. Folded into the FIRST eval via the `HIRING MANAGER NOTES:` block in the candidate bundle (the eval prompt already treats that block as verified context that supersedes resume / cover-letter inferences).
+Managers often forward with their own context ("strong fit, schedule a call"). When that commentary lands in jobs@'s body, it's the most reliable signal we have. `extractManagerNote` walks every explicit-forward segment, parses each `From:`, and for any Mirror sender captures body with signatures stripped (bolded-name + brand-marker heuristic) and "from-mobile" Apple Mail tags filtered. Multi-manager chains attribute each note with `Note from <email>:`. Folded into FIRST eval via `HIRING MANAGER NOTES:` block in candidate bundle (eval prompt treats that block as verified context superseding resume/cover-letter inferences).
 
 ### `mirrornyc.com` blocked from portfolio URL extraction
 
-Manager email signatures embed `http://www.mirrornyc.com/` and `@mirror_nyc`. The portfolio scorer was promoting those as the candidate's portfolio. `mirrornyc.com` added to `BLOCKED_PORTFOLIO_DOMAINS` in `_shared/unwrapUrl.ts` so it's filtered at extraction time; never enters `detected_links`, never becomes `portfolio_path_or_url`.
+Manager email signatures embed `http://www.mirrornyc.com/` and `@mirror_nyc`. Portfolio scorer was promoting those as candidate's portfolio. Added to `BLOCKED_PORTFOLIO_DOMAINS` in `_shared/unwrapUrl.ts`.
 
 ### Global competitor list as `text[]` on `global_settings`; per-role override on `ts_roles.competitor_bonus`
 
-Mirror has a canonical 19-entry list of competitor agencies that should bonus-credit candidate experience across every role. Stored as Postgres `text[]` on `global_settings` (flat array, simple membership check). Per-role override stays on `ts_roles.competitor_bonus` (jsonb, carries a `bonus_points` scalar alongside the array). Seeded via two migrations (conditional UPDATE + idempotent DO block) so the canonical list is enforceable on existing rows AND new installs.
+19-entry list of competitor agencies that bonus-credit candidate experience across every role. Stored as `text[]` on global_settings (flat, simple membership check). Per-role override stays on `ts_roles.competitor_bonus` (jsonb, carries bonus_points scalar alongside array). Seeded via two migrations (conditional UPDATE + idempotent DO block).
 
-### Stepped pull-running checklist driven by existing signals, not new step_progress writes
+### Stepped pull-running checklist driven by existing signals
 
-Source repo writes per-step state to a `step_progress` jsonb column on `pull_rounds`. HQ's port intentionally dropped that ornamentation in Phase 3.4 to keep `ts-pull-candidates` simple. For the stepped UI in 3.7.8.6, kept the simpler approach; derived a 4-step checklist (search / dedupe / process / save) from the existing `candidates_found` + `processed_count` + `status` columns. Less granular than the source's 6-step view but covers the practical UX (most of the running window is "processing X of N"), and avoided re-adding per-substep writes across the entire pull pipeline.
-
-### Toasts default to Mirror coral; ReferralPill stays electric blue
-
-Toasts site-wide flipped from black/red destructive variant to solid Mirror coral with white bold text; coral is the brand attention color. ReferralPill briefly tried coral too (3.7.8.8), reverted in 3.7.8.13 because too many other coral surfaces (Master Pool header, primary buttons, toasts) made the referral signal disappear. Back to the original electric blue, which stands cleanly apart from the muted-grey AUTO/MANUAL pill it sits beside.
-
-### Slider track + score bar track use `bg-input` on Mirror-grey card surfaces
-
-Phase 3.7.6 moved many cards to `bg-surface-alt` (#141414, Mirror grey). The shadcn slider track and `ScoreInline` bar track used `bg-secondary` (#141414); same color, invisible against the new card surfaces. Made the empty portion of every slider and the unfilled portion of every score bar disappear. Flipped both to `bg-input` (#292929) so the track always reads against any card surface.
-
-### Top nav reduced to Dashboard + Talent Scout
-
-Projects / Venues / Clients / Tasks reachable by drilling in from the Dashboard tile grid. Top nav's job is high-level orientation, not "every route in HQ". Routes still work; they just don't have nav slots.
+Source repo writes per-step state to `step_progress` jsonb on `pull_rounds`. HQ port dropped that in 3.4 to keep `ts-pull-candidates` simple. Stepped UI derives 4-step checklist (search/dedupe/process/save) from existing `candidates_found` + `processed_count` + `status`. Less granular than source's 6-step but covers practical UX without re-adding per-substep writes.
 
 ## Phase 3.6 (Final review + packet)
 
-### Q5: split into two edge functions, share via `_shared/packetRender.ts`
+### Split into two edge functions, share via `_shared/packetRender.ts`
 
-Source ships two ~800-line packet generators (`generate-packet` round-scoped, `generate-final-review-packet` review-scoped) that share ~50% of their code (CloudConvert helper, Gmail/Storage attachment fetch, candidate title/email pages, packet divider, BASE_CSS, htmlDoc wrapper, helpers). Consolidating into one function would mean a 200-line if/else inside the renderer because the cover, body table (matrix vs rankings), writeup categories, and classification semantics are all different and pull from different DB tables (`ts_pull_rounds` vs `ts_final_reviews`).
-
-Split into `ts-packet-generate` + `ts-final-review-packet`, lift the shared infrastructure into `supabase/functions/_shared/packetRender.ts`. Net: each domain function ~250 lines, shared module ~400 lines, ~44% smaller than source's 1,599 lines combined.
+Source ships two ~800-line packet generators (`generate-packet` round-scoped, `generate-final-review-packet` review-scoped) sharing ~50% of code. Consolidating into one would mean 200-line if/else inside renderer because cover, body table (matrix vs rankings), writeup categories, classification semantics differ and pull from different DB tables. Split into `ts-packet-generate` + `ts-final-review-packet`, lift shared infra. Net: each domain function ~250 lines, shared ~400 lines, ~44% smaller than source's 1,599 combined.
 
 ### `final_overview` field on each `ts_final_reviews.final_rankings` entry
 
-Source had no equivalent. Hiring managers reviewing the final pool need a comparative angle that the per-candidate `quick_overview` (generated during pull-time) doesn't provide; quick_overview is "what's in this candidate's materials"; final_overview is "what unique strengths or angles this candidate brings to Mirror NYC that distinguish them within this final pool."
-
-The AI generates 4-6 short headlines per candidate, framed as positives about the candidate (never by direct comparison to others; the comparative reading is what the hiring manager does, not the AI). Stored on the `final_rankings` jsonb entry. Surfaced in `FinalReviewDetail`'s candidate table where the dashboard CandidateTable would otherwise show Quick Overview.
-
-Final entry shape: `{candidate_id, final_rank, final_tier, rationale, recruiter_note, final_overview}`. `final_rank` kept (despite not being in Jimmie's literal spec) because deriving rank from tier + secondary sort is brittle; source's reasoning still applies.
-
-### Field renames vs source: `final_tier` (was `recommendation_tier`), `rationale` (was `narrative`)
-
-HQ's naming is more direct. Source's field names came from an earlier iteration; this rename happens as part of the port and won't ripple back.
+Source had no equivalent. Reviewing managers need a comparative angle that per-candidate `quick_overview` (generated at pull-time) doesn't provide; quick_overview is "what's in this candidate's materials"; final_overview is "what unique strengths or angles this candidate brings to Mirror NYC that distinguish them within this final pool." AI generates 4-6 short headlines framed as positives (never direct comparison; comparative reading is what the manager does, not the AI). Surfaced in FinalReviewDetail's candidate table where dashboard CandidateTable would show Quick Overview.
 
 ### `unwrapSecurityWrapper` ported and applied broadly
 
-Email-security services (Outlook safelinks, Mimecast, Proofpoint URLDefense, Cuda LinkProtect, EdgePilot) wrap outgoing links so clicks route through their redirect first. When candidates send portfolio links from a corporate email account, those wrappers leak into HQ via Gmail ingestion. Source had `lib/unwrapUrl.ts` to strip the wrapper before opening the actual URL.
-
-Phase 3.6 ports the helper to `src/lib/unwrapUrl.ts` and applies it everywhere a portfolio URL is rendered:
-- `CandidateTable` (portfolio cell button on the dashboard table)
-- `CandidateDetail` (portfolio web link + every detected_links row)
-- `FinalReviewDetail` (rankings table portfolio cell)
-
-Cheap insurance; prevents click-through routing through Google/Outlook/Mimecast redirects when the user wants the actual portfolio site.
+Email-security services (Outlook safelinks, Mimecast, Proofpoint URLDefense, etc.) wrap outgoing links so clicks route through their redirect. When candidates send portfolio links from corporate accounts, wrappers leak into HQ via Gmail ingestion. Ported to `src/lib/unwrapUrl.ts` and applied everywhere a portfolio URL is rendered.
 
 ### `include_fast_track` toggle on FinalReviewDetail
 
-Source had a checkbox; HQ surfaces the same toggle. Default `true` (full coverage; packet includes every fast-tracked candidate's pages even if they're outside the top-N tier). Hiring managers occasionally want a tighter top-tier-only packet; the toggle gives them that escape. Seeded from the review row's `packet_include_fast_track` if a packet has been generated before, so re-generation defaults to the previous preference.
+Default true. Managers occasionally want tighter top-tier-only packet; toggle gives that escape. Seeded from `packet_include_fast_track` so re-generation defaults to previous preference.
 
-### Tier subtotals in the packet matrix render an em dash (U+2014) instead of `0` when score_breakdown is empty
+### Tier subtotals render em dash when score_breakdown is empty
 
-When a candidate's `score_breakdown` jsonb is empty (legacy candidate, or a candidate where the AI returned no per-criterion breakdown), the matrix used to show T1=0 / T2=0 / T3=0 / Bonus=total. That reads as "candidate scored zero on Tier 1" rather than "we don't have the breakdown." Misleading zeros are worse than honest missing data. Now renders an em dash (U+2014) per missing tier; total still renders correctly (it lives on `ts_candidates.score`).
+Used to show T1=0/T2=0/T3=0/Bonus=total when breakdown was empty (legacy or AI returned none). Reads as "candidate scored zero on Tier 1" rather than "we don't have the breakdown." Now renders em dash per missing tier; total still renders correctly.
 
-Applies to the round packet's Top Candidate Comparison Matrix. Per-criterion display in CandidateDetail's score breakdown panel keeps existing "0 / X" behavior since each criterion has its own line item; viewer can tell at a glance whether the breakdown was populated.
+### HQ-specific: skip Gmail re-fetch, read attachments from Storage
 
-### Cron watchdog for stalled `ts_final_reviews` deferred to Phase 3.7
+Source re-fetches via OAuth refresh tokens. Phase 3.4 already persists every attachment to `candidate_attachments` on initial pull, so HQ doesn't need the round-trip. `_shared/packetRender.ts` reads from Storage. Cleaner path, no Gmail dependency at packet time, faster.
 
-Phase 3.7 is the dedicated cron + watchdog phase (`ts-cron-scheduled-pulls`, `ts-cron-pull-watchdog`, `ts-cron-reeval-watchdog`, `ts-cron-storage-cleanup`). `ts-cron-final-review-watchdog` joins that batch; same pattern as the others (heartbeat detection, status flip to `failed` on stall, no auto-restart). Not bolted onto 3.6.
+### HQ-specific: email packet via Gmail service account + PDF coral preserved
 
-### HQ-specific: skip Gmail re-fetch at packet time, read attachments from Storage
+Source returns download URL only. HQ adds email step: sends PDF from jobs@mirrornyc.com via service account's `gmail.send` scope. Best-effort: failures don't fail overall request. 3.5b brand pass moved HQ's UI coral to `#BE4E44`; PDFs keep source's `#ef5b5b` because dustier coral reads dim on paper print + PDF previews.
 
-Source's packet generators re-fetch attachments from Gmail using OAuth refresh tokens. Phase 3.4 already persists every attachment to the `candidate_attachments` Storage bucket on initial pull, so HQ doesn't need that round-trip. `_shared/packetRender.ts` reads bytes from Storage instead. Cleaner code path, no Gmail dependency at packet time, faster (no token mint).
+### `ts_candidates.email_body_text` column added
 
-### HQ-specific: email packet to hiring manager via Gmail service account
-
-Source's packet generators return a download URL only; the user manually shares the PDF afterward. HQ adds an email step: after upload, the function sends the packet PDF to the role's hiring manager from `jobs@mirrornyc.com` via the service account's `gmail.send` scope (added to `_shared/gmailServiceAccount.ts` SCOPES list in this phase). Best-effort: failures don't fail the overall request; the user still gets the download URL. Hiring manager email is read from `users` joined on `ts_roles.hiring_manager_id`.
-
-### HQ-specific: PDF coral stays at source's `#ef5b5b`, not deck-canonical `#BE4E44`
-
-The Phase 3.5b brand pass moved HQ's UI coral to `#BE4E44` (deck-canonical). Inside packet PDFs, BASE_CSS keeps `#ef5b5b` because the dustier coral reads dim on paper print and on screen-share PDF previews. Same brand identity, different surface (screen UI vs paper artifact).
-
-### `ts_candidates.email_body_text` column added; packet email page skipped when null
-
-Source's packet shows the candidate's original application email as a white "doc-slot" page inside their per-candidate section. HQ didn't persist email body text in Phase 3.4. This phase adds `email_body_text text` (nullable) and updates `ts-pull-candidates` to populate it (trimmed at 30k chars). The packet renders the email page only when the column is non-null; pre-3.6 candidates won't have it, but their title page + attachments still render correctly.
+Source shows candidate's original application email as doc-slot page. HQ didn't persist in 3.4. Added nullable column; `ts-pull-candidates` populates (trimmed at 30k chars). Pre-3.6 candidates lack it but title page + attachments still render.
 
 ## Talent Scout port (Phase 3): locked Q1-Q6
 
-Resolutions to the six open questions surfaced during the Phase 3.1 Talent Scout port-plan inventory (plan doc retired in 5.8.3; questions captured below).
+Resolutions to six open questions surfaced during Phase 3.1 port-plan inventory.
 
-### Q1: re-eval history → keep history
+### Q1: re-eval history → keep
 
-`ts_evaluations` is a separate history table. Every single re-eval (CandidateDetail's button, row-level Re-evaluate selected bulk action) INSERTs a new row, preserving prior scores for audit. The latest row's fields are mirrored onto `ts_candidates` for fast list queries.
+`ts_evaluations` is separate history table. Every re-eval INSERTs a new row preserving prior scores. Latest row mirrors onto `ts_candidates` for fast list queries. Bulk re-evaluate is the one exception: implies prompt/scorecard changed so prior evals not meaningful. `overwrite_history: true` flag deletes prior `ts_evaluations` rows before insert.
 
-**Bulk re-evaluate** (role-scoped or round-scoped "Re-Evaluate Pool") is the one exception: it implies the prompt or scorecard changed, so prior evals are no longer meaningful. The `overwrite_history: true` flag on `ts-evaluate-candidate` deletes prior `ts_evaluations` rows for the candidate before inserting.
+### Q2: pending-candidate parking → jsonb on round
 
-**Why both modes**: a single re-eval is usually the user fixing one candidate's classification or pulling new info; history matters. A bulk re-eval is the user changing the scoring rules; old scores aren't comparable, keeping them around just clutters the audit trail.
-
-### Q2: pending-candidate parking spot → jsonb on the round
-
-`ts_pull_rounds.pending_candidates` (jsonb, default `[]`) holds Gmail message IDs the chunked pipeline batches in groups of 8 across self-invocations. Matches the source pipeline's existing shape; no separate table.
+`ts_pull_rounds.pending_candidates` (jsonb default []) holds Gmail message IDs the chunked pipeline batches in groups of 8 across self-invocations. Matches source shape; no separate table.
 
 ### Q3: hiring manager identity → block on first sign-in
 
-`ts_roles.hiring_manager_id` FKs to `users`. New-role wizard looks up by email at submit. If no `users` row exists yet, role creation is blocked: "Hiring manager must sign in to HQ at least once first." No auto-creating users from email strings.
+`ts_roles.hiring_manager_id` FKs to users. Wizard looks up by email at submit. If no users row exists, role creation blocked: "Hiring manager must sign in to HQ at least once first." No auto-creating users from email strings.
 
 ### Q4: notification consolidation → standalone first, fold later
 
-Phase 3.8 ships `ts-send-pull-notification` standalone so Talent Scout doesn't block on Phase 5 work. Phase 5 folds it into `notifications-dispatch`.
+Phase 3.8 ships `ts-send-pull-notification` standalone so TS doesn't block on Phase 5. Phase 5 folds into `notifications-dispatch`.
 
-### Q5: two packet generators → read both, then consolidate
+### Q6: anthropic-spend-tracker → explicit `callClaude(app, ...)` wrapper
 
-Before writing `ts-packet-generate` in Phase 3.6, do a 30-min read of source's `generate-packet` (832 lines) vs `generate-final-review-packet` (767 lines) to confirm whether they're two distinct flows (candidate-pool packet vs final-review packet) or one is dead code. Consolidate based on that read.
-
-### Q6: anthropic-spend-tracker shape → explicit `callClaude(app, ...)` wrapper
-
-Single helper in `supabase/functions/_shared/anthropic.ts`. Selects key from `ANTHROPIC_API_KEY_TS` / `_VS` / `_HQ` based on the `app` argument. After each successful call, computes cost from the response usage block (incl. prompt-cache discounts) and increments `global_settings.anthropic_spend_current_month_usd`. Emails the admin once per cap crossing, gated by `cap_alert_sent_this_month`. **Does NOT refuse calls when over cap**; graceful degradation, not a hard failure.
+Single helper in `supabase/functions/_shared/anthropic.ts`. Selects key from `ANTHROPIC_API_KEY_TS / _VS / _HQ` based on `app`. After each call computes cost from response usage (incl. prompt-cache discounts) and increments `global_settings.anthropic_spend_current_month_usd`. Emails admin once per cap crossing, gated by `cap_alert_sent_this_month`. Does NOT refuse calls when over cap; graceful degradation, not hard failure.
 
 ## Phase 3.4 (pull pipeline)
 
 ### Edge Function self-invocation auth
 
-The Supabase gateway on this project rejects the service-role bearer token at its `verify_jwt` layer (likely a new-format-key vs legacy-JWT mismatch). Solved with per-function `verify_jwt = false` in `supabase/config.toml` + an `INTERNAL_API_SECRET` shared secret + auth enforcement in `_shared/internalAuth.ts` (three accept-paths: internal-secret header, service-role bearer match, valid user JWT). See `docs/auth-model.md` for the full pattern.
-
-Any future self-invoking function uses the same pattern; non-self-invoking functions stay on default `verify_jwt = true`.
+Supabase gateway rejects service-role bearer at its `verify_jwt` layer (likely new-format vs legacy-JWT mismatch). Solved with per-function `verify_jwt = false` + `INTERNAL_API_SECRET` shared secret + auth enforcement in `_shared/internalAuth.ts` (three accept-paths: internal-secret header, service-role match, valid user JWT). See `docs/auth-model.md`. Any future self-invoking function uses same pattern.
 
 ### Realtime publication
 
-`supabase_realtime` publication on this project starts empty. `ts_pull_rounds` was added to it via migration with `REPLICA IDENTITY FULL` so PullDetail's `postgres_changes` UPDATE subscription receives the full new row. Any future table the UI subscribes to needs the same.
+`supabase_realtime` on this project starts empty. `ts_pull_rounds` added via migration with REPLICA IDENTITY FULL so PullDetail's postgres_changes UPDATE subscription receives the full new row. Future subscribed tables need same.
 
 ### All attachments to Storage (drift from source)
 
-Source repo kept small attachments in Gmail and let the dashboard fetch them on demand via a `gmail-attachment` Edge Function. HQ persists every attachment to the `candidate_attachments` bucket regardless of size. Slightly more Storage cost; much simpler download path (`supabase.storage.createSignedUrl`); no separate Edge Function for candidate-detail attachment viewing.
+Source kept small attachments in Gmail and let dashboard fetch on demand via `gmail-attachment` Edge Function. HQ persists every attachment to `candidate_attachments` bucket regardless of size. Slightly more Storage cost; much simpler download path; no separate function for detail viewing.
 
 ### `ts_pull_rounds` operational columns
 
-`candidates_found`, `processed_count`, `attempt`, `round_number` added so progress and round labels work without joining `ts_candidates` per render. Source's `step_progress` jsonb / `current_step` / `error_log` were dropped; simpler `processed_count / candidates_found` is enough; richer progress UI can be added back later if needed.
+`candidates_found`, `processed_count`, `attempt`, `round_number` added so progress + round labels work without joining `ts_candidates` per render. Source's `step_progress` jsonb / `current_step` / `error_log` dropped; simpler `processed_count / candidates_found` is enough.
 
 ## Phase 3.5 (candidate detail + re-eval)
 
-### Re-eval history retention with one bulk-overwrite escape hatch
+### `promote` → `interview` enum rename + status sort
 
-See Q1 above. Implementation note: the candidate-detail UI shows only the latest fields (mirrored onto `ts_candidates`); history accumulates server-side without a UI surface yet. Future "score history" timeline page can read from `ts_evaluations` when it's needed.
+Original used `promote` as "advance" status. Renamed; concrete next-stage action mapping to hiring workflow language. `ts_candidate_status` is now (consider, interview, reject, fast_track, auto_rejected). CandidateTable sorts by status bucket first (Interview → Fast-Track → Consider in active; Rejected → Auto-Rejected in collapsible tier), then by user-selectable column.
 
-### `promote` → `interview` enum rename
+### Bulk re-eval split: role-scoped vs round-scoped
 
-Original schema used `promote` as the "advance" status. Renamed to `interview` in Phase 3.5; concrete next-stage action that maps to actual hiring workflow language. `ts_candidate_status` is now `(consider, interview, reject, fast_track, auto_rejected)`. Migration verified zero rows used `promote` before renaming.
+`ts-bulk-reevaluate` (chunked self-invoke) operates on role's master pool with optional status_filter. PullDetail's "Re-Evaluate Pool" is round-scoped and skips the dedicated function; fans out parallel `ts-evaluate-candidate` calls (concurrency=6) with `overwrite_history: true` from browser. Source put bulk-reeval state on pull_rounds; HQ moved to role-scoped (`reeval_*` columns on ts_roles).
 
-### Status priority is the primary sort everywhere
+### Status dropdown writes awaited before parent refetch
 
-`CandidateTable` sorts by status bucket first (Interview → Fast-Track → Consider in active tier; Rejected → Auto-Rejected in collapsible rejected tier), then by user-selectable column. Buckets never interleave regardless of column or direction. The active/rejected divider is collapsible inline, not a separate table.
-
-### Bulk re-eval split: role-scoped uses `ts-bulk-reevaluate`, round-scoped fans out
-
-`ts-bulk-reevaluate` (chunked self-invoke, `verify_jwt = false`) operates on the role's master pool with optional `status_filter`. PullDetail's "Re-Evaluate Pool" is round-scoped and skips the dedicated function; instead, it fans out parallel `ts-evaluate-candidate` calls (concurrency=6) with `overwrite_history: true` from the browser. Floating bottom-right widget shows progress; cancellable mid-run.
-
-### Round-scoped state on `ts_pull_rounds`, role-scoped state on `ts_roles`
-
-Source repo put bulk-reeval state on `pull_rounds`. HQ moved to role-scoped: `reeval_status` / `reeval_total` / `reeval_processed` / `reeval_failed` / `reeval_started_at` / `reeval_completed_at` / `reeval_last_progress_at` columns live on `ts_roles`. The legacy `ts_pull_rounds.reeval_last_progress_at` from Phase 3.2 is dead (drop in a future cleanup migration).
-
-### Status dropdown writes are awaited before parent refetch
-
-`StatusDropdown.onValueChange` awaits the DB UPDATE before calling its `onChange` callback (which triggers parent reload). Calling `onChange` first races the write and leaves the displayed value one click behind. **Future inline-mutation components in HQ follow the same order.**
+`StatusDropdown.onValueChange` awaits DB UPDATE before calling onChange. Calling onChange first races the write and leaves displayed value one click behind. Future inline-mutation components in HQ follow same order.
 
 ## Phase 2 (schema + auth)
 
 ### `handle_new_user` Postgres trigger replaces `auth-on-signup` Edge Function
 
-Original spec called for an `auth-on-signup` Edge Function. Implemented as a Postgres trigger on `auth.users` instead, running with service-role privileges. Simpler, atomic with the auth.users insert, no cold-start latency. The Edge Function name is reserved in case we need extra signup-time work later (e.g. provisioning Drive folders); for now it doesn't exist.
+Original spec called for Edge Function. Implemented as Postgres trigger on `auth.users` instead, running with service-role privileges. Simpler, atomic with auth.users insert, no cold-start latency. Function name reserved in case extra signup-time work needed later.
 
 ### Project security defaults: Auto-expose OFF, Auto-RLS ON
 
-Every new table requires explicit `GRANT` to `authenticated` and `service_role`. Forces every new table to be reviewed for which roles can hit the Data API at all, separate from RLS row-level policy. See `docs/conventions.md`.
+Every new table requires explicit `GRANT` to `authenticated` and `service_role`. Forces every new table to be reviewed for which roles can hit Data API at all, separate from RLS row-level policy.
 
 ## Open
 
-Decisions still up in the air; revisit when the relevant phase starts.
-
 - **Project status enum trim.** Current 14 values may consolidate. Defer until Phase 5 polish.
-- **`venue_types` lookup values.** **Resolution (2026-05-13, retroactive):** Shipped as a free-text canonicalization layer. The producer's sheet supplies an arbitrary string; the parser maps to the canonical list (Retail, Event Venue, Industrial, Warehouse, Gallery, Studio, Outdoor, Mobile) via substring matching. Lookup table not needed. See `docs/templates/venue-scout-sheet-template.md`.
-- **Talent Scout data extraction** (future cross-platform data extraction; not blocking Phase 5). Plan: re-create active roles via Gmail re-pull, preserve closed roles as packet PDF archives. If a future inventory turns up data that doesn't fit, revisit then.
+- **TS data extraction** (future cross-platform; not blocking Phase 5). Plan: re-create active roles via Gmail re-pull, preserve closed roles as packet PDF archives.

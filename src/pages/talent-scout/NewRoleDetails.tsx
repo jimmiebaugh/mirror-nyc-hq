@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
+import { HQFormField } from "@/components/hq/HQFormField";
 import {
   Select,
   SelectContent,
@@ -75,36 +74,33 @@ export default function NewRoleDetails() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6 pb-32">
+      <div className="eyebrow mb-2">New Role</div>
       <Stepper steps={TS_WIZARD_STEPS} active={1} />
       <header className="space-y-2">
-        <div className="text-[14px] font-mono uppercase tracking-widest text-primary">Talent Scout · New Role</div>
         <h1 className="h-page">Role details</h1>
-        <p className="text-sm text-muted-foreground">
-          Tell us about the role. We'll generate a scorecard from this in step 3.
-        </p>
       </header>
 
-      <Card>
-        <CardContent className="space-y-6 p-6">
-          <Field label="Role title" required>
+      <section className="card">
+        <div className="card-pad space-y-6">
+          <HQFormField label="Role title" required>
             <Input value={form.title} onChange={(e) => update("title", e.target.value)} placeholder="e.g. Senior Producer" />
-          </Field>
+          </HQFormField>
 
-          <Field label="Job description" hint="Paste the full JD" required>
+          <HQFormField label={<>Job Description <span className="text-primary font-normal normal-case tracking-normal ml-2">Paste the full JD</span></>} required>
             <Textarea
               className="min-h-[180px]"
               value={form.job_description}
               onChange={(e) => update("job_description", e.target.value)}
               placeholder="Paste the full job description here…"
             />
-          </Field>
+          </HQFormField>
 
           <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Location">
+            <HQFormField label="Location">
               <Input value={form.location} onChange={(e) => update("location", e.target.value)} />
-            </Field>
-            <Field label="Type">
+            </HQFormField>
+            <HQFormField label="Type">
               <Select value={form.type} onValueChange={(v) => update("type", v)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -115,25 +111,21 @@ export default function NewRoleDetails() {
                   <SelectItem value="Freelance">Freelance</SelectItem>
                 </SelectContent>
               </Select>
-            </Field>
-            <Field label="Start date">
+            </HQFormField>
+            <HQFormField label="Start date">
               <Input value={form.start_date} onChange={(e) => update("start_date", e.target.value)} />
-            </Field>
+            </HQFormField>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Compensation">
+            <HQFormField label="Compensation">
               <Input
                 placeholder="e.g. $85k to $110k"
                 value={form.compensation}
                 onChange={(e) => update("compensation", e.target.value)}
               />
-            </Field>
-            <Field
-              label="Hiring manager"
-              hint="Picks from admin users. Manager must sign in to HQ at least once first."
-              required
-            >
+            </HQFormField>
+            <HQFormField label="Hiring manager" required>
               <Select
                 value={form.hiring_manager_id ?? undefined}
                 onValueChange={(id) => {
@@ -159,19 +151,19 @@ export default function NewRoleDetails() {
                   ))}
                 </SelectContent>
               </Select>
-            </Field>
+            </HQFormField>
           </div>
 
-          <Field label="Hiring priorities not in JD" hint="Optional · free text">
+          <HQFormField label={<>Additional Priorities Not in JD <span className="text-primary font-normal normal-case tracking-normal ml-2">(Optional)</span></>}>
             <Textarea
               className="min-h-[100px]"
               placeholder="e.g. needs to run pitches solo, culture fit critical, must have managed direct reports"
               value={form.hiring_priorities}
               onChange={(e) => update("hiring_priorities", e.target.value)}
             />
-          </Field>
+          </HQFormField>
 
-          <Field label="Auto-rejection threshold" hint="Candidates scoring below this are auto-rejected">
+          <HQFormField label={<>Auto-Rejection Threshold <span className="text-primary font-normal normal-case tracking-normal ml-2">Candidates scored below this are auto-rejected</span></>}>
             <div className="space-y-2">
               <Slider
                 min={0}
@@ -189,39 +181,19 @@ export default function NewRoleDetails() {
                 Tier 1 (Must-Have) gaps will auto-reject regardless of total score.
               </p>
             </div>
-          </Field>
+          </HQFormField>
+        </div>
+      </section>
 
-          <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
-            <Button variant="ghost" onClick={() => navigate("/talent-scout")}>
-              ← Cancel
-            </Button>
-            <Button onClick={onContinue}>Continue →</Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="actionbar">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
+          <Button variant="ghost" className="text-primary" onClick={() => navigate("/talent-scout")}>
+            Cancel
+          </Button>
+          <Button onClick={onContinue}>Continue →</Button>
+        </div>
+      </div>
     </div>
   );
 }
 
-function Field({
-  label,
-  hint,
-  required,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label className="text-[13px] font-mono font-bold uppercase tracking-wider text-primary">
-        {label}
-        {required && <span className="ml-1 text-primary">*</span>}
-        {hint && <span className="ml-2 text-[11px] font-normal normal-case tracking-normal text-muted-foreground">{hint}</span>}
-      </Label>
-      {children}
-    </div>
-  );
-}
