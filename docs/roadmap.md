@@ -39,36 +39,7 @@ The cross-cutting HQ Core layer that ties Talent Scout and Venue Scout into a si
 - **5.11** DONE 2026-05-23 (`fee051e`). UX/design-system audit + structural consistency + docs reorg. Focus rings; mobile shell + 44px hit targets; token cleanup; coral link contrast; `hq-` chrome convergence; managed Project Tags + Venue Features lookups; aligned list headers + stacked identifier colors + count footers + compact detail-page headers + detail crumbs; extracted `DField` / `HQFormField` / `ContactsCard` / `WebsiteActionButton` / `prettyHost` / `ListPageChrome`. Deferred 5.11.0/5.11.1/5.11.2 sub-phases collapsed into one squash.
 - **5.12** DONE 2026-05-27 (`ed81c38`). Venue Scout review (complete). 28 sub-phases collapsed into one squash. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.12. Architectural decisions in `docs/decisions.md` § Phase 5.12. 10 migrations + 9 edge functions touched cumulatively. Closes the VS review cycle.
 - **5.13** DONE 2026-05-27 (`9e15841`). Talent Scout review (complete). Nav context parity (BrandTS, TS_TOOL_ITEMS, cross-tool links, IconTalentScout/IconVenueScout), HQFormField global consolidation (VSPageField deleted), full chrome convergence across all 11 TS pages, savebar merged into actionbar HQ-wide, Sonnet design-system accuracy audit (13 findings addressed), eval prompt location rule injection, weekly auto-pull Monday anchoring, pipeline smoke (pull + re-eval + final review packet all clear). 7 sub-phases collapsed into one squash.
-
-### Phase 5.14: Venue photo persistence to HQ Venues DB.
-
-When a Venue Scout deck is generated, the 4 venue photos passed to the deck generator become canonical photos on the corresponding HQ Venue record. Round-trip: existing HQ Venue records auto-surface their 4 stored photos into Final Review deck prep; producer can replace / remove per slot; deck generation persists the producer's final state.
-
-**Scope:**
-
-1. **Schema.**
-   - New storage bucket `venue-photos` (service-account writes; authenticated-member reads).
-   - Photo links on the `venues` table: either 4 nullable URL columns (`photo_url_1`..`photo_url_4`) or a related `venue_photos` table keyed by `venue_id` + ordinal. Column shape simpler, related-table allows N > 4 later. Decision at spec time.
-   - RLS: read for any authenticated member (or freelance-readable per 5.16 access pattern, TBD); write reserved for service account.
-
-2. **Edge function.**
-   - `vs-generate-deck`: at the existing dedup-and-supplement step (adds new venues + supplements null fields on existing venues), ALSO upload the 4 deck photos to `venue-photos` and link them to the venue row. Photos are "assumed to be the most recent" -- always write on deck generation when the final photo set differs from what's stored.
-   - If the candidate's final photo set matches what's already stored, no-op (no storage write, no row update).
-   - If the producer replaced / removed slots in Final Review, the persisted state matches that final shape (replace / delete in storage accordingly).
-
-3. **Frontend.**
-   - When a sourced candidate is matched against an existing HQ Venue record during research, surface the linked 4 stored photos as the default photo set for that candidate in Review.
-   - VS Final Review (Deck Prep) photo slots: pre-populate from linked HQ Venue photos if present; producer can replace / remove per slot; final state lands at deck generation.
-   - HQ Venue detail page: render the 4 linked photos.
-
-4. **Migration considerations.**
-   - Existing venues have no linked photos. Either backfill from existing decks' Drive folders (heuristic; needs Drive scope) or accept that pre-5.14 venues stay photo-empty until a producer regenerates a deck involving them.
-
-5. **Open questions for spec time.**
-   - Backfill yes/no, and from what source?
-   - Storage layout: flat-keyed (`<venue_id>/photo_<n>.jpg`) vs. per-deck-version snapshot?
-   - 4 slots permanent, or grow to N if deck templates expand?
-   - Freelance-tier visibility (read-only access pattern from 5.16)?
+- **5.14** DONE 2026-05-28. Venue photo persistence (backend-only). `vs-generate-deck`: `persistVenuePhotosToHq` at deck-gen persists finalized `vs_venue_photos` to HQ `venue_photos` bucket + updates `venues.photos`. `vs-research-venues`: all three hq_pool INSERT paths (`loadHqVenuesIntoPool` deterministic-keep, Phase B seed-then-drop, `rescueHqPoolFitVetoedVenues`) seed `vs_venue_photos` from stored HQ photos with `path=`-qualified `[hqPoolPhotoSeed]` telemetry. No migration; no frontend; two edge functions.
 
 ### Phase 5.15: Anthropic per-tool call-log infra.
 

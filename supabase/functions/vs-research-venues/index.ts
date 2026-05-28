@@ -678,6 +678,7 @@ type HqVenueRowRaw = {
   square_footage: number | null;
   capacity: number | null;
   about_venue: string | null;
+  photos: (string | null)[] | null;
   venue_venue_types: VenueTypesJoinRow[] | null;
 };
 
@@ -724,6 +725,73 @@ function hqVenueTypesToSlashJoined(hq: HqVenueRowRaw): string | null {
     }
   }
   return unique.length > 0 ? unique.join(" / ") : null;
+}
+
+// Phase 5.14.0: extract extension from a storage path like
+// "venue_id/photo_1.jpg". Defaults to "jpg" when no dot is found.
+function extractExtension(storagePath: string): string {
+  const lastDot = storagePath.lastIndexOf(".");
+  return lastDot >= 0 ? storagePath.slice(lastDot + 1) : "jpg";
+}
+
+// Phase 5.14.0: copy photos from the HQ venue_photos bucket to the VS
+// vs_venue_photos bucket for a freshly-inserted hq_pool candidate. Best-
+// effort: every failure warn-logs and continues. Returns seeded/failed counts.
+async function seedHqPhotosToVs(
+  sb: SupabaseClient,
+  scout_id: string,
+  candidateId: string,
+  hqPhotos: (string | null)[],
+): Promise<{ seeded: number; failed: number }> {
+  let seeded = 0;
+  let failed = 0;
+  for (let i = 0; i < hqPhotos.length; i++) {
+    const storedPath = hqPhotos[i];
+    if (!storedPath || storedPath.length === 0) continue;
+    const slotNum = i + 1;
+
+    const { data: blob, error: dlErr } = await sb.storage
+      .from("venue_photos")
+      .download(storedPath);
+    if (dlErr || !blob) {
+      console.warn(
+        `[hqPoolPhotoSeed] scout=${scout_id} candidate=${candidateId} slot=${slotNum} download failed: ${dlErr?.message ?? "no blob"}`,
+      );
+      failed++;
+      continue;
+    }
+
+    const ext = extractExtension(storedPath);
+    const timestamp = Date.now();
+    const vsPath = `${scout_id}/${candidateId}/slot-${slotNum}-${timestamp}.${ext}`;
+    const { error: ulErr } = await sb.storage
+      .from("vs_venue_photos")
+      .upload(vsPath, blob);
+    if (ulErr) {
+      console.warn(
+        `[hqPoolPhotoSeed] scout=${scout_id} candidate=${candidateId} slot=${slotNum} upload failed: ${ulErr.message}`,
+      );
+      failed++;
+      continue;
+    }
+
+    const { error: rowErr } = await sb.from("vs_venue_photos").insert({
+      candidate_venue_id: candidateId,
+      slot: slotNum,
+      storage_path: vsPath,
+      file_name: `photo_${slotNum}.${ext}`,
+    });
+    if (rowErr) {
+      console.warn(
+        `[hqPoolPhotoSeed] scout=${scout_id} candidate=${candidateId} slot=${slotNum} row insert failed: ${rowErr.message}`,
+      );
+      failed++;
+      continue;
+    }
+
+    seeded++;
+  }
+  return { seeded, failed };
 }
 
 // Phase 5.12.3.1 helpers: HQ pool fit filter.
@@ -1050,7 +1118,7 @@ async function loadHqVenuesIntoPool(
   const { data: hqRowsRaw, error: hqErr } = await sb
     .from("venues")
     .select(
-      "id, name, address, neighborhood, city, website_url, features, total_sq_ft, square_footage, capacity, about_venue, venue_venue_types(venue_types(name))",
+      "id, name, address, neighborhood, city, website_url, features, total_sq_ft, square_footage, capacity, about_venue, photos, venue_venue_types(venue_types(name))",
     )
     .ilike("city", scoutCity);
 
@@ -1173,38 +1241,76 @@ async function loadHqVenuesIntoPool(
 
   // Step 9: INSERT loop. Per-row try / catch preserved from 5.12.1; the
   // 5.12.1 `skipped` counter is renamed to `insert_failed` for clarity
-  // (spec § 8.6).
+  // (spec § 8.6). Phase 5.14.0: collect (candidateId, photos) for seeding
+  // after the loop.
   let inserted = 0;
   let insertFailed = 0;
+  const photoSeedCandidates: {
+    candidateId: string;
+    photos: (string | null)[];
+  }[] = [];
   for (const entry of toInsert) {
     const hq = entry.venue;
     const venueType = hqVenueTypesToSlashJoined(hq);
     const sizeSqFt = hq.total_sq_ft ?? hq.square_footage ?? null;
     const features = Array.isArray(hq.features) ? hq.features : [];
-    const { error: insErr } = await sb.from("vs_candidate_venues").insert({
-      scout_id,
-      name: hq.name,
-      address: hq.address,
-      neighborhood: hq.neighborhood,
-      venue_type: venueType,
-      website_url: hq.website_url,
-      size_sq_ft: sizeSqFt,
-      capacity: hq.capacity,
-      key_features: features,
-      venue_overview: hq.about_venue,
-      linked_venue_id: hq.id,
-      source: "hq_pool",
-    });
-    if (insErr) {
+    const { data: insData, error: insErr } = await sb
+      .from("vs_candidate_venues")
+      .insert({
+        scout_id,
+        name: hq.name,
+        address: hq.address,
+        neighborhood: hq.neighborhood,
+        venue_type: venueType,
+        website_url: hq.website_url,
+        size_sq_ft: sizeSqFt,
+        capacity: hq.capacity,
+        key_features: features,
+        venue_overview: hq.about_venue,
+        linked_venue_id: hq.id,
+        source: "hq_pool",
+      })
+      .select("id")
+      .maybeSingle();
+    if (insErr || !insData) {
       // Per-row INSERT failures are best-effort: log + continue. A failed
       // FK / CHECK / unique constraint shouldn't sink the scout's research.
       console.warn(
-        `[vs-research-venues] scout=${scout_id} hq-pool insert failed "${hq.name}" (${hq.id}): ${insErr.message}`,
+        `[vs-research-venues] scout=${scout_id} hq-pool insert failed "${hq.name}" (${hq.id}): ${insErr?.message ?? "no row returned"}`,
       );
       insertFailed++;
       continue;
     }
     inserted++;
+    // Phase 5.14.0: queue photo seeding when HQ venue has stored photos.
+    const hqPhotos = hq.photos ?? [];
+    if (hqPhotos.some((p: unknown) => typeof p === "string" && (p as string).length > 0)) {
+      photoSeedCandidates.push({
+        candidateId: (insData as { id: string }).id,
+        photos: hqPhotos,
+      });
+    }
+  }
+
+  // Phase 5.14.0: seed HQ photos to vs_venue_photos for newly-inserted
+  // hq_pool candidates. Batch after the INSERT loop; best-effort parallel.
+  if (photoSeedCandidates.length > 0) {
+    const seedResults = await Promise.allSettled(
+      photoSeedCandidates.map(({ candidateId, photos }) =>
+        seedHqPhotosToVs(sb, scout_id, candidateId, photos)
+      ),
+    );
+    let totalSeeded = 0;
+    let totalFailed = 0;
+    for (const r of seedResults) {
+      if (r.status === "fulfilled") {
+        totalSeeded += r.value.seeded;
+        totalFailed += r.value.failed;
+      }
+    }
+    console.log(
+      `[hqPoolPhotoSeed] scout=${scout_id} path=load candidates_with_photos=${photoSeedCandidates.length} photos_seeded=${totalSeeded} photos_failed=${totalFailed}`,
+    );
   }
 
   // Step 10: summary log + accounting identity check.
@@ -1649,6 +1755,11 @@ Additional brief notes: ${
   let insertFailed = 0;
   let hallucinatedVerdicts = 0;
   let malformedVerdicts = 0;
+  // Phase 5.14.1: collect (candidateId, photos) for seeding after the loop.
+  const photoSeedCandidates: {
+    candidateId: string;
+    photos: (string | null)[];
+  }[] = [];
   for (const raw of rawVerdicts) {
     if (raw === null || typeof raw !== "object") {
       console.warn(
@@ -1691,23 +1802,27 @@ Additional brief notes: ${
       const venueType = hqVenueTypesToSlashJoined(hq);
       const sizeSqFt = hq.total_sq_ft ?? hq.square_footage ?? null;
       const features = Array.isArray(hq.features) ? hq.features : [];
-      const { error: insErr } = await sb.from("vs_candidate_venues").insert({
-        scout_id,
-        name: hq.name,
-        address: hq.address,
-        neighborhood: hq.neighborhood,
-        venue_type: venueType,
-        website_url: hq.website_url,
-        size_sq_ft: sizeSqFt,
-        capacity: hq.capacity,
-        key_features: features,
-        venue_overview: hq.about_venue,
-        linked_venue_id: hq.id,
-        source: "hq_pool",
-      });
-      if (insErr) {
+      const { data: insData, error: insErr } = await sb
+        .from("vs_candidate_venues")
+        .insert({
+          scout_id,
+          name: hq.name,
+          address: hq.address,
+          neighborhood: hq.neighborhood,
+          venue_type: venueType,
+          website_url: hq.website_url,
+          size_sq_ft: sizeSqFt,
+          capacity: hq.capacity,
+          key_features: features,
+          venue_overview: hq.about_venue,
+          linked_venue_id: hq.id,
+          source: "hq_pool",
+        })
+        .select("id")
+        .maybeSingle();
+      if (insErr || !insData) {
         console.warn(
-          `[hqPoolRescue] scout=${scout_id} venue=${hq.id} name="${hq.name}" insert failed: ${insErr.message}`,
+          `[hqPoolRescue] scout=${scout_id} venue=${hq.id} name="${hq.name}" insert failed: ${insErr?.message ?? "no row returned"}`,
         );
         insertFailed++;
         continue;
@@ -1716,6 +1831,14 @@ Additional brief notes: ${
       console.log(
         `[hqPoolRescue] scout=${scout_id} venue=${hq.id} name="${hq.name}" verdict=keep reason="${reason}"`,
       );
+      // Phase 5.14.1: queue photo seeding when HQ venue has stored photos.
+      const hqPhotos = hq.photos ?? [];
+      if (hqPhotos.some((p: unknown) => typeof p === "string" && (p as string).length > 0)) {
+        photoSeedCandidates.push({
+          candidateId: (insData as { id: string }).id,
+          photos: hqPhotos,
+        });
+      }
     } else {
       dropped++;
       console.log(
@@ -1734,6 +1857,27 @@ Additional brief notes: ${
         `[hqPoolRescue] scout=${scout_id} venue=${entry.venue.id} name="${entry.venue.name}" verdict missing (Claude returned no verdict for this candidate; treating as drop)`,
       );
     }
+  }
+
+  // Phase 5.14.1: seed HQ photos to vs_venue_photos for rescued candidates.
+  // Mirrors the loadHqVenuesIntoPool pattern; same helper, same telemetry.
+  if (photoSeedCandidates.length > 0) {
+    const seedResults = await Promise.allSettled(
+      photoSeedCandidates.map(({ candidateId, photos }) =>
+        seedHqPhotosToVs(sb, scout_id, candidateId, photos)
+      ),
+    );
+    let totalSeeded = 0;
+    let totalFailed = 0;
+    for (const r of seedResults) {
+      if (r.status === "fulfilled") {
+        totalSeeded += r.value.seeded;
+        totalFailed += r.value.failed;
+      }
+    }
+    console.log(
+      `[hqPoolPhotoSeed] scout=${scout_id} path=rescue candidates_with_photos=${photoSeedCandidates.length} photos_seeded=${totalSeeded} photos_failed=${totalFailed}`,
+    );
   }
 
   // Accounting identity check (cheap arithmetic; defends against silent
@@ -2574,7 +2718,7 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
       const { data: hqVenuesRaw, error: poolReadErr } = await sb
         .from("venues")
         .select(
-          "id, name, address, neighborhood, city, website_url, features, total_sq_ft, square_footage, capacity, about_venue, venue_venue_types(venue_types(name))",
+          "id, name, address, neighborhood, city, website_url, features, total_sq_ft, square_footage, capacity, about_venue, photos, venue_venue_types(venue_types(name))",
         )
         .ilike("city", (scout.city ?? "").trim());
       const { data: seededLinksRaw, error: seededErr } = await sb
@@ -2620,6 +2764,12 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
           let seededOnDedupe = 0;
           let seededOnDedupeFailed = 0;
           const filtered: typeof cleanVenues = [];
+          // Phase 5.14.0: collect (candidateId, photos) for seeding after
+          // the loop.
+          const seedThenDropPhotoSeedCandidates: {
+            candidateId: string;
+            photos: (string | null)[];
+          }[] = [];
           for (const cand of cleanVenues) {
             // Phase 5.12.3: points-based ladder. Address-differ VETO
             // catches same-city same-name different-address collisions.
@@ -2668,7 +2818,7 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
             const hqFeatures = Array.isArray(hq.features) ? hq.features : [];
             const mergedFeatures =
               hqFeatures.length > 0 ? hqFeatures : cand.key_features;
-            const { error: seedErr } = await sb
+            const { data: seedData, error: seedErr } = await sb
               .from("vs_candidate_venues")
               .insert({
                 scout_id,
@@ -2692,14 +2842,16 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
                 rank: cand.rank,
                 linked_venue_id: hq.id,
                 source: "hq_pool",
-              });
-            if (seedErr) {
+              })
+              .select("id")
+              .maybeSingle();
+            if (seedErr || !seedData) {
               // INSERT failed (FK / CHECK / unique race against a
               // concurrent run). Keep the research row in the matrix so
               // the producer still sees the venue; vs-generate-deck's
               // pushVenuesToHq will catch the dedupe at deck time.
               console.warn(
-                `[vs-research-venues] scout=${scout_id} hq-pool dedupe: seed-then-drop INSERT failed "${hq.name}" (${hq.id}): ${seedErr.message} (keeping research row)`,
+                `[vs-research-venues] scout=${scout_id} hq-pool dedupe: seed-then-drop INSERT failed "${hq.name}" (${hq.id}): ${seedErr?.message ?? "no row returned"} (keeping research row)`,
               );
               seededOnDedupeFailed++;
               filtered.push(cand);
@@ -2713,8 +2865,35 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
             // same HQ venue hits the seeded-path (drop only) instead of
             // double-inserting.
             seededHqIds.add(matchedId);
+            // Phase 5.14.0: queue photo seeding when HQ venue has stored photos.
+            const hqPhotos = hq.photos ?? [];
+            if (hqPhotos.some((p: unknown) => typeof p === "string" && (p as string).length > 0)) {
+              seedThenDropPhotoSeedCandidates.push({
+                candidateId: (seedData as { id: string }).id,
+                photos: hqPhotos,
+              });
+            }
           }
           cleanVenues = filtered;
+          // Phase 5.14.0: seed HQ photos for seed-then-drop candidates.
+          if (seedThenDropPhotoSeedCandidates.length > 0) {
+            const photoSeedResults = await Promise.allSettled(
+              seedThenDropPhotoSeedCandidates.map(({ candidateId, photos }) =>
+                seedHqPhotosToVs(sb, scout_id, candidateId, photos)
+              ),
+            );
+            let totalSeeded = 0;
+            let totalFailed = 0;
+            for (const r of photoSeedResults) {
+              if (r.status === "fulfilled") {
+                totalSeeded += r.value.seeded;
+                totalFailed += r.value.failed;
+              }
+            }
+            console.log(
+              `[hqPoolPhotoSeed] scout=${scout_id} path=seed_then_drop candidates_with_photos=${seedThenDropPhotoSeedCandidates.length} photos_seeded=${totalSeeded} photos_failed=${totalFailed}`,
+            );
+          }
           if (cleanVenues.length < before || seededOnDedupe > 0) {
             console.log(
               `[vs-research-venues] scout=${scout_id} hq-pool dedupe summary: dropped=${before - cleanVenues.length} of ${before} research rows (${seededOnDedupe} seed-then-drop, ${seededOnDedupeFailed} seed-then-drop INSERT failed)`,

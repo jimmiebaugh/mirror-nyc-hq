@@ -2,6 +2,40 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.14: Venue photo persistence (2026-05-28, complete)
+
+Squash SHA `bf2cb67`. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.14. Two edge functions touched: `vs-generate-deck` + `vs-research-venues`. No migration.
+
+All three `vs-research-venues` hq_pool INSERT paths covered (`loadHqVenuesIntoPool` deterministic-keep, Phase B seed-then-drop, `rescueHqPoolFitVetoedVenues`). Pre-populate pattern is uniform: fresh INSERT captures candidate id via `.select("id").maybeSingle()`; photos queued in `photoSeedCandidates`; `Promise.allSettled` fires `seedHqPhotosToVs` per candidate after the loop. Telemetry unified with `path=load/seed_then_drop/rescue` qualifier on all three `[hqPoolPhotoSeed]` log lines.
+
+### D1: Use existing `venues.photos text[]` column
+
+Column already exists (`text[] NOT NULL DEFAULT '{}'`, created in `20260506061457_initial_schema.sql` line 374). No migration needed. HQ photo surface is backend-only for v1; no per-photo metadata needed on the HQ side. `text[]` naturally extends to N > 4 slots later without schema changes.
+
+### D2: Use existing `venue_photos` storage bucket
+
+Bucket already created in `20260506061457_initial_schema.sql` line 908. Public bucket (CDN URLs bypass RLS). Write gated to `is_producer_or_admin()` for SDK callers; service-role (edge functions) bypasses. No new bucket needed.
+
+### D3: Flat-keyed storage at `<venue_id>/photo_<slot>.<ext>`
+
+Latest deck's photos always overwrite at the same deterministic path. Simple and predictable. Per-scout photo history already preserved in `vs_venue_photos` bucket if ever needed. Extension changes handled by deleting old paths first (Step A) then uploading new paths.
+
+### D4: 4 slots locked for v1
+
+Matches deck template (img_1..img_4), matches `vs_venue_photos` CHECK BETWEEN 1 AND 4. `photos text[]` naturally extends to N later without migration.
+
+### D5: No backfill of pre-5.14 venue photos
+
+Existing venues stay photo-empty until a producer generates a deck involving them. Natural fill through normal workflow. Avoids Drive scope complexity.
+
+### D6: Pre-populate at seed time in `vs-research-venues`
+
+Copy HQ photos to `vs_venue_photos` when `loadHqVenuesIntoPool` (and seed-then-drop) creates hq_pool candidates. Everything downstream (Review UI, PhotoUploadModal, deck generation) works unchanged. Best-effort: copy failure = empty slots. Producer can still upload/replace per slot in Review.
+
+### D7: No HQ frontend changes in 5.14
+
+No VenueDetail photo display, no VenueEdit photo management. Photos are storage-layer persistence only. Frontend surface deferred to Phase 5.15+.
+
 ## Phase 5.13: Talent Scout review (2026-05-27, complete)
 
 Squash SHA `9e15841`. 7 sub-phases plus project doc clean-up, collapsed into one commit. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.13.

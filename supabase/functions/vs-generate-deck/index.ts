@@ -208,6 +208,14 @@ function fmtDate(live: string | null | undefined): string {
   return live; // pass-through; producer-formatted strings already
 }
 
+// Phase 5.14.0: extract extension from a storage path like
+// "scout_id/candidate_id/slot-1-timestamp.jpg" or
+// "venue_id/photo_1.jpg". Defaults to "jpg" when no dot is found.
+function extractExtension(storagePath: string): string {
+  const lastDot = storagePath.lastIndexOf(".");
+  return lastDot >= 0 ? storagePath.slice(lastDot + 1) : "jpg";
+}
+
 // Slide element walking. Lifted verbatim from VS Pro.
 function findImagesByAltText(
   // deno-lint-ignore no-explicit-any
@@ -586,6 +594,166 @@ async function pushVenuesToHq(
   return { failedVenueId: null, error: null };
 }
 
+// Phase 5.14.0: copy the producer's finalized vs_venue_photos for each
+// pitched + include_in_deck candidate to the HQ venue_photos bucket and
+// update venues.photos with a 4-element path array. Best-effort: every
+// failure warn-logs and continues. Never throws or fails the deck.
+//
+// Placement: runs AFTER pushVenuesToHq (linked_venue_id is set on all
+// candidates) and BEFORE the photo-load step for Slides (which reads
+// vs_venue_photos -- unrelated bucket; not affected by this function).
+//
+// Authority: the candidate's vs_venue_photos ALWAYS overwrite HQ. Prior
+// HQ photos (from an earlier deck run on the same venue) are deleted
+// first (Step A) to prevent orphaned objects when photo extensions change
+// between generations. The producer's current selections are canonical.
+async function persistVenuePhotosToHq(
+  sb: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  candidates: any[],
+  scout_id: string,
+): Promise<void> {
+  const candidateIds = candidates.map((c) => c.id as string);
+  if (candidateIds.length === 0) return;
+
+  // Re-read linked_venue_id for all candidates so we see the post-
+  // pushVenuesToHq values (the in-memory array was loaded before that call).
+  const { data: freshLinks } = await sb
+    .from("vs_candidate_venues")
+    .select("id, linked_venue_id")
+    .in("id", candidateIds);
+  const linkedMap = new Map<string, string>(
+    (
+      (freshLinks ?? []) as {
+        id: string;
+        linked_venue_id: string | null;
+      }[]
+    )
+      .filter(
+        (r): r is { id: string; linked_venue_id: string } =>
+          typeof r.linked_venue_id === "string",
+      )
+      .map((r) => [r.id, r.linked_venue_id]),
+  );
+
+  // Batch-read vs_venue_photos for all candidates in one query.
+  const { data: vsPhotosRaw } = await sb
+    .from("vs_venue_photos")
+    .select("candidate_venue_id, slot, storage_path")
+    .in("candidate_venue_id", candidateIds)
+    .order("slot", { ascending: true });
+  const vsPhotos = (vsPhotosRaw ?? []) as {
+    candidate_venue_id: string;
+    slot: number;
+    storage_path: string;
+  }[];
+
+  // Group photos by candidate id.
+  const photosByCandidate = new Map<
+    string,
+    { slot: number; storage_path: string }[]
+  >();
+  for (const p of vsPhotos) {
+    const arr = photosByCandidate.get(p.candidate_venue_id) ?? [];
+    arr.push({ slot: p.slot, storage_path: p.storage_path });
+    photosByCandidate.set(p.candidate_venue_id, arr);
+  }
+
+  let persisted = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const cand of candidates) {
+    const candId = cand.id as string;
+    const linkedId = linkedMap.get(candId) ?? null;
+    if (!linkedId) {
+      // Guard: shouldn't happen post-pushVenuesToHq, but skip gracefully.
+      skipped++;
+      continue;
+    }
+
+    const candPhotos = photosByCandidate.get(candId) ?? [];
+    if (candPhotos.length === 0) {
+      skipped++;
+      continue;
+    }
+
+    // Step A: Delete all existing files referenced in venues.photos so
+    // extension changes don't leave orphans (old .jpg when new .png lands).
+    const { data: hqVenue } = await sb
+      .from("venues")
+      .select("photos")
+      .eq("id", linkedId)
+      .maybeSingle();
+    const currentPhotos = (
+      (hqVenue as { photos?: (string | null)[] | null } | null)?.photos ?? []
+    ) as (string | null)[];
+    const existingPaths = currentPhotos.filter(
+      (p): p is string => typeof p === "string" && p.length > 0,
+    );
+    if (existingPaths.length > 0) {
+      const { error: removeErr } = await sb.storage
+        .from("venue_photos")
+        .remove(existingPaths);
+      if (removeErr) {
+        console.warn(
+          `[vs-generate-deck] scout=${scout_id} candidate=${candId} venue=${linkedId} photo remove failed: ${removeErr.message} (upsert will overwrite)`,
+        );
+      }
+    }
+
+    // Step B: Download from vs_venue_photos, upload to venue_photos.
+    const newPhotos: (string | null)[] = [null, null, null, null];
+    for (const photo of candPhotos) {
+      const slotIdx = photo.slot - 1;
+      if (slotIdx < 0 || slotIdx > 3) continue;
+      const ext = extractExtension(photo.storage_path);
+      const targetPath = `${linkedId}/photo_${photo.slot}.${ext}`;
+
+      const { data: blob, error: dlErr } = await sb.storage
+        .from("vs_venue_photos")
+        .download(photo.storage_path);
+      if (dlErr || !blob) {
+        console.warn(
+          `[vs-generate-deck] scout=${scout_id} candidate=${candId} venue=${linkedId} slot=${photo.slot} download failed: ${dlErr?.message ?? "no blob"}`,
+        );
+        continue;
+      }
+
+      const { error: ulErr } = await sb.storage
+        .from("venue_photos")
+        .upload(targetPath, blob, { upsert: true });
+      if (ulErr) {
+        console.warn(
+          `[vs-generate-deck] scout=${scout_id} candidate=${candId} venue=${linkedId} slot=${photo.slot} upload failed: ${ulErr.message}`,
+        );
+        continue;
+      }
+
+      newPhotos[slotIdx] = targetPath;
+    }
+
+    // Step C: Update venues.photos with the new 4-element array.
+    const { error: updErr } = await sb
+      .from("venues")
+      .update({ photos: newPhotos })
+      .eq("id", linkedId);
+    if (updErr) {
+      console.warn(
+        `[vs-generate-deck] scout=${scout_id} candidate=${candId} venue=${linkedId} venues.photos UPDATE failed: ${updErr.message}`,
+      );
+      failed++;
+      continue;
+    }
+
+    persisted++;
+  }
+
+  console.log(
+    `[vsPhotoPersist] scout=${scout_id} candidates=${candidates.length} persisted=${persisted} failed=${failed} skipped=${skipped}`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 // Main handler
@@ -879,6 +1047,10 @@ Deno.serve(async (req) => {
         );
         return;
       }
+
+      // 2.7. Persist venue photos to HQ (Phase 5.14.0). Best-effort: any
+      // failure warn-logs and continues; never fails the deck.
+      await persistVenuePhotosToHq(sb, venues, scout_id);
 
       // 3. Load photos + build signed URLs (private bucket, 1-hour TTL).
       //    Signed-URL mint is parallel via Promise.all (~50-100ms per call;
