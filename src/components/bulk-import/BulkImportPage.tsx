@@ -413,7 +413,7 @@ export function BulkImportPage({
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+    <div className="mx-auto max-w-7xl space-y-6 px-6 pt-8 pb-28">
       <header className="space-y-2">
         {/* R7 amendment v3 § 3: per-page back-crumb retired; TopBar carries it. */}
         <h1 className="h-page">Bulk Import · {config.displayName}</h1>

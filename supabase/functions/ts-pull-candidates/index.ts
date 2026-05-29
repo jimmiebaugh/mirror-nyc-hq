@@ -31,6 +31,93 @@ import { uploadAttachmentToStorage, LARGE_ATTACHMENT_THRESHOLD_BYTES } from "../
 import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
 import { getGmailAccessToken } from "../_shared/gmailServiceAccount.ts";
 import { callClaude } from "../_shared/anthropic.ts";
+import type { ClaudeContentPart, ClaudeMessage } from "../_shared/anthropic.ts";
+import type { EvalRole } from "../_shared/buildClaudeEvalRequest.ts";
+
+// Service-role Supabase client used throughout this function. Matches the
+// ReturnType<typeof createClient> convention used by sibling edge functions.
+type ServiceClient = ReturnType<typeof createClient>;
+
+// ---- Narrow Gmail REST shapes (only the fields this function reads) ----
+// Gmail users.messages.get (format=full) and users.messages.attachments.get
+// surface far more than we use; type just what we touch.
+interface GmailHeader {
+  name?: string;
+  value?: string;
+}
+interface GmailMessagePartBody {
+  data?: string;
+  size?: number;
+  attachmentId?: string;
+}
+interface GmailMessagePart {
+  mimeType?: string;
+  filename?: string;
+  body?: GmailMessagePartBody;
+  parts?: GmailMessagePart[];
+  headers?: GmailHeader[];
+}
+interface GmailMessage {
+  payload?: GmailMessagePart;
+}
+interface GmailAttachment {
+  data?: string;
+}
+interface GmailMessageListEntry {
+  id: string;
+}
+interface GmailMessageList {
+  messages?: GmailMessageListEntry[];
+  nextPageToken?: string;
+}
+
+// Parsed Claude eval JSON. Narrow to exactly the fields the save path reads;
+// every field is optional/defensive since the model output is untrusted.
+interface EvalResult {
+  scores?: Record<string, number>;
+  total_score?: number;
+  auto_classification_suggested?: string;
+  candidate_location?: string | null;
+  recruiter_note?: string | null;
+  top_strengths?: unknown;
+  key_gaps?: unknown;
+  quick_overview?: unknown;
+  recommendation_tier?: string | null;
+}
+
+// One scorecard criterion, as stored on ts_roles.scorecard[].
+interface ScorecardCriterion {
+  name?: string;
+  tier?: number;
+  is_disqualifier?: boolean;
+}
+
+// Narrow view of the ts_roles row this function reads. Extends EvalRole (the
+// shared eval-request shape) with job_description, the raw JD column the
+// builders consume via `jd_full_text: role.job_description ?? role.jd_full_text`.
+interface PullRole extends EvalRole {
+  job_description?: string | null;
+}
+
+// One queued candidate message id awaiting processing in a pull round.
+interface PendingCandidate {
+  messageId: string;
+}
+
+// Shape of the JSON request body this function accepts. All fields optional;
+// the entry point branches on which are present.
+interface PullRequestBody {
+  continue_round_id?: string;
+  role_id?: string;
+  triggered_by?: string;
+}
+
+// Per-step error captured during a candidate's pipeline run.
+interface ProcessError {
+  step: string;
+  messageId: string;
+  error: string;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,7 +163,7 @@ function yieldForCleanup() {
   return new Promise((r) => setTimeout(r, 0));
 }
 
-async function gmailFetch(token: string, path: string, retries = 3): Promise<any> {
+async function gmailFetch<T = unknown>(token: string, path: string, retries = 3): Promise<T> {
   const url = `https://gmail.googleapis.com/gmail/v1/users/me${path}`;
   for (let i = 0; i < retries; i++) {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -86,7 +173,7 @@ async function gmailFetch(token: string, path: string, retries = 3): Promise<any
     }
     const bodyText = await res.text();
     if (!res.ok) throw new Error(`Gmail ${path}: ${res.status} ${bodyText.slice(0, 400)}`);
-    return JSON.parse(bodyText);
+    return JSON.parse(bodyText) as T;
   }
   throw new Error(`Gmail ${path}: retries exhausted`);
 }
@@ -100,7 +187,7 @@ function decodeBase64Url(s: string): Uint8Array {
   return out;
 }
 
-function walkParts(payload: any, out: any[] = []): any[] {
+function walkParts(payload: GmailMessagePart | undefined, out: GmailMessagePart[] = []): GmailMessagePart[] {
   if (!payload) return out;
   out.push(payload);
   if (payload.parts) for (const p of payload.parts) walkParts(p, out);
@@ -186,7 +273,7 @@ function extractNameFromOnPrefix(prefix: string): string {
     if (lastComma > 0 && /\d/.test(s.slice(0, lastComma))) {
       s = s.slice(lastComma + 1);
     }
-    s = s.replace(/^[\s\d:.\/-]+/, "");
+    s = s.replace(/^[\s\d:./-]+/, "");
   }
   s = s.trim().replace(/[<>"']/g, "");
   if (/\d/.test(s)) return "";
@@ -211,7 +298,7 @@ function parseForwardedFromString(rawBody: string): {
   // in such a chain is @mirrornyc.com and we incorrectly skip.
   const FROM_LINE = /From:\s*"?([^"<\n]{0,200}?)"?\s*<([^>\s]+@[^>\s]+)>/gi;
   const FROM_BARE = /From:\s*([^\s<\n]+@[^\s<\n]+)/gi;
-  const ON_WROTE_LINE = /\bOn\b([^<]{1,300}?)<\s*([\w.+\-]+@[\w.\-]+)\s*>\s*wrote\s*:/gi;
+  const ON_WROTE_LINE = /\bOn\b([^<]{1,300}?)<\s*([\w.+-]+@[\w.-]+)\s*>\s*wrote\s*:/gi;
   type FromHit = { name: string; email: string; startIdx: number; afterIdx: number };
   const hits: FromHit[] = [];
   for (const m of rawBody.matchAll(FROM_LINE)) {
@@ -290,7 +377,7 @@ function stripMirrorSignature(text: string): string {
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i].trim();
     // Bolded name pattern: *Firstname Lastname* on its own line.
-    if (/^\*[A-Z][A-Za-z'\-\.\s]{1,60}\*\s*$/.test(ln)) {
+    if (/^\*[A-Z][A-Za-z'\-.\s]{1,60}\*\s*$/.test(ln)) {
       const window = lines
         .slice(i, Math.min(lines.length, i + 14))
         .join("\n");
@@ -362,7 +449,7 @@ function extractSegmentBody(segment: string): string {
     body = body.slice(blankMatch.index + blankMatch[0].length);
   }
   const wroteMatch = body.match(
-    /\bOn\b[^<]{1,300}?<\s*[\w.+\-]+@[\w.\-]+\s*>\s*wrote\s*:/i,
+    /\bOn\b[^<]{1,300}?<\s*[\w.+-]+@[\w.-]+\s*>\s*wrote\s*:/i,
   );
   if (wroteMatch && typeof wroteMatch.index === "number") {
     body = body.slice(0, wroteMatch.index);
@@ -445,7 +532,7 @@ export function extractManagerNote(
   // (no explicit forward marker but a reply-quote pattern), truncate
   // at it so the quoted body isn't picked up as the manager's note.
   const seg0Wrote = seg0.match(
-    /\bOn\b[^<]{1,300}?<\s*[\w.+\-]+@[\w.\-]+\s*>\s*wrote\s*:/i,
+    /\bOn\b[^<]{1,300}?<\s*[\w.+-]+@[\w.-]+\s*>\s*wrote\s*:/i,
   );
   if (seg0Wrote && typeof seg0Wrote.index === "number") {
     seg0 = seg0.slice(0, seg0Wrote.index);
@@ -523,7 +610,7 @@ export function parseForwardedEmail(
 }
 
 async function extractPdfText(bytes: Uint8Array): Promise<string> {
-  let pdf: any = null;
+  let pdf: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
   try {
     pdf = await getDocumentProxy(bytes);
     const { text } = await extractText(pdf, { mergePages: true });
@@ -605,8 +692,12 @@ async function dispatchNextBatch(roundId: string, attempt = 1): Promise<boolean>
       return dispatchNextBatch(roundId, attempt + 1);
     }
     console.error(`[ts-pull-candidates] SELF_INVOKE_FAILED: round=${roundId} all ${MAX_ATTEMPTS} attempts exhausted`);
-  } catch (err: any) {
-    console.warn(`[ts-pull-candidates] SELF_INVOKE_ERROR: round=${roundId} attempt=${attempt} ${err?.message ?? err}`);
+  } catch (err: unknown) {
+    // Preserve the original `err?.message ?? err` semantics for non-Error
+    // throwers that still carry a `.message` (e.g. supabase-js errors).
+    const m = (err as { message?: unknown } | null | undefined)?.message;
+    const errMsg = m != null ? String(m) : String(err);
+    console.warn(`[ts-pull-candidates] SELF_INVOKE_ERROR: round=${roundId} attempt=${attempt} ${errMsg}`);
     if (attempt < MAX_ATTEMPTS) {
       await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt]));
       return dispatchNextBatch(roundId, attempt + 1);
@@ -682,29 +773,29 @@ function fireNotificationAsync(roleId: string, roundId: string) {
 // ---------- Per-candidate processing ----------
 
 async function processOne(
-  supabase: any,
+  supabase: ServiceClient,
   ctx: {
     accessToken: string;
     roleId: string;
     roundId: string;
-    role: any;
-    scorecard: { criteria: any[] };
+    role: PullRole;
+    scorecard: { criteria: ScorecardCriterion[] };
     competitors: string[];
     threshold: number;
     evalPromptSnapshot: string;
   },
-  pending: { messageId: string },
-  errors: any[],
+  pending: PendingCandidate,
+  errors: ProcessError[],
 ): Promise<"saved" | "rejected" | "fast_track" | "promoted" | "failed" | "skipped"> {
   const { accessToken, roleId, roundId, role, scorecard, competitors, threshold, evalPromptSnapshot } = ctx;
   const id = pending.messageId;
   const candidateUuid = crypto.randomUUID();
 
   // --- extract ---
-  let msg: any = null;
+  let msg: GmailMessage | null = null;
   let bodyText = "";
   let bodyHtml = "";
-  let attachments: { id: string; filename: string; mimeType: string; size: number | null; storage_path?: string | null }[] = [];
+  let attachments: { id: string; filename: string; mimeType: string | undefined; size: number | null; storage_path?: string | null }[] = [];
   let name = "", email = "", date = new Date().toISOString();
   // Phase 3.7.7: when the sender is a Mirror manager forwarding to jobs@,
   // these get filled in; the candidate identity below shifts to the
@@ -718,10 +809,10 @@ async function processOne(
   // "HIRING MANAGER NOTES:".
   let internalNotes: string | null = null;
   try {
-    msg = await gmailFetch(accessToken, `/messages/${id}?format=full`);
-    const headers: any[] = msg.payload?.headers ?? [];
-    const fromH = headers.find((h: any) => h.name?.toLowerCase() === "from")?.value ?? "";
-    const dateH = headers.find((h: any) => h.name?.toLowerCase() === "date")?.value ?? "";
+    msg = await gmailFetch<GmailMessage>(accessToken, `/messages/${id}?format=full`);
+    const headers: GmailHeader[] = msg.payload?.headers ?? [];
+    const fromH = headers.find((h) => h.name?.toLowerCase() === "from")?.value ?? "";
+    const dateH = headers.find((h) => h.name?.toLowerCase() === "date")?.value ?? "";
     const parsed = parseFromHeader(fromH);
     name = parsed.name; email = parsed.email;
     if (dateH) date = new Date(dateH).toISOString();
@@ -740,7 +831,7 @@ async function processOne(
     // a message/rfc822 attachment is in play (forward-as-attachment).
     console.log(
       `[ts-pull-candidates] ${id} parts: ${
-        parts.map((p: any) => `${p.mimeType ?? "?"}(${p.body?.size ?? p.body?.data?.length ?? "0"})`).join(", ")
+        parts.map((p) => `${p.mimeType ?? "?"}(${p.body?.size ?? p.body?.data?.length ?? "0"})`).join(", ")
       }`,
     );
     for (const p of parts) {
@@ -781,7 +872,7 @@ async function processOne(
           raw = new TextDecoder().decode(decodeBase64Url(p.body.data));
         } else if (p.body?.attachmentId) {
           try {
-            const att = await gmailFetch(
+            const att = await gmailFetch<GmailAttachment>(
               accessToken,
               `/messages/${id}/attachments/${p.body.attachmentId}`,
             );
@@ -894,7 +985,7 @@ async function processOne(
   const PER_ATTACHMENT_TEXT_CAP = 10000;
 
   for (const att of attachments) {
-    let a: any = null;
+    let a: GmailAttachment | null = null;
     try {
       const isDocx = att.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         || /\.docx$/i.test(att.filename ?? "");
@@ -910,7 +1001,7 @@ async function processOne(
       }
 
       logMemory(`Candidate ${id} BEFORE_FETCH ${att.filename} size=${bytesToMb(att.size)}`);
-      a = await gmailFetch(accessToken, `/messages/${id}/attachments/${att.id}`);
+      a = await gmailFetch<GmailAttachment>(accessToken, `/messages/${id}/attachments/${att.id}`);
       let bytes: Uint8Array | null = a?.data ? decodeBase64Url(a.data) : null;
       a = null;
 
@@ -920,7 +1011,9 @@ async function processOne(
           roleId,
           candidateId: candidateUuid,
           filename: att.filename,
-          mimeType: att.mimeType,
+          // Gmail attachment parts always carry a mimeType; cast narrows the
+          // part-shape's optional field to the helper's required string.
+          mimeType: att.mimeType as string,
         });
         if (uploaded) att.storage_path = uploaded.path;
       }
@@ -972,7 +1065,7 @@ async function processOne(
   const portfolioAtt = pickPortfolioAttachment(attachments);
 
   // --- score ---
-  let parsedResult: any = null;
+  let parsedResult: EvalResult | null = null;
   try {
     const claudeRequest = buildClaudeEvalRequest({
       role: { ...role, jd_full_text: role.job_description ?? role.jd_full_text },
@@ -992,11 +1085,14 @@ async function processOne(
 
     const result = await callClaude(
       "talent_scout",
-      claudeRequest.messages as any,
+      // buildClaudeEvalRequest widens the block `type` fields to `string`,
+      // so cast through unknown to the wrapper's narrow content types. No
+      // runtime effect; the object shape already matches the API contract.
+      claudeRequest.messages as unknown as ClaudeMessage[],
       {
         model: claudeRequest.model,
         max_tokens: claudeRequest.max_tokens,
-        system: claudeRequest.system as any,
+        system: claudeRequest.system as unknown as ClaudeContentPart[],
         anthropic_beta: ["extended-cache-ttl-2025-04-11"],
         fn_name: "ts-pull-candidates",
         role_id: roleId,
@@ -1018,7 +1114,7 @@ async function processOne(
       throw new Error(`Anthropic ${status}: ${msg.slice(0, 200)}`);
     }
 
-    parsedResult = parseClaudeJson<any>(result.text);
+    parsedResult = parseClaudeJson<EvalResult>(result.text);
   } catch (e) {
     if (e instanceof ClaudeApiCriticalError) throw e;
     errors.push({ step: "score", messageId: id, error: String(e) });
@@ -1030,11 +1126,13 @@ async function processOne(
   attachText = "";
 
   // --- save ---
-  const r = parsedResult;
-  const criteriaList: any[] = scorecard.criteria ?? [];
+  // Non-null: the try above returns "failed" on any parse error, so reaching
+  // here means parsedResult was populated by a successful parseClaudeJson.
+  const r = parsedResult!;
+  const criteriaList: ScorecardCriterion[] = scorecard.criteria ?? [];
   let disqualified = false;
   for (const c of criteriaList) {
-    if (c.tier === 1 && c.is_disqualifier && (r.scores?.[c.name] ?? 0) === 0) { disqualified = true; break; }
+    if (c.tier === 1 && c.is_disqualifier && (r.scores?.[c.name as string] ?? 0) === 0) { disqualified = true; break; }
   }
   // Phase 3.7.2.1: AI rejection writes status='reject' with manually_reviewed
   // false (default on insert). The AUTO pill in the UI flags it as the AI's
@@ -1151,7 +1249,7 @@ async function processOne(
 
 // ---------- Continuation ----------
 
-async function continueRound(supabase: any, roundId: string): Promise<Response> {
+async function continueRound(supabase: ServiceClient, roundId: string): Promise<Response> {
   const invocationId = crypto.randomUUID();
   const INVOCATION_START_MS = Date.now();
   console.log(`[ts-pull-candidates] INVOCATION_START: invocation=${invocationId} round=${roundId} batchSize=${BATCH_SIZE}`);
@@ -1159,7 +1257,7 @@ async function continueRound(supabase: any, roundId: string): Promise<Response> 
   const { data: round } = await supabase.from("ts_pull_rounds").select("*").eq("id", roundId).maybeSingle();
   if (!round) throw new Error(`Round ${roundId} not found`);
 
-  let pendingCandidates: { messageId: string }[] =
+  let pendingCandidates: PendingCandidate[] =
     Array.isArray(round.pending_candidates) ? [...round.pending_candidates] : [];
 
   const terminal = ["complete", "failed", "stalled"];
@@ -1175,7 +1273,7 @@ async function continueRound(supabase: any, roundId: string): Promise<Response> 
 
   const { data: role } = await supabase.from("ts_roles").select("*").eq("id", round.role_id).single();
 
-  const scorecardCriteria = (role.scorecard as any[]) ?? [];
+  const scorecardCriteria = (role.scorecard as ScorecardCriterion[]) ?? [];
   const scorecard = { criteria: scorecardCriteria };
   const competitorBonus = (role.competitor_bonus as { competitors?: string[] } | null) ?? null;
   const competitors = competitorBonus?.competitors ?? [];
@@ -1183,7 +1281,7 @@ async function continueRound(supabase: any, roundId: string): Promise<Response> 
   const evalPromptSnapshot = (role.evaluation_prompt as string | null) ?? "";
 
   const accessToken = await getGmailAccessToken();
-  const errors: any[] = [];
+  const errors: ProcessError[] = [];
 
   // Dedupe against already-saved candidates (resume safety).
   if (pendingCandidates.length > 0) {
@@ -1192,7 +1290,11 @@ async function continueRound(supabase: any, roundId: string): Promise<Response> 
       .select("gmail_message_id")
       .eq("role_id", round.role_id)
       .not("gmail_message_id", "is", null);
-    const seen = new Set<string>((existing ?? []).map((c: any) => c.gmail_message_id));
+    // The query filters `gmail_message_id is null` out, so each row's id is a
+    // non-null string here.
+    const seen = new Set<string>(
+      ((existing ?? []) as { gmail_message_id: string }[]).map((c) => c.gmail_message_id),
+    );
     const before = pendingCandidates.length;
     pendingCandidates = pendingCandidates.filter((p) => !seen.has(p.messageId));
     if (pendingCandidates.length !== before) {
@@ -1293,7 +1395,7 @@ async function continueRound(supabase: any, roundId: string): Promise<Response> 
 
 // ---------- Initial pull ----------
 
-async function startPull(supabase: any, roleId: string, body: any): Promise<string> {
+async function startPull(supabase: ServiceClient, roleId: string, body: PullRequestBody): Promise<string> {
   const { data: role } = await supabase.from("ts_roles").select("*").eq("id", roleId).single();
   if (!role) throw new Error("Role not found");
 
@@ -1355,7 +1457,7 @@ async function startPull(supabase: any, roleId: string, body: any): Promise<stri
 
       let pageToken: string | undefined;
       do {
-        const list = await gmailFetch(
+        const list = await gmailFetch<GmailMessageList>(
           accessToken,
           `/messages?q=${encodeURIComponent(q)}&maxResults=100${pageToken ? `&pageToken=${pageToken}` : ""}`,
         );
@@ -1368,7 +1470,9 @@ async function startPull(supabase: any, roleId: string, body: any): Promise<stri
         .from("ts_candidates")
         .select("gmail_message_id")
         .eq("role_id", roleId);
-      const existingIds = new Set((existing ?? []).map((c: any) => c.gmail_message_id));
+      const existingIds = new Set(
+        ((existing ?? []) as { gmail_message_id: string | null }[]).map((c) => c.gmail_message_id),
+      );
       const newIds = messageIds.filter((id) => !existingIds.has(id));
 
       if (newIds.length === 0) {
@@ -1418,7 +1522,7 @@ Deno.serve(async (req) => {
   const supabase = sb();
 
   try {
-    const body = await req.json();
+    const body = (await req.json()) as PullRequestBody;
 
     if (body.continue_round_id) {
       try {

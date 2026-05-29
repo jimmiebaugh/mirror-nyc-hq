@@ -1,11 +1,13 @@
 import type { EntityConfig, ParsedSheet, UnresolvedRef } from "./types";
+import { splitMultiValue } from "@/lib/multiValue";
 
 /**
  * Generic unresolved-ref enumeration shared by every entity's
  * `buildUnresolved`. Walks the parsed sheet, collects every distinct raw
  * value found in `refResolved` columns, grouped by ref kind. Multi-value
- * columns split on "|" so each token resolves independently. Sync (no DB):
- * the actual existence match happens in MapStep.
+ * columns split on the canonical delimiter set (`/`, `,`; `|` accepted during
+ * the Phase 5.16.1.1 transition window) so each token resolves independently.
+ * Sync (no DB): the actual existence match happens in MapStep.
  *
  * Columns that share a `refKind` collapse into one group, so a value that
  * appears in multiple columns resolves once and applies everywhere.
@@ -26,9 +28,7 @@ export function enumerateUnresolvedRefs(
       const kind = col.refKind!;
       const cell = (row[col.key] ?? "").trim();
       if (!cell) continue;
-      const tokens = col.multiValue
-        ? cell.split("|").map((t) => t.trim()).filter(Boolean)
-        : [cell];
+      const tokens = col.multiValue ? splitMultiValue(cell) : [cell];
       for (const token of tokens) {
         let valueMap = byKind.get(kind);
         if (!valueMap) {
@@ -54,10 +54,12 @@ export function enumerateUnresolvedRefs(
   return out;
 }
 
-/** Split a multi-value cell on "|" into trimmed non-empty tokens. */
+/**
+ * Split a multi-value cell into trimmed non-empty tokens on the canonical
+ * delimiter set (`/`, `,`; legacy `|` during the transition window). Thin
+ * wrapper over the shared `splitMultiValue` so all bulk-import callsites and
+ * the edge parser stay on one delimiter contract.
+ */
 export function splitMulti(cell: unknown): string[] {
-  return String(cell ?? "")
-    .split("|")
-    .map((t) => t.trim())
-    .filter(Boolean);
+  return splitMultiValue(cell);
 }

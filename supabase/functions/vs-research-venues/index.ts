@@ -1996,7 +1996,7 @@ const TOOL: ClaudeTool = {
             name: {
               type: "string",
               description:
-                "Just the venue's actual name. Use the venue's brand / property name as it appears in directories or on its own site. Do NOT add descriptive suffixes like 'Storefront', 'Vacancy', 'Vacant Retail', 'Ground-Floor Retail', 'Ground-Floor Storefront', 'Retail Vacancy', 'Event Suite', or any other modifier that describes WHAT the space is. Those belong in venue_type / key_features. Examples of good: 'Palihouse West Hollywood', 'Westfield Century City', 'The Sunset', 'Platform Culver City'. Examples of BAD: 'Palihouse West Hollywood - Ground-Floor Event Suite', 'Westfield Century City - Ground Level Retail Space', 'Vacant Retail - Larchmont Village Storefront'. If the property is genuinely an unbranded vacancy with no name, use just the address (e.g. '10250 Santa Monica Blvd').",
+                "The venue's real name. If the property has a brand or property name (as it appears on its own site or in directories), use exactly that, e.g. 'Palihouse West Hollywood', 'Westfield Century City', 'The Sunset', 'Platform Culver City'. Three hard rules: (1) NO listing-database citations in the name. Never append a source or sub-listing in parentheses such as a Peerspace lounge name, '(LoopNet)', or '(NMRK)'; the listing URL belongs in website_url and nowhere else. (2) NO cross-street or 'at <street>' qualifier unless it is genuinely part of the property's verified name; e.g. 'Melrose Ave Storefront at La Cienega' should be just 'Melrose Ave Storefront'. (3) For a genuinely unbranded vacancy with no brand name, use a short '<neighborhood-or-street> <space-type>' identifier such as 'Sunset Strip Storefront' or 'Melrose Ave Storefront', rather than a bare address or a listing-site title. Do NOT append redundant space descriptors to a venue that already has a real name (no 'Palihouse West Hollywood - Ground-Floor Event Suite'); space-type detail belongs in venue_type and key_features. GOOD: 'Palihouse West Hollywood', 'Sunset Strip Storefront', 'Melrose Ave Storefront'. BAD: 'Sunset Strip Storefront (Peerspace Sunset Strip Lounge)', 'Melrose Ave Storefront at La Cienega', 'Westfield Century City - Ground Level Retail Space'.",
             },
             neighborhood: { type: "string" },
             address: { type: "string" },
@@ -3071,9 +3071,11 @@ Return ${targetNet} net-new venue candidates (10-15 total considering the existi
   // EdgeRuntime.waitUntil keeps the function alive past the response so
   // the AI work can finish in the background. Available on Supabase
   // Edge Runtime; local dev fallback awaits the work synchronously so
-  // tests behave deterministically.
-  // deno-lint-ignore no-explicit-any
-  const erAny = (globalThis as any).EdgeRuntime;
+  // tests behave deterministically. The global isn't in Deno's lib types,
+  // so narrow it through a local shape declaring only the field we read.
+  const erAny = (globalThis as {
+    EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
+  }).EdgeRuntime;
   if (erAny && typeof erAny.waitUntil === "function") {
     erAny.waitUntil(work());
   } else {

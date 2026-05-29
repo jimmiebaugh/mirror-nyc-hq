@@ -75,7 +75,7 @@ export function normalizeVenueName(raw: string | null | undefined): string {
     .normalize("NFKD")                              // strip diacritics
     .replace(/[̀-ͯ]/g, "")
     .replace(/&/g, " and ")                         // normalize "&" + "and"
-    .replace(/[.,'"!?\-_/\\()\[\]]/g, " ")          // strip common punctuation
+    .replace(/[.,'"!?\-_/\\()[\]]/g, " ")           // strip common punctuation
     .replace(/^(the)\s+/i, "")                      // strip leading article
     .replace(/\s+(inc\.?|llc\.?|ltd\.?|co\.?|corp\.?|nyc|ny|nv)\s*$/i, "") // strip suffixes
     .replace(/\s+/g, " ")                           // collapse whitespace

@@ -4,19 +4,18 @@ Living-state doc. The "Now" block below should answer "where is the project righ
 
 ## Now
 
-- **Latest ship:** Phase 5.15 (Anthropic per-tool call-log infra + spend breakdown surface). 4 sub-phases collapsed into one squash. New `anthropic_call_log` table (per-row Claude API spend, 12-month retention pruned by `ts-cron-monthly-spend-reset`) + `public.anthropic_spend_breakdown(window_kind text default 'month', window_iso text default null)` SECURITY DEFINER RPC supporting both calendar-month and calendar-year windows. `callClaude` wrapper writes a log row after `trackSpendAndAlert` (non-fatal); `CallClaudeOptions` gains optional `scout_id` + `role_id`; caller sweep threads ids across the VS + TS pipelines. Cap-control consolidation: HQ Admin Settings becomes the canonical cap-edit surface; TS + VS Settings flip to read-only spend displays. UX: new `<AnthropicSpendBreakdownTable>` with `appFilter` + `window` props; Month / Year `.viewswitch` toggle in the breakdown header row on all three Settings consumers; HQ Cap-card spend display scales (of $Y cap / of $Y annualized). CSS: `.scout-list-tbl` renamed globally to `.tbl-list`; `.tbl-divider` repainted to muted coral with wrapper-aware selector. Cron `ts-cron-monthly-spend-reset` gains a 12-month log prune.
+- **Latest ship:** Phase 5.16 (v1 wind-down cycle) — the 4 sub-phases (5.16.0 + 5.16.1.0 + 5.16.1.1 + 5.16.1.2) collapsed into ONE **consolidation squash** rebased onto Phase 5.15 (`1814867`), same pattern as the 5.15 consolidation. The tree is byte-identical to the per-sub-phase ships; this only collapses history. Cycle scope: freelance→standard flatten + `is_active_member()` DB tier hardening (~57 RLS rewrites); Vite 5→8 + tooling (bundle 603→584 KB); lint 191→0 full repo + ProjectDetail split + `.tbl` canon flip + delimiter fix; Supabase advisor focused (bulk-import + trigger-fn GRANT lockdown, 2 init-plan wraps, 6 FK indexes, 12 SECURITY DEFINER warnings documented); `xlsx`→SheetJS (frontend lazy CDN; edge `vs-parse-sheet` vendored patched 0.20.3) + `qs` fix (`npm audit` 0); Database types in the Deno tree (Edge #18); `logClaudeUsage` pruned (Edge #19); HQ Bulk Import column-mapping UI (Frontend #50); Phase B name-schema wording locked (Edge #13). 3 migrations + 21 edge-fn redeploys live across the cycle. Lint 0, build green (~584 KB). Per-sub-phase detail in `docs/decisions.md` § Phase 5.16.* ; narrative in `docs/v1-changelog.md` § 5.16. **Self-SHA placeholder `<pending consolidation squash>` backfills to the real consolidation SHA in the Phase 6.0 doc sweep** (per [[feedback_no_standalone_backfill_commits]]).
 
-- **Currently deployed to production:** Phase 5.15 collapsed (`e9a382e`). History-rewrite rebase replaced the four prior 5.15.x commits on `origin/main`. Both migrations + 11 edge function redeploys already on live (unchanged from the four-commit state). Builds on Phase 5.14 (`4e67f12`).
-- **Recent commits** (newest first):
-  - `e9a382e` Phase 5.15: Anthropic per-tool call-log infra + spend breakdown surface — 4 sub-phases collapsed; per-phase narratives in `docs/v1-changelog.md`
-  - `4e67f12` Phase 5.14: venue photo persistence — persist at deck-gen + pre-populate at research seed (all paths)
-  - `2393840` Phase 5.13: Talent Scout review (complete) + project doc clean-up, 7 sub-phases collapsed into one squash
-  - `ed81c38` Phase 5.12: Venue Scout full audit + UX update + cleanup — 28 sub-phases collapsed; per-sub-phase narratives in `docs/v1-changelog.md`
-  - `fee051e` Phase 5.11: UX/design-system audit + structural consistency + docs reorg
-  - `55bfee1` Phase 5.10: venues.about_venue rename + AI About Venue generator + Venue Edit/Detail refresh + v1 codebase triage cleanup
-- **Recent migrations:** `20260609000000_phase_5_15_3_spend_breakdown_window.sql` (Phase 5.15: drop old `anthropic_spend_breakdown(text)`, create new `(window_kind text default 'month', window_iso text default null)`) + `20260608000000_phase_5_15_anthropic_call_log.sql` (Phase 5.15: `anthropic_call_log` table + 4 indexes + admin-only RLS + original breakdown RPC). Both applied out-of-band via `supabase db push --linked`; types regenerated. Predecessor: 5.14 had no migration; prior set was the 5.12 cycle (10 files).
-- **Next sub-phase per roadmap:** Phase 5.15 complete (4 sub-phases collapsed). **Phase 5.16** (DB tier hardening + freelance project-contributor access + codebase triage) is next; spec at `OUTPUTS/phase-5-16-0-spec.md`. Then Phase 5.17 final smoke test + revisions. Queued carry-forwards: HQ-wide `.tbl` canon flip (`code-observations.md` row #47, deferred); HQ Core list-page sweep to adopt `.tbl-list` (deferred from 5.15); `vs-generate-deck` neighborhood auto-add into `public.neighborhoods` (5.12.13.3 carry-forward); VS research-accuracy C3 URL accuracy; VenueDetail photo display (Phase 5.15+ per 5.14 D7); per-scout / per-role drilldown UI deferred from 5.15; `SpendCapCard` rename to `AnthropicSpendCard` deferred from 5.15; month-selector / custom-range UI deferred from 5.15 (RPC's `window_iso` param exposed for it); toggle-state navigation persistence deferred from 5.15.
-- **Last updated:** 2026-05-28 (Phase 5.15 consolidation rebase).
+- **Currently deployed to production:** Phase 5.16 consolidation (`<pending consolidation squash>`) on the frontend (force-pushed to `main`; deploy fired). The cycle's 3 migrations + all touched edge functions are already live (applied / deployed out-of-band during the sub-phases), so the force-push tree is byte-identical to the per-sub-phase ships and the rebuild is wasted-but-harmless. Predecessors: 5.15 (`1814867`), 5.14 (`4e67f12`), 5.13 (`2393840`), 5.12 (`ed81c38`).
+- **Recent commits** (newest first, last 5):
+  - `<pending consolidation squash>` Phase 5.16: v1 wind-down cycle (4 sub-phases collapsed); see `docs/v1-changelog.md` § 5.16 + `docs/decisions.md` § Phase 5.16.*
+  - `1814867` Phase 5.15: Anthropic per-tool call-log infra + spend breakdown surface (4 sub-phases collapsed)
+  - `4e67f12` Phase 5.14: venue photo persistence (persist at deck-gen + pre-populate at research seed)
+  - `2393840` Phase 5.13: Talent Scout review (complete) + project doc clean-up
+  - `ed81c38` Phase 5.12: Venue Scout full audit + UX update + cleanup
+- **Recent migrations:** all 3 applied to live out-of-band during the 5.16 cycle — `20260612000000_phase_5_16_1_2_advisor_focused.sql` (bulk-import + trigger-fn GRANT lockdown, 2 RLS init-plan wraps, 6 FK indexes; no schema/type change), `20260611000000_phase_5_16_1_1_briefs_dedupe_policy.sql` (briefs storage-policy dedupe), `20260610000000_phase_5_16_0_freelance_flatten_and_tier_hardening.sql` (`is_active_member()` helper + ~57 RLS rewrites).
+- **Next phase:** **Phase 6.0** — post-v1 full-site smoke + punch list (the work formerly numbered "5.17 final smoke"; renumbered at the v1 close). The v1 build cycle closes with this 5.16 consolidation.
+- **Last updated:** 2026-05-28 (Phase 5.16 consolidation rebase).
 
 ## What's where
 
@@ -31,9 +30,12 @@ Living-state doc. The "Now" block below should answer "where is the project righ
 
 Only items that need a fresh eye to act on. Items already triaged into a phase plan or `code-observations.md` belong there, not here.
 
-- **esbuild dev-only SSRF advisory.** Deferred until the dedicated Vite 5 → 8 upgrade phase (a Phase 5.8 carry-forward).
-- **Lint baseline ~192 problems** tracked in `code-observations.md` Build & Tooling #3; build does not gate on lint.
-- **Owner-decision rows on observations:** Build & Tooling #2 (`@testing-library/react` keep or drop) and Frontend #16 (`IconStar` keep or prune). One-line calls from Jimmie unblock them.
+- **Phase B `name` schema wording LOCKED 2026-05-28** (0 iterations; `code-observations.md` Edge #13 closed).
+- **Both xlsx smokes PASSED 2026-05-28:** HQ Bulk Import real `.xlsx` (frontend browser CDN import) + Venue Scout sheet upload (vendored edge xlsx 0.20.3). `npm audit` 0; lint 0.
+- **DateRangePicker HQ lift deferred** to its own sub-phase (display-string/range-only API vs HQ's ISO `date` columns; a faithful lift needs a dual-contract picker extension). `code-observations.md` Frontend #43.
+- **Phase 6.0 carry-forwards:** RLS-helper `internal`-schema relocation (decisions § 5.16.1.2 D8); revisit the ~25 unused-index drops once production scan stats are meaningful (D6); the ~30 audit-column FK indexes (D7); RoleSettings.tsx + ProjectEdit.tsx god-file splits (Frontend #19 remainder); HQ Core list-page `.tbl-list` sweep; `vs-generate-deck` neighborhood auto-add into `public.neighborhoods`; VS research-accuracy C3 URL accuracy; per-scout / per-role drilldown UI; month-selector / custom-range UI; toggle-state navigation persistence.
+
+(Self-SHA `<pending consolidation squash>` in CHECKPOINT / changelog / roadmap / decisions backfills to the real consolidation SHA in the Phase 6.0 doc sweep — no standalone deploy-firing commit.)
 
 ## How to update this file
 

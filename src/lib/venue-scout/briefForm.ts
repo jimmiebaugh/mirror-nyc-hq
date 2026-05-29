@@ -357,8 +357,9 @@ export function toUpdate(state: BriefFormState): VsScoutUpdate {
     city: state.city.trim() || null,
     budget: parseBudget(state.budget_text),
     event_overview: state.event_overview.trim() || null,
-    // deno-lint-ignore no-explicit-any
-    brief_data: bd as any,
+    // bd is a plain key/value accumulator for the vs_scouts.brief_data jsonb
+    // column; narrow to the column's generated Json type, not any.
+    brief_data: bd as VsScoutUpdate["brief_data"],
   };
 }
 

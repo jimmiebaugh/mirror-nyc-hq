@@ -4,9 +4,8 @@ import { type WikiPage } from "@/lib/wiki/queries";
 
 /**
  * Wiki sidebar nav. Lists pages sorted by sort_order. Special page types
- * (team_directory / vendors_glance) get a link glyph; pages with
- * visibility = 'no_freelance' get a lock glyph and are hidden entirely
- * from freelance users (the nav itself is rendered server-side then
+ * (team_directory / vendors_glance) get a link glyph; admin_only pages get
+ * a lock glyph and are hidden from non-admins (the nav is rendered then
  * filtered, so even the link doesn't show up).
  *
  * Admin users see a "+ New Page" affordance at the bottom.
@@ -14,18 +13,15 @@ import { type WikiPage } from "@/lib/wiki/queries";
 export function WikiNav({
   pages,
   isAdmin,
-  isFreelance,
   currentSlug,
 }: {
   pages: WikiPage[];
   isAdmin: boolean;
-  isFreelance: boolean;
   currentSlug: string | null;
 }) {
   const { pathname } = useLocation();
   const visible = pages.filter((p) => {
     if (p.visibility === "admin_only" && !isAdmin) return false;
-    if (p.visibility === "no_freelance" && isFreelance) return false;
     return true;
   });
 
@@ -33,8 +29,7 @@ export function WikiNav({
     <nav className="wikinav">
       {visible.map((p) => {
         const active = currentSlug === p.slug || pathname === `/wiki/${p.slug}`;
-        const showLockGlyph =
-          p.visibility === "no_freelance" || p.visibility === "admin_only";
+        const showLockGlyph = p.visibility === "admin_only";
         const showLinkGlyph =
           p.page_type === "team_directory" || p.page_type === "vendors_glance";
         return (

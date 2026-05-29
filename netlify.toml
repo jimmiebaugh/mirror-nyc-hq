@@ -17,6 +17,13 @@
   command = "npm run build"
   publish = "dist"
 
+# Vite 8 requires Node ^20.19.0 || >=22.12.0 (Phase 5.16.1.0). Pin the build
+# container to Node 22 (latest LTS, satisfies the floor) so the production build
+# matches the local .nvmrc + package.json engines. Without this, a Netlify
+# default-Node drift below the floor would fail the build.
+[build.environment]
+  NODE_VERSION = "22"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

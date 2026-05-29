@@ -325,7 +325,6 @@ export default function RoleSettings() {
       }
     }
     if (errMsg) {
-      // eslint-disable-next-line no-console
       console.error("ts-refine-scorecard failed:", errMsg, invokeErr);
       toast({ title: "Couldn't refine scorecard", description: errMsg, variant: "destructive" });
       return;
@@ -394,8 +393,9 @@ export default function RoleSettings() {
       evaluation_prompt: form.evaluation_prompt.trim() === DEFAULT_EVAL_PROMPT.trim()
         ? null
         : (form.evaluation_prompt || null),
-      // deno-lint-ignore no-explicit-any
-      scorecard: form.scorecard as any,
+      // scorecard is the ts_roles jsonb column; narrow to the column's
+      // generated Json type rather than any.
+      scorecard: form.scorecard as RoleUpdate["scorecard"],
     };
     const { error } = await supabase.from("ts_roles").update(payload).eq("id", role.id);
     if (error) {

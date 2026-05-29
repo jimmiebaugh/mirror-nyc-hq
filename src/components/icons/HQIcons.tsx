@@ -313,6 +313,9 @@ export const IconAlert = (p: IconProps) => (
   </Base>
 );
 
+// Kept for palette completeness (HQIcons is a hand-curated set, treated like
+// the shadcn re-exports); not currently imported. See docs/decisions.md
+// § Phase 5.16.1.1 D12 (IconStar palette-completeness posture, Frontend #16).
 export const IconStar = (p: IconProps) => (
   <Base {...p}>
     <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />

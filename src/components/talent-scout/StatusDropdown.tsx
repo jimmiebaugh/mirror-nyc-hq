@@ -34,6 +34,8 @@ const LEGACY_AUTO_REJECTED: Opt = {
   cls: "bg-destructive/10 text-destructive border-destructive/40",
 };
 
+// Style map helper co-located with the dropdown that uses it; intentional.
+// eslint-disable-next-line react-refresh/only-export-components
 export function statusStyle(v: string | null | undefined) {
   if (v === "auto_rejected") return LEGACY_AUTO_REJECTED;
   return OPTIONS.find((o) => o.value === v) ?? OPTIONS[2]; // default = consider

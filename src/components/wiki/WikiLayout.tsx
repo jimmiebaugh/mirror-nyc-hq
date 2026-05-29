@@ -10,24 +10,17 @@ import type { WikiPage } from "@/lib/wiki/queries";
 export function WikiLayout({
   pages,
   isAdmin,
-  isFreelance,
   currentSlug,
   children,
 }: {
   pages: WikiPage[];
   isAdmin: boolean;
-  isFreelance: boolean;
   currentSlug: string | null;
   children: ReactNode;
 }) {
   return (
     <div className="wikilayout">
-      <WikiNav
-        pages={pages}
-        isAdmin={isAdmin}
-        isFreelance={isFreelance}
-        currentSlug={currentSlug}
-      />
+      <WikiNav pages={pages} isAdmin={isAdmin} currentSlug={currentSlug} />
       {children}
     </div>
   );

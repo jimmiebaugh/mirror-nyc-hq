@@ -42,15 +42,15 @@ const corsHeaders = {
 
 const sb = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-// deno-lint-ignore no-explicit-any
-function fmtErr(e: any): string {
+function fmtErr(e: unknown): string {
   if (e instanceof Error) return e.message;
   if (e && typeof e === "object") {
-    if (typeof e.message === "string") {
-      const parts = [e.message];
-      if (e.code) parts.push(`(code ${e.code})`);
-      if (e.details) parts.push(`details: ${e.details}`);
-      if (e.hint) parts.push(`hint: ${e.hint}`);
+    const o = e as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+    if (typeof o.message === "string") {
+      const parts = [o.message];
+      if (o.code) parts.push(`(code ${o.code})`);
+      if (o.details) parts.push(`details: ${o.details}`);
+      if (o.hint) parts.push(`hint: ${o.hint}`);
       return parts.join(" ");
     }
     try { return JSON.stringify(e).slice(0, 500); } catch { return String(e); }
@@ -70,6 +70,35 @@ function isNYC(loc: string | null | undefined): boolean {
 }
 
 type ScorecardEntry = { criterion: string; tier: number; weight: number; max_points?: number };
+
+// Narrow row shape for the partial ts_candidates projection this function
+// selects (see the `.select(...)` below). detected_links is typed to match
+// what addCandidateTitlePage consumes. manually_reviewed is NOT selected, so
+// it is optional/undefined at runtime and used only in the AI-rejected count.
+interface PacketCandidateRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  location: string | null;
+  applied_date: string | null;
+  status: string;
+  score: number | null;
+  recruiter_overview: string | null;
+  top_strengths: unknown;
+  key_gaps: unknown;
+  score_breakdown: unknown;
+  portfolio_path_or_url: string | null;
+  detected_links: { url: string; type: string }[] | null;
+  tier: string | null;
+  manually_reviewed?: boolean;
+}
+
+// Enriched candidate carried through ranking/rendering.
+interface EnrichedCandidate extends PacketCandidateRow {
+  total_score: number;
+  top_strength_short: string | null;
+  key_gap_short: string | null;
+}
 
 function computeTierMaxes(scorecard: ScorecardEntry[]) {
   const tierMax = (t: number) => scorecard.filter((c) => c.tier === t).reduce((s, c) => s + (Number(c.weight) || 0), 0);
@@ -122,57 +151,46 @@ Deno.serve(async (req) => {
       .from("ts_candidates")
       .select("id,name,email,location,applied_date,status,score,recruiter_overview,top_strengths,key_gaps,score_breakdown,portfolio_path_or_url,detected_links,tier")
       .eq("pull_round_id", pull_round_id);
-    const candList = cands ?? [];
+    const candList = (cands ?? []) as PacketCandidateRow[];
 
     // Enrich + sort.
-    // deno-lint-ignore no-explicit-any
-    const enriched = candList.map((c: any) => ({
+    const enriched: EnrichedCandidate[] = candList.map((c) => ({
       ...c,
       total_score: Number(c.score ?? 0),
-      top_strength_short: Array.isArray(c.top_strengths) ? c.top_strengths[0] : null,
-      key_gap_short: Array.isArray(c.key_gaps) ? c.key_gaps[0] : null,
+      top_strength_short: Array.isArray(c.top_strengths) ? (c.top_strengths[0] as string | null) : null,
+      key_gap_short: Array.isArray(c.key_gaps) ? (c.key_gaps[0] as string | null) : null,
     }));
 
-    const scorecard: ScorecardEntry[] = Array.isArray(role.scorecard) ? role.scorecard : [];
+    const scorecard: ScorecardEntry[] = Array.isArray(role.scorecard) ? (role.scorecard as ScorecardEntry[]) : [];
     const { t1: t1Max, t2: t2Max, t3: t3Max } = computeTierMaxes(scorecard);
-    // deno-lint-ignore no-explicit-any
     // Phase 3.7.6.7: default 12 → 10 to match updated COMPETITOR_BONUS_POINTS
     // constant. Roles still carry their own bonus_points in jsonb so older
     // roles persist whatever value they were created with.
-    const bonusMax = Number((role.competitor_bonus as any)?.bonus_points ?? 10);
+    const competitorBonus = role.competitor_bonus as { bonus_points?: number } | null;
+    const bonusMax = Number(competitorBonus?.bonus_points ?? 10);
     const totalMax = (t1Max || 53) + (t2Max || 42) + (t3Max || 5) + bonusMax;
 
-    // deno-lint-ignore no-explicit-any
-    const sorted = [...enriched].sort((a: any, b: any) => b.total_score - a.total_score);
-    // deno-lint-ignore no-explicit-any
-    const isRej = (s: any) => s === "reject" || s === "auto_rejected";
-    // deno-lint-ignore no-explicit-any
-    const nonRejected = sorted.filter((c: any) => !isRej(c.status));
+    const sorted = [...enriched].sort((a, b) => b.total_score - a.total_score);
+    const isRej = (s: string) => s === "reject" || s === "auto_rejected";
+    const nonRejected = sorted.filter((c) => !isRej(c.status));
     const topN = nonRejected.slice(0, top_n);
-    // deno-lint-ignore no-explicit-any
-    const fastTracks = include_fast_track ? sorted.filter((c: any) => c.status === "fast_track") : [];
-    // deno-lint-ignore no-explicit-any
-    const topMap = new Map<string, any>();
-    // deno-lint-ignore no-explicit-any
-    [...topN, ...fastTracks].forEach((c: any) => topMap.set(c.id, c));
-    // deno-lint-ignore no-explicit-any
-    const topCandidates = Array.from(topMap.values()).sort((a: any, b: any) => b.total_score - a.total_score);
+    const fastTracks = include_fast_track ? sorted.filter((c) => c.status === "fast_track") : [];
+    const topMap = new Map<string, EnrichedCandidate>();
+    [...topN, ...fastTracks].forEach((c) => topMap.set(c.id, c));
+    const topCandidates = Array.from(topMap.values()).sort((a, b) => b.total_score - a.total_score);
 
     const pulled = candList.length;
-    // deno-lint-ignore no-explicit-any
-    const inPool = candList.filter((c: any) => ["interview", "fast_track", "consider"].includes(c.status)).length;
+    const inPool = candList.filter((c) => ["interview", "fast_track", "consider"].includes(c.status)).length;
     // Phase 3.7.2.1: AI-rejected count = status='reject' AND
     // manually_reviewed=false (the AI's call, no human confirmation yet).
     // Legacy 'auto_rejected' still counted for any rows that escaped the
     // backfill.
-    // deno-lint-ignore no-explicit-any
     const autoRejected = candList.filter(
-      (c: any) =>
+      (c) =>
         c.status === "auto_rejected" ||
         (c.status === "reject" && !c.manually_reviewed),
     ).length;
-    // deno-lint-ignore no-explicit-any
-    const fastTrackCount = candList.filter((c: any) => c.status === "fast_track").length;
+    const fastTrackCount = candList.filter((c) => c.status === "fast_track").length;
 
     const reportDate = new Date(round.completed_at ?? round.started_at ?? Date.now());
     const headerText = `Mirror NYC · ${role.title ?? "Role"} · R${round.round_number ?? "?"}`;
@@ -202,10 +220,8 @@ Deno.serve(async (req) => {
     });
 
     // Matrix page (NYC-only top 15)
-    // deno-lint-ignore no-explicit-any
-    const matrixCands = nonRejected.filter((c: any) => isNYC(c.location)).slice(0, 15);
-    // deno-lint-ignore no-explicit-any
-    const fastTrackIds = new Set(sorted.filter((c: any) => c.status === "fast_track").map((c: any) => c.id));
+    const matrixCands = nonRejected.filter((c) => isNYC(c.location)).slice(0, 15);
+    const fastTrackIds = new Set(sorted.filter((c) => c.status === "fast_track").map((c) => c.id));
 
     newContentPage(ctx);
     drawSectionTitle(ctx, "Top Candidate", "Comparison Matrix");
@@ -218,10 +234,8 @@ Deno.serve(async (req) => {
       { label: "Top Strength", width: 162 },
       { label: "Key Gap", width: 142 },
     ], matrixCands.length === 0
-      // deno-lint-ignore no-explicit-any
       ? [["", "No NYC-area candidates in this round.", "", "", ""]]
-      // deno-lint-ignore no-explicit-any
-      : matrixCands.map((c: any, i: number) => [
+      : matrixCands.map((c, i) => [
         String(i + 1),
         { text: c.name ?? c.email ?? "", bold: true,
           color: fastTrackIds.has(c.id) ? C_CORAL : undefined },
@@ -235,10 +249,8 @@ Deno.serve(async (req) => {
     // for simplicity — the AI's tier guidance covers this distinction in
     // the final review packet; round packet just splits fast_track vs
     // consider/interview).
-    // deno-lint-ignore no-explicit-any
-    const fastTrackCands = sorted.filter((c: any) => c.status === "fast_track");
-    // deno-lint-ignore no-explicit-any
-    const otherRecommended = sorted.filter((c: any) =>
+    const fastTrackCands = sorted.filter((c) => c.status === "fast_track");
+    const otherRecommended = sorted.filter((c) =>
       (c.status === "consider" || c.status === "interview") && c.status !== "fast_track"
     );
 
@@ -246,7 +258,6 @@ Deno.serve(async (req) => {
       newContentPage(ctx);
       drawSectionTitle(ctx, "Fast-Track", "Candidates");
       drawSectionSub(ctx, "Contact for an immediate conversation.");
-      // deno-lint-ignore no-explicit-any
       for (const c of fastTrackCands) {
         drawWriteupCard(ctx, {
           name: c.name ?? c.email ?? "Candidate",
@@ -261,7 +272,6 @@ Deno.serve(async (req) => {
       newContentPage(ctx);
       drawSectionTitle(ctx, "Other", "Recommended");
       drawSectionSub(ctx, "Solid candidates worth keeping in the pipeline.");
-      // deno-lint-ignore no-explicit-any
       for (const c of otherRecommended) {
         drawWriteupCard(ctx, {
           name: c.name ?? c.email ?? "Candidate",
@@ -287,10 +297,9 @@ Deno.serve(async (req) => {
         .select("id,candidate_id,attachment_type,file_name,file_path,file_size_bytes")
         .in("candidate_id", candIds);
       const attsByCand: Record<string, StorageAttachment[]> = {};
-      // deno-lint-ignore no-explicit-any
-      (attRows ?? []).forEach((a: any) => {
+      ((attRows ?? []) as StorageAttachment[]).forEach((a) => {
         attsByCand[a.candidate_id] = attsByCand[a.candidate_id] ?? [];
-        attsByCand[a.candidate_id].push(a as StorageAttachment);
+        attsByCand[a.candidate_id].push(a);
       });
 
       for (const c of topCandidates) {

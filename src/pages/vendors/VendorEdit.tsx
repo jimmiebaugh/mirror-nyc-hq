@@ -8,6 +8,7 @@ import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { VendorFilesEditor } from "@/components/data/VendorFilesEditor";
 import { useLookup } from "@/lib/hq/lookups";
 import { formatPhone } from "@/lib/hq/phone";
+import { invalidateClientsAndVendors } from "@/lib/hq/useClientsAndVendors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -258,6 +259,7 @@ export default function VendorEdit() {
         return;
       }
       vendorId = data.id;
+      invalidateClientsAndVendors();
     } else {
       const { error } = await supabase
         .from("vendors")

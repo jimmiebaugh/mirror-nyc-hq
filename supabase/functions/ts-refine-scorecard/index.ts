@@ -186,16 +186,18 @@ function mergeRefinedIntoOriginal(
   const result: Criterion[] = [];
   for (let i = 0; i < original.length; i++) {
     const orig = original[i];
-    // deno-lint-ignore no-explicit-any
-    const r = modelOut[i] as any;
+    const r: Record<string, unknown> =
+      modelOut[i] && typeof modelOut[i] === "object"
+        ? (modelOut[i] as Record<string, unknown>)
+        : {};
     const refinedName =
-      typeof r?.name === "string" && r.name.trim().length > 0 ? r.name.trim() : orig.name;
+      typeof r.name === "string" && r.name.trim().length > 0 ? r.name.trim() : orig.name;
     const refinedDescriber =
-      typeof r?.full_points_rubric === "string" && r.full_points_rubric.trim().length > 0
+      typeof r.full_points_rubric === "string" && r.full_points_rubric.trim().length > 0
         ? r.full_points_rubric.trim()
         : orig.full_points_rubric;
     const refinedSummary =
-      typeof r?.summary === "string" && r.summary.trim().length > 0
+      typeof r.summary === "string" && r.summary.trim().length > 0
         ? r.summary.trim()
         : (orig.summary && orig.summary.trim().length > 0 ? orig.summary : undefined);
     result.push({

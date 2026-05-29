@@ -177,6 +177,21 @@ export function buildFillUserMsg(
   const briefData = (scout.brief_data ?? {}) as Record<string, unknown>;
   const expectedGuests = briefData.expected_guest_count;
   const briefNotes = briefData.notes;
+  // Phase 5.16.1.1 (Edge #11): surface the two Phase 5.12.5 brief signals
+  // (target_audience + vibe_aesthetic, both tag arrays) to the Pass 1 /
+  // Phase A enrichment prompt. Previously this shared block omitted them, so
+  // the 5.12.5 array-shape flip only reached Phase B's userMsgBriefPrefix.
+  // Same label + "(not set)" shape as that Phase B block for parity. Tolerates
+  // the legacy single-string shape too.
+  const fmtBriefTags = (v: unknown): string => {
+    if (Array.isArray(v)) {
+      const tags = v
+        .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+        .map((x) => x.trim());
+      return tags.length > 0 ? tags.join(", ") : "(not set)";
+    }
+    return typeof v === "string" && v.trim().length > 0 ? v.trim() : "(not set)";
+  };
   const briefBlock =
     `Client: ${scout.client_name ?? "(not set)"}
 Event: ${scout.event_name ?? "(not set)"}
@@ -189,6 +204,8 @@ Expected guests: ${
         : "(not set)"
     }
 Overview: ${scout.event_overview ?? "(not set)"}
+Target audience: ${fmtBriefTags(briefData.target_audience)}
+Vibe / aesthetic: ${fmtBriefTags(briefData.vibe_aesthetic)}
 Additional brief notes: ${
       typeof briefNotes === "string" && briefNotes.trim().length > 0
         ? briefNotes.trim()

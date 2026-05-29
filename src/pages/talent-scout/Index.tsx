@@ -70,7 +70,6 @@ export default function TalentScoutIndex() {
       .order("updated_at", { ascending: false });
 
     if (error) {
-      // eslint-disable-next-line no-console
       console.warn("ts_roles query error:", error);
       setRoles([]);
       return;
@@ -134,7 +133,6 @@ export default function TalentScoutIndex() {
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reopen = async (id: string) => {

@@ -44,4 +44,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
+// buttonVariants is the canonical shadcn cva export, imported app-wide; it
+// stays co-located with Button by convention.
+// eslint-disable-next-line react-refresh/only-export-components
 export { Button, buttonVariants };

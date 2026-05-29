@@ -97,8 +97,7 @@ export type ClaudeMessage = {
  *   - Server tools: { type: "web_search_20250305" | ..., name, ... }
  * Phase 4.4 (vs-start-sourcing) is the first HQ caller to need tools.
  */
-// deno-lint-ignore no-explicit-any
-export type ClaudeTool = Record<string, any>;
+export type ClaudeTool = Record<string, unknown>;
 
 export type ClaudeToolChoice =
   | { type: "auto" }
@@ -127,8 +126,7 @@ export type CallClaudeOptions = {
 };
 
 /** A single content block from Claude's response (text, tool_use, etc.). */
-// deno-lint-ignore no-explicit-any
-export type ClaudeResponseBlock = Record<string, any> & { type: string };
+export type ClaudeResponseBlock = Record<string, unknown> & { type: string };
 
 export type ClaudeUsage = {
   input_tokens: number;

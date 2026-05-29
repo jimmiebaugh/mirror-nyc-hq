@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
 export type WikiPageType = "prose" | "team_directory" | "vendors_glance" | "account_logins";
-export type WikiVisibility = "all" | "no_freelance" | "admin_only";
+export type WikiVisibility = "all" | "admin_only";
 
 export type WikiPage = Database["public"]["Tables"]["wiki_pages"]["Row"] & {
   page_type: WikiPageType;

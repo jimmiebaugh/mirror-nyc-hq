@@ -28,8 +28,8 @@ export function StickyActionBar({
   destructive?: boolean;
 }) {
   return (
-    <div className="sticky bottom-0 z-10 -mx-6 mt-6 border-t-2 border-primary/40 bg-background/90 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+    <div className="actionbar">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
         <div className="flex items-center gap-3">
           {onCancel ? (
             <Button variant="ghost" onClick={onCancel} type="button">
@@ -46,11 +46,7 @@ export function StickyActionBar({
           </Button>
         </div>
         <div className="flex items-center gap-3">
-          {dirty ? (
-            <span className="text-xs font-mono uppercase tracking-wider text-amber-400">
-              Unsaved changes
-            </span>
-          ) : null}
+          {dirty ? <span className="dirty">Unsaved changes</span> : null}
           <Button
             onClick={onNext}
             disabled={nextDisabled || loading}

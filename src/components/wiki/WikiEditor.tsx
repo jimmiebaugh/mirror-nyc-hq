@@ -82,7 +82,6 @@ export function WikiEditor({
     if (!editor) return;
     if (editor.getHTML() === value) return;
     editor.commands.setContent(value || "", { emitUpdate: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor]);
 
   if (!editor) {

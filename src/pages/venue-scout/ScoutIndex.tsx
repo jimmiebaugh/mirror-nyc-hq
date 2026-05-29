@@ -104,7 +104,6 @@ export default function ScoutIndex() {
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const archive = async (id: string) => {
@@ -144,18 +143,33 @@ export default function ScoutIndex() {
     const gen = ++openDeleteGenRef.current;
     setPendingDelete(s);
     setDeleteCounts(null);
-    const { data: cands } = await supabase
-      .from("vs_candidate_venues")
-      .select("id")
-      .eq("scout_id", s.id);
-    const candidateIds = (cands ?? []).map((c) => c.id);
+    // Page the candidate-id fetch + chunk the photo count so the delete
+    // preview stays accurate on extreme scouts (>1000 candidates). A single
+    // unpaged .select silently truncates at PostgREST's db-max-rows cap, and a
+    // single .in() of all ids blows past the URL ceiling. Mirrors the
+    // vs-delete-scout pagination (PAGE_SIZE 1000 + POSTGREST_IN_CHUNK 200).
+    const PAGE_SIZE = 1000;
+    const POSTGREST_IN_CHUNK = 200;
+    const candidateIds: string[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data: page, error } = await supabase
+        .from("vs_candidate_venues")
+        .select("id")
+        .eq("scout_id", s.id)
+        .order("id")
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) break;
+      const ids = (page ?? []).map((c) => c.id);
+      candidateIds.push(...ids);
+      if (ids.length < PAGE_SIZE) break;
+    }
     let photos = 0;
-    if (candidateIds.length) {
+    for (let i = 0; i < candidateIds.length; i += POSTGREST_IN_CHUNK) {
       const { count } = await supabase
         .from("vs_venue_photos")
         .select("id", { count: "exact", head: true })
-        .in("candidate_venue_id", candidateIds);
-      photos = count ?? 0;
+        .in("candidate_venue_id", candidateIds.slice(i, i + POSTGREST_IN_CHUNK));
+      photos += count ?? 0;
     }
     if (gen !== openDeleteGenRef.current) return;
     setDeleteCounts({ candidates: candidateIds.length, photos });

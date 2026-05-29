@@ -23,7 +23,7 @@
 // the worst case is an orphan file, which costs cents per month and surfaces
 // in any future bucket audit.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
 import { STORAGE_BUCKET } from "../_shared/attachmentStorage.ts";
 
@@ -43,7 +43,7 @@ function sb() {
   );
 }
 
-async function deleteStorageObjects(supabase: any, paths: string[]): Promise<{ ok: number; failed: number }> {
+async function deleteStorageObjects(supabase: SupabaseClient, paths: string[]): Promise<{ ok: number; failed: number }> {
   if (paths.length === 0) return { ok: 0, failed: 0 };
   let ok = 0;
   let failed = 0;
@@ -61,7 +61,7 @@ async function deleteStorageObjects(supabase: any, paths: string[]): Promise<{ o
   return { ok, failed };
 }
 
-async function purgeAttachmentsForCandidates(supabase: any, candidateIds: string[], label: string) {
+async function purgeAttachmentsForCandidates(supabase: SupabaseClient, candidateIds: string[], label: string) {
   if (candidateIds.length === 0) {
     return { scanned: 0, storage_ok: 0, storage_failed: 0, rows_deleted: 0 };
   }
@@ -98,7 +98,7 @@ async function purgeAttachmentsForCandidates(supabase: any, candidateIds: string
   return { scanned: allRows.length, storage_ok: stor.ok, storage_failed: stor.failed, rows_deleted: rowsDeleted };
 }
 
-async function pass1RejectedCandidates(supabase: any) {
+async function pass1RejectedCandidates(supabase: SupabaseClient) {
   const cutoff = new Date(Date.now() - REJECTED_RETENTION_DAYS * 86400_000).toISOString();
   const { data, error } = await supabase
     .from("ts_candidates")
@@ -109,11 +109,11 @@ async function pass1RejectedCandidates(supabase: any) {
     console.error("[ts-cron-storage-cleanup] pass1 candidate query failed:", error);
     return { scanned: 0, storage_ok: 0, storage_failed: 0, rows_deleted: 0 };
   }
-  const ids = (data ?? []).map((r: any) => r.id as string);
+  const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
   return purgeAttachmentsForCandidates(supabase, ids, "rejected-candidates");
 }
 
-async function pass2ClosedRoles(supabase: any) {
+async function pass2ClosedRoles(supabase: SupabaseClient) {
   const cutoff = new Date(Date.now() - CLOSED_ROLE_RETENTION_DAYS * 86400_000).toISOString();
   // Pull all closed-role candidates past the 90-day window. Pass3 will
   // catch the >60d-closed ones for full row delete; overlap is fine —
@@ -127,7 +127,7 @@ async function pass2ClosedRoles(supabase: any) {
     console.error("[ts-cron-storage-cleanup] pass2 role query failed:", roleErr);
     return { scanned: 0, storage_ok: 0, storage_failed: 0, rows_deleted: 0 };
   }
-  const roleIds = (roles ?? []).map((r: any) => r.id as string);
+  const roleIds = ((roles ?? []) as { id: string }[]).map((r) => r.id);
   if (roleIds.length === 0) {
     return { scanned: 0, storage_ok: 0, storage_failed: 0, rows_deleted: 0 };
   }
@@ -148,7 +148,7 @@ async function pass2ClosedRoles(supabase: any) {
   return purgeAttachmentsForCandidates(supabase, candIds, "closed-role-candidates");
 }
 
-async function pass3HardDeleteOldClosedRoles(supabase: any) {
+async function pass3HardDeleteOldClosedRoles(supabase: SupabaseClient) {
   const cutoff = new Date(Date.now() - ROLE_HARD_DELETE_AFTER_DAYS * 86400_000).toISOString();
   const { data: roles, error: roleErr } = await supabase
     .from("ts_roles")
@@ -162,7 +162,8 @@ async function pass3HardDeleteOldClosedRoles(supabase: any) {
   if (!roles || roles.length === 0) {
     return { scanned: 0, storage_ok: 0, storage_failed: 0, roles_deleted: 0 };
   }
-  const roleIds = roles.map((r: any) => r.id as string);
+  const closedRoles = roles as { id: string; title: string | null; closed_at: string | null }[];
+  const roleIds = closedRoles.map((r) => r.id);
 
   // Collect attachment paths so Storage clears before the FK CASCADE.
   const candIds: string[] = [];
@@ -197,10 +198,10 @@ async function pass3HardDeleteOldClosedRoles(supabase: any) {
     }
     rolesDeleted += chunk.length;
   }
-  for (const r of roles) {
+  for (const r of closedRoles) {
     console.warn(`[ts-cron-storage-cleanup] hard-deleted closed role ${r.id} (${r.title}), closed_at=${r.closed_at}`);
   }
-  return { scanned: roles.length, storage_ok: stor.ok, storage_failed: stor.failed, roles_deleted: rolesDeleted };
+  return { scanned: closedRoles.length, storage_ok: stor.ok, storage_failed: stor.failed, roles_deleted: rolesDeleted };
 }
 
 Deno.serve(async (req) => {

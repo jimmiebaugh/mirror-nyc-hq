@@ -3,7 +3,26 @@ import tailwindcssAnimate from "tailwindcss-animate";
 
 export default {
   darkMode: ["class"],
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  content: {
+    files: ["./index.html", "./src/**/*.{ts,tsx}"],
+    // Phase 5.16.1.1 (Build #5): neutralize JS-negation false positives before
+    // the JIT scanner sees them. Tokens like `!row` (scanned out of `!row.read`)
+    // are read as important-modified candidates; when one matches a component
+    // class that has a rule inside a nested `@media` within `@layer components`
+    // (here `.row` in src/index.css's max-width:640px block), Tailwind v3 emits
+    // malformed EMPTY-SELECTOR `!important` rules. Lightning CSS (the Vite 8
+    // default minifier) hard-errors on those; esbuild silently dropped them.
+    // Strip the leading `!` from bare-word candidates (lowercase letters NOT
+    // followed by a class-continuation char) so they never reach the scanner.
+    // Hyphenated/bracketed important utilities (`!border-t-2`, `!bg-[...]`) are
+    // preserved (next char is `-`/`[`). Build-scan only: never mutates source,
+    // no runtime or cascade effect. Caveat: single-word important utilities
+    // (`!flex`) won't generate under this transform; use the longhand or add to
+    // `safelist`. None are used today.
+    transform: {
+      DEFAULT: (content: string) => content.replace(/!([a-z]+)(?![-/:[a-z0-9])/g, "$1"),
+    },
+  },
   // Safelist for dynamic-token classes constructed via template literals
   // (e.g. `pill p-${token}`, `rb-${token}`, `cal-ev ${kind}`). Tailwind's
   // content scanner cannot detect those suffixes statically, so the

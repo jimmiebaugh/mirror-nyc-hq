@@ -24,9 +24,35 @@ export type ClientOrVendorOption = {
   sublabel: "Client" | "Vendor";
 };
 
+// Module-level subscriber registry (Phase 5.16.1.1, Frontend #2 + #3). The
+// hook previously loaded once on mount and never refreshed, so a Client/Vendor
+// created elsewhere wouldn't surface in a still-mounted Organization picker.
+// Each mounted instance registers a refetch; invalidateClientsAndVendors()
+// fires them all.
+const refetchSubscribers = new Set<() => void>();
+
+/**
+ * Tell every mounted `useClientsAndVendors` consumer to refetch. Call from any
+ * Client/Vendor create-success path so a newly-created org surfaces in the
+ * PeopleList Organization filter without a full page reload.
+ */
+export function invalidateClientsAndVendors() {
+  for (const refetch of refetchSubscribers) refetch();
+}
+
 export function useClientsAndVendors() {
   const [options, setOptions] = useState<ClientOrVendorOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Register this instance so invalidateClientsAndVendors() can refresh it.
+  useEffect(() => {
+    const refetch = () => setReloadKey((k) => k + 1);
+    refetchSubscribers.add(refetch);
+    return () => {
+      refetchSubscribers.delete(refetch);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -53,7 +79,7 @@ export function useClientsAndVendors() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [reloadKey]);
 
   return { options, loading };
 }

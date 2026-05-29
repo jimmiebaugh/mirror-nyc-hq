@@ -792,8 +792,32 @@ export function addCoverLetterEmailPages(ctx: PacketCtx, opts: {
 // DOCX is no longer converted (Phase 3.6.1 — CloudConvert removed); it gets
 // listed by filename on the title page but not embedded.
 // ============================================================================
-// deno-lint-ignore no-explicit-any
-export async function fetchStorageAttachment(supabase: any, attachment: StorageAttachment): Promise<Uint8Array | null> {
+
+// Narrow structural view of just the supabase-js storage surface these
+// helpers touch: storage.from(bucket).{download,upload,createSignedUrl}. A
+// full SupabaseClient structurally satisfies this, so callers pass their
+// client unchanged. Fields are kept loose (Blob | null, optional error) to
+// match supabase-js's response unions without pulling in its types.
+type StorageBucketApi = {
+  download: (
+    path: string,
+  ) => PromiseLike<{ data: Blob | null; error: unknown }>;
+  upload: (
+    path: string,
+    body: Uint8Array,
+    opts?: { contentType?: string; upsert?: boolean },
+  ) => PromiseLike<{ error: unknown }>;
+  createSignedUrl: (
+    path: string,
+    expiresIn: number,
+    opts?: { download?: string | boolean },
+  ) => PromiseLike<{ data: { signedUrl: string } | null; error?: unknown }>;
+};
+type SupabaseStorageClient = {
+  storage: { from: (bucket: string) => StorageBucketApi };
+};
+
+export async function fetchStorageAttachment(supabase: SupabaseStorageClient, attachment: StorageAttachment): Promise<Uint8Array | null> {
   try {
     const { data, error } = await supabase.storage
       .from("candidate_attachments")
@@ -819,8 +843,7 @@ export async function fetchStorageAttachment(supabase: any, attachment: StorageA
     and let GC reclaim the source bytes between each. If a packet still
     OOMs on a degenerate case, the 7-day download URL is still valid; the
     user just won't get the auto-merged PDF for that run. */
-// deno-lint-ignore no-explicit-any
-export async function mergePdfAttachments(doc: PDFDocument, supabase: any, attachments: StorageAttachment[]) {
+export async function mergePdfAttachments(doc: PDFDocument, supabase: SupabaseStorageClient, attachments: StorageAttachment[]) {
   // Order: cover, resume, others (so the hiring manager reads them in order)
   const resume = attachments.find((a) => a.attachment_type === "resume" || /resume|cv/i.test(a.file_name));
   const cover = attachments.find((a) => a.attachment_type === "cover_letter" || /cover/i.test(a.file_name));
@@ -857,8 +880,7 @@ export async function mergePdfAttachments(doc: PDFDocument, supabase: any, attac
 // Final assembly: upload merged PDF → packets bucket → signed URL.
 // ============================================================================
 export async function uploadPacketAndSign(
-  // deno-lint-ignore no-explicit-any
-  supabase: any,
+  supabase: SupabaseStorageClient,
   doc: PDFDocument,
   opts: {
     pathPrefix: string;

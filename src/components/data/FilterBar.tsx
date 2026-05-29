@@ -73,6 +73,8 @@ export type FilterFieldDef = {
   hidden?: boolean;
 };
 
+// Co-located factory for the component's own state shape; intentional.
+// eslint-disable-next-line react-refresh/only-export-components
 export function emptyFilterState(): FilterState {
   return { connector: "AND", chips: [] };
 }

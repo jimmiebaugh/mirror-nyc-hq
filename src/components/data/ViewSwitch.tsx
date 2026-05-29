@@ -68,6 +68,8 @@ const SURFACE_ROUTES: Record<Surface, Partial<Record<ViewKind, string>>> = {
   },
 };
 
+// Route helper co-located with the switch it drives; intentional.
+// eslint-disable-next-line react-refresh/only-export-components
 export function viewSwitchRoute(surface: Surface, kind: ViewKind): string | undefined {
   return SURFACE_ROUTES[surface][kind];
 }

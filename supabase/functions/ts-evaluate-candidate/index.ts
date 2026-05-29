@@ -25,7 +25,7 @@ import { pickBestPortfolioUrl, pickPortfolioAttachment, buildPortfolioInputs } f
 import { uploadAttachmentToStorage } from "../_shared/attachmentStorage.ts";
 import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
 import { getGmailAccessToken } from "../_shared/gmailServiceAccount.ts";
-import { callClaude } from "../_shared/anthropic.ts";
+import { callClaude, type ClaudeMessage, type ClaudeContentPart } from "../_shared/anthropic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,12 +35,46 @@ const corsHeaders = {
 const sb = () =>
   createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-async function gmailFetch(token: string, path: string): Promise<any> {
+// Narrow shapes for the only Gmail REST fields this function reads. Not the
+// full users.messages resource, just the MIME-part tree and attachment body.
+type GmailMessagePart = {
+  mimeType?: string;
+  filename?: string;
+  body?: { data?: string; size?: number; attachmentId?: string };
+  parts?: GmailMessagePart[];
+};
+type GmailMessage = { payload?: GmailMessagePart };
+type GmailAttachment = { data?: string };
+
+// The fields of a ts_roles.scorecard criterion this function reads. The full
+// criterion carries more (weight, rubrics) but the disqualifier gate only
+// needs these three.
+type ScorecardCriterion = {
+  name: string;
+  tier?: number;
+  is_disqualifier?: boolean;
+};
+
+// Parsed Claude eval JSON. Narrow to the fields read below; the model returns
+// more but only these drive scoring + the candidate/evaluation writes.
+type ClaudeEvalResult = {
+  total_score?: number;
+  scores?: Record<string, number>;
+  candidate_location?: string | null;
+  recruiter_note?: string | null;
+  top_strengths?: string[];
+  key_gaps?: string[];
+  quick_overview?: unknown;
+  recommendation_tier?: string | null;
+  auto_classification_suggested?: string | null;
+};
+
+async function gmailFetch<T>(token: string, path: string): Promise<T> {
   const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Gmail ${path}: ${res.status} ${(await res.text()).slice(0, 300)}`);
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
 function decodeBase64Url(s: string): Uint8Array {
@@ -51,7 +85,7 @@ function decodeBase64Url(s: string): Uint8Array {
   return out;
 }
 
-function walkParts(payload: any, out: any[] = []): any[] {
+function walkParts(payload: GmailMessagePart | undefined, out: GmailMessagePart[] = []): GmailMessagePart[] {
   if (!payload) return out;
   out.push(payload);
   if (payload.parts) for (const p of payload.parts) walkParts(p, out);
@@ -59,7 +93,7 @@ function walkParts(payload: any, out: any[] = []): any[] {
 }
 
 async function extractPdfText(bytes: Uint8Array): Promise<string> {
-  let pdf: any = null;
+  let pdf: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
   try {
     pdf = await getDocumentProxy(bytes);
     const { text } = await extractText(pdf, { mergePages: true });
@@ -114,7 +148,7 @@ Deno.serve(async (req) => {
     const { data: role } = await supabase.from("ts_roles").select("*").eq("id", cand.role_id).single();
     if (!role) throw new Error("Role not found");
 
-    const scorecardCriteria = (role.scorecard as any[]) ?? [];
+    const scorecardCriteria = (role.scorecard as ScorecardCriterion[]) ?? [];
     const scorecard = { criteria: scorecardCriteria };
     const competitorBonus = (role.competitor_bonus as { competitors?: string[] } | null) ?? null;
     const competitors = competitorBonus?.competitors ?? [];
@@ -124,7 +158,7 @@ Deno.serve(async (req) => {
     const accessToken = await getGmailAccessToken();
 
     // Fetch + parse the original message.
-    const msg = await gmailFetch(accessToken, `/messages/${cand.gmail_message_id}?format=full`);
+    const msg = await gmailFetch<GmailMessage>(accessToken, `/messages/${cand.gmail_message_id}?format=full`);
     const parts = walkParts(msg.payload);
     let bodyText = "";
     let bodyHtml = "";
@@ -152,7 +186,7 @@ Deno.serve(async (req) => {
     let attachText = "";
     for (const att of attachments) {
       try {
-        const a = await gmailFetch(accessToken, `/messages/${cand.gmail_message_id}/attachments/${att.id}`);
+        const a = await gmailFetch<GmailAttachment>(accessToken, `/messages/${cand.gmail_message_id}/attachments/${att.id}`);
         let bytes: Uint8Array | null = a?.data ? decodeBase64Url(a.data) : null;
         if (bytes) {
           const uploaded = await uploadAttachmentToStorage({
@@ -218,11 +252,14 @@ Deno.serve(async (req) => {
 
     const result = await callClaude(
       "talent_scout",
-      claudeRequest.messages as any,
+      // buildClaudeEvalRequest's inferred return type widens the block
+      // `type`/`role` string literals, so it isn't structurally assignable to
+      // the wrapper's ClaudeMessage[] without routing through unknown.
+      claudeRequest.messages as unknown as ClaudeMessage[],
       {
         model: claudeRequest.model,
         max_tokens: claudeRequest.max_tokens,
-        system: claudeRequest.system as any,
+        system: claudeRequest.system as unknown as ClaudeContentPart[],
         anthropic_beta: ["extended-cache-ttl-2025-04-11"],
         fn_name: "ts-evaluate-candidate",
         role_id: cand.role_id,
@@ -230,7 +267,7 @@ Deno.serve(async (req) => {
     );
     if (!result.ok) throw new Error(`Anthropic ${result.status}: ${result.error.slice(0, 300)}`);
 
-    const r = parseClaudeJson<any>(result.text);
+    const r = parseClaudeJson<ClaudeEvalResult>(result.text);
 
     // Compute new portfolio_type / path. Same logic as ts-pull-candidates.
     let portfolio_type: "file" | "url" | "none" = "none";

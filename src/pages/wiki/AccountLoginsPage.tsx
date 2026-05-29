@@ -38,10 +38,11 @@ const IDLE_DELAY_MS = 30_000;
  * with slug = 'account-logins' has page_type = 'account_logins', which
  * causes WikiPage to render this component instead of prose).
  *
- * Auth: Freelance users are blocked at WikiPage (visibility = no_freelance
- * also hides from nav; component check shows access-restricted state).
- * RLS on credentials enforces non-freelance-only SELECT + INSERT/UPDATE/DELETE
- * (widened in 5.4 feedback round 2 from admin-only).
+ * Auth: Freelance users are blocked at WikiPage (the component check shows
+ * the access-restricted state). RLS on credentials enforces
+ * non-freelance-only SELECT + INSERT/UPDATE/DELETE (widened in 5.4 feedback
+ * round 2 from admin-only). Phase 5.16.0 dropped the `no_freelance` wiki
+ * visibility value, but this component-level gate is unchanged.
  *
  * `canWrite` toggles the Add Credential button + per-row Edit/Delete icons.
  * Always true under the current call site (WikiPage passes canWrite when

@@ -187,6 +187,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         /* private-mode; ref guard still holds */
       }
     })();
+    // One-shot avatar stamp, guarded by a ref + sessionStorage; keyed to the
+    // user id so it doesn't re-fire a no-op write on user_metadata churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
 
   const signInWithGoogle = async () => {
@@ -254,6 +257,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// Co-located with AuthProvider by design (canonical React context pattern);
+// the hook needs AuthContext from this module.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");

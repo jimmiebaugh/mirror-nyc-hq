@@ -48,8 +48,17 @@
 // returns in well under a second now that AI work is gone.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+// SheetJS 0.20.3 patched build, vendored locally (Phase 5.16.1.2). The npm /
+// esm.sh `xlsx@0.18.5` carried unpatched prototype-pollution + ReDoS advisories
+// (npm tops out at 0.18.5); SheetJS ships the patched build only via their CDN,
+// which the Supabase edge bundler rejects at deploy time ("Cannot import from
+// cdn.sheetjs.com:443"). So the patched ESM build is vendored under
+// _shared/vendor/ and imported locally (the bundler bundles local files fine).
+// Same `read` + `utils.sheet_to_json` surface used below. Provenance + update
+// steps in _shared/vendor/README.md; see code-observations Edge #21.
+import * as XLSX from "../_shared/vendor/xlsx.mjs";
 import { sanitizeWebsiteUrl } from "../_shared/venueTypes.ts";
+import { splitMultiValue } from "../_shared/multiValue.ts";
 
 // User-invoked synchronous only; no internal-secret path.
 const corsHeaders = {
@@ -70,8 +79,9 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 // Lifted verbatim from VS Pro parse-sheet/index.ts. Matches the first row
 // key whose lowercase form contains any of the candidate substrings.
-// deno-lint-ignore no-explicit-any
-function pick(row: Record<string, any>, keys: string[]): string | null {
+// XLSX sheet rows are open-shaped (cell values can be string/number/bool/
+// Date), so the value type is genuinely `unknown`; String(v) coerces it.
+function pick(row: Record<string, unknown>, keys: string[]): string | null {
   for (const k of Object.keys(row)) {
     const norm = k.toLowerCase().trim();
     if (keys.some((kk) => norm.includes(kk))) {
@@ -139,8 +149,7 @@ Deno.serve(async (req) => {
     }
     const buf = new Uint8Array(await file.arrayBuffer());
 
-    // deno-lint-ignore no-explicit-any
-    let rows: Record<string, any>[] = [];
+    let rows: Record<string, unknown>[] = [];
     if (ext === "pdf") {
       // Naive PDF behavior, lifted verbatim from VS Pro. Returns 0 venues;
       // the frontend routes to /sourcing/error/empty-sheet. Improving this
@@ -149,8 +158,9 @@ Deno.serve(async (req) => {
     } else {
       const wb = XLSX.read(buf, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      // deno-lint-ignore no-explicit-any
-      rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+      rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+        defval: "",
+      });
     }
 
     const venues = rows
@@ -171,8 +181,18 @@ Deno.serve(async (req) => {
         address: pick(r, ["address", "location"]),
         // VS Pro `type` -> HQ `venue_type` (port plan-locked rename;
         // `type` reads as a Postgres / TS reserved word and was renamed at
-        // 4.1-port migration time).
-        venue_type: pick(r, ["type", "category", "kind"]),
+        // 4.1-port migration time). Phase 5.16.1.1 (Edge #15): split the
+        // producer's multi-value cell on the canonical delimiter set and
+        // re-join with " / " so downstream Phase A `sanitizeMultiAgainst`
+        // (which splits on / and ,) canonicalizes each token. Previously the
+        // raw cell was stored verbatim, so "Retail|Event Venue" failed
+        // canonicalize and rendered as one stale-token fallback chip.
+        venue_type: (() => {
+          const v = pick(r, ["type", "category", "kind"]);
+          if (!v) return v;
+          const tokens = splitMultiValue(v);
+          return tokens.length ? tokens.join(" / ") : v;
+        })(),
         // Phase 4.10.3-port: extract producer-entered URL + capacity from
         // sheet columns. VS Pro's parse-sheet dropped both fields; the
         // enrichment pass was then forced to web_search for URLs Claude

@@ -232,9 +232,11 @@ export default function CalendarPage() {
     enabled: !!userId,
   });
 
-  const projects = projectsQuery.data ?? [];
-  const deliverables = deliverablesQuery.data ?? [];
-  const tasks = tasksQuery.data ?? [];
+  // Memoized so the `?? []` fallback keeps a stable identity across renders;
+  // these feed the events/visibility useMemo dep arrays below.
+  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data]);
+  const deliverables = useMemo(() => deliverablesQuery.data ?? [], [deliverablesQuery.data]);
+  const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const { holidays: mirrorHolidays } = useMirrorHolidays();
 
   // Visibility panel project list (sorted alphabetically by display).

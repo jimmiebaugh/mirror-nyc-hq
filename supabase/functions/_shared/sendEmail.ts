@@ -110,11 +110,25 @@ export async function sendGmail(opts: {
   }
 }
 
+// Narrow structural view of just the supabase-js query chain getAdminEmail
+// uses: from("users").select(...).eq(...).eq(...).order(...).limit(...)
+// .maybeSingle(). Each builder method returns the same chainable shape; the
+// terminal maybeSingle() resolves to { data }. A full SupabaseClient
+// structurally satisfies this, so callers pass their service-role client
+// unchanged.
+type AdminEmailQuery = {
+  select: (columns: string) => AdminEmailQuery;
+  eq: (column: string, value: unknown) => AdminEmailQuery;
+  order: (column: string, opts: { ascending: boolean }) => AdminEmailQuery;
+  limit: (count: number) => AdminEmailQuery;
+  maybeSingle: () => PromiseLike<{ data: { email?: string | null } | null }>;
+};
+
 /** Look up the admin email for transactional alerts. Returns the first admin
  *  by created_at; falls back to jobs@mirrornyc.com if no admin row exists.
  *  Caller passes a service-role Supabase client. */
 export async function getAdminEmail(sb: {
-  from: (table: string) => any;
+  from: (table: string) => AdminEmailQuery;
 }): Promise<string> {
   try {
     const { data } = await sb

@@ -61,9 +61,16 @@ function parseDelimitedText(text: string, delimiter: "," | "\t"): ParsedSheet {
 }
 
 async function parseWorkbook(buffer: ArrayBuffer): Promise<ParsedSheet> {
-  // Dynamic import keeps the heavy `xlsx` library out of the initial bundle;
-  // it loads only when an admin actually uploads an .xlsx/.xls file.
-  const XLSX = await import("xlsx");
+  // Lazy dynamic import of SheetJS's patched CDN ESM build (Phase 5.16.1.2).
+  // Keeps the heavy library out of the bundle AND off npm: the npm `xlsx`
+  // 0.18.5 carried unpatched prototype-pollution + ReDoS advisories with no
+  // npm fix, so it was removed; the CDN 0.20.3 build is patched. Loads only
+  // when an admin uploads an .xlsx/.xls file (the CSV/TSV path above never
+  // touches the network). `@vite-ignore` keeps the URL specifier external so
+  // Vite leaves it as a runtime import() instead of trying to bundle it.
+  const XLSX = await import(
+    /* @vite-ignore */ "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs"
+  );
   const warnings: string[] = [];
   const wb = XLSX.read(buffer, { type: "array" });
   if (wb.SheetNames.length > 1) {

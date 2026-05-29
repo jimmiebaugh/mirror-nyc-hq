@@ -23,11 +23,19 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   if (bytesA.length !== bytesB.length) return false;
 
   // Try the native Deno API first (sync, fast, constant-time).
-  // deno-lint-ignore no-explicit-any
-  const nativeFn = (globalThis as any)?.crypto?.timingSafeEqual;
+  // `crypto.timingSafeEqual` is a Deno/Node extension not present on the
+  // standard Web Crypto `Crypto` lib type, so reach for it via an unknown-
+  // typed view of the global rather than the typed `crypto` binding.
+  const maybeCrypto = (globalThis as { crypto?: unknown }).crypto;
+  const nativeFn =
+    maybeCrypto && typeof maybeCrypto === "object"
+      ? (maybeCrypto as { timingSafeEqual?: unknown }).timingSafeEqual
+      : undefined;
   if (typeof nativeFn === "function") {
     try {
-      return Boolean(nativeFn(bytesA, bytesB));
+      return Boolean(
+        (nativeFn as (a: Uint8Array, b: Uint8Array) => boolean)(bytesA, bytesB),
+      );
     } catch {
       // Fall through to manual loop.
     }

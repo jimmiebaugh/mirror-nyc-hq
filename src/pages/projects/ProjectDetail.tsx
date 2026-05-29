@@ -1,46 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { Check, Pencil, Plus, X } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import {
   IconDrive,
   IconSlack,
-  IconExt,
-  IconActivity,
-  IconClients,
-  IconComment,
-  IconDeliverables,
-  IconLock,
-  IconOrgs,
-  IconOutlook,
-  IconPeople,
-  IconProjects,
-  IconTasks,
-  IconVenues,
-  IconWiki,
 } from "@/components/icons/HQIcons";
 import {
   loadActivityByProject,
   type ActivityRow,
   type ActivityViewerRole,
 } from "@/lib/activity/queries";
-import {
-  activityRowTimestamp,
-  formatActivitySentence,
-  iconKeyForEntity,
-} from "@/lib/activity/formatSentence";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
   projectStatusToken,
@@ -49,7 +19,6 @@ import {
   statusTextDecoration,
 } from "@/lib/home/projectStatusToken";
 import {
-  formatMediumDate,
   formatShortDate,
   relativeDay,
 } from "@/lib/hq/dates";
@@ -58,18 +27,13 @@ import {
   updateProjectStatus,
   type ProjectStatus,
 } from "@/lib/projects/queries";
-import { InlineEditText } from "@/components/hq/InlineEditText";
-import { DField } from "@/components/hq/DField";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
 import { ClickPillCell } from "@/components/hq/ClickPillCell";
-import { RecordCombobox } from "@/components/ui/RecordCombobox";
-import {
-  createClientInline,
-  createVenueInline,
-  CLIENT_MINI_CREATE_FIELDS,
-  VENUE_MINI_CREATE_FIELDS,
-} from "@/lib/hq/inlineCreate";
 import { toast } from "@/hooks/use-toast";
+import { ProjectDetailsCard } from "@/components/projects/ProjectDetailsCard";
+import { ProjectTeamSection } from "@/components/projects/ProjectTeamSection";
+import { ProjectVendorsCard } from "@/components/projects/ProjectVendorsCard";
+import { ProjectActivitySection } from "@/components/projects/ProjectActivitySection";
 
 /**
  * Surface 07 Project Detail.
@@ -83,7 +47,7 @@ import { toast } from "@/hooks/use-toast";
  * Overview kv (was previously crammed into the title composite).
  */
 
-type Project = {
+export type Project = {
   id: string;
   name: string;
   status: ProjectStatus;
@@ -127,38 +91,11 @@ type TaskRow = {
   assignee: { full_name: string | null; email: string | null } | null;
 };
 
-type VendorLink = {
+export type VendorLink = {
   id: string;
   name: string;
   category_name: string | null;
 };
-
-function formatBudget(b: number | null): string {
-  if (b == null) return "-";
-  return `$${b.toLocaleString("en-US")}`;
-}
-
-// Phase 5.7.3 § 3.F: row-dot icon for the Project Activity card. Same mapping
-// the global ActivityFeed uses (kept inline so this card doesn't pull in the
-// full feed component).
-function ActivityRowIcon({ entityType }: { entityType: string }) {
-  const key = iconKeyForEntity(entityType);
-  const style = { width: 14, height: 14 } as const;
-  switch (key) {
-    case "project":       return <IconProjects style={style} />;
-    case "task":          return <IconTasks style={style} />;
-    case "deliverable":   return <IconDeliverables style={style} />;
-    case "venue":         return <IconVenues style={style} />;
-    case "vendor":        return <IconOrgs style={style} />;
-    case "client":        return <IconClients style={style} />;
-    case "person":        return <IconPeople style={style} />;
-    case "wiki_page":     return <IconWiki style={style} />;
-    case "credential":    return <IconLock style={style} />;
-    case "outlook_entry": return <IconOutlook style={style} />;
-    case "notes_log":     return <IconComment style={style} />;
-    default:              return <IconActivity style={style} />;
-  }
-}
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -797,247 +734,17 @@ export default function ProjectDetail() {
 
       <div className="detail-2col--wide">
         <div className="stack-6" style={{ minWidth: 0 }}>
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Details</span>
-            </div>
-            <div className="card-pad stack-4">
-              {/* Phase 5.11.3: Job# | Category | Budget (3-col), Title |
-                  Client, City | Venue, then the Live / Install / Removal
-                  date trio. Tags moved to its own full-width row at the
-                  bottom under a divider. */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
-                  gap: 16,
-                }}
-              >
-                <DField label="Job #">
-                  <InlineEditText
-                    value={project.job_number}
-                    placeholder="Job number"
-                    renderRead={(v) =>
-                      v ? <span className="mono">#{v}</span> : <span className="muted subtle">-</span>
-                    }
-                    onSave={(next) => saveField("job_number", next || null)}
-                  />
-                </DField>
-                <DField label="Category">
-                  <RecordCombobox
-                    source={{ kind: "lookup", table: "project_categories" }}
-                    value={project.category || null}
-                    onChange={(next) => void saveField("category", next || null)}
-                    entityLabel="Category"
-                    placeholder="Select"
-                  />
-                </DField>
-                <DField label="Budget">
-                  <InlineEditText
-                    value={project.budget != null ? String(project.budget) : null}
-                    placeholder="$185,000"
-                    renderRead={(v) =>
-                      v ? formatBudget(Number(v)) : <span className="muted subtle">-</span>
-                    }
-                    onSave={(next) => {
-                      const parsed = next ? Number(next.replace(/[$,\s]/g, "")) : null;
-                      return saveField(
-                        "budget",
-                        parsed != null && Number.isFinite(parsed) ? parsed : null,
-                      );
-                    }}
-                  />
-                </DField>
-              </div>
-              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
-              <div className="g2">
-                <DField label="Title">
-                  <InlineEditText
-                    value={project.name}
-                    required
-                    placeholder="Project name"
-                    renderRead={(v) => v ?? "(untitled)"}
-                    onSave={(next) => saveField("name", next)}
-                  />
-                </DField>
-                <DField label="Client">
-                  <RecordCombobox
-                    source={{ kind: "record", loadOptions: loadClientOptions }}
-                    value={project.client_id}
-                    onChange={(next) => void saveClientId(next)}
-                    entityLabel="Client"
-                    placeholder="No client"
-                    quickCreate
-                    getRecordHref={(id) => `/clients/${id}`}
-                    miniCreateFields={CLIENT_MINI_CREATE_FIELDS}
-                    onMiniCreate={async (data) => {
-                      const created = await createClientInline(data);
-                      if (created) {
-                        setClientOptions((prev) =>
-                          [...prev, created].sort((a, b) =>
-                            a.label.localeCompare(b.label),
-                          ),
-                        );
-                      }
-                      return created;
-                    }}
-                  />
-                </DField>
-              </div>
-              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
-              <div className="g2">
-                <DField label="City">
-                  <RecordCombobox
-                    source={{ kind: "lookup", table: "cities" }}
-                    value={project.city || null}
-                    onChange={(next) => void saveField("city", next || null)}
-                    entityLabel="city"
-                    placeholder="Select"
-                  />
-                </DField>
-                <DField label="Venue">
-                  <RecordCombobox
-                    multi
-                    source={{ kind: "record", loadOptions: loadVenueOptions }}
-                    multiValue={venueIds}
-                    onMultiChange={(next) => void saveVenueIds(next)}
-                    entityLabel="Venue"
-                    placeholder="Add venue..."
-                    quickCreate
-                    getRecordHref={(id) => `/venues/${id}`}
-                    displayAs="stack"
-                    miniCreateFields={VENUE_MINI_CREATE_FIELDS}
-                    onMiniCreate={async (data) => {
-                      const created = await createVenueInline(data);
-                      if (created) {
-                        setVenueOptions((prev) =>
-                          [...prev, created].sort((a, b) =>
-                            a.label.localeCompare(b.label),
-                          ),
-                        );
-                      }
-                      return created;
-                    }}
-                  />
-                </DField>
-              </div>
-              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
-              {/* Combined dates row: Live | Install | Removal with vertical
-                  dividers. Tight 4px label-to-input gap so the date pairs
-                  read as compact columns. */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div className="field" style={{ gap: 4 }}>
-                    <div className="label-form">Live start</div>
-                    <InlineEditText
-                      value={project.live_dates_start}
-                      placeholder="YYYY-MM-DD"
-                      inputType="date"
-                      renderRead={(v) =>
-                        v ? formatShortDate(v) : <span className="muted subtle">Not set</span>
-                      }
-                      onSave={(next) => saveField("live_dates_start", next || null)}
-                    />
-                  </div>
-                  <div className="field" style={{ gap: 4 }}>
-                    <div className="label-form">Live end</div>
-                    <InlineEditText
-                      value={project.live_dates_end}
-                      placeholder="YYYY-MM-DD"
-                      inputType="date"
-                      renderRead={(v) =>
-                        v ? formatShortDate(v) : <span className="muted subtle">-</span>
-                      }
-                      onSave={(next) => saveField("live_dates_end", next || null)}
-                    />
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 12,
-                    borderLeft: "1px solid hsl(var(--border))",
-                    paddingLeft: 16,
-                    marginLeft: 16,
-                  }}
-                >
-                  <div className="field" style={{ gap: 4 }}>
-                    <div className="label-form">Install start</div>
-                    <InlineEditText
-                      value={project.install_dates_start}
-                      placeholder="YYYY-MM-DD"
-                      inputType="date"
-                      renderRead={(v) =>
-                        v ? formatShortDate(v) : <span className="muted subtle">Not set</span>
-                      }
-                      onSave={(next) => saveField("install_dates_start", next || null)}
-                    />
-                  </div>
-                  <div className="field" style={{ gap: 4 }}>
-                    <div className="label-form">Install end</div>
-                    <InlineEditText
-                      value={project.install_dates_end}
-                      placeholder="YYYY-MM-DD"
-                      inputType="date"
-                      renderRead={(v) =>
-                        v ? formatShortDate(v) : <span className="muted subtle">-</span>
-                      }
-                      onSave={(next) => saveField("install_dates_end", next || null)}
-                    />
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 12,
-                    borderLeft: "1px solid hsl(var(--border))",
-                    paddingLeft: 16,
-                    marginLeft: 16,
-                  }}
-                >
-                  <div className="field" style={{ gap: 4 }}>
-                    <div className="label-form">Removal start</div>
-                    <InlineEditText
-                      value={project.removal_dates_start}
-                      placeholder="YYYY-MM-DD"
-                      inputType="date"
-                      renderRead={(v) =>
-                        v ? formatShortDate(v) : <span className="muted subtle">Not set</span>
-                      }
-                      onSave={(next) => saveField("removal_dates_start", next || null)}
-                    />
-                  </div>
-                  <div className="field" style={{ gap: 4 }}>
-                    <div className="label-form">Removal end</div>
-                    <InlineEditText
-                      value={project.removal_dates_end}
-                      placeholder="YYYY-MM-DD"
-                      inputType="date"
-                      renderRead={(v) =>
-                        v ? formatShortDate(v) : <span className="muted subtle">-</span>
-                      }
-                      onSave={(next) => saveField("removal_dates_end", next || null)}
-                    />
-                  </div>
-                </div>
-              </div>
-              <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
-              <div className="field-chips">
-                <DField label="Tags">
-                  <RecordCombobox
-                    multi
-                    source={{ kind: "lookup", table: "project_tags" }}
-                    multiValue={project.tags}
-                    onMultiChange={(next) => void saveField("tags", next)}
-                    entityLabel="Tag"
-                    placeholder="Add tag..."
-                  />
-                </DField>
-              </div>
-            </div>
-          </section>
+          <ProjectDetailsCard
+            project={project}
+            venueIds={venueIds}
+            saveField={saveField}
+            saveClientId={saveClientId}
+            saveVenueIds={saveVenueIds}
+            loadClientOptions={loadClientOptions}
+            loadVenueOptions={loadVenueOptions}
+            setClientOptions={setClientOptions}
+            setVenueOptions={setVenueOptions}
+          />
 
           <section className="card">
             <div className="card-headbar">
@@ -1155,129 +862,16 @@ export default function ProjectDetail() {
         </div>
 
         <aside className="stack-6" style={{ minWidth: 0 }}>
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Team</span>
-              <Popover
-                open={memberPickerOpen}
-                onOpenChange={(o) => {
-                  setMemberPickerOpen(o);
-                  if (!o) setMemberSearch("");
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="combo-picker-btn"
-                    aria-label="Add team member"
-                    title="Add team member"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[280px] p-0" align="end">
-                  <Command shouldFilter>
-                    <CommandInput
-                      value={memberSearch}
-                      onValueChange={setMemberSearch}
-                      placeholder="Search users..."
-                    />
-                    <CommandList>
-                      <CommandEmpty>No users.</CommandEmpty>
-                      {userOptions.map((opt) => {
-                        const isAlreadyOnProject =
-                          project.account_managers.some((j) => j.user?.id === opt.id) ||
-                          project.designers.some((j) => j.user?.id === opt.id) ||
-                          project.members.some((j) => j.user?.id === opt.id);
-                        return (
-                          <CommandItem
-                            key={opt.id}
-                            value={opt.label}
-                            disabled={isAlreadyOnProject}
-                            onSelect={() => {
-                              if (isAlreadyOnProject) return;
-                              void handleAddMember(opt.id);
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <span className="flex-1 truncate">{opt.label}</span>
-                            {isAlreadyOnProject ? (
-                              <span className="cap" style={{ opacity: 0.6 }}>
-                                on project
-                              </span>
-                            ) : null}
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="card-pad stack-3">
-              {project.account_managers.length === 0 &&
-              project.designers.length === 0 &&
-              project.members.length === 0 ? (
-                <div className="subtle">No team assigned.</div>
-              ) : null}
-              {project.account_managers.map((j, i) =>
-                j.user ? (
-                  <div key={`am-${i}`} className="row-c">
-                    <span className="av-i">
-                      {(j.user.full_name ?? j.user.email ?? "?").slice(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <div>{j.user.full_name ?? j.user.email}</div>
-                      <div className="cap">Account</div>
-                    </div>
-                  </div>
-                ) : null,
-              )}
-              {project.designers.map((j, i) =>
-                j.user ? (
-                  <div key={`d-${i}`} className="row-c">
-                    <span className="av-i">
-                      {(j.user.full_name ?? j.user.email ?? "?").slice(0, 2).toUpperCase()}
-                    </span>
-                    <div>
-                      <div>{j.user.full_name ?? j.user.email}</div>
-                      <div className="cap">Design</div>
-                    </div>
-                  </div>
-                ) : null,
-              )}
-              {project.members.map((j, i) =>
-                j.user ? (
-                  <div
-                    key={`m-${i}`}
-                    className="row-c team-member-row"
-                    style={{ justifyContent: "space-between" }}
-                  >
-                    <div className="row-c">
-                      <span className="av-i">
-                        {(j.user.full_name ?? j.user.email ?? "?").slice(0, 2).toUpperCase()}
-                      </span>
-                      <div>
-                        <div>{j.user.full_name ?? j.user.email}</div>
-                        <div className="cap">Team</div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="combo-picker-btn team-member-remove"
-                      aria-label={`Remove ${j.user.full_name ?? j.user.email ?? "member"} from team`}
-                      title="Remove from team"
-                      onClick={() => {
-                        if (j.user) void handleRemoveMember(j.user.id);
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : null,
-              )}
-            </div>
-          </section>
+          <ProjectTeamSection
+            project={project}
+            userOptions={userOptions}
+            memberPickerOpen={memberPickerOpen}
+            setMemberPickerOpen={setMemberPickerOpen}
+            memberSearch={memberSearch}
+            setMemberSearch={setMemberSearch}
+            handleAddMember={handleAddMember}
+            handleRemoveMember={handleRemoveMember}
+          />
 
           {/* Status Notes (Phase 5.7.3 followup-13): append-only via
               shared InternalNotesEditor; users can be @-mentioned. Existing
@@ -1290,135 +884,22 @@ export default function ProjectDetail() {
             maxVisibleNotes={2}
           />
 
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Vendors</span>
-              <Popover open={vendorPickerOpen} onOpenChange={(o) => { setVendorPickerOpen(o); if (!o) setVendorSearch(""); }}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="combo-picker-btn"
-                    aria-label="Add or remove vendors"
-                    title="Manage vendors"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[280px] p-0" align="end">
-                  <Command shouldFilter>
-                    <CommandInput
-                      value={vendorSearch}
-                      onValueChange={setVendorSearch}
-                      placeholder="Search vendors..."
-                    />
-                    <CommandList>
-                      <CommandEmpty>No vendors.</CommandEmpty>
-                      {vendorOptions.map((opt) => {
-                        const selected = vendors.some((v) => v.id === opt.id);
-                        return (
-                          <CommandItem
-                            key={opt.id}
-                            value={opt.label}
-                            onSelect={() => {
-                              void toggleVendor(opt.id);
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <span className="flex-1 truncate">{opt.label}</span>
-                            {selected ? (
-                              <Check className="ml-2 h-4 w-4 text-primary" />
-                            ) : null}
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-            <div className="card-pad stack-2">
-              {vendors.length === 0 ? (
-                <div className="subtle" style={{ fontSize: 13 }}>
-                  No vendors linked yet.
-                </div>
-              ) : (
-                vendors.map((v) => (
-                  <div key={v.id} className="row-c" style={{ justifyContent: "space-between" }}>
-                    <Link
-                      to={`/vendors/${v.id}`}
-                      className="tlink"
-                      style={{ fontSize: 13 }}
-                    >
-                      {v.name}
-                    </Link>
-                    {v.category_name ? (
-                      <span className="cap muted">{v.category_name}</span>
-                    ) : null}
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
+          <ProjectVendorsCard
+            vendors={vendors}
+            vendorOptions={vendorOptions}
+            vendorPickerOpen={vendorPickerOpen}
+            setVendorPickerOpen={setVendorPickerOpen}
+            vendorSearch={vendorSearch}
+            setVendorSearch={setVendorSearch}
+            toggleVendor={toggleVendor}
+          />
 
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Project Activity</span>
-              <Link to="/activity" className="tlink">
-                View all
-                <IconExt className="ic" style={{ width: 11, height: 11 }} />
-              </Link>
-            </div>
-            <div className="card-pad">
-              {activityLoading ? (
-                <p className="subtle" style={{ fontSize: 13 }}>Loading...</p>
-              ) : activityError ? (
-                <p className="subtle" style={{ fontSize: 13 }}>
-                  Could not load activity.
-                </p>
-              ) : activityRows.length === 0 ? (
-                <p className="subtle" style={{ fontSize: 13 }}>
-                  No project activity yet.
-                </p>
-              ) : (
-                activityRows.map((row) => {
-                  const f = formatActivitySentence(row);
-                  // Phase 5.7.2 carry-forward: /users (Team list) is admin-only.
-                  // Demote the mention-fallback link for non-admin viewers so we
-                  // don't render a dead-end. Revert in 5.7.11 once /users/:id ships.
-                  const recordHrefEffective =
-                    f.recordHref === "/users" && viewerRole !== "admin"
-                      ? null
-                      : f.recordHref;
-                  return (
-                    <div key={row.id} className="activity-row">
-                      <span className="actdot">
-                        <ActivityRowIcon entityType={row.entity_type} />
-                      </span>
-                      <div>
-                        <div className="txt">
-                          <span className="who">{f.actor.name}</span>
-                          {f.leadingText}
-                          {f.recordName ? (
-                            f.recordIsBoldOnly ? (
-                              <span className="dlv">{f.recordName}</span>
-                            ) : recordHrefEffective ? (
-                              <Link to={recordHrefEffective}>
-                                <b>{f.recordName}</b>
-                              </Link>
-                            ) : (
-                              <b>{f.recordName}</b>
-                            )
-                          ) : null}
-                          {f.trailingText}
-                        </div>
-                        <div className="ts">{activityRowTimestamp(row.created_at)}</div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
+          <ProjectActivitySection
+            activityRows={activityRows}
+            activityLoading={activityLoading}
+            activityError={activityError}
+            viewerRole={viewerRole}
+          />
         </aside>
       </div>
     </div>

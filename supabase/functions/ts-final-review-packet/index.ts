@@ -44,15 +44,15 @@ const corsHeaders = {
 
 const sb = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-// deno-lint-ignore no-explicit-any
-function fmtErr(e: any): string {
+function fmtErr(e: unknown): string {
   if (e instanceof Error) return e.message;
   if (e && typeof e === "object") {
-    if (typeof e.message === "string") {
-      const parts = [e.message];
-      if (e.code) parts.push(`(code ${e.code})`);
-      if (e.details) parts.push(`details: ${e.details}`);
-      if (e.hint) parts.push(`hint: ${e.hint}`);
+    const o = e as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+    if (typeof o.message === "string") {
+      const parts = [o.message];
+      if (o.code) parts.push(`(code ${o.code})`);
+      if (o.details) parts.push(`details: ${o.details}`);
+      if (o.hint) parts.push(`hint: ${o.hint}`);
       return parts.join(" ");
     }
     try { return JSON.stringify(e).slice(0, 500); } catch { return String(e); }
@@ -66,6 +66,46 @@ const TIER_LABEL: Record<string, string> = {
   backup: "Backup",
   not_recommended: "Not Recommended",
 };
+
+// Final-review ranking entry as stored in ts_final_reviews.final_rankings
+// (Json). Shape per Phase 3.6 header. recruiter_note may be an array
+// (Phase 3.6.6+) or a legacy string.
+interface RankingEntry {
+  candidate_id: string;
+  final_rank?: number | null;
+  final_tier?: string | null;
+  rationale?: string | null;
+  recruiter_note?: string[] | string | null;
+}
+
+// Narrow row shape for the partial ts_candidates projection this function
+// selects (see the `.select(...)` below). detected_links is typed to match
+// what addCandidateTitlePage consumes.
+interface FinalCandidateRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  location: string | null;
+  applied_date: string | null;
+  status: string;
+  score: number | null;
+  recruiter_overview: string | null;
+  portfolio_path_or_url: string | null;
+  detected_links: { url: string; type: string }[] | null;
+  email_body_text: string | null;
+}
+
+// Candidate row merged with its ranking entry plus derived render fields.
+// Spread from a possibly-empty candidate map, so the row fields are optional.
+interface EnrichedFinalCandidate extends Partial<FinalCandidateRow> {
+  candidate_id: string;
+  final_rank?: number | null;
+  final_tier: string;
+  rationale: string;
+  recruiter_note: string | null;
+  total_score: number | null;
+  portfolio_url: string | null;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -89,8 +129,9 @@ Deno.serve(async (req) => {
     const { data: fr } = await supabase.from("ts_final_reviews").select("*").eq("id", final_review_id).maybeSingle();
     if (!fr) throw new Error("Final review not found");
     if (fr.status !== "complete") throw new Error("Final review is not complete yet");
-    // deno-lint-ignore no-explicit-any
-    const rankings: any[] = Array.isArray(fr.final_rankings) ? fr.final_rankings : [];
+    const rankings: RankingEntry[] = Array.isArray(fr.final_rankings)
+      ? (fr.final_rankings as unknown as RankingEntry[])
+      : [];
     if (!rankings.length) throw new Error("Final review has no rankings");
 
     const { data: role } = await supabase.from("ts_roles").select("*").eq("id", fr.role_id).maybeSingle();
@@ -101,19 +142,16 @@ Deno.serve(async (req) => {
       .from("ts_candidates")
       .select("id,name,email,location,applied_date,status,score,recruiter_overview,portfolio_path_or_url,detected_links,email_body_text")
       .in("id", candIds);
-    // deno-lint-ignore no-explicit-any
-    const candMap: Record<string, any> = {};
-    // deno-lint-ignore no-explicit-any
-    (cands ?? []).forEach((c: any) => { candMap[c.id] = c; });
+    const candMap: Record<string, FinalCandidateRow> = {};
+    ((cands ?? []) as FinalCandidateRow[]).forEach((c) => { candMap[c.id] = c; });
 
-    // deno-lint-ignore no-explicit-any
-    const enriched = rankings.map((r: any) => {
-      const c = candMap[r.candidate_id] ?? {};
+    const enriched: EnrichedFinalCandidate[] = rankings.map((r) => {
+      const c = candMap[r.candidate_id] ?? {} as Partial<FinalCandidateRow>;
       // recruiter_note may be array (Phase 3.6.6+) or legacy string. Flatten
       // to a single newline-joined bullet block for the packet's
       // drawWriteupCard helper (which renders one prose block).
       const rn = Array.isArray(r.recruiter_note)
-        ? r.recruiter_note.filter(Boolean).map((s: string) => `• ${s}`).join("\n")
+        ? r.recruiter_note.filter(Boolean).map((s) => `• ${s}`).join("\n")
         : typeof r.recruiter_note === "string" ? r.recruiter_note
           : "";
       return {
@@ -126,30 +164,20 @@ Deno.serve(async (req) => {
         total_score: c.score ?? null,
         portfolio_url: c.portfolio_path_or_url ?? null,
       };
-    // deno-lint-ignore no-explicit-any
-    }).sort((a: any, b: any) => (a.final_rank ?? 9999) - (b.final_rank ?? 9999));
+    }).sort((a, b) => (a.final_rank ?? 9999) - (b.final_rank ?? 9999));
 
-    // deno-lint-ignore no-explicit-any
-    const topRecs = enriched.filter((c: any) => c.final_tier === "top_recommendation");
-    // deno-lint-ignore no-explicit-any
-    const strong = enriched.filter((c: any) => c.final_tier === "strong_consideration");
-    // deno-lint-ignore no-explicit-any
-    const backup = enriched.filter((c: any) => c.final_tier === "backup");
-    // deno-lint-ignore no-explicit-any
-    const notRec = enriched.filter((c: any) => c.final_tier === "not_recommended");
+    const topRecs = enriched.filter((c) => c.final_tier === "top_recommendation");
+    const strong = enriched.filter((c) => c.final_tier === "strong_consideration");
+    const backup = enriched.filter((c) => c.final_tier === "backup");
+    const notRec = enriched.filter((c) => c.final_tier === "not_recommended");
 
     // Per-candidate pages: include all when requested, else top-N + fast-tracks.
     const topNList = include_all ? enriched : enriched.slice(0, top_n);
-    // deno-lint-ignore no-explicit-any
-    const fastTracks = include_fast_track ? enriched.filter((c: any) => c.status === "fast_track") : [];
-    // deno-lint-ignore no-explicit-any
-    const candPagesMap = new Map<string, any>();
-    // deno-lint-ignore no-explicit-any
-    [...topNList, ...fastTracks].forEach((c: any) => candPagesMap.set(c.candidate_id, c));
-    // deno-lint-ignore no-explicit-any
+    const fastTracks = include_fast_track ? enriched.filter((c) => c.status === "fast_track") : [];
+    const candPagesMap = new Map<string, EnrichedFinalCandidate>();
+    [...topNList, ...fastTracks].forEach((c) => candPagesMap.set(c.candidate_id, c));
     const candidatesForPages = Array.from(candPagesMap.values())
-      // deno-lint-ignore no-explicit-any
-      .sort((a: any, b: any) => (a.final_rank ?? 9999) - (b.final_rank ?? 9999));
+      .sort((a, b) => (a.final_rank ?? 9999) - (b.final_rank ?? 9999));
 
     const reportDate = new Date(fr.generated_at ?? Date.now());
     const headerText = `Mirror NYC · ${role.title ?? "Role"} · Final Review`;
@@ -193,8 +221,7 @@ Deno.serve(async (req) => {
       { label: "Location", width: 142 },
     ], enriched.length === 0
       ? [["", "No candidates ranked.", "", "", ""]]
-      // deno-lint-ignore no-explicit-any
-      : enriched.map((c: any) => [
+      : enriched.map((c) => [
         { text: String(c.final_rank ?? "—"), bold: true, color: C_CORAL },
         { text: c.name ?? c.email ?? "—", bold: true,
           color: c.final_tier === "top_recommendation" ? C_TIER3 : undefined },
@@ -210,7 +237,6 @@ Deno.serve(async (req) => {
       newContentPage(ctx);
       drawSectionTitle(ctx, "Top", "Recommendations");
       drawSectionSub(ctx, "Hiring manager should prioritize for offer or final-round interviews.");
-      // deno-lint-ignore no-explicit-any
       for (const c of topRecs) {
         drawWriteupCard(ctx, {
           name: c.name ?? c.email ?? "Candidate",
@@ -226,7 +252,6 @@ Deno.serve(async (req) => {
       newContentPage(ctx);
       drawSectionTitle(ctx, "Strong", "Consideration");
       drawSectionSub(ctx, "Qualified candidates worth interviewing if top picks fall through.");
-      // deno-lint-ignore no-explicit-any
       for (const c of strong) {
         drawWriteupCard(ctx, {
           name: c.name ?? c.email ?? "Candidate",
@@ -242,7 +267,6 @@ Deno.serve(async (req) => {
       newContentPage(ctx);
       drawSectionTitle(ctx, "Backup");
       drawSectionSub(ctx, "Qualified but unlikely to be chosen unless circumstances change.");
-      // deno-lint-ignore no-explicit-any
       for (const c of backup) {
         drawWriteupCard(ctx, {
           name: c.name ?? c.email ?? "Candidate",
@@ -262,8 +286,7 @@ Deno.serve(async (req) => {
         { label: "Name", width: 200 },
         { label: "Score", width: 60, align: "right" },
         { label: "Brief Reason", width: 192 },
-      // deno-lint-ignore no-explicit-any
-      ], notRec.map((c: any) => [
+      ], notRec.map((c) => [
         String(c.final_rank ?? "—"),
         c.name ?? c.email ?? "—",
         c.total_score != null ? String(c.total_score) : "—",
@@ -285,10 +308,9 @@ Deno.serve(async (req) => {
         .select("id,candidate_id,attachment_type,file_name,file_path,file_size_bytes")
         .in("candidate_id", cidArr);
       const attsByCand: Record<string, StorageAttachment[]> = {};
-      // deno-lint-ignore no-explicit-any
-      (attRows ?? []).forEach((a: any) => {
+      ((attRows ?? []) as StorageAttachment[]).forEach((a) => {
         attsByCand[a.candidate_id] = attsByCand[a.candidate_id] ?? [];
-        attsByCand[a.candidate_id].push(a as StorageAttachment);
+        attsByCand[a.candidate_id].push(a);
       });
 
       for (const c of candidatesForPages) {

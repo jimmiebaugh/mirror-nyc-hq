@@ -338,7 +338,7 @@ export default function ClientDetail() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gridTemplateColumns: "1fr 1fr",
                   gap: 16,
                 }}
               >
@@ -415,21 +415,6 @@ export default function ClientDetail() {
                       - (set Primary Contact)
                     </span>
                   )}
-                </DField>
-                <DField label="Phone">
-                  <InlineEditText
-                    value={client.contact_phone}
-                    placeholder="(212) 555-0000"
-                    onBlurFormat={formatPhone}
-                    renderRead={(v) =>
-                      v ? (
-                        <span className="mono" style={{ fontSize: 13 }}>{v}</span>
-                      ) : (
-                        <span className="muted subtle">-</span>
-                      )
-                    }
-                    onSave={(next) => saveField("contact_phone", next || null)}
-                  />
                 </DField>
               </div>
               <div style={{ borderTop: "1px solid hsl(var(--border))" }} />

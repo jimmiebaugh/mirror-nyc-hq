@@ -128,6 +128,47 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+// Narrow shapes for the Drive + Slides REST responses, declaring only the
+// fields this function actually reads. Slides API request objects are
+// heterogeneous (replaceAllText / duplicateObject / deleteObject /
+// updateSlidesPosition / replaceImage / updateTextStyle), so a request is
+// modeled as an open record; the response shapes below are read-side only.
+type SlidesRequest = Record<string, unknown>;
+
+interface SlidesTextRun {
+  content?: string;
+  startIndex?: number;
+}
+interface SlidesTextElement {
+  startIndex?: number;
+  textRun?: SlidesTextRun;
+}
+interface SlidesPageElement {
+  objectId?: string;
+  description?: string;
+  title?: string;
+  image?: unknown;
+  elementGroup?: { children?: SlidesPageElement[] };
+  shape?: { text?: { textElements?: SlidesTextElement[] } };
+}
+interface SlidesPage {
+  objectId?: string;
+  pageElements?: SlidesPageElement[];
+}
+interface SlidesPresentation {
+  slides?: SlidesPage[];
+}
+interface SlidesBatchReply {
+  duplicateObject?: { objectId?: string };
+}
+interface SlidesBatchResponse {
+  // batchUpdate always returns a replies array (empty when no requests run).
+  replies: SlidesBatchReply[];
+}
+interface DriveFileCopyResponse {
+  id?: string;
+}
+
 // Google API fetch wrapper. Lifted verbatim from VS Pro.
 async function gFetch(
   url: string,
@@ -155,36 +196,38 @@ async function copyTemplate(
   folderId: string,
   token: string,
 ): Promise<string> {
-  const j = await gFetch(
+  const j = (await gFetch(
     `https://www.googleapis.com/drive/v3/files/${templateId}/copy?supportsAllDrives=true`,
     token,
     {
       method: "POST",
       body: JSON.stringify({ name, parents: [folderId] }),
     },
-  );
+  )) as DriveFileCopyResponse;
   return j.id as string;
 }
 
-async function getPresentation(deckId: string, token: string) {
-  return gFetch(
+async function getPresentation(
+  deckId: string,
+  token: string,
+): Promise<SlidesPresentation> {
+  return (await gFetch(
     `https://slides.googleapis.com/v1/presentations/${deckId}`,
     token,
-  );
+  )) as SlidesPresentation;
 }
 
 async function batchUpdate(
   deckId: string,
-  // deno-lint-ignore no-explicit-any
-  requests: any[],
+  requests: SlidesRequest[],
   token: string,
-) {
+): Promise<SlidesBatchResponse> {
   if (!requests.length) return { replies: [] };
-  return gFetch(
+  return (await gFetch(
     `https://slides.googleapis.com/v1/presentations/${deckId}:batchUpdate`,
     token,
     { method: "POST", body: JSON.stringify({ requests }) },
-  );
+  )) as SlidesBatchResponse;
 }
 
 // Token -> request builders. Lifted verbatim from VS Pro.
@@ -218,21 +261,18 @@ function extractExtension(storagePath: string): string {
 
 // Slide element walking. Lifted verbatim from VS Pro.
 function findImagesByAltText(
-  // deno-lint-ignore no-explicit-any
-  presentation: any,
+  presentation: SlidesPresentation,
   pageId: string,
 ): Record<string, string> {
-  // deno-lint-ignore no-explicit-any
-  const page = presentation.slides?.find((s: any) => s.objectId === pageId);
+  const page = presentation.slides?.find((s) => s.objectId === pageId);
   const out: Record<string, string> = {};
   if (!page) return out;
-  // deno-lint-ignore no-explicit-any
-  const walk = (els: any[]) => {
+  const walk = (els: SlidesPageElement[]) => {
     for (const el of els ?? []) {
       if (el.elementGroup?.children) walk(el.elementGroup.children);
       if (el.image) {
         const desc = el.description ?? el.title;
-        if (desc) out[desc] = el.objectId;
+        if (desc) out[desc] = el.objectId as string;
       }
     }
   };
@@ -241,23 +281,20 @@ function findImagesByAltText(
 }
 
 function findTextElementsByContent(
-  // deno-lint-ignore no-explicit-any
-  presentation: any,
+  presentation: SlidesPresentation,
   pageId: string,
   needle: string,
 ): string[] {
-  // deno-lint-ignore no-explicit-any
-  const page = presentation.slides?.find((s: any) => s.objectId === pageId);
+  const page = presentation.slides?.find((s) => s.objectId === pageId);
   const out: string[] = [];
   if (!page) return out;
-  // deno-lint-ignore no-explicit-any
-  const walk = (els: any[]) => {
+  const walk = (els: SlidesPageElement[]) => {
     for (const el of els ?? []) {
       if (el.elementGroup?.children) walk(el.elementGroup.children);
       const runs = el.shape?.text?.textElements ?? [];
       for (const te of runs) {
         if (te.textRun?.content?.includes(needle)) {
-          out.push(el.objectId);
+          out.push(el.objectId as string);
           break;
         }
       }
@@ -324,10 +361,11 @@ type HqVenueRow = {
 // decorative and warn-and-continue (do NOT populate `failedVenueId`).
 async function pushVenuesToHq(
   sb: ReturnType<typeof createClient>,
-  // deno-lint-ignore no-explicit-any
-  candidates: any[],
-  // deno-lint-ignore no-explicit-any
-  scout: any,
+  // Candidate vs_candidate_venues rows from a `select("*")`; every field is
+  // read with an explicit per-field cast below, so the row is open-shaped.
+  candidates: Record<string, unknown>[],
+  // Scout row; only city / created_by / id are read (each cast at use).
+  scout: Record<string, unknown>,
   venueTypesCanonical: VenueTypesCanonical,
 ): Promise<{ failedVenueId: string | null; error: string | null }> {
   // 1. Load HQ venue pool. Small enough to scan in memory; cheaper than
@@ -609,8 +647,8 @@ async function pushVenuesToHq(
 // between generations. The producer's current selections are canonical.
 async function persistVenuePhotosToHq(
   sb: ReturnType<typeof createClient>,
-  // deno-lint-ignore no-explicit-any
-  candidates: any[],
+  // Candidate vs_candidate_venues rows; only `id` is read (cast at use).
+  candidates: Record<string, unknown>[],
   scout_id: string,
 ): Promise<void> {
   const candidateIds = candidates.map((c) => c.id as string);
@@ -1115,10 +1153,8 @@ Deno.serve(async (req) => {
       //    any throw here gets caught and reported as SLIDES_API_FAILED.
       try {
         // Read presentation to learn page object IDs.
-        // deno-lint-ignore no-explicit-any
-        const pres: any = await getPresentation(deckId, token);
-        // deno-lint-ignore no-explicit-any
-        const slides: any[] = pres.slides ?? [];
+        const pres = await getPresentation(deckId, token);
+        const slides: SlidesPage[] = pres.slides ?? [];
         // Slides 1..N in order. Mirror template (verified via .pptx parse
         // 2026-05-12) has 6 front-matter slides: cover (1), project info
         // (2-3), event overview (4), section title (5), venue map with
@@ -1143,8 +1179,7 @@ Deno.serve(async (req) => {
         const eventName = (scout.event_name as string) ?? "";
         const liveDate = fmtDate(scout.live_dates as string);
         const cityName = (scout.city as string) ?? "";
-        // deno-lint-ignore no-explicit-any
-        const globalReqs: any[] = [
+        const globalReqs: SlidesRequest[] = [
           // Post-4.10.4 hot patch round 17: slide 2 ALL-CAPS pass MUST
           // run before the case-preserving global replaces below. The
           // Slides API processes requests within a batchUpdate in
@@ -1189,8 +1224,7 @@ Deno.serve(async (req) => {
         await batchUpdate(deckId, globalReqs, token);
 
         // Per-venue: duplicate slides 7 + 8 once per venue.
-        // deno-lint-ignore no-explicit-any
-        const dupReqs: any[] = [];
+        const dupReqs: SlidesRequest[] = [];
         venues.forEach((_, idx) => {
           const k7 = `dup7_${idx}`;
           const k8 = `dup8_${idx}`;
@@ -1207,14 +1241,12 @@ Deno.serve(async (req) => {
             },
           });
         });
-        // deno-lint-ignore no-explicit-any
-        const dupRes: any = await batchUpdate(deckId, dupReqs, token);
+        const dupRes = await batchUpdate(deckId, dupReqs, token);
         // Map duplicate keys to returned object IDs (alternating 7/8).
         const slide7Ids: string[] = [];
         const slide8Ids: string[] = [];
-        // deno-lint-ignore no-explicit-any
-        dupRes.replies.forEach((r: any, i: number) => {
-          const id = r.duplicateObject?.objectId;
+        dupRes.replies.forEach((r, i) => {
+          const id = r.duplicateObject?.objectId as string;
           if (i % 2 === 0) slide7Ids.push(id);
           else slide8Ids.push(id);
         });
@@ -1243,8 +1275,7 @@ Deno.serve(async (req) => {
             (v.key_features as string[] | null | undefined) ?? []
           ).join("\n");
 
-          // deno-lint-ignore no-explicit-any
-          const reqs: any[] = [
+          const reqs: SlidesRequest[] = [
             repText(
               "{{venue_name}}",
               ((v.name as string) ?? "").toUpperCase(),
@@ -1279,17 +1310,13 @@ Deno.serve(async (req) => {
 
           // Hyperlink the "Website" text run on slide 7 (per-venue detail).
           if (v.website_url) {
-            // deno-lint-ignore no-explicit-any
-            const dupPres: any = await getPresentation(deckId, token);
+            const dupPres = await getPresentation(deckId, token);
             const els = findTextElementsByContent(dupPres, s7, "Website");
             for (const objId of els) {
-              // deno-lint-ignore no-explicit-any
-              const page = dupPres.slides.find(
-                // deno-lint-ignore no-explicit-any
-                (s: any) => s.objectId === s7,
-              );
-              // deno-lint-ignore no-explicit-any
-              const findEl = (els: any[]): any => {
+              const page = dupPres.slides!.find((s) => s.objectId === s7);
+              const findEl = (
+                els: SlidesPageElement[],
+              ): SlidesPageElement | null => {
                 for (const el of els ?? []) {
                   if (el.objectId === objId) return el;
                   if (el.elementGroup?.children) {
@@ -1356,11 +1383,9 @@ Deno.serve(async (req) => {
               emittedPhotos = true;
               await writeProgress("inserting_photos");
             }
-            // deno-lint-ignore no-explicit-any
-            const dupPres: any = await getPresentation(deckId, token);
+            const dupPres = await getPresentation(deckId, token);
             const imgMap = findImagesByAltText(dupPres, s7);
-            // deno-lint-ignore no-explicit-any
-            const imgReqs: any[] = [];
+            const imgReqs: SlidesRequest[] = [];
             for (const ph of venuePhotos) {
               const target = imgMap[`img_${ph.slot}`];
               if (target) {
@@ -1414,8 +1439,7 @@ Deno.serve(async (req) => {
         // moves operate on the cleaner post-delete state. The dup IDs
         // are stable across the template deletes (they're independent
         // slides, not children of the templates).
-        // deno-lint-ignore no-explicit-any
-        const finalizeReqs: any[] = [];
+        const finalizeReqs: SlidesRequest[] = [];
         finalizeReqs.push({ deleteObject: { objectId: templateSlide7 } });
         finalizeReqs.push({ deleteObject: { objectId: templateSlide8 } });
         if (venues.length > 0) {
@@ -1442,8 +1466,7 @@ Deno.serve(async (req) => {
         await batchUpdate(deckId, finalizeReqs, token);
 
         // Final slide count.
-        // deno-lint-ignore no-explicit-any
-        const finalPres: any = await getPresentation(deckId, token);
+        const finalPres = await getPresentation(deckId, token);
         const slideCount = (finalPres.slides ?? []).length;
 
         await writeProgress("finalizing");
@@ -1559,9 +1582,11 @@ Deno.serve(async (req) => {
   // EdgeRuntime.waitUntil keeps the function alive past the response so
   // the Slides work can finish in the background. Available on Supabase
   // Edge Runtime; local dev fallback awaits the work synchronously so
-  // tests behave deterministically.
-  // deno-lint-ignore no-explicit-any
-  const erAny = (globalThis as any).EdgeRuntime;
+  // tests behave deterministically. The global isn't in Deno's lib types,
+  // so narrow it through a local shape declaring only the field we read.
+  const erAny = (globalThis as {
+    EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
+  }).EdgeRuntime;
   if (erAny && typeof erAny.waitUntil === "function") {
     erAny.waitUntil(work());
   } else {

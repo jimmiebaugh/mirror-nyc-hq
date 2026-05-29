@@ -844,9 +844,11 @@ Deno.serve(async (req) => {
   // EdgeRuntime.waitUntil keeps the function alive past the response so
   // the AI work can finish in the background. Available on Supabase
   // Edge Runtime; local dev fallback awaits the work synchronously so
-  // tests behave deterministically.
-  // deno-lint-ignore no-explicit-any
-  const erAny = (globalThis as any).EdgeRuntime;
+  // tests behave deterministically. The global isn't in Deno's lib types,
+  // so narrow it through a local shape declaring only the field we read.
+  const erAny = (globalThis as {
+    EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
+  }).EdgeRuntime;
   if (erAny && typeof erAny.waitUntil === "function") {
     erAny.waitUntil(work());
   } else {

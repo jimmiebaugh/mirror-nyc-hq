@@ -845,18 +845,30 @@
   .combo-stack-row .combo-link{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
   /* Tables. Wrap in .tbl-wrap. Use .tbl--flat to strip row left borders.
-     R7 amendment v1 § 2: thead default stays text-align:left for HQ Core
-     consumers (Settings, Wiki, ProjectDetail, etc. — they ship that
-     contract). .tbl--matrix overrides below center the matrix's headers
-     per producer call. `.tbl thead th.l/.c/.r` opt-in classes preserved. */
+     Phase 5.16.1.1 § 3d canon flip: the global .tbl now matches the VS matrix
+     Th/Td primitives (src/components/venue-scout/matrix/primitives.tsx) so HQ
+     tables read consistently with the Sourcing/Shortlist matrix + the
+     .tbl-list contract. thead default is now CENTER on a --surface header bg
+     (was left / --surface-alt); opt a column back to left with `.l`. Cell-
+     divider `::after` bars are OFF by default (the matrix dropped them because
+     they painted over content); opt in per-table with `.tbl--with-dividers`.
+     Row hover stays the HQ default; `.tbl--matrix` is standalone and never
+     inherits it. Td padding already matched matrix Td (12px 14px). `.r`/`.c`/
+     `.l` opt-ins preserved. */
   .tbl{width:100%;border-collapse:collapse;}
-  .tbl thead th{font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--subtle-foreground));text-align:left;padding:10px 14px;background:hsl(var(--surface-alt));border-bottom:1px solid hsl(var(--border));}
+  .tbl thead th{font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--subtle-foreground));text-align:center;padding:10px 14px;background:hsl(var(--surface));border-bottom:1px solid hsl(var(--border));}
   .tbl thead th.r{text-align:right;}
   .tbl thead th.c{text-align:center;}
-  /* Phase 5.7.4 follow-up: vertical cell dividers at 75% row height (Jimmie smoke round 2 — was 90%/border). Pseudo-element keeps it independent of border-collapse + lets it center inside the cell without spanning the row's top/bottom borders. Cell can opt out via `.tbl-cell-nodivider`. */
+  /* Left opt-out (default flipped to center in 5.16.1.1 § 3d). */
+  .tbl thead th.l, .tbl tbody td.l{text-align:left;}
+  /* Cells stay position:relative so positioned children + the opt-in divider
+     pseudo bar anchor correctly. Phase 5.16.1.1 § 3d: the 75%-height vertical
+     cell dividers (Phase 5.7.4 treatment) are now OPT-IN via
+     `.tbl--with-dividers` on the table; a cell still opts out with
+     `.tbl-cell-nodivider`. */
   .tbl thead th, .tbl tbody td{position:relative;}
-  .tbl thead th:not(:last-child)::after, .tbl tbody td:not(:last-child)::after{content:"";position:absolute;right:0;top:12.5%;height:75%;width:1px;background:rgba(255,255,255,0.12);}
-  .tbl thead th.tbl-cell-nodivider::after, .tbl tbody td.tbl-cell-nodivider::after{display:none;}
+  .tbl--with-dividers thead th:not(:last-child)::after, .tbl--with-dividers tbody td:not(:last-child)::after{content:"";position:absolute;right:0;top:12.5%;height:75%;width:1px;background:rgba(255,255,255,0.12);}
+  .tbl--with-dividers thead th.tbl-cell-nodivider::after, .tbl--with-dividers tbody td.tbl-cell-nodivider::after{display:none;}
   .tbl tbody td{padding:12px 14px;border-bottom:1px solid hsl(var(--border));font-size:13px;vertical-align:middle;}
   .tbl tbody tr{border-left:3px solid transparent;}
   .tbl tbody tr:hover{background:rgba(255,255,255,.025);}

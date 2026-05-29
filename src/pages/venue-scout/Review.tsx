@@ -217,9 +217,12 @@ export default function Review() {
   }, [load]);
 
   useEffect(() => {
+    // fieldTimers.current is a stable object mutated in place; capture it so
+    // the cleanup clears whatever per-field timers are pending at unmount.
+    const fieldTimersMap = fieldTimers.current;
     return () => {
       if (orderTimer.current) clearTimeout(orderTimer.current);
-      Object.values(fieldTimers.current).forEach((t) => clearTimeout(t));
+      Object.values(fieldTimersMap).forEach((t) => clearTimeout(t));
     };
   }, []);
 

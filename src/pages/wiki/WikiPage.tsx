@@ -37,8 +37,8 @@ import { toast } from "@/hooks/use-toast";
  *
  * Auth: route is gated by <ProtectedRoute> (all tiers including freelance).
  * The `account_logins` page type has component-level + RLS protection that
- * blocks freelance users; visibility = 'no_freelance' also hides it from
- * the nav for freelance entirely.
+ * blocks freelance users. (Phase 5.16.0 dropped the `no_freelance` per-page
+ * visibility value; admin_only is the only remaining nav-level gate.)
  */
 export default function WikiPage() {
   const { slug } = useParams<{ slug?: string }>();
@@ -73,11 +73,10 @@ export default function WikiPage() {
     if (slug) return slug;
     const visible = pages.filter((p) => {
       if (p.visibility === "admin_only" && !isAdmin) return false;
-      if (p.visibility === "no_freelance" && isFreelance) return false;
       return true;
     });
     return visible[0]?.slug ?? null;
-  }, [slug, pages, isAdmin, isFreelance]);
+  }, [slug, pages, isAdmin]);
 
   // Load the active page.
   useEffect(() => {
@@ -186,12 +185,7 @@ export default function WikiPage() {
         </div>
       </div>
 
-      <WikiLayout
-        pages={pages}
-        isAdmin={isAdmin}
-        isFreelance={isFreelance}
-        currentSlug={resolvedSlug}
-      >
+      <WikiLayout pages={pages} isAdmin={isAdmin} currentSlug={resolvedSlug}>
         <div
           className={`wikipage ${page?.page_type === "prose" ? "prose" : ""}`}
           style={isSpecial ? { maxWidth: "none" } : undefined}
@@ -240,8 +234,9 @@ function PageContent({
   isAdmin: boolean;
   isFreelance: boolean;
 }) {
-  // Visibility gate: admin_only blocks non-admins; no_freelance blocks
-  // freelance. Direct slug nav still has to pass this check.
+  // Visibility gate: admin_only blocks non-admins. Direct slug nav still
+  // has to pass this check. (Account Logins keeps its own freelance gate
+  // below.)
   if (page.visibility === "admin_only" && !isAdmin) {
     return (
       <PermissionDenied

@@ -4,12 +4,14 @@ How to run, deploy, and debug the app. Day-to-day commands and troubleshooting.
 
 ## Local toolchain
 
-- Node 25.9.0
+- Node `^20.19.0 || >=22.12.0` (Vite 8 floor, Phase 5.16.1.0). Pinned in `package.json` `engines` + `.nvmrc` (= `22`, latest LTS); Netlify's build container is pinned to the same via `NODE_VERSION = "22"` in `netlify.toml`. Local dev currently runs Node 25.9.0, which is above the floor.
 - Supabase CLI 2.98.1
 - psql 18.3
 - Git
 
 `npm install` once, then `npm run dev` for the Vite dev server.
+
+Build pipeline is Vite 8 (Rolldown + Oxc engine). CSS minification is pinned to esbuild (`build.cssMinify: 'esbuild'` in `vite.config.ts`) because Vite 8's default Lightning CSS minifier rejects empty-selector `!important` rules Tailwind's JIT emits from false-positive candidates; esbuild drops them silently. See the config comment + `code-observations.md` Build & Tooling for the 5.16.1.1 follow-up.
 
 ## Local dev
 

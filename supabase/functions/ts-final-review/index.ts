@@ -16,7 +16,7 @@
 // background via EdgeRuntime.waitUntil and streams progress via
 // ts_final_reviews.step_progress (Realtime subscribed by FinalReviewLoading).
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { parseClaudeJson } from "../_shared/parseClaudeJson.ts";
 import { callClaude } from "../_shared/anthropic.ts";
 import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
@@ -35,15 +35,15 @@ const sb = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPAB
  * yields "[object Object]". This handles the common shapes: real Errors,
  * objects with a `.message` field, and anything else.
  */
-// deno-lint-ignore no-explicit-any
-function fmtErr(e: any): string {
+function fmtErr(e: unknown): string {
   if (e instanceof Error) return e.message;
   if (e && typeof e === "object") {
-    if (typeof e.message === "string") {
-      const parts = [e.message];
-      if (e.code) parts.push(`(code ${e.code})`);
-      if (e.details) parts.push(`details: ${e.details}`);
-      if (e.hint) parts.push(`hint: ${e.hint}`);
+    const o = e as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+    if (typeof o.message === "string") {
+      const parts = [o.message];
+      if (o.code) parts.push(`(code ${o.code})`);
+      if (o.details) parts.push(`details: ${o.details}`);
+      if (o.hint) parts.push(`hint: ${o.hint}`);
       return parts.join(" ");
     }
     try { return JSON.stringify(e).slice(0, 500); } catch { return String(e); }
@@ -58,9 +58,41 @@ type Progress = Record<string, { status: "pending" | "active" | "done"; count?: 
 // fast_track / consider land here. Reject + auto_rejected are excluded.
 const POOL_STATUSES = ["interview", "fast_track", "consider"];
 
+// Parsed Claude final-review JSON. final_rankings entries get their
+// candidate_id canonicalized and recruiter_note coerced to a string[] in
+// place, so both fields are mutable here.
+type RankingEntry = {
+  candidate_id: string;
+  recruiter_note?: string | string[];
+  [key: string]: unknown;
+};
+type FinalReviewParsed = {
+  final_rankings?: RankingEntry[];
+  pool_summary?: string;
+};
 
-// deno-lint-ignore no-explicit-any
-async function setProgress(supabase: any, id: string, progress: Progress, extra: Record<string, unknown> = {}) {
+// Narrow shapes matching exactly the .select() projections below.
+type RoundRow = { id: string; round_number: number };
+type PoolCandidateRow = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  location: string | null;
+  applied_date: string | null;
+  status: string | null;
+  pull_round_id: string | null;
+  internal_notes: string | null;
+  quick_overview: unknown;
+  score: number | null;
+  tier: string | null;
+  recruiter_overview: string | null;
+  top_strengths: string[] | null;
+  key_gaps: string[] | null;
+  score_breakdown: Record<string, number> | null;
+};
+
+
+async function setProgress(supabase: SupabaseClient, id: string, progress: Progress, extra: Record<string, unknown> = {}) {
   await supabase.from("ts_final_reviews").update({ step_progress: progress, ...extra }).eq("id", id);
 }
 
@@ -130,11 +162,9 @@ Deno.serve(async (req) => {
         const { data: rounds } = await supabase
           .from("ts_pull_rounds").select("id,round_number").eq("role_id", role_id);
         const roundMap: Record<string, number> = {};
-        // deno-lint-ignore no-explicit-any
-        (rounds ?? []).forEach((r: any) => { roundMap[r.id] = r.round_number; });
+        ((rounds ?? []) as RoundRow[]).forEach((r) => { roundMap[r.id] = r.round_number; });
 
-        // deno-lint-ignore no-explicit-any
-        const fullPayload = candList.map((c: any) => ({
+        const fullPayload = (candList as PoolCandidateRow[]).map((c) => ({
           id: c.id,
           name: c.name,
           email: c.email,
@@ -193,10 +223,8 @@ Deno.serve(async (req) => {
         await setProgress(supabase, reviewId!, progress);
 
         // Two-attempt retry on JSON parse failure (matches source).
-        // deno-lint-ignore no-explicit-any
-        let parsed: any | null = null;
-        // deno-lint-ignore no-explicit-any
-        let raw: any = null;
+        let parsed: FinalReviewParsed | null = null;
+        let raw: unknown = null;
         let attempt = 0;
         let lastErr: unknown;
         while (attempt < 2) {
@@ -214,7 +242,7 @@ Deno.serve(async (req) => {
           }
           raw = result.raw;
           try {
-            parsed = parseClaudeJson(result.text);
+            parsed = parseClaudeJson<FinalReviewParsed>(result.text);
             break;
           } catch (e) {
             lastErr = e;
@@ -225,9 +253,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Validate and canonicalize candidate_ids (hyphen-tolerant).
-        // deno-lint-ignore no-explicit-any
-        const rankings: any[] = Array.isArray(parsed.final_rankings) ? parsed.final_rankings : [];
+        // Validate and canonicalize candidate_ids (hyphen-tolerant). `parsed`
+        // is non-null here: the retry loop above either assigns it or throws.
+        const parsedResult = parsed as FinalReviewParsed;
+        const rankings: RankingEntry[] = Array.isArray(parsedResult.final_rankings) ? parsedResult.final_rankings : [];
         const normalizeId = (id: string) => String(id ?? "").replace(/-/g, "").toLowerCase();
         const poolByNormalized = new Map(candidatesPayload.map((c) => [normalizeId(c.id), c.id]));
         for (const r of rankings) {
@@ -259,7 +288,7 @@ Deno.serve(async (req) => {
         await setProgress(supabase, reviewId!, progress, {
           status: "complete",
           final_rankings: rankings,
-          pool_summary: parsed.pool_summary ?? "",
+          pool_summary: parsedResult.pool_summary ?? "",
           claude_raw_response: raw,
           duration_seconds: Math.floor((Date.now() - startedAt) / 1000),
           error_log: errors,
@@ -277,9 +306,9 @@ Deno.serve(async (req) => {
     })();
 
     // EdgeRuntime.waitUntil keeps the function alive past the response so
-    // background work can finish. Available on Supabase Edge Runtime.
-    // deno-lint-ignore no-explicit-any
-    const erAny = (globalThis as any).EdgeRuntime;
+    // background work can finish. Available on Supabase Edge Runtime; not in
+    // Deno's types, so read it off a narrowly-typed view of globalThis.
+    const erAny = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
     if (erAny && typeof erAny.waitUntil === "function") {
       erAny.waitUntil(work);
     } else {

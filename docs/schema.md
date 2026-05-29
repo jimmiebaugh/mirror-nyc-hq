@@ -6,6 +6,8 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 
 ## HQ Core
 
+> **RLS standing rule (Phase 5.16.0).** Every HQ Core policy that was previously `USING (true)` / `WITH CHECK (true)` (open to any authenticated JWT, including `pending` users) now gates on `(select public.is_active_member())` — true for any non-pending, active user (admin / standard / freelance). Per-table notes below that read "open to authenticated" should be understood as "active-member" as of 5.16.0; standard / freelance / admin behavior is unchanged, `pending` users now get 403 at the raw API. Policies already gated on `is_admin()`, self-scope (`auth.uid()`), or the credentials freelance-block are unchanged. `is_active_member()` is the canonical predicate: `permission_role::text <> 'pending' AND active = true`, SECURITY DEFINER, wrapped `(select ...)` for init-plan stability. `users_select` keeps an `OR id = auth.uid()` self-read clause so pending/deactivated users can still resolve their own row for the pending-redirect / deactivation flows.
+
 ### users (synced from auth.users via `handle_new_user` trigger)
 - `id` (uuid, PK). Phase 5.4 dropped the FK to `auth.users(id)` so admins can pre-provision Team members before they sign in. `handle_new_user` swaps the placeholder id to the auth uid on first sign-in (id-swap pattern; see `docs/decisions.md` Phase 5.4).
 - `email` (text, unique, not null)
@@ -13,7 +15,7 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `avatar_url` (text)
 - `permission_role` (enum: `admin`, `standard`, `freelance`, `pending`; default `pending`). Reshaped in Phase 5.1 from the 3-tier model (`member`/`producer`/`admin`) per the locked Phase 5 decisions memo. Backfill: admin -> admin, producer -> admin, member -> standard. New signups land in `pending` until an admin assigns a tier from the Team page.
 - `role_title` (text, nullable). Added Phase 5.4. Free-text producer / designer / etc.
-- `department_id` (uuid, FK to `departments.id` ON DELETE SET NULL, nullable). Added Phase 5.4. Replaces the Phase-5.1 `department_tags` text[] (dropped). Seeded values: Leadership, Accounts, Creative, Design, Event Production.
+- `department_id` (uuid, FK to `departments.id` ON DELETE SET NULL, nullable). Added Phase 5.4. Replaces the Phase-5.1 `department_tags` text[] (dropped). Seeded values: Leadership, Accounts, Creative, Design, Event Production. Index `users_department_id_idx (department_id)` (Phase 5.16.1.2 advisor FK-coverage).
 - `slack_handle` (text, nullable). Added Phase 5.4. Future Slack-DM notification dispatch reads this.
 - `slack_user_id` (text, nullable). Added Phase 5.4. Slack workspace user id (e.g. `U01234ABCD`) for DM addressing.
 - `last_active_at` (timestamptz, nullable). Added Phase 5.4. Stamped by `handle_new_user` on sign-in.
@@ -24,16 +26,16 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 ### departments (Phase 5.4 lookup)
 - `id` (uuid, PK), `name` (text, unique, not null)
 - `created_by` (uuid, FK to users, nullable), `created_at`
-- RLS: open SELECT for authenticated; admin INSERT/UPDATE/DELETE via `is_admin()`.
+- RLS: SELECT gates on `is_active_member()` (Phase 5.16.0; was open-authenticated); admin INSERT/UPDATE/DELETE via `is_admin()`.
 
 ### wiki_pages (Phase 5.4)
 - `id`, `slug` (text, unique), `title`, `body` (text, markdown for prose pages)
 - `page_type` (text CHECK in `prose`, `team_directory`, `vendors_glance`, `account_logins`; default `prose`). Special pages (non-prose) render hardcoded components instead of body markdown; they're seeded in the migration and can't be created from the UI.
-- `visibility` (text CHECK in `all`, `no_freelance`; default `all`). Filters the wiki nav; `account-logins` ships with `no_freelance`.
+- `visibility` (text CHECK in `all`, `admin_only`; default `all`). Filters the wiki nav. Phase 5.16.0 dropped the `no_freelance` value (the freelance-access flatten removed admin-curated per-page freelance hiding); the one `account-logins` row that carried `no_freelance` was migrated to `all` (Account Logins stays blocked for freelance at the component + credentials-RLS level).
 - `sort_order` (int, default 0). Drives nav order (asc).
 - `created_by`, `updated_by` (uuid FKs to users, nullable), `created_at`, `updated_at`
 - Triggers: `updated_at_auto`, `activity_log_writer`.
-- RLS: open SELECT for authenticated; admin INSERT/UPDATE/DELETE.
+- RLS: SELECT gates on `is_active_member()` (Phase 5.16.0; was open-authenticated); admin INSERT/UPDATE/DELETE.
 
 ### credentials (Phase 5.4; encrypted Phase 5.8.5)
 - `id`, `service_name` (text, not null), `username` (text, nullable), `password_encrypted` (bytea, not null; pgsodium AEAD-deterministic via the 4-arg `crypto_aead_det_encrypt(message, additional, key_uuid, nonce)` overload with NULL nonce; key name `credentials`), `url` (text, nullable)
@@ -47,7 +49,7 @@ Migrations live in `supabase/migrations/`. The current migration set was applied
 - `id`, `name` (text), `date` (date), `created_by` (uuid FK to users, nullable), `created_at`
 - Index on `(date asc)`.
 - Trigger: `activity_log_writer`.
-- RLS: open SELECT for authenticated; admin INSERT/UPDATE/DELETE.
+- RLS: SELECT gates on `is_active_member()` (Phase 5.16.0; was open-authenticated); admin INSERT/UPDATE/DELETE.
 - Seeded from the prior `src/lib/calendar/holidays.ts` `MIRROR_HOLIDAYS` constant; the Calendar now reads via `useMirrorHolidays()` hook.
 
 ### vendors (renamed from `organizations` in Phase 5.2.3.B; canonical shape after the 5.2.3 split + 5.6.2 + 5.7.11 + 5.7.13 additions)
@@ -73,7 +75,7 @@ Holds rows that were on the unified `organizations` table pre-5.2.3 (with rows o
 - `created_at`, `updated_at` (timestamptz)
 - Indexes: `vendors_city_idx (city) WHERE city IS NOT NULL` (renamed via OID from `organizations_city_idx`); `vendors_subcategory_idx` (5.6.2); `vendors_preferred_idx WHERE preferred = true` (5.4 fb r2); `vendors_bulk_import_session_idx (bulk_import_session_id) WHERE bulk_import_session_id IS NOT NULL` (5.9.3). The legacy `organizations_type_idx (type)` was dropped in 5.2.3.B alongside the `type` column.
 - Triggers: `trg_activity_log_vendors` (AFTER INSERT/UPDATE/DELETE → activity_log via `activity_log_writer`; OID-renamed from `trg_activity_log_organizations`); `trg_vendors_updated_at`.
-- RLS: SELECT/INSERT/UPDATE open to authenticated; DELETE admin-only via `is_admin()`. Underlying identifiers stay `clients_*` because the rename preserved policies by table OID.
+- RLS: SELECT/INSERT/UPDATE gate on `is_active_member()` (Phase 5.16.0; was open-authenticated); DELETE admin-only via `is_admin()`. Underlying identifiers stay `clients_*` because the rename preserved policies by table OID.
 - GRANTs: SELECT/INSERT/UPDATE/DELETE to authenticated; ALL to service_role.
 - Internal Notes: surfaced via the shared `notes_log` table with `parent_type = 'vendor'` (renamed from `'organization'` in 5.2.3.D).
 
@@ -89,7 +91,7 @@ Holds rows that were on the unified `organizations` table pre-5.2.3 (with rows o
 **Vendor child tables** (auxiliary; no activity-log triggers, all match the `project_vendors` posture):
 - `project_vendors` (Phase 5.6.2): PK `(project_id, vendor_id)`, both FKs ON DELETE CASCADE; created_by FK to users ON DELETE SET NULL; created_at. Index `project_vendors_vendor_idx (vendor_id)`. RLS open SELECT/INSERT/UPDATE/DELETE for authenticated. Surfaced read paths: VendorsList Projects column, VendorDetail Projects section, VendorEdit Projects section; write path: ProjectEdit Vendors picker (diff-on-save).
 - `vendor_files` (Phase 5.7.11, `20260527100000_phase_5_7_11_vendor_files.sql`): id (uuid, PK), vendor_id (FK ON DELETE CASCADE), title (text NOT NULL), url (text NOT NULL), created_by (FK to users ON DELETE SET NULL), created_at. Index `vendor_files_vendor_idx (vendor_id, created_at DESC)`. RLS: open-authenticated SELECT/INSERT/DELETE; no UPDATE policy (delete + re-add only). Any URL accepted (no format validation; producers paste Drive, Dropbox, Figma, vendor websites). Surfaced: VendorDetail Files & Assets card + VendorEdit Files & Assets section (gated on `!isCreate`).
-- `vendor_ratings` (Phase 5.7.13, `20260529100000_phase_5_7_13_vendor_ratings.sql`): vendor_id (FK ON DELETE CASCADE), user_id (FK ON DELETE CASCADE), rating (int, CHECK BETWEEN 1 AND 5), created_at, updated_at. Composite PK `(vendor_id, user_id)`; UPSERT for re-rating. Index `vendor_ratings_vendor_idx`. RLS: open-authenticated SELECT (aggregate needs cross-user reads); self-only INSERT/UPDATE/DELETE via `user_id = auth.uid()`. `trg_vendor_ratings_updated_at` trigger. Replaces the admin-curated `vendors.internal_rating` column dropped in `20260529110000_phase_5_7_13_drop_vendors_internal_rating.sql` (backfill: non-null ratings written to vendor_ratings owned by `vendors.created_by`; rows with NULL `created_by` skipped). Surfaced: VendorDetail Team Rating card (aggregate + viewer's own), VendorsList Rating column (team aggregate, rounded to half-star), Preferred Vendors wiki embed.
+- `vendor_ratings` (Phase 5.7.13, `20260529100000_phase_5_7_13_vendor_ratings.sql`): vendor_id (FK ON DELETE CASCADE), user_id (FK ON DELETE CASCADE), rating (int, CHECK BETWEEN 1 AND 5), created_at, updated_at. Composite PK `(vendor_id, user_id)`; UPSERT for re-rating. Indexes `vendor_ratings_vendor_idx` (vendor_id) + `vendor_ratings_user_id_idx` (user_id; Phase 5.16.1.2 advisor FK-coverage — the composite PK leads with `vendor_id`, so the `user_id` FK was unindexed). RLS: open-authenticated SELECT (aggregate needs cross-user reads); self-only INSERT/UPDATE/DELETE via `user_id = auth.uid()`. `trg_vendor_ratings_updated_at` trigger. Replaces the admin-curated `vendors.internal_rating` column dropped in `20260529110000_phase_5_7_13_drop_vendors_internal_rating.sql` (backfill: non-null ratings written to vendor_ratings owned by `vendors.created_by`; rows with NULL `created_by` skipped). Surfaced: VendorDetail Team Rating card (aggregate + viewer's own), VendorsList Rating column (team aggregate, rounded to half-star), Preferred Vendors wiki embed.
 
 ### clients (Phase 5.2.3.A, new in this phase)
 
@@ -106,7 +108,7 @@ Created fresh in 5.2.3.A. Holds rows that were `type = 'Client'` on the legacy `
 - `created_by` (uuid, FK to `users.id`)
 - `created_at`, `updated_at` (timestamptz)
 - Triggers: `trg_clients_updated_at`, `trg_activity_log_clients`.
-- RLS: SELECT/INSERT/UPDATE open to authenticated; DELETE admin-only.
+- RLS: SELECT/INSERT/UPDATE gate on `is_active_member()` (Phase 5.16.0; was open-authenticated); DELETE admin-only.
 - Internal Notes: shared `notes_log` with `parent_type = 'client'`.
 
 ### organizations table (DROPPED)
@@ -142,10 +144,10 @@ The pre-split unified-organizations shape is documented in `OUTPUTS/historical/p
 - Realtime: published via `supabase_realtime` publication with `REPLICA IDENTITY FULL` (Phase 5.2.1) so the Projects Board view subscribes to status changes via `postgres_changes`.
 
 ### project_account_managers (join, every project must have at least one row)
-- `project_id`, `user_id` (PK composite)
+- `project_id`, `user_id` (PK composite). Index `project_account_managers_user_id_idx (user_id)` (Phase 5.16.1.2 advisor FK-coverage; the composite PK leads with `project_id`, so the `user_id` FK reverse lookup was unindexed).
 
 ### project_designers (join, optional)
-- `project_id`, `user_id` (PK composite)
+- `project_id`, `user_id` (PK composite). Index `project_designers_user_id_idx (user_id)` (Phase 5.16.1.2 advisor FK-coverage; same composite-PK rationale as `project_account_managers`).
 
 ### project_members (join, optional general team bucket)
 - `project_id` (FK to projects ON DELETE CASCADE), `user_id` (FK to users ON DELETE CASCADE), `created_by` (FK to users, ON DELETE SET NULL, nullable), `created_at`. PRIMARY KEY `(project_id, user_id)`. Index `project_members_user_idx (user_id)`.
@@ -155,7 +157,7 @@ The pre-split unified-organizations shape is documented in `OUTPUTS/historical/p
 - Surfaced read paths: ProjectDetail Team card (third loop + inline + Add picker + remove affordance), ProjectsList "Team" filter (key still `leadName` for saved-view back-compat; applyFn remaps to a derived `teamNames` row field across AM + D + members). Write paths: ProjectDetail Team card add/remove; ProjectEdit Team card diff-on-save (third RecordCombobox multi).
 
 ### project_venues (join, multi-venue per project)
-- `project_id`, `venue_id` (PK composite)
+- `project_id`, `venue_id` (PK composite). Index `project_venues_venue_id_idx (venue_id)` (Phase 5.16.1.2 advisor FK-coverage; the composite PK leads with `project_id`, so the venue→projects backlist below was unindexed on `venue_id`).
 - The Notion-style backlist on a Venue page queries this to show every project that's used or is using the venue.
 
 ### venues
@@ -356,7 +358,7 @@ Three-table schema landed in Phase 4.1-port (`20260512200000_phase_4_1_port_sche
 - Single-round sourcing per scout (no `vs_sourcing_rounds`)
 - Brief fields inline on `vs_scouts` (no `vs_briefs`)
 - Deck history as `vs_scouts.generated_decks` jsonb array (no `vs_pitch_decks`)
-- RLS open to all authenticated users (collaborative agency-wide workflow)
+- RLS: ALL gates on `is_active_member()` (Phase 5.16.0; was open to all authenticated). Collaborative agency-wide workflow for active members; `pending` excluded. Applies to the three live VS tables (`vs_scouts`, `vs_candidate_venues`, `vs_venue_photos`)
 
 ### vs_scouts
 - `id` (uuid, PK), `name` (text, NOT NULL)
@@ -581,7 +583,7 @@ Polymorphic Internal Notes log shared by Clients, Vendors, People, Venues, Outlo
 - `body` (text, NOT NULL)
 - `author_id` (uuid, NOT NULL, FK to `users.id`)
 - `created_at` (timestamptz, NOT NULL, default `now()`)
-- Index: `(parent_type, parent_id, created_at DESC)` for the newest-first per-parent timeline.
+- Index: `(parent_type, parent_id, created_at DESC)` (`notes_log_parent_idx`) for the newest-first per-parent timeline; `notes_log_author_id_idx (author_id)` (Phase 5.16.1.2 advisor FK-coverage — the parent index doesn't cover the `author_id` FK).
 - **No `updated_at`. Notes are immutable except for deletion** per locked-decisions § 3.
 - RLS: SELECT-all-authenticated, INSERT-self-author, DELETE-author-or-admin. **No UPDATE policy.**
 

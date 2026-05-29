@@ -62,6 +62,8 @@ function parseDateParts(
   return new Date(y, m, d);
 }
 
+// Parse/format helpers co-located with the picker that owns the format.
+// eslint-disable-next-line react-refresh/only-export-components
 export function parseOwnFormat(value: string): DateRange | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
@@ -127,6 +129,7 @@ export function parseOwnFormat(value: string): DateRange | undefined {
   return undefined;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatRange(range: DateRange | undefined): string {
   if (!range?.from) return "";
   const fmt = (d: Date, opts: Intl.DateTimeFormatOptions) =>

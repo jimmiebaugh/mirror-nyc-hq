@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminRoute } from "@/components/AdminRoute";
-import { StandardOrAdminRoute } from "@/components/StandardOrAdminRoute";
 import AppShell from "@/components/AppShell";
 
 // Route components are lazy-loaded so each surface ships in its own chunk and
@@ -127,259 +126,131 @@ const App = () => (
               <Route path="/" element={<Navigate to="/home" replace />} />
               <Route
                 path="/home"
-                element={
-                  <StandardOrAdminRoute>
-                    <Home />
-                  </StandardOrAdminRoute>
-                }
+                element={<Home />}
               />
               <Route
                 path="/projects"
-                element={
-                  <StandardOrAdminRoute>
-                    <ProjectsList view="list" />
-                  </StandardOrAdminRoute>
-                }
+                element={<ProjectsList view="list" />}
               />
               <Route
                 path="/projects/board"
-                element={
-                  <StandardOrAdminRoute>
-                    <ProjectsList view="board" />
-                  </StandardOrAdminRoute>
-                }
+                element={<ProjectsList view="board" />}
               />
               <Route
                 path="/projects/timeline"
-                element={
-                  <StandardOrAdminRoute>
-                    <ProjectsList view="timeline" />
-                  </StandardOrAdminRoute>
-                }
+                element={<ProjectsList view="timeline" />}
               />
               <Route
                 path="/projects/new"
-                element={
-                  <StandardOrAdminRoute>
-                    <ProjectEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<ProjectEdit />}
               />
               <Route
                 path="/projects/:id"
-                element={
-                  <StandardOrAdminRoute>
-                    <ProjectDetail />
-                  </StandardOrAdminRoute>
-                }
+                element={<ProjectDetail />}
               />
               <Route
                 path="/projects/:id/edit"
-                element={
-                  <StandardOrAdminRoute>
-                    <ProjectEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<ProjectEdit />}
               />
               <Route
                 path="/tasks"
-                element={
-                  <StandardOrAdminRoute>
-                    <TasksList view="list" />
-                  </StandardOrAdminRoute>
-                }
+                element={<TasksList view="list" />}
               />
               <Route
                 path="/tasks/board"
-                element={
-                  <StandardOrAdminRoute>
-                    <TasksList view="board" />
-                  </StandardOrAdminRoute>
-                }
+                element={<TasksList view="board" />}
               />
               <Route
                 path="/tasks/new"
-                element={
-                  <StandardOrAdminRoute>
-                    <TaskEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<TaskEdit />}
               />
               <Route
                 path="/tasks/:id"
-                element={
-                  <StandardOrAdminRoute>
-                    <TaskDetail />
-                  </StandardOrAdminRoute>
-                }
+                element={<TaskDetail />}
               />
               <Route
                 path="/tasks/:id/edit"
-                element={
-                  <StandardOrAdminRoute>
-                    <TaskEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<TaskEdit />}
               />
               <Route
                 path="/deliverables"
-                element={
-                  <StandardOrAdminRoute>
-                    <DeliverablesList view="board" />
-                  </StandardOrAdminRoute>
-                }
+                element={<DeliverablesList view="board" />}
               />
               <Route
                 path="/deliverables/list"
-                element={
-                  <StandardOrAdminRoute>
-                    <DeliverablesList view="list" />
-                  </StandardOrAdminRoute>
-                }
+                element={<DeliverablesList view="list" />}
               />
               <Route
                 path="/deliverables/board"
-                element={
-                  <StandardOrAdminRoute>
-                    <DeliverablesList view="board" />
-                  </StandardOrAdminRoute>
-                }
+                element={<DeliverablesList view="board" />}
               />
               <Route
                 path="/deliverables/calendar"
-                element={
-                  <StandardOrAdminRoute>
-                    <DeliverablesList view="calendar" />
-                  </StandardOrAdminRoute>
-                }
+                element={<DeliverablesList view="calendar" />}
               />
               <Route
                 path="/deliverables/new"
-                element={
-                  <StandardOrAdminRoute>
-                    <DeliverableEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<DeliverableEdit />}
               />
               <Route
                 path="/deliverables/:id"
-                element={
-                  <StandardOrAdminRoute>
-                    <DeliverableDetail />
-                  </StandardOrAdminRoute>
-                }
+                element={<DeliverableDetail />}
               />
               <Route
                 path="/deliverables/:id/edit"
-                element={
-                  <StandardOrAdminRoute>
-                    <DeliverableEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<DeliverableEdit />}
               />
               <Route
                 path="/calendar"
-                element={
-                  <StandardOrAdminRoute>
-                    <CalendarPage />
-                  </StandardOrAdminRoute>
-                }
+                element={<CalendarPage />}
               />
               <Route
                 path="/venues"
-                element={
-                  <StandardOrAdminRoute>
-                    <VenuesList />
-                  </StandardOrAdminRoute>
-                }
+                element={<VenuesList />}
               />
               <Route
                 path="/venues/new"
-                element={
-                  <StandardOrAdminRoute>
-                    <VenueEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<VenueEdit />}
               />
               <Route
                 path="/venues/:id"
-                element={
-                  <StandardOrAdminRoute>
-                    <VenueDetail />
-                  </StandardOrAdminRoute>
-                }
+                element={<VenueDetail />}
               />
               <Route
                 path="/venues/:id/edit"
-                element={
-                  <StandardOrAdminRoute>
-                    <VenueEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<VenueEdit />}
               />
               <Route
                 path="/clients"
-                element={
-                  <StandardOrAdminRoute>
-                    <ClientsList />
-                  </StandardOrAdminRoute>
-                }
+                element={<ClientsList />}
               />
               <Route
                 path="/clients/new"
-                element={
-                  <StandardOrAdminRoute>
-                    <ClientEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<ClientEdit />}
               />
               <Route
                 path="/clients/:id"
-                element={
-                  <StandardOrAdminRoute>
-                    <ClientDetail />
-                  </StandardOrAdminRoute>
-                }
+                element={<ClientDetail />}
               />
               <Route
                 path="/clients/:id/edit"
-                element={
-                  <StandardOrAdminRoute>
-                    <ClientEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<ClientEdit />}
               />
               <Route
                 path="/vendors"
-                element={
-                  <StandardOrAdminRoute>
-                    <VendorsList />
-                  </StandardOrAdminRoute>
-                }
+                element={<VendorsList />}
               />
               <Route
                 path="/vendors/new"
-                element={
-                  <StandardOrAdminRoute>
-                    <VendorEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<VendorEdit />}
               />
               <Route
                 path="/vendors/:id"
-                element={
-                  <StandardOrAdminRoute>
-                    <VendorDetail />
-                  </StandardOrAdminRoute>
-                }
+                element={<VendorDetail />}
               />
               <Route
                 path="/vendors/:id/edit"
-                element={
-                  <StandardOrAdminRoute>
-                    <VendorEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<VendorEdit />}
               />
               {/* Backward-compat redirects for the shipped /organizations URLs.
                   Old bookmarks resolve to the right post-split surface based on
@@ -395,67 +266,35 @@ const App = () => (
               />
               <Route
                 path="/organizations/:id"
-                element={
-                  <StandardOrAdminRoute>
-                    <OrganizationsRedirect />
-                  </StandardOrAdminRoute>
-                }
+                element={<OrganizationsRedirect />}
               />
               <Route
                 path="/organizations/:id/edit"
-                element={
-                  <StandardOrAdminRoute>
-                    <OrganizationsRedirect editMode />
-                  </StandardOrAdminRoute>
-                }
+                element={<OrganizationsRedirect editMode />}
               />
               <Route
                 path="/people"
-                element={
-                  <StandardOrAdminRoute>
-                    <PeopleList />
-                  </StandardOrAdminRoute>
-                }
+                element={<PeopleList />}
               />
               <Route
                 path="/people/new"
-                element={
-                  <StandardOrAdminRoute>
-                    <PersonEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<PersonEdit />}
               />
               <Route
                 path="/people/:id"
-                element={
-                  <StandardOrAdminRoute>
-                    <PersonDetail />
-                  </StandardOrAdminRoute>
-                }
+                element={<PersonDetail />}
               />
               <Route
                 path="/people/:id/edit"
-                element={
-                  <StandardOrAdminRoute>
-                    <PersonEdit />
-                  </StandardOrAdminRoute>
-                }
+                element={<PersonEdit />}
               />
               <Route
                 path="/activity"
-                element={
-                  <StandardOrAdminRoute>
-                    <ActivityFeed />
-                  </StandardOrAdminRoute>
-                }
+                element={<ActivityFeed />}
               />
               <Route
                 path="/search"
-                element={
-                  <StandardOrAdminRoute>
-                    <SearchPage />
-                  </StandardOrAdminRoute>
-                }
+                element={<SearchPage />}
               />
               {/* Phase 5.5 notification preferences. Auth handled by the
                   outer <ProtectedRoute><AppShell /></ProtectedRoute> group

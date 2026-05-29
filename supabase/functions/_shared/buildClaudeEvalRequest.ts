@@ -10,6 +10,22 @@ import { DEFAULT_EVAL_PROMPT, LOCATION_RULES } from "./prompts.ts";
 export const CLAUDE_EVAL_MODEL = "claude-sonnet-4-6";
 export const CLAUDE_EVAL_MAX_TOKENS = 1600;
 
+// Narrow views of the ts_roles row + derived scorecard, covering only the
+// fields the eval-request builders actually read. Callers spread the full
+// ts_roles row (which carries many more columns) plus a derived jd_full_text;
+// the object-spread suppresses excess-property checks, so these permissive
+// shapes keep every caller compiling without edits.
+export type EvalRole = {
+  title?: string | null;
+  jd_full_text?: string | null;
+  hiring_priorities?: string | null;
+  auto_rejection_threshold?: number | null;
+};
+
+export type EvalScorecard = {
+  criteria?: unknown;
+};
+
 export function getClaudeSystemText(systemPromptOverride?: string): string {
   if (!systemPromptOverride || !systemPromptOverride.trim().length) {
     return DEFAULT_EVAL_PROMPT;
@@ -24,8 +40,8 @@ export function getClaudeSystemText(systemPromptOverride?: string): string {
 }
 
 export function buildRoleContext(
-  role: any,
-  scorecard: any,
+  role: EvalRole,
+  scorecard: EvalScorecard,
   competitors: string[],
 ): string {
   const competitorList = (competitors ?? []).join(", ");
@@ -59,8 +75,8 @@ export function buildCandidateBundleText(
 }
 
 export function buildClaudeEvalRequest(args: {
-  role: any;
-  scorecard: any;
+  role: EvalRole;
+  scorecard: EvalScorecard;
   competitors: string[];
   candidateBundle: string;
   detectedUrls: string[];
@@ -100,8 +116,8 @@ export function buildClaudeEvalRequest(args: {
 }
 
 export function getClaudeStaticPrefixLength(args: {
-  role: any;
-  scorecard: any;
+  role: EvalRole;
+  scorecard: EvalScorecard;
   competitors: string[];
   systemPromptOverride?: string;
 }): number {
@@ -127,10 +143,4 @@ export function classifyDetectedUrls(urls: string[]): Array<{ url: string; type:
     ) type = "portfolio_site";
     return { url, type };
   });
-}
-
-export function logClaudeUsage(label: string, usage: any, candidateRef: string) {
-  console.log(
-    `[claude-eval] tokens: input=${usage?.input_tokens ?? 0} output=${usage?.output_tokens ?? 0} cache_create=${usage?.cache_creation_input_tokens ?? 0} cache_read=${usage?.cache_read_input_tokens ?? 0} candidate=${candidateRef} ${label}`,
-  );
 }

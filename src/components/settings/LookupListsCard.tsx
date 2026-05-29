@@ -30,6 +30,8 @@ export type LookupListsCardEntry = {
 // branches in the row renderer below — NeighborhoodsLookupEditor for
 // neighborhoods (city-scoped editor), LookupListEditor for everything
 // else.
+// Lookup-list config table co-located with the card that renders it.
+// eslint-disable-next-line react-refresh/only-export-components
 export const HQ_LOOKUPS: LookupListsCardEntry[] = [
   {
     key: "project_categories",
@@ -95,7 +97,6 @@ export function LookupListsCard({
     };
     // Only refetch when the consumer-supplied list shape changes (which is
     // usually a stable module-level constant). Counts are a mount snapshot.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lookups]);
 
   return (

@@ -6,6 +6,7 @@ import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { formatPhone } from "@/lib/hq/phone";
+import { invalidateClientsAndVendors } from "@/lib/hq/useClientsAndVendors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -163,6 +164,7 @@ export default function ClientEdit() {
         return;
       }
       toast({ title: "Client created" });
+      invalidateClientsAndVendors();
       navigate(`/clients/${data.id}`);
     } else {
       const { error } = await supabase

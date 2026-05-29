@@ -188,6 +188,8 @@ export default function ClientsList() {
               {
                 key: "projects",
                 label: "Active Projects",
+                headerTitle:
+                  "Counts only active projects. Complete, Cancelled, and On Hold projects are excluded.",
                 render: (r) => (
                   <span className="list-projects">
                     <OverflowList

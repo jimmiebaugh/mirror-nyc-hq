@@ -45,6 +45,12 @@ export type Column<T> = {
    * over the relative-label + actual-date sub-columns.
    */
   group?: string;
+  /**
+   * Phase 5.16.1.1 (Frontend #29): optional `title` tooltip on the column
+   * header `<th>`. Used by ClientsList "Active Projects" to surface the
+   * active-only filter rule on hover.
+   */
+  headerTitle?: string;
 };
 
 export type SortState = { key: string; dir: "asc" | "desc" } | null;
@@ -252,6 +258,7 @@ export function DataTable<T extends { id: string }>({
                 <th
                   key={c.key}
                   className={className}
+                  title={c.headerTitle}
                   style={{
                     width: c.width,
                     cursor: c.sort ? "pointer" : undefined,

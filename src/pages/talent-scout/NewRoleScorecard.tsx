@@ -105,7 +105,6 @@ export default function NewRoleScorecard() {
     }
     if (errMsg) {
       setError(errMsg);
-      // eslint-disable-next-line no-console
       console.error("ts-generate-scorecard failed:", errMsg, invokeErr);
       toast({ title: "Couldn't generate scorecard", description: errMsg, variant: "destructive" });
       return;
@@ -163,7 +162,6 @@ export default function NewRoleScorecard() {
       }
     }
     if (errMsg) {
-      // eslint-disable-next-line no-console
       console.error("ts-refine-scorecard failed:", errMsg, invokeErr);
       toast({ title: "Couldn't refine scorecard", description: errMsg, variant: "destructive" });
       return;

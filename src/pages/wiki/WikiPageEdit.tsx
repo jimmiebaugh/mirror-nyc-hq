@@ -297,7 +297,6 @@ export default function WikiPageEdit() {
       <WikiLayout
         pages={allPages}
         isAdmin={isAdmin}
-        isFreelance={false}
         currentSlug={routeSlug ?? null}
       >
         <div className="wikipage" style={{ maxWidth: 760 }}>
@@ -350,7 +349,6 @@ export default function WikiPageEdit() {
                     }
                   >
                     <option value="all">Everyone</option>
-                    <option value="no_freelance">Hide from Freelance</option>
                     <option value="admin_only">Admin Only</option>
                   </select>
                 </div>

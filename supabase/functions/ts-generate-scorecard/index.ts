@@ -115,8 +115,7 @@ Deno.serve(async (req) => {
 //    the wizard's UI shows zeros and the user fills them in by hand.
 // ---------------------------------------------------------------------------
 function normalizeWeightsTo100(rawCriteria: unknown[]): unknown[] {
-  // deno-lint-ignore no-explicit-any
-  const criteria = (rawCriteria as any[]).map((c) => ({
+  const criteria = (rawCriteria as Record<string, unknown>[]).map((c) => ({
     ...c,
     weight: Math.max(0, Math.round(Number(c?.weight) || 0)),
   }));

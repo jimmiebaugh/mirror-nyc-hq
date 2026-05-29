@@ -19,7 +19,7 @@
 //   - State on ts_roles instead of ts_pull_rounds.
 //   - status_filter param consolidates retry-failed-candidates' role here.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
 
 const corsHeaders = {
@@ -101,12 +101,12 @@ async function dispatchNext(roleId: string, attempt = 1): Promise<void> {
       return dispatchNext(roleId, attempt + 1);
     }
     console.error(`[ts-bulk-reevaluate] dispatch failed status=${r.status}`);
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (attempt < MAX_ATTEMPTS) {
       await new Promise((x) => setTimeout(x, 1500 * attempt));
       return dispatchNext(roleId, attempt + 1);
     }
-    console.error("[ts-bulk-reevaluate] dispatch error:", e?.message ?? e);
+    console.error("[ts-bulk-reevaluate] dispatch error:", e instanceof Error ? e.message : e);
   }
 }
 
@@ -140,14 +140,14 @@ async function evaluateOne(candidateId: string, triggeredByUserId?: string | nul
       }),
     });
     return r.status >= 200 && r.status < 300;
-  } catch (e: any) {
-    console.error(`[ts-bulk-reevaluate] candidate ${candidateId} error:`, e?.message ?? e);
+  } catch (e: unknown) {
+    console.error(`[ts-bulk-reevaluate] candidate ${candidateId} error:`, e instanceof Error ? e.message : e);
     return false;
   }
 }
 
 async function listPendingCandidates(
-  supabase: any,
+  supabase: SupabaseClient,
   roleId: string,
   filter: StatusFilter,
   startedAt: string,
@@ -159,7 +159,7 @@ async function listPendingCandidates(
   if (f.manuallyReviewed !== undefined) q = q.eq("manually_reviewed", f.manuallyReviewed);
   if (f.orExpr) q = q.or(f.orExpr);
   const { data: cands } = await q;
-  const allIds: string[] = (cands ?? []).map((c: any) => c.id);
+  const allIds: string[] = ((cands ?? []) as { id: string }[]).map((c) => c.id);
   if (allIds.length === 0) return [];
 
   // Skip candidates already evaluated in this run (history-table-aware).
@@ -168,11 +168,13 @@ async function listPendingCandidates(
     .select("candidate_id")
     .in("candidate_id", allIds)
     .gte("evaluated_at", startedAt);
-  const done = new Set<string>((doneEvals ?? []).map((e: any) => e.candidate_id));
+  const done = new Set<string>(
+    ((doneEvals ?? []) as { candidate_id: string }[]).map((e) => e.candidate_id),
+  );
   return allIds.filter((id) => !done.has(id));
 }
 
-async function processRole(supabase: any, roleId: string): Promise<Response> {
+async function processRole(supabase: SupabaseClient, roleId: string): Promise<Response> {
   const { data: role } = await supabase
     .from("ts_roles")
     .select("id, reeval_status, reeval_status_filter, reeval_total, reeval_processed, reeval_failed, reeval_started_at")
@@ -301,9 +303,14 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ ok: true, total: totalNum, status_filter: filter }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("[ts-bulk-reevaluate] fatal:", e);
-    return new Response(JSON.stringify({ error: e?.message ?? String(e) }), {
+    // Preserve the original `e?.message ?? String(e)` semantics: supabase-js
+    // throws PostgrestError-style plain objects (not Error instances) that
+    // carry a `.message`, so read it off non-Error throwers too.
+    const m = (e as { message?: unknown } | null | undefined)?.message;
+    const message = m != null ? String(m) : String(e);
+    return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

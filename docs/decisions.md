@@ -2,9 +2,185 @@
 
 Architectural decisions worth preserving with their rationale. Newest at the top within each section.
 
+## Phase 5.16.1.2: Supabase advisor focused + 5.16.1.1 carry-forwards (2026-05-28, complete)
+
+Squash: folded into the Phase 5.16 consolidation squash (placeholder `<pending consolidation squash>`). Part three (final) of the three-way 5.16.1 split: the focused Supabase Studio advisor fixes bundled with the 5.16.1.1 carry-forwards. One consolidated migration (`20260612000000_phase_5_16_1_2_advisor_focused.sql`, applied out-of-band, migration-reviewer GO); the `xlsx` high vuln + `qs` moderate vuln closed; Database types generated into the Deno tree; `logClaudeUsage` dead code pruned. Phase B name-schema lock + the 17 parity redeploys are staged behind a human-in-the-loop gate. Closes the 5.16.1 cycle; next is 5.17 final smoke.
+
+### D1: Bulk-import RPC GRANT lockdown = service_role only (advisor 0028/0029)
+
+The four bulk-import RPCs (`bulk_import_commit_projects/vendors/venues(jsonb)`, `bulk_import_undo(uuid,uuid,boolean)`) were `GRANT`ed to `authenticated` on every historic `CREATE OR REPLACE` (7+ migrations), plus the implicit PUBLIC grant. They are invoked ONLY by `supabase/functions/bulk-import/index.ts` via a `SUPABASE_SERVICE_ROLE_KEY` client (the edge function gates `permission_role='admin'` through a user-client first, then calls the RPCs through `adminClient`). Zero frontend `.rpc()` callers; no RLS policy references them (checked per [[feedback_revoke_execute_check_rls_callers]] — they are commit functions, not predicate helpers). So `REVOKE EXECUTE FROM PUBLIC, anon, authenticated` + `GRANT EXECUTE TO service_role` is safe and clears both advisor flags. The in-function `actor_id` admin re-check stays as defense in depth (third gate after AdminRoute + the edge-function server-side re-check). Pattern lifted from Phase 5.12.1's `vs_research_try_acquire_kickoff`.
+
+### D2: users_align_id_to_auth KEEPS its `authenticated` grant (spec deviation, approved)
+
+Spec §3b proposed revoking `authenticated` from `users_align_id_to_auth`, claiming Team-page pre-provision runs via the service-role client. It does NOT: `src/pages/team/TeamMemberEdit.tsx:171` inserts the pre-provisioned user row from the browser as `authenticated`, which fires the BEFORE INSERT `trg_users_align_id_to_auth` in the `authenticated` role context. Trigger-function EXECUTE IS enforced in this Supabase project (the root cause of the 2026-05-19 sign-in lockout, Phase 5.8.8). Revoking would break add-member with the same failure class. `auth-model.md` Phase 5.8.8 hardening notes already document this ("Team-page INSERTs run as `authenticated`"); the spec misread its own source. Resolution (Jimmie 2026-05-28): revoke only `anon` + `PUBLIC` (clears advisor 0028); keep `authenticated` + `service_role`; the residual 0029 (authenticated-callable) flag is documented as intentional, exactly parallel to `users_protect_admin_columns`.
+
+### D3: users_protect_admin_columns grant preserved (authenticated + supabase_auth_admin)
+
+Re-asserted the known-good Phase 5.8.8 ACL (`REVOKE FROM PUBLIC, anon`; `GRANT TO supabase_auth_admin, authenticated`). The BEFORE UPDATE trigger fires on user-row UPDATEs from `authenticated` callers (Profile Settings, Team-page edits) and on the swap UPDATE inside `handle_new_user` (`supabase_auth_admin`). The residual advisor 0029 flag is informational + intentional. Both `users_align_id_to_auth` (D2) and `users_protect_admin_columns` are documented in `auth-model.md` § "Intentional SECURITY DEFINER advisor warnings."
+
+### D4: RLS policy init-plan wraps (bulk_import_drafts + anthropic_call_log)
+
+Two policies wrapped `auth.uid()` in `(select auth.uid())` so the planner evaluates it once per query (InitPlan) instead of once per row (advisor 0003). `bulk_import_drafts_author_all` (FOR ALL; the column is `author`, NOT `author_id` as the spec guessed) and `anthropic_call_log_admin_read` (FOR SELECT, EXISTS-on-users). Behavior-identical; query plan improves. `DROP POLICY IF EXISTS` + `CREATE POLICY` per the Phase 5.8.5 `credentials_*` pattern; byte-faithful to the originals except for the wrap.
+
+### D5: Selective FK indexes (6) — chosen by real query patterns, plain CREATE INDEX
+
+Six FK columns got indexes. Each is genuinely unindexed: every join-table PK leads with the OTHER column (`project_account_managers` / `project_designers` / `project_venues` PKs lead with `project_id`; `vendor_ratings` PK leads with `vendor_id`), and `notes_log_parent_idx` / `vendor_ratings_vendor_idx` don't cover `author_id` / `user_id`. Targets: `project_account_managers.user_id`, `project_designers.user_id`, `vendor_ratings.user_id`, `users.department_id`, `notes_log.author_id`, `project_venues.venue_id` (the (project_id, venue_id) composite does NOT cover the venue→project reverse lookup). Used plain `CREATE INDEX IF NOT EXISTS`, not `CONCURRENTLY`: `supabase db push` wraps migrations in a transaction (CONCURRENTLY can't run inside one), and the write-time lock window is negligible at Mirror's row counts.
+
+### D6: Unused-index advisor warnings (~25) deferred
+
+Determination is fragile at low scale: indexes like `idx_anthropic_call_log_app_fn_created` (spend-rollup hot path) and most list-page filter indexes haven't accumulated meaningful `pg_stat_user_indexes.idx_scan` stats yet under producer load. Revisit in a post-team-rollout pass once scan counts reflect real query patterns. No drops this phase.
+
+### D7: Audit-column unindexed-FK warnings (~30) deferred
+
+The `_created_by_fkey` / `_updated_by_fkey` audit columns are filled by triggers and never filtered on in any UI surface. Index cost isn't justified by current query patterns. Verify-and-defer; revisit if a future audit/reporting surface starts filtering on them.
+
+### D8: RLS helper schema relocation deferred
+
+Relocating the RLS helper functions (`is_admin`, `is_active_member`, `is_producer_or_admin`, `current_user_role`) to an `internal` schema (so they'd drop off the advisor's authenticated-callable list) would require rewriting every RLS policy that references them — large blast radius, not warranted by the warning level. The `authenticated` EXECUTE grant is required for RLS predicate evaluation; the only info these leak when called directly via PostgREST RPC is self-status ("am I admin?"). Acceptable risk; documented as intentional in `auth-model.md`. Defer relocation to a future focused refactor.
+
+### D9: Auth DB connections flipped to percentage-based allocation
+
+The Supabase dashboard Auth-server DB connection allocation was switched from absolute (10) to percentage-based (Project Settings → Database → Connection Pooling) by Jimmie 2026-05-28, before this squash landed (advisor INFO `auth_db_connections_absolute`). Dashboard-only; no migration, no code.
+
+### D10: xlsx → SheetJS lazy CDN import (high vuln closed, lazy-load preserved)
+
+The npm `xlsx@0.18.5` carried unpatched prototype-pollution + ReDoS advisories with no npm fix. Replaced with a lazy dynamic import of SheetJS's patched CDN ESM build (`https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs`) inside `src/lib/hq/bulkImport/parseWorkbook`, removing `xlsx` from `package.json` (clears `npm audit`). Chose the lazy dynamic-import route over the spec's recommended top-level `<script>` tag (Jimmie 2026-05-28): the parser deliberately lazy-loaded the library (only on .xlsx upload), and a `<script>` tag would load SheetJS eagerly on every page for every user, regressing that. The CDN ESM build's API surface (`read`, `utils.sheet_to_json`) is identical to the npm package's for these calls. A narrow ambient declaration (`src/types/sheetjs-cdn.d.ts`) types the URL import so no `@types/xlsx` dependency is needed; `@vite-ignore` keeps the URL specifier external. No CSP exists, so no allowlisting needed. Tradeoff: the .xlsx parse path now needs network at upload moment (the CSV/TSV path never touches the network). **Producer-format reality:** `.xlsx`/`.xls` support is preserved (UploadStep accepts `.csv,.tsv,.xlsx,.xls`; venue-scout SheetUploadCard accepts pdf/xlsx/csv via the server-side `vs-parse-sheet` path); whether producers upload xlsx vs csv in practice is unconfirmed but moot since both paths keep working. Live xlsx-upload smoke (needs an admin browser session + a real .xlsx) deferred to Jimmie. **Companion finding (code-reviewer):** the edge parser `vs-parse-sheet/index.ts:51` still imports the same vulnerable `https://esm.sh/xlsx@0.18.5` server-side (`code-observations.md` Edge #21) — `npm audit` only covers the npm tree, not Deno esm.sh imports. **Folded into this phase (Jimmie 2026-05-28), via vendoring after the CDN route failed:** pointing the `vs-parse-sheet` import at `https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs` (mirroring the frontend) was attempted but the Supabase edge **deploy bundler rejects that host** ("Cannot import from cdn.sheetjs.com:443"). The frontend is unaffected — it builds through Vite and imports the CDN at browser runtime (`@vite-ignore`), a different code path than the server-side Deno bundler. Resolution (Jimmie's call): vendored SheetJS's patched 0.20.3 ESM build into `supabase/functions/_shared/vendor/xlsx.mjs` (+ a provenance README) and imported it locally from `vs-parse-sheet` (`../_shared/vendor/xlsx.mjs`) — the bundler bundles local files fine; the vendored `.mjs` is eslint-ignored (`supabase/functions/_shared/vendor/**` in `eslint.config.js` — eslint's default JS handling otherwise lints `.mjs`). Deployed to prod 2026-05-28; the server-side xlsx vuln is closed (Edge #21 resolved). A PDF/xlsx/csv parse smoke is recommended to confirm 0.18.5→0.20.3 parity (API-identical, low risk). Standing note: **Supabase edge functions can't import from arbitrary CDN hosts at deploy time — use esm.sh / `npm:` / `jsr:` / a vendored local file.**
+
+### D11: qs moderate vuln auto-fixed
+
+`npm audit fix` bumped the transitive `qs` (via `googleapis` → `googleapis-common`) to 6.15.2, closing the moderate DoS advisory (GHSA-q8mj-m7cp-5q26). `googleapis@171.4.0` unchanged. `npm audit` now reports 0 vulnerabilities.
+
+### D12: Database types generated into the Deno tree; existing narrow interfaces left as-is (Edge #18)
+
+Generated `supabase/functions/_shared/database.types.ts` (3061 lines, matches the frontend `src/integrations/supabase/types.ts` schema; via `/tmp` + `test -s` + `mv` per the edge-tree CLAUDE.md rule). This closes Edge #18 (no generated `Database` types existed in the Deno tree). Did NOT retrofit existing edge `.select()` callsites: investigation found the hand-rolled interfaces are intentionally narrow (`RoundRow = {id, round_number}`, `HqVenueRow`, etc.) or joined/derived shapes that don't map 1:1 to a table Row — replacing them with the full `Database[...]["Row"]` would over-fetch the type surface, which the spec's own §3k step 3 says to avoid. Reinforced by: no local `deno` to typecheck edge adoptions, and edge deploys transpile via swc (no typecheck) so a bad swap wouldn't fail deploy. Forward convention (in `edge-functions.md` + `conventions.md`): new edge functions that select a full row import `Database` from `_shared/database.types.ts` and use `Database["public"]["Tables"][...]["Row"]`; existing intentionally-narrow interfaces are retrofitted opportunistically, not swept. (Reverses 5.16.1.1 D2's "not wired" note — the types are now wired; adoption is the deferred part.)
+
+### D13: Phase B name-schema wording LOCKED (0 wording iterations)
+
+The 5.16.1.1 D10 initial 3-rule rewrite is **LOCKED as-is** — no iterations needed. Jimmie ran a fresh Phase B scout 2026-05-28; the 5 returned sourced names (`Abbot Kinney Storefront`, `Century Park Storefront`, `Culver City Main Street Storefront`, `Robertson Blvd Storefront`, `Santa Monica Blvd Storefront`) all satisfy the three producer rules: (a) no listing-DB citations, (b) no cross-street / "at X" qualifiers, (c) the `<location> Storefront` shape for unbranded vacancies. Locked on Jimmie's confirmation 2026-05-28. Closes `code-observations.md` Edge #13. The same run exercised the deployed `buildFillUserMsg` enrichment path end-to-end without error (Edge #11, resolved 5.16.1.1).
+
+### D14: HQ Bulk Import header→key normalization (carry-over bug fix, folded in)
+
+The 5.16.1.2 smoke surfaced that the Bulk Venue Import Review grid rendered the correct row count with every cell BLANK for any uploaded sheet whose headers didn't exactly match the internal column keys (Jimmie was uploading a modified template). Root cause (NOT a regression — the contract has held since the Phase 5.9 bulk-import primitive; a code-reviewer + general-purpose trace reproduced the parser against the shipped templates and confirmed the carry-over / grid / virtualizer code is correct + byte-unchanged): the whole pipeline reads `row[col.key]`, the templates use the internal keys verbatim as CSV headers, and there was NO header→key normalization — so a modified / friendly-header sheet produced rows keyed by the raw headers and every `row[col.key]` read `undefined`. Jimmie confirmed the correct template fills in. Fix (folded into 5.16.1.2 per Jimmie 2026-05-28), in two layers: (1) **auto-match** — `buildAutoHeaderMapping` (new `src/lib/hq/bulkImport/normalizeHeaders.ts`) seeds a header→`col.key` map by normalized token (lowercase + non-alphanumerics stripped) against both `col.key` and `col.label`, key-wins-on-collision, so `name` / `Name` / `venue_types` / "Venue Types" auto-resolve; (2) **manual column-mapping UI** — the smoke surfaced that synonyms the token match can't safely guess ("Venue" → Name, "Venue Type" → Venue Types, "Size" → Square Footage) had no remedy (the Map step only resolves client/venue/staff references), so `UploadStep` now renders an editable mapping table (each uploaded header → a field dropdown; auto-matches pre-filled; "Don't import" default for the rest) with a required-field-unmapped guard, a duplicate-target warning, and a live preview of the mapped result. `applyHeaderMapping` re-keys the rows per the final (auto + manual) mapping, pushed downstream via `onParsed` so the whole pipeline (ref enumeration, ImportGrid, dedupe, validation, commit) sees entity-keyed rows. Placement = Upload step (Jimmie 2026-05-28: fix it where the mismatch surfaces; cleanest data flow since the mapping is finalized before any downstream step runs). Entity-agnostic (project / vendor / venue all benefit). 9 unit tests (`src/test/normalizeHeaders.test.ts`). Closes `code-observations.md` Frontend #50. v1 limitation: re-mapping after leaving the Upload step needs a re-upload (the raw sheet isn't persisted into wizard state; on re-entry the step shows a read-only preview) — acceptable for the admin-only flow.
+
+## Phase 5.16.1.1: Codebase triage / full sweep (2026-05-28, complete)
+
+Squash: folded into the Phase 5.16 consolidation squash (placeholder `<pending consolidation squash>`). The "burn the baseline to zero" pass: lint 191 → 0 (frontend 30 + edge 161), 30 open `code-observations.md` rows closed, the 5.16.0 + 5.16.1.0 carry-forwards, and three UI/data lifts. Part two of the three-way 5.16.1 split. One migration (briefs storage-policy dedupe); four edge functions redeployed out-of-band (`vs-research-venues`, `vs-compile-summaries`, `vs-research-single-venue`, `vs-parse-sheet`).
+
+### D1: Lint baseline burned to zero, full repo; edge functions permanently back in the lint contract
+
+5.16.1.0 had scoped `supabase/functions/**` out of `eslint.config.js`. 5.16.1.1 reverts that: the edge tree returns to the frontend lint contract permanently, and the full-repo baseline (191 = 165 errors + 26 warnings) burns to zero. The `no-explicit-any` debt was real, not noise; keeping the edge tree linted stops it re-accumulating. The sweep used REAL typing (Anthropic `ClaudeResult`/`ClaudeResponseBlock` shapes, hand-rolled narrow Google Drive/Slides REST interfaces, narrow row projections, `unknown` + guards for open payloads, `catch (e: unknown)` + narrowing) with ZERO inline eslint-disables (the ~5 cap was never approached). A cold review of the edge diff caught 2 catch-narrowing fidelity regressions (`e?.message ?? String(e)` semantics), corrected to preserve byte-identical error output.
+
+### D2: Edge typing pattern (no generated Database types in the Deno tree)
+
+The edge functions do NOT import the generated `Database` types (those live in the frontend `src/integrations/supabase/types.ts`; routing that through esm/Deno resolution is not wired). The convention, reaffirmed by the sweep: an untyped service client (`ReturnType<typeof createClient>`) plus hand-rolled narrow interfaces / inline casts per `.select(...)`. Consequence: edge row reads are effectively `any`-shaped at the type level with no tsc/deno gate, so projection mismatches are invisible. Logged as code-observations Edge #18 for a future "wire Database types into the edge tree" pass.
+
+### D3: ProjectDetail.tsx split = ProjectDetail only (Round 1, locked B)
+
+ProjectDetail.tsx (1426 → 907 lines) split into presentational siblings under `src/components/projects/` (ProjectDetailsCard, ProjectTeamSection, ProjectVendorsCard, ProjectActivitySection). PURE presentational extraction: every hook/effect/handler/optimistic-update/dep-array stays in the parent; children take everything via props (cold-reviewed byte-identical). The `ProjectStatTiles` sibling the spec listed was NOT created: there is no standalone "Days Until Install"/`.stat` tiles row in the current file (it folded into the Schedule card, which stays inline). RoleSettings.tsx + ProjectEdit.tsx (also in #19) stay verify-and-defer; opportunistic extraction on their next touch, not forced in triage.
+
+### D4: venues.contact_* columns kept write-only (Round 2)
+
+The `venues.contact_name`/`contact_email`/`contact_phone` text columns (written by bulk-import, invisible/uneditable in VenueEdit/VenueDetail) stay as-is. The `venue_contact_people` join is the canonical contact link; the text columns are a write-only divergence from the vendor side, not worth a UI surface or a column drop. Documented so a future audit does not re-litigate. (Frontend #11.)
+
+### D5: PersonDetail affiliation type pill keeps Edit-nav (Round 2, verify-and-defer)
+
+The Person Detail title-row type pill navigates to Edit rather than offering inline reassignment. Inline reassignment needs UX for the "type changed -> which FK to clear/set" disambiguation, which does not fit a triage phase. Deferred. (Frontend #28.)
+
+### D6: ClientsList "Active Projects" lifecycle definition
+
+The ClientsList "Active Projects" column counts only projects whose `status` is NOT in `NON_ACTIVE_PROJECT_STATUSES` (Complete / Cancelled / On Hold). Surfaced via a column-header hover tooltip (DataTable gained an optional `headerTitle` prop). The spec said "ProjectsList" but the column lives on ClientsList per the authoritative observation #29; the tooltip went where the column is. (Frontend #29.)
+
+### D7: DateRangePicker HQ lift DEFERRED (reverses the Round 1 "lift to five surfaces" lock)
+
+Round 1 locked lifting DateRangePicker into five HQ surfaces on the assumption it had a `mode` prop and round-tripped `{from,to}` date values. Implementation-time verification found the real component is `value: string` (a formatted DISPLAY string like "Oct 15-17, 2026", built for VS `text` columns) and range-mode only. All five HQ targets use `date` columns / ISO `<input type="date">`, and §4 forbids schema changes, so wiring as-is would write display strings into date columns and break saves. The faithful lift needs a dual-contract (ISO + display) picker extension with a `single` mode, which is bigger than a triage closure. Deferred to its own focused sub-phase (Jimmie 2026-05-28). Frontend #43 + #45 verify-and-defer.
+
+### D8: .tbl canon flip = match the VS matrix primitives, HQ-wide
+
+The global `.tbl` rule now matches the VS matrix Th/Td primitives: thead default flipped left -> CENTER on a `--surface` header bg (opt a column back with `.l`), and the 75%-height vertical cell-divider `::after` bars are now OPT-IN via `.tbl--with-dividers` (the matrix dropped them because they painted over content). Td padding already matched matrix Td (12px 14px); row hover stays the HQ default. `.tbl--matrix` stays STANDALONE (R7 amendment v1 decoupled it for specificity; recoupling would re-bury matrix utilities). List tables (via `.tbl-list .tbl`) already render this contract, so the visible delta is concentrated on the bare-`.tbl` consumers (AccountLogins, ProjectDetail's two inline tables, TeamList, NotificationPreferences, FinalReviewDetail). FinalReviewDetail already uses `.tbl` (the observation's "uses w-full without .tbl" premise was stale). (Frontend #47.)
+
+### D9: Delimiter contract = `/` + `,` universal, `|` accepted during a transition window
+
+Multi-value cell parsing converges on `/` and `,` (the union VS Phase A + frontend `parseTypes` already accept). Legacy `|` is still parsed during a transition window and its consumption is logged (frontend console + edge logs) so the deprecation can be timed later. A shared `splitMultiValue` util (`src/lib/multiValue.ts` + a byte-equivalent `supabase/functions/_shared/multiValue.ts` mirror) is the single source so HQ bulk-import (refEnumerate/splitMulti) and `vs-parse-sheet` (which now splits `venue_type`, re-joining with " / ") cannot drift. CSV templates + the RefResolvedCell placeholder updated to `/`. The transition-comms in-app banner was SKIPPED (owner call: low producer count, `|` still parses, nothing breaks). (Edge #15.)
+
+### D10: Phase B name schema rewrite (3 producer rules); wording iteration expected
+
+The Phase B `submit_research` `name` schema description was rewritten per three producer rules: (1) no listing-database citations in the name (Peerspace/LoopNet/NMRK belong in `website_url`); (2) no cross-street / "at <street>" qualifiers unless part of the verified name; (3) a "<location> <space-type>" identifier ("Sunset Strip Storefront") IS acceptable for unbranded vacancies, reversing the prior "bare address, no 'Storefront' suffix" rule. Initial draft shipped + deployed out-of-band; 1-2 wording iterations expected against a fresh Phase B batch before the wording locks (human-in-the-loop, not auto-iterated). (Edge #13.)
+
+### D11: buildFillUserMsg brief block lift (Edge #11)
+
+`buildFillUserMsg` now surfaces `target_audience` + `vibe_aesthetic` (the two Phase 5.12.5 tag-array brief signals) to the Pass 1 / Phase A enrichment prompt, matching the Phase B `userMsgBriefPrefix` labels + "(not set)" shape. Previously the 5.12.5 array-shape flip only reached Phase B; the shared block omitted them. Deployed out-of-band to its three callers.
+
+### D12: IconStar kept for palette completeness
+
+IconStar (HQIcons.tsx) is exported but unimported; kept as hand-curated-palette completeness (treated like the shadcn re-exports), annotated in place. Prune only if a future pass usage-prunes the icon set. (Frontend #16.)
+
+## Phase 5.16.1.0: Vite 5 to 8 upgrade + tooling pass (2026-05-28, complete)
+
+Squash: folded into the Phase 5.16 consolidation squash (placeholder `<pending consolidation squash>`). Tooling-only: Vite 5.4.19 → 8.0.14 (stepped through 6 + 7 + 8), `@vitejs/plugin-react-swc` 3.11.0 → 4.3.1, Vitest 3.2.4 → 4.1.7, Node floor pinned, eslint scoped off the edge-function tree, esbuild SSRF advisory closed. No schema, no RLS, no edge-function changes. Part one of the three-way 5.16.1 split (5.16.1.0 tooling / 5.16.1.1 lint-to-zero + observations / 5.16.1.2 Supabase advisor).
+
+### D1: Vite 5→8 stepped per-major in one sub-phase, not split into three squashes
+
+The four hops (5→6→7→8) each landed as their own commit on the feature branch (auditable history) but fold into one 5.16.1.0 squash. Rationale: stepping per-major preserves regression-forensic clarity (a Lightning CSS crash at the 7→8 hop is unambiguously a Vite-8 thing, not smeared across three guides), while one squash keeps the deploy surface single. Isolating all of Vite from the lint/observation cleanup (5.16.1.1) means a Vite rollback unwinds only the upgrade.
+
+### D2: CSS minifier pinned to esbuild instead of adopting Vite 8's Lightning CSS default (owner call)
+
+Vite 8 switched the default CSS minifier from esbuild to Lightning CSS. Lightning CSS is stricter and hard-errors on empty-selector `!important` rules that Tailwind's JIT emits from false-positive candidates — it scans `!row` out of idiomatic JS negations like `!row.read` and generates spurious important-variants of our `@layer` component rules, some with no selector. esbuild's minifier silently dropped these across Vite 5/6/7, so they were invisible dead CSS in production. Owner's call (in-session): pin `build.cssMinify: 'esbuild'` now (one line, keeps CSS output byte-identical to pre-8 production, advisory still closes) and log the Tailwind artifact as a 5.16.1.1 carry-forward, rather than fixing the empty-selector generation inside a tooling phase. Once 5.16.1.1 closes the Tailwind artifact, the override drops and Lightning CSS becomes the default.
+
+### D3: esbuild SSRF advisory closed by Vite 8's bundled esbuild, not by removing esbuild
+
+The Phase 5.8 carry-forward (esbuild dev-only SSRF, affected esbuild ≤0.24.2) closes because Vite 8 ships esbuild 0.27.7 internally (deduped with `tsx`'s copy). esbuild is NOT gone from the tree — Rolldown + Oxc are the build engine, but esbuild 0.27.7 remains as the (now non-vulnerable) CSS-minify backend and a transitive of `tsx`. `npm audit` no longer flags it. Remaining audit findings (`qs` moderate transitive, `xlsx` high no-fix) pre-date this phase and are out of scope.
+
+### D4: Node floor pinned to Vite 8's own range
+
+`package.json` `engines.node` mirrors Vite 8's published floor verbatim (`^20.19.0 || >=22.12.0`); `.nvmrc` = `22` (latest LTS, simplest single value satisfying the floor); `netlify.toml` `[build.environment] NODE_VERSION = "22"`. Pinning all three prevents works-on-my-machine drift across Cowork / Code / Netlify. No Node bump was required of Jimmie (local Node 25.9.0 already clears the floor).
+
+### D5: eslint excludes `supabase/functions/**` (Deno working-norm posture)
+
+Edge functions run on Deno with a different working norm and shipping discipline; they stay outside the frontend lint contract. Adding `supabase/functions/**` to the eslint ignores narrows the baseline from 191 problems (165 errors / 26 warnings, full repo) to 30 (4 errors / 26 warnings, frontend-only) — the measurable number 5.16.1.1 burns to zero. The edge-function tree accounted for 161 of the 165 errors. A separate gated `lint:edge` script under Deno rules is an explicit 5.16.1.1+ option, out of scope here.
+
+## Phase 5.16.0: Freelance access flatten + DB tier hardening (2026-05-28, complete)
+
+Squash: folded into the Phase 5.16 consolidation squash (placeholder `<pending consolidation squash>`; deployed 2026-05-28). One migration (`20260610000000_phase_5_16_0_freelance_flatten_and_tier_hardening.sql`); 7 frontend files (1 deleted). Closes the Phase 5.11.0 data-leak audit finding (pending users hold a valid `authenticated` JWT and could hit raw PostgREST against `using(true)` HQ Core policies) while promoting freelance to functional equality with standard.
+
+### D1: Freelance flattened to standard; the row-scoped contributor model was dropped
+
+The original `phase-5-16-0-spec.md` draft scoped freelance as a row-scoped project-contributor tier (read/write only assigned projects, read-only CRM, via an `is_project_member()` helper). That model is **out**. Jimmie's call: freelance now equals standard for all permission purposes. The `freelance` enum value persists **only** as a visual badge so admins can identify freelance staff in the Users list. Rationale: the row-scoped model added a large RLS + helper + per-page-affordance surface for a distinction Mirror does not actually enforce day-to-day; flattening removes that complexity and ships the security hardening (the genuinely valuable half) without it. No `is_project_member()` helper was added.
+
+### D2: `is_active_member()` is the new standing RLS predicate
+
+Single SECURITY DEFINER STABLE helper: `permission_role::text <> 'pending' AND active = true` (`::text` keeps it enum-rebuild-safe per the `is_producer_or_admin` precedent; SECURITY DEFINER so it reads `public.users` inside an RLS predicate without recursion; REVOKE FROM PUBLIC + GRANT to authenticated/service_role). Every HQ Core policy previously `USING (true)` / `WITH CHECK (true)` was rewritten to `(select public.is_active_member())` (the 5.8.5 init-plan wrapping). Admin / standard / freelance behavior is unchanged at the DB layer (all satisfy the predicate); `pending` now 403s at the raw API. Admin-gated, self-scoped, and the credentials freelance-block policies were left untouched.
+
+### D3: Account Logins carve-out survives the flatten
+
+Freelance still cannot see Account Logins. Enforced at two layers, both unchanged by this phase: the `WikiPage` component-level `page_type === 'account_logins'` block, and the `credentials_*_non_freelance` RLS policies (`admin` + `standard` only). The flatten widened everything EXCEPT this deliberate carve-out.
+
+### D4: `wiki_pages.visibility` CHECK collapsed (dropped `no_freelance`)
+
+`visibility` is a `text` CHECK column, not an enum, so the collapse was a three-statement move: UPDATE the one `no_freelance` row (`account-logins`) to `all`, DROP CONSTRAINT, ADD CONSTRAINT with `('all','admin_only')`. Admin-curated per-page freelance-hiding goes away as a feature (it only ever hid Account Logins, which the component + credentials RLS already block). The editor's Visibility dropdown drops to Everyone / Admin Only.
+
+### D5: `users_select` keeps an `OR id = auth.uid()` self-read clause (deviation from literal spec)
+
+The spec listed `users` SELECT as a flat `is_active_member()` rewrite. That would have broken the pending flow: `useUserRole` + `ProtectedRoute` read the caller's own `users` row to resolve `isPending` / `isDeactivated` and drive the `/pending` redirect + deactivation sign-out. A bare `is_active_member()` gate returns null for a pending/deactivated user reading their own row, so the redirect never fires. Fix: `USING ((select public.is_active_member()) OR id = (select auth.uid()))`. Pending still cannot read the rest of the user directory; it can only read its own row. Caught by the migration-reviewer pass.
+
+### D6: Three Bucket-3 SELECTs hardened despite the spec's "no change" label (deviation)
+
+The spec put `activity_log`, `global_settings`, `mirror_holidays` in Bucket 3 ("already gated, no change"), but the live snapshot showed all three had `SELECT = true` (readable by pending via raw API). Leaving them would perpetuate the exact leak class 5.16.0 closes. Owner decision (confirmed in-session): harden all three to `is_active_member()`. Verified behavior-safe first — every reader is a member/admin surface (Home, Activity Feed, Calendar, admin Settings); no pending or unauthenticated path reads them.
+
+### D7: `anthropic_call_log` stays admin-only (resolves the 5.15 D5 speculative note)
+
+The 5.15 migration left a comment that 5.16.0 might broaden `anthropic_call_log` to `is_active_member()`. It was **not** broadened. Spend/cost data is sensitive and every consumer surface is already admin-gated, so widening would expose data with no UI consumer. `anthropic_call_log` + the `anthropic_spend_breakdown` RPC stay admin-only (Bucket 3, genuinely already gated).
+
+### D8: No new Freelance chip on the Users list / profile (deviation)
+
+Spec §6 #8/#9 asked for a separate neutral "Freelance" pill on TeamList + UserProfile alongside the tier label. Both surfaces already render "Freelance" as the tier pill, so a second pill would render "Freelance" twice. Owner chose "leave as-is, no new chip" — the existing tier pill already satisfies the "admins can identify freelance staff" goal. TeamList + UserProfile were not modified.
+
+### D9: Scope corrections surfaced by the live snapshot
+
+The spec's table lists were drafted from memory; the authoritative `pg_policies` snapshot corrected three things. (a) `public.vendors` policies are named `clients_*` (OID-preserved through the clients->organizations->vendors rename) and were missing from the spec's enumeration; added. (b) Only 3 `vs_*` tables exist (`vs_scouts`, `vs_candidate_venues`, `vs_venue_photos`); the spec's "8+" counted `vs_briefs`/`vs_pitch_decks`/`vs_sourcing_rounds`, which the 4.1 port dropped. (c) `wiki_images` is a storage bucket, not a table; the spec listed it in Bucket 1 in error. The `venue_photos` bucket has no `_select` policy to recreate (dropped in 5.8.5); only the 3 write policies were rewritten.
+
 ## Phase 5.15: Anthropic per-tool call-log infra + spend breakdown surface (2026-05-28, complete)
 
-Squash SHA `e9a382e`. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.15. 4 sub-phases collapsed (originally 5.15 / 5.15.1 / 5.15.2 / 5.15.3). Two migrations (`20260608000000_phase_5_15_anthropic_call_log.sql` + `20260609000000_phase_5_15_3_spend_breakdown_window.sql`); 11 edge function redeploys; 5 frontend files + design-system canon updates.
+Squash SHA `1814867`. Per-phase narrative in `docs/v1-changelog.md` § Phase 5.15. 4 sub-phases collapsed (originally 5.15 / 5.15.1 / 5.15.2 / 5.15.3). Two migrations (`20260608000000_phase_5_15_anthropic_call_log.sql` + `20260609000000_phase_5_15_3_spend_breakdown_window.sql`); 11 edge function redeploys; 5 frontend files + design-system canon updates.
 
 Decisions grouped thematically: infra (D1-D5), UX iteration (D6-D8), CSS canonicalization (D9-D10), window selector (D11-D16).
 

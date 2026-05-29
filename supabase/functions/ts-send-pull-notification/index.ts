@@ -15,7 +15,7 @@
 // the upstream pull; the round row already records status='complete' and the
 // PullDetail UI works without the email.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
 import { sendGmail } from "../_shared/sendEmail.ts";
 
@@ -41,7 +41,15 @@ type Counts = {
   reject: number;
 };
 
-async function tallyCandidates(supabase: any, roundId: string): Promise<Counts> {
+// Narrow shape for the ts_roles select with the hiring_manager embed. The
+// `users!hiring_manager_id(...)` to-one join resolves to an object (or null).
+type RoleWithManager = {
+  id: string;
+  title: string | null;
+  hiring_manager: { email: string | null; full_name: string | null } | null;
+};
+
+async function tallyCandidates(supabase: SupabaseClient, roundId: string): Promise<Counts> {
   const { data } = await supabase
     .from("ts_candidates")
     .select("status")
@@ -80,7 +88,7 @@ Deno.serve(async (req) => {
     .from("ts_roles")
     .select("id, title, hiring_manager:users!hiring_manager_id(email, full_name)")
     .eq("id", roleId)
-    .maybeSingle();
+    .maybeSingle<RoleWithManager>();
 
   if (!role) {
     console.warn(`[ts-send-pull-notification] role ${roleId} not found, skipping`);
@@ -89,7 +97,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const managerEmail = (role as any).hiring_manager?.email as string | undefined;
+  const managerEmail = role.hiring_manager?.email ?? undefined;
   if (!managerEmail) {
     console.warn(`[ts-send-pull-notification] role ${roleId} has no hiring manager email, skipping`);
     return new Response(JSON.stringify({ ok: false, reason: "no_hiring_manager_email" }), {
@@ -112,7 +120,7 @@ Deno.serve(async (req) => {
   const tally = await tallyCandidates(supabase, roundId);
   const triggerWord = round.triggered_by === "scheduled" ? "Scheduled" : "Manual";
   const link = `${APP_URL}/talent-scout/roles/${roleId}/pulls/${roundId}`;
-  const managerName = (role as any).hiring_manager?.full_name ?? "there";
+  const managerName = role.hiring_manager?.full_name ?? "there";
   const firstName = managerName.split(" ")[0];
   const candidateNoun = tally.total === 1 ? "candidate" : "candidates";
 

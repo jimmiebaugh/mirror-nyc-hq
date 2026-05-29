@@ -96,7 +96,11 @@ export default function CandidateDetail() {
     setLoading(false);
   };
 
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [id]);
+  useEffect(() => {
+    void load();
+    // load closes over `id`; re-running only on id change is intentional.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     const name = cand?.name?.trim();

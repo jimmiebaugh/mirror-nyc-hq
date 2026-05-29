@@ -19,10 +19,11 @@ export function parseClaudeJson<T = unknown>(rawText: string): T {
 
   try {
     return JSON.parse(text) as T;
-  } catch (error: any) {
+  } catch (error: unknown) {
     const truncated = (rawText ?? "").substring(0, 200);
+    const errMsg = error instanceof Error ? error.message : String(error);
     console.error(
-      `[parseClaudeJson] Failed to parse JSON. Error: ${error?.message ?? error}. Raw text (first 200 chars): "${truncated}"`,
+      `[parseClaudeJson] Failed to parse JSON. Error: ${errMsg}. Raw text (first 200 chars): "${truncated}"`,
     );
     throw error;
   }
