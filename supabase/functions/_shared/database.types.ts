@@ -2280,6 +2280,48 @@ export type Database = {
           },
         ]
       }
+      venue_files: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          title: string
+          url: string
+          venue_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          title: string
+          url: string
+          venue_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          title?: string
+          url?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_files_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "venue_files_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venue_rate_history: {
         Row: {
           amount_usd: number
@@ -2816,6 +2858,15 @@ export type Database = {
       current_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["permission_role"]
+      }
+      increment_anthropic_spend: {
+        Args: { p_cost: number }
+        Returns: {
+          after_usd: number
+          before_usd: number
+          cap_usd: number
+          just_crossed: boolean
+        }[]
       }
       invoke_edge_function: {
         Args: { body?: Json; fn_name: string }

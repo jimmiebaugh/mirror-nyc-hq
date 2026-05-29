@@ -99,7 +99,7 @@ export function AnthropicSpendBreakdownTable({
           <table className="tbl">
             <thead>
               <tr>
-                <th>Function</th>
+                <th className="l">Function</th>
                 <th className="r">Calls</th>
                 <th className="r">Total Spend</th>
                 <th className="r">Avg / Call</th>
@@ -108,7 +108,7 @@ export function AnthropicSpendBreakdownTable({
             <tbody>
               {filtered.map((r) => (
                 <tr key={`${r.app}-${r.fn_name}`}>
-                  <td className="mono">{r.fn_name}</td>
+                  <td className="mono l">{r.fn_name}</td>
                   <td className="r">{Number(r.calls).toLocaleString()}</td>
                   <td className="r">${Number(r.total_cost_usd).toFixed(2)}</td>
                   <td className="r">${Number(r.avg_cost_usd).toFixed(4)}</td>
@@ -147,7 +147,7 @@ export function AnthropicSpendBreakdownTable({
         <table className="tbl">
           <thead>
             <tr>
-              <th>Function</th>
+              <th className="l">Function</th>
               <th className="r">Calls</th>
               <th className="r">Total Spend</th>
               <th className="r">Avg / Call</th>
@@ -175,7 +175,7 @@ export function AnthropicSpendBreakdownTable({
                 ) : (
                   group.rows.map((r) => (
                     <tr key={`${r.app}-${r.fn_name}`}>
-                      <td className="mono">{r.fn_name}</td>
+                      <td className="mono l">{r.fn_name}</td>
                       <td className="r">{Number(r.calls).toLocaleString()}</td>
                       <td className="r">
                         ${Number(r.total_cost_usd).toFixed(2)}

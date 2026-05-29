@@ -378,12 +378,14 @@ export default function ScoutSettings() {
               Unsaved changes
             </span>
           )}
-          <Button
+          <button
+            type="button"
+            className="btn btn-primary"
             onClick={() => void save()}
             disabled={saving || !dirty || !canSave}
           >
             {saving ? "Saving…" : "Save changes"}
-          </Button>
+          </button>
         </div>
       </div>
 

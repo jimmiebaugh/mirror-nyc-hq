@@ -11,7 +11,7 @@ Internal operations app for Mirror NYC, an experiential agency in NYC. Replaces 
 - [`CLAUDE.md`](CLAUDE.md) — project entry point + topic index.
 - [`docs/`](docs/) — single source of truth (architecture, schema, auth, conventions, design system, decisions, roadmap, operations).
 - [`CHECKPOINT.md`](CHECKPOINT.md) — living state; latest commit, recent commits, known drift.
-- [`docs/v1-changelog.md`](docs/v1-changelog.md) — HQ v1 release notes (Phase 5.1 through 5.8.0).
+- [`docs/v1-changelog.md`](docs/v1-changelog.md): HQ v1 release notes (Phase 3 through 6.0).
 
 ## Local dev
 

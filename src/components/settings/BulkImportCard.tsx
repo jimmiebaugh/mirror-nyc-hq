@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Download } from "lucide-react";
 
 /**
  * Settings card surface for Bulk Import (Phase 5.9.1). Slots between the
@@ -17,12 +18,19 @@ type EntityButton = {
   label: string;
   pendingPhase: string;
   enabled: boolean;
+  /**
+   * Phase 6.5 (IMPORT-TPL): public asset under /templates for the up-front
+   * "Download template (CSV)" grab. Matches the entity config's
+   * `templateFilename` (src/lib/hq/bulkImport/entities/*.ts) and the per-step
+   * link in UploadStep.
+   */
+  templateFile: string;
 };
 
 const ENTITY_BUTTONS: EntityButton[] = [
-  { key: "project", label: "Projects", pendingPhase: "5.9.2", enabled: true },
-  { key: "vendor", label: "Vendors", pendingPhase: "5.9.3", enabled: true },
-  { key: "venue", label: "Venues", pendingPhase: "5.9.4", enabled: true },
+  { key: "project", label: "Projects", pendingPhase: "5.9.2", enabled: true, templateFile: "bulk-import-projects-template.csv" },
+  { key: "vendor", label: "Vendors", pendingPhase: "5.9.3", enabled: true, templateFile: "bulk-import-vendors-template.csv" },
+  { key: "venue", label: "Venues", pendingPhase: "5.9.4", enabled: true, templateFile: "bulk-import-venues-template.csv" },
 ];
 
 export function BulkImportCard() {
@@ -32,9 +40,6 @@ export function BulkImportCard() {
         <span className="h-card">Bulk Import</span>
       </div>
       <div className="card-pad" style={{ padding: 24 }}>
-        <p className="muted" style={{ marginBottom: 16, fontSize: 14 }}>
-          Backfill past records from CSV exports. Admin-only.
-        </p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           {ENTITY_BUTTONS.map((b) => (
             // Pass the entity key under a non-reserved prop name. React
@@ -49,6 +54,31 @@ export function BulkImportCard() {
             />
           ))}
           <HistoryButton />
+        </div>
+        {/* Phase 6.5 (IMPORT-TPL): up-front template grabs, stacked under a
+            Templates subheader. Mirrors VS Overview + the UploadStep link. */}
+        <div className="label-section" style={{ marginTop: 20, marginBottom: 10 }}>
+          Templates
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            gap: 8,
+          }}
+        >
+          {ENTITY_BUTTONS.map((b) => (
+            <a
+              key={b.key}
+              href={`/templates/${b.templateFile}`}
+              download
+              className="tlink"
+            >
+              <Download className="h-4 w-4" />
+              {b.label} template (CSV)
+            </a>
+          ))}
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { IconLink, IconSlides } from "@/components/icons/HQIcons";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
+import { VenueFilesEditor } from "@/components/data/VenueFilesEditor";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { ContactsCard } from "@/components/hq/ContactsCard";
 import { DField } from "@/components/hq/DField";
@@ -336,8 +337,8 @@ export default function VenueDetail() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="eyebrow" style={{ paddingTop: 8 }}>Venue</div>
             <div
-              className="row-c"
-              style={{ gap: 16, alignItems: "center", flexWrap: "wrap", marginTop: 5, minWidth: 0 }}
+              className="row-c-title"
+              style={{ gap: 16, alignItems: "center", marginTop: 5, minWidth: 0 }}
             >
               <h1 className="h-page" style={{ minWidth: 0 }}>
                 {venue.name || "(unnamed)"}
@@ -641,6 +642,37 @@ export default function VenueDetail() {
             </div>
           </section>
 
+          <InternalNotesEditor parentType="venue" parentId={venue.id} />
+        </div>
+
+        <AlertDialog open={regenerateConfirmOpen} onOpenChange={setRegenerateConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Regenerate About paragraph?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The current About paragraph will be cleared and overwritten. This
+                cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setRegenerateConfirmOpen(false);
+                  void handleGenerate();
+                }}
+              >
+                Regenerate
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <aside className="stack-6">
+          <VenueFilesEditor venueId={venue.id} />
+
+          <ContactsCard contacts={contacts} />
+
           <section className="card">
             <div className="card-headbar">
               <span className="h-card">Rates</span>
@@ -689,6 +721,31 @@ export default function VenueDetail() {
 
           <section className="card">
             <div className="card-headbar">
+              <span className="h-card">Past Projects</span>
+            </div>
+            <div className="card-pad">
+              {projects.length === 0 ? (
+                <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
+              ) : (
+                <div className="stack-2">
+                  {projects.map((p) => (
+                    <Link
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      className="tlink"
+                      style={{ fontSize: 12.5 }}
+                    >
+                      {p.job_number ? `#${p.job_number} ` : ""}
+                      {p.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="card-headbar">
               <span className="h-card">Exclusive Vendors</span>
               <div className="combo-as-link">
                 <RecordCombobox
@@ -718,60 +775,6 @@ export default function VenueDetail() {
                 </span>
               ) : (
                 <span className="muted subtle">No exclusive vendors yet.</span>
-              )}
-            </div>
-          </section>
-        </div>
-
-        <AlertDialog open={regenerateConfirmOpen} onOpenChange={setRegenerateConfirmOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Regenerate About paragraph?</AlertDialogTitle>
-              <AlertDialogDescription>
-                The current About paragraph will be cleared and overwritten. This
-                cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  setRegenerateConfirmOpen(false);
-                  void handleGenerate();
-                }}
-              >
-                Regenerate
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        <aside className="stack-6">
-          <ContactsCard contacts={contacts} />
-
-          <InternalNotesEditor parentType="venue" parentId={venue.id} />
-
-          <section className="card">
-            <div className="card-headbar">
-              <span className="h-card">Past Projects</span>
-            </div>
-            <div className="card-pad">
-              {projects.length === 0 ? (
-                <p className="subtle" style={{ fontSize: 13 }}>No projects yet.</p>
-              ) : (
-                <div className="stack-2">
-                  {projects.map((p) => (
-                    <Link
-                      key={p.id}
-                      to={`/projects/${p.id}`}
-                      className="tlink"
-                      style={{ fontSize: 12.5 }}
-                    >
-                      {p.job_number ? `#${p.job_number} ` : ""}
-                      {p.name}
-                    </Link>
-                  ))}
-                </div>
               )}
             </div>
           </section>

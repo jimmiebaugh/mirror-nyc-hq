@@ -146,8 +146,8 @@ export function MirrorHolidaysEditor({
           <table className="tbl">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Date</th>
+                <th className="l">Name</th>
+                <th className="l">Date</th>
                 <th className="r" style={{ width: 40 }}></th>
               </tr>
             </thead>

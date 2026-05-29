@@ -19,36 +19,6 @@ export function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export type StatusPill = {
-  label: string;
-  cls: string;
-  dot: string;
-};
-
-export function statusPill(status: string): StatusPill {
-  switch (status) {
-    case "in_progress":
-      return {
-        label: "In Progress",
-        cls: "bg-primary/15 text-primary border-primary/30",
-        dot: "bg-primary",
-      };
-    case "complete":
-      return {
-        label: "Complete",
-        cls: "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))] border-[hsl(var(--success))]/30",
-        dot: "bg-[hsl(var(--success))]",
-      };
-    case "draft":
-    default:
-      return {
-        label: "Draft",
-        cls: "bg-muted text-muted-foreground border-border",
-        dot: "bg-muted-foreground",
-      };
-  }
-}
-
 export type ScoutStep =
   | "brief"
   | "sheet_prompt"
@@ -93,10 +63,6 @@ export function stepToRoute(scoutId: string, step: string | null | undefined): s
     default:
       return `/venue-scout/scouts/${scoutId}/sourcing/sheet-prompt`;
   }
-}
-
-export function isInProgress(step: string | null | undefined): boolean {
-  return !!step && step !== "sheet_prompt" && step !== "completed";
 }
 
 // Phase 4.10.3-port: source priority for the matrix sort. Phase 5.12.1

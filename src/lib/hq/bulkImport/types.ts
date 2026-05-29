@@ -20,6 +20,7 @@ export type ColumnSection =
   | "Dates & Phases"
   | "References"
   | "Folders & Links"
+  | "About Venue"
   | "Notes";
 
 export type ColumnSchema = {

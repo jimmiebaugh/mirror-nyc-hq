@@ -11,7 +11,7 @@
 // navigates to /brief/report. current_step is NOT touched here.
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -265,7 +265,7 @@ export default function BriefVenue() {
   // full-width inside the AppShell chrome. `stack-6` (24px gap) replaces the
   // legacy `space-y-6` so vertical rhythm matches BriefReport + BriefEvent.
   return (
-    <div className="stack-6 pb-32">
+    <div className="stack-6 pb-32 vs-input-contrast">
       <header className="space-y-2">
         {/* R7 amendment v2 § 5: shared ScoutPageHeader (crumb left, phase
             stepper centered, gear right). */}
@@ -481,16 +481,19 @@ export default function BriefVenue() {
       {/* ---- Sticky footer ---- */}
       <div className="actionbar">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
-          <Button variant="ghost" onClick={goBack}>
-            ← Back
-          </Button>
+          <button type="button" className="btn btn-tertiary" onClick={goBack}>
+            <IconArrowLeft className="ic" />
+            Back
+          </button>
           <div className="flex items-center gap-3">
             {dirty && (
               <span className="text-xs font-mono uppercase tracking-wider text-warn">
                 Unsaved changes
               </span>
             )}
-            <Button
+            <button
+              type="button"
+              className="btn btn-primary"
               onClick={requestSubmit}
               disabled={!!submitting || invalid || isArchived}
             >
@@ -499,7 +502,7 @@ export default function BriefVenue() {
                 : submitting === "submitting"
                   ? "Submitting…"
                   : "Submit Brief"}
-            </Button>
+            </button>
           </div>
         </div>
       </div>

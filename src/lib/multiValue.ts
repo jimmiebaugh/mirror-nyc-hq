@@ -1,25 +1,17 @@
-// Phase 5.16.1.1 (Edge #15): canonical multi-value cell splitter shared across
-// HQ bulk-import + sheet parsing. The locked delimiter set is `/` and `,`
-// (the union VS Phase A `sanitizeMultiAgainst` + frontend `parseTypes` already
-// accept). The legacy `|` delimiter is ALSO accepted during a transition window
-// so producers holding the old CSV templates don't break; a `|` consumption is
-// logged so the deprecation timing can be judged later.
+// Canonical multi-value cell splitter shared across HQ bulk-import + sheet parsing.
+// CONTRACT (v1.0): the ONLY multi-value separator is pipe `|`. Slash `/` is a
+// literal character and NEVER splits a value, so "Theatre/Auditorium" and
+// "Indoor/Outdoor" stay single values. Comma `,` is the CSV column delimiter
+// only, never a multi-value separator (so producers never quote a cell just to
+// express multiple values).
 //
-// MIRROR: `supabase/functions/_shared/multiValue.ts` keeps the split logic
-// below byte-equivalent. Change both files together.
+// MIRROR: `supabase/functions/_shared/multiValue.ts` keeps the split logic below
+// byte-equivalent. Change both files together.
 
-const MULTI_VALUE_SPLIT = /[/,|]/;
+const MULTI_VALUE_SPLIT = /\|/;
 
 export function splitMultiValue(cell: unknown): string[] {
-  const raw = String(cell ?? "");
-  if (raw.includes("|")) {
-    // Transition-window telemetry: drop `|` from MULTI_VALUE_SPLIT and remove
-    // this branch once legacy-pipe cells stop appearing.
-    console.warn(
-      "[multiValue] legacy '|' delimiter consumed; CSV templates now use '/' (',' also accepted)",
-    );
-  }
-  return raw
+  return String(cell ?? "")
     .split(MULTI_VALUE_SPLIT)
     .map((t) => t.trim())
     .filter(Boolean);

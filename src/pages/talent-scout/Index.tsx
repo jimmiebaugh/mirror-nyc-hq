@@ -16,6 +16,7 @@ import { DataTable, type Column } from "@/components/data/DataTable";
 import { supabase } from "@/integrations/supabase/client";
 import { RoleStatusPill } from "@/components/talent-scout/RoleStatusPill";
 import { toast } from "@/hooks/use-toast";
+import { fmtRelative } from "@/lib/talent-scout/relativeTime";
 
 type Role = {
   id: string;
@@ -33,19 +34,6 @@ type RoleExt = Role & {
   last_pull_at: string | null;
   latest_round_number: number | null;
   has_final_report: boolean;
-};
-
-const fmtRelative = (iso: string | null) => {
-  if (!iso) return "Never";
-  const diff = Date.now() - new Date(iso).getTime();
-  const h = Math.floor(diff / 3_600_000);
-  if (h < 1) return "Just now";
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d === 1) return "Yesterday";
-  if (d < 30) return `${d}d ago`;
-  const m = Math.floor(d / 30);
-  return `${m}mo ago`;
 };
 
 const fmtDate = (iso: string | null) =>

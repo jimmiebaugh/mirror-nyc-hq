@@ -44,11 +44,13 @@ function formatBudget(b: number | null): string {
 export function OutlookYearGrid({
   entries,
   selectedEntryId,
-  loading,
   onSelectEntry,
 }: {
   entries: OutlookEntry[];
   selectedEntryId: string | null;
+  // Accepted for parent-contract parity (OutlookPage passes entriesQuery
+  // .isLoading) but unused since Phase 6.5 (G6/#52) removed the no-op
+  // loading ternary; the grid renders entries as they arrive.
   loading?: boolean;
   onSelectEntry: (id: string) => void;
 }) {
@@ -79,7 +81,6 @@ export function OutlookYearGrid({
             const cellEntries = byMonthWeek.get(`${idx + 1}-${week}`) ?? [];
             return (
               <div key={week} className="ol-cell">
-                {loading && cellEntries.length === 0 ? null : null}
                 {cellEntries.map((entry) => {
                   const isSelected = entry.id === selectedEntryId;
                   const title = entry.clientName

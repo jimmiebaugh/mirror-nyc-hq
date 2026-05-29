@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { Stepper } from "@/components/ui/Stepper";
 import { TagInput } from "@/components/talent-scout/TagInput";
 import { CriterionCard } from "@/components/talent-scout/CriterionCard";
@@ -407,9 +408,14 @@ export default function NewRoleScorecard() {
 
       <div className="actionbar">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
-          <Button variant="ghost" className="text-primary" onClick={() => navigate("/talent-scout/new/search")}>
+          <button
+            type="button"
+            className="btn btn-tertiary"
+            onClick={() => navigate("/talent-scout/new/search")}
+          >
+            <IconArrowLeft className="ic" />
             Back
-          </Button>
+          </button>
           <div className="flex-1 text-center text-base text-muted-foreground">
             Total:{" "}
             <strong className={total === 100 ? "text-foreground" : "text-warn"}>
@@ -417,23 +423,34 @@ export default function NewRoleScorecard() {
             </strong>
           </div>
           {dirty ? (
-            <Button onClick={process} disabled={refining || saving} size="lg" title="Refine your edits through Claude before locking">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={process}
+              disabled={refining || saving}
+              title="Refine your edits through Claude before locking"
+            >
               {refining ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Refining…
                 </>
               ) : (
                 <>
-                  <Sparkles className="mr-2 h-4 w-4" />
+                  <Sparkles className="h-4 w-4" />
                   Process scorecard →
                 </>
               )}
-            </Button>
+            </button>
           ) : (
-            <Button onClick={onApprove} disabled={saving || refining} size="lg">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={onApprove}
+              disabled={saving || refining}
+            >
               {saving ? "Saving…" : "Approve & lock scorecard →"}
-            </Button>
+            </button>
           )}
         </div>
       </div>

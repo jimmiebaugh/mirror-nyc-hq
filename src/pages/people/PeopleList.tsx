@@ -287,6 +287,7 @@ export default function PeopleList() {
         </div>
       ) : (
         <>
+          <div className="tbl-list">
           <DataTable<PersonRowWithDerived>
             rows={filtered}
             flat
@@ -325,7 +326,8 @@ export default function PeopleList() {
               },
               {
                 key: "full_name",
-                label: "Name / Affiliation",
+                label: "Name / Company",
+                align: "l",
                 sort: (a, b) => a.full_name.localeCompare(b.full_name),
                 render: (r) => {
                   // Phase 5.11.3: name + affiliation stacked into one cell,
@@ -389,6 +391,7 @@ export default function PeopleList() {
               {
                 key: "role_title",
                 label: "Role / Title",
+                align: "l",
                 sort: (a, b) =>
                   (a.role_title ?? "").localeCompare(b.role_title ?? ""),
                 render: (r) =>
@@ -401,6 +404,7 @@ export default function PeopleList() {
               {
                 key: "email",
                 label: "Email",
+                align: "l",
                 render: (r) =>
                   r.email ? (
                     <a
@@ -418,6 +422,7 @@ export default function PeopleList() {
               {
                 key: "phone",
                 label: "Phone",
+                align: "l",
                 render: (r) =>
                   r.phone ? (
                     <span className="muted mono" style={{ fontSize: 12 }}>
@@ -429,6 +434,7 @@ export default function PeopleList() {
               },
             ]}
           />
+          </div>
           <span className="cap">{filtered.length} people</span>
         </>
       )}

@@ -315,7 +315,7 @@ export function DataTable<T extends { id: string }>({
           ) : null}
           {twoTier && terminal.length > 0 ? (
             <>
-              <tr className="tbl-divider">
+              <tr className="tbl-done">
                 <td colSpan={totalCols}>
                   <button
                     type="button"

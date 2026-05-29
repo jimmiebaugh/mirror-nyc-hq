@@ -90,7 +90,7 @@ export function NewScoutModal({ open, onOpenChange }: NewScoutModalProps) {
             on the next step.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 vs-input-contrast">
           <HQFormField label="Client Name" required>
             <Input
               autoFocus

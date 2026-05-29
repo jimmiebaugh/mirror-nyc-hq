@@ -36,16 +36,6 @@ export function unwrapSecurityWrapper(url: string): string {
   }
 }
 
-/** Display-only: show "jacquelinenuzzo.com" instead of full URL. */
-export function cleanRootDomain(url: string): string {
-  try {
-    const u = new URL(url);
-    return u.hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
 /**
  * Phase 3.7.3.7: normalize a URL into a comparable canonical form for
  * dedup. Same address presented as `http://www.x.com`, `www.x.com`,
@@ -58,7 +48,7 @@ export function cleanRootDomain(url: string): string {
  *   - drop the protocol (treat http and https as equivalent)
  *   - keep the path + query (different paths on same host = different links)
  */
-export function normalizeUrl(url: string): string {
+function normalizeUrl(url: string): string {
   if (!url) return "";
   const cleaned = unwrapSecurityWrapper(url).trim();
   try {

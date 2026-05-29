@@ -258,23 +258,6 @@ export function pickPortfolioAttachment<T extends { filename?: string | null; mi
   return matches[0];
 }
 
-/** Build the public Gmail-attachment stream URL used by the dashboard's Open buttons. */
-export function buildGmailAttachmentUrl(opts: {
-  supabaseUrl: string;
-  messageId: string;
-  attachmentId: string;
-  filename: string;
-  mimeType: string;
-}): string {
-  const params = new URLSearchParams({
-    message_id: opts.messageId,
-    attachment_id: opts.attachmentId,
-    filename: opts.filename,
-    mime_type: opts.mimeType,
-  });
-  return `${opts.supabaseUrl}/functions/v1/gmail-attachment?${params.toString()}`;
-}
-
 // ============================================================
 // URL extraction helpers used by ingest functions.
 // ============================================================

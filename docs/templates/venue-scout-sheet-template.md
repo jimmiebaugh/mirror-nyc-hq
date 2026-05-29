@@ -9,11 +9,11 @@ Drop a CSV or XLSX file with any of the columns below into Sheet Upload. The par
 | **Venue Name** | `name` | `name`, `venue` | Required. Row dropped if empty. |
 | **Address** | `address` | `address`, `location` | Free text. Used as the address shown in the matrix. |
 | **Neighborhood** | `neighborhood` | `neighborhood`, `area`, `district`, `hood`, `borough` | Free text. |
-| **Type** | `venue_type` | `type`, `category`, `kind` | Slash-separated values from the canonical list: Retail, Event Venue, Industrial, Warehouse, Gallery, Studio, Outdoor, Mobile. AI canonicalizes on enrich (e.g. "storefront" -> Retail). |
+| **Type** | `venue_type` | `type`, `category`, `kind` | Pipe-separated (use `|`) values from the canonical list: Retail, Event Venue, Industrial, Warehouse, Gallery, Studio, Outdoor, Mobile. AI canonicalizes on enrich (e.g. "storefront" -> Retail). |
 | **Website** | `website_url` | `website`, `url`, `site`, `link`, `web`, `homepage` | Producer-entered URLs become the **primary research source** for AI enrichment. Listing-DB homepages (`peerspace.com`, `loopnet.com`, etc. on their own) get rejected at parse time, but deep listing links (e.g. `peerspace.com/spaces/12345`) pass through. |
 | **Capacity** | `capacity` | `capacity`, `occupancy`, `max guests`, `max`, `guests`, `people`, `pax`, `headcount`, `attendance`, `seats`, `seating` | Integer. Digits-only extraction (e.g. "200 guests" -> 200). |
 | **Size (sq ft)** | `size_sq_ft` | `sq ft`, `sqft`, `size`, `square footage`, `footage`, `feet` | Integer. Same digits-only extraction. |
-| **Key Features** | `key_features` | `features`, `feature`, `notes`, `amenities`, `highlights`, `description`, `details` | Free text. Auto-split on commas, semicolons, pipes, or newlines into bullet list. **Heads up: a column titled "Notes" gets routed here, not to a separate notes field.** |
+| **Key Features** | `key_features` | `features`, `feature`, `notes`, `amenities`, `highlights`, `description`, `details` | Free text. Use pipe `|` to separate multiple features into a bullet list (newlines also work). **Heads up: a column titled "Notes" gets routed here, not to a separate notes field.** |
 
 ## Fields NOT in the sheet (filled by AI enrichment)
 

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { IconChevronRight } from "@/components/icons/HQIcons";
 import { pillClass } from "@/lib/home/projectStatusToken";
+import { relativeDay } from "@/lib/hq/dates";
 
 /**
  * Phase 5.1 Home `My Projects` card.
@@ -23,6 +24,8 @@ type Row = {
   clientName: string | null;
   liveStartIso: string | null;
   liveEndIso: string | null;
+  nextDeliverableTitle: string | null;
+  nextDeliverableDueIso: string | null;
 };
 
 function formatLiveRange(start: string | null, end: string | null): string {
@@ -56,21 +59,35 @@ async function loadMyProjects(userId: string): Promise<Row[]> {
   const { data: projects } = await supabase
     .from("projects")
     .select(
-      "id, name, status, job_number, live_dates_start, live_dates_end, client:clients(name)",
+      "id, name, status, job_number, live_dates_start, live_dates_end, client:clients(name), deliverables(id, title, due_date, status)",
     )
     .in("id", Array.from(ids))
     .is("archived_at", null)
     .order("live_dates_start", { ascending: true });
 
-  return (projects ?? []).map((p) => ({
-    id: p.id,
-    jobNumber: p.job_number ?? null,
-    name: p.name,
-    status: (p.status as string | null) ?? "",
-    clientName: (p.client as { name?: string } | null)?.name ?? null,
-    liveStartIso: p.live_dates_start,
-    liveEndIso: p.live_dates_end,
-  }));
+  return (projects ?? []).map((p) => {
+    // Project-wide next deliverable: earliest Upcoming with a due date
+    // (mirrors loadProjects in src/lib/projects/queries.ts).
+    const deliverables = (p.deliverables ?? []) as {
+      title: string | null;
+      due_date: string | null;
+      status: string | null;
+    }[];
+    const nextDeliverable = deliverables
+      .filter((d) => d.due_date && d.status === "Upcoming")
+      .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))[0];
+    return {
+      id: p.id,
+      jobNumber: p.job_number ?? null,
+      name: p.name,
+      status: (p.status as string | null) ?? "",
+      clientName: (p.client as { name?: string } | null)?.name ?? null,
+      liveStartIso: p.live_dates_start,
+      liveEndIso: p.live_dates_end,
+      nextDeliverableTitle: nextDeliverable?.title ?? null,
+      nextDeliverableDueIso: nextDeliverable?.due_date ?? null,
+    };
+  });
 }
 
 export function MyProjectsCard({
@@ -106,8 +123,8 @@ export function MyProjectsCard({
         <thead>
           <tr>
             {fullWidth ? <th>Job #</th> : null}
-            <th>Project / Client</th>
-            <th>Status</th>
+            <th className="l">Project / Client</th>
+            <th className="c">Status</th>
             <th>Next Deliverable</th>
             <th className="r">Live</th>
           </tr>
@@ -131,7 +148,7 @@ export function MyProjectsCard({
                     {r.jobNumber ?? "-"}
                   </td>
                 ) : null}
-                <td>
+                <td className="l">
                   <div className="lead">{r.name}</div>
                   {r.clientName ? (
                     <span className="text-[11.5px] text-[hsl(var(--muted-foreground))]">
@@ -139,14 +156,25 @@ export function MyProjectsCard({
                     </span>
                   ) : null}
                 </td>
-                <td>
+                <td className="c">
                   <span className={pillClass(r.status)}>
                     <span className="dt" />
                     {r.status || "Queued"}
                   </span>
                 </td>
                 <td className="text-[hsl(var(--muted-foreground))]">
-                  <span className="text-[hsl(var(--subtle-foreground))]">None scheduled</span>
+                  {r.nextDeliverableTitle ? (
+                    <div>
+                      <div className="lead">{r.nextDeliverableTitle}</div>
+                      {r.nextDeliverableDueIso ? (
+                        <span className="text-[11.5px] text-[hsl(var(--muted-foreground))]">
+                          {relativeDay(r.nextDeliverableDueIso)}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="text-[hsl(var(--subtle-foreground))]">None scheduled</span>
+                  )}
                 </td>
                 <td className="r text-[hsl(var(--muted-foreground))]">
                   {formatLiveRange(r.liveStartIso, r.liveEndIso)}

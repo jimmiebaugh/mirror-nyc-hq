@@ -202,8 +202,7 @@ export function invalidateLookup(
  * lookup. Used exclusively by RecordCombobox's LookupCombobox when
  * `source.table === 'cities'` to surface alias rows in the typeahead
  * (typing "Los Angeles" matches the alias row whose canonical city is
- * "LA"). Module-level cache like `useLookup`; refetched on demand via
- * `invalidateCityAliases`.
+ * "LA"). Module-level cache like `useLookup`, loaded once per session.
  *
  * The alias resolution is intentionally NOT folded into useLookup
  * because alias rows have a different shape (one canonical id per
@@ -262,12 +261,6 @@ async function ensureAliasesLoaded(): Promise<void> {
     notifyAliases();
   })();
   return aliasCache.loadPromise;
-}
-
-export function invalidateCityAliases(): void {
-  aliasCache.options = null;
-  aliasCache.loadPromise = null;
-  if (aliasCache.subscribers.size > 0) void ensureAliasesLoaded();
 }
 
 export function useCityAliases() {

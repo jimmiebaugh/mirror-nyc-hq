@@ -89,6 +89,11 @@ export function useUnreadCount(
           const oldRow = payload.old as Partial<NotificationRow>;
           const newRow = payload.new as NotificationRow;
           if (typeFilter && newRow.type !== typeFilter) return;
+          // Only in-app-delivered rows are counted (matching the INSERT gate
+          // and fetchUnreadCount). markAllNotificationsRead flips `read` on
+          // non-in-app rows too, so gate the counter on delivered_in_app or it
+          // decrements a row it never counted.
+          if (!newRow.delivered_in_app) return;
           // Unread -> read: decrement. Read -> unread (rare): increment.
           if (oldRow.read === false && newRow.read === true) {
             setCount((c) => Math.max(0, c - 1));

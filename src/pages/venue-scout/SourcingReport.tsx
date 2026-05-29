@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Loader2, Plus } from "lucide-react";
+import { Check, Loader2, Plus } from "lucide-react";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -760,9 +760,10 @@ export default function SourcingReport() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-6">
           <Link
             to={`/venue-scout/scouts/${scoutId}/sourcing/sheet-prompt`}
-            className="crumb inline-flex items-center gap-1.5"
+            className="btn btn-tertiary"
           >
-            <ArrowLeft className="h-3 w-3" /> Back
+            <IconArrowLeft className="ic" />
+            Back
           </Link>
           {/* R6 § G.2: text-xs → text-base to match Review's action bar
               center text. */}
@@ -771,12 +772,14 @@ export default function SourcingReport() {
             selected ·{" "}
             <strong className="text-foreground">2</strong> minimum to continue
           </div>
-          <Button
+          <button
+            type="button"
+            className="btn btn-primary"
             onClick={onContinue}
             disabled={!canContinue || continuing}
           >
             Continue · Shortlist →
-          </Button>
+          </button>
         </div>
       </div>
 

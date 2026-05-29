@@ -9,14 +9,16 @@
 // notifications-dispatch alongside in-app bell notifications.
 //
 // Body shape: { role_id: string, pull_round_id: string }
-// Auth: requireInternalOrUserAuth (cron + ts-pull-candidates self-invoke).
+// Auth: requireInternalOrAdminUser. Cron + ts-pull-candidates self-invoke use
+// the internal secret / service-role key (both skip the role check); a direct
+// user JWT must resolve to permission_role='admin'.
 //
 // Failures are logged, not surfaced. A notification outage shouldn't fail
 // the upstream pull; the round row already records status='complete' and the
 // PullDetail UI works without the email.
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
+import { requireInternalOrAdminUser } from "../_shared/internalAuth.ts";
 import { sendGmail } from "../_shared/sendEmail.ts";
 
 const corsHeaders = {
@@ -65,7 +67,7 @@ async function tallyCandidates(supabase: SupabaseClient, roundId: string): Promi
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  const authFail = await requireInternalOrUserAuth(req);
+  const authFail = await requireInternalOrAdminUser(req);
   if (authFail) return authFail;
 
   let roleId: string;

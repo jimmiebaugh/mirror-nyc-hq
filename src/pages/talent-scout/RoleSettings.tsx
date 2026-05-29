@@ -66,7 +66,6 @@ const SCHEDULE_OPTIONS: { value: AutoPullSchedule; label: string }[] = [
 ];
 
 function fromRole(r: RoleRow): FormState {
-  // deno-lint-ignore-file no-explicit-any
   const competitorBonus = (r.competitor_bonus as { competitors?: string[] } | null) ?? null;
   const scorecard = (r.scorecard as unknown as Criterion[] | null) ?? [];
   return {
@@ -712,9 +711,13 @@ export default function RoleSettings() {
            normal confirm-reeval-and-persist flow takes over. */}
       <div className="actionbar">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
-          <Button variant="ghost" onClick={() => navigateOrConfirm(`/talent-scout/roles/${role.id}`)}>
+          <button
+            type="button"
+            className="btn btn-tertiary"
+            onClick={() => navigateOrConfirm(`/talent-scout/roles/${role.id}`)}
+          >
             Cancel
-          </Button>
+          </button>
           <div className="flex items-center gap-3">
             {dirty && (
               <span className="text-xs font-mono uppercase tracking-wider text-amber-400">
@@ -722,13 +725,23 @@ export default function RoleSettings() {
               </span>
             )}
             {scorecardEditedSinceRefine ? (
-              <Button onClick={runRefine} disabled={saving || refining}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={runRefine}
+                disabled={saving || refining}
+              >
                 {refining ? "Refining…" : "Process scorecard →"}
-              </Button>
+              </button>
             ) : (
-              <Button onClick={requestSave} disabled={saving || refining || !dirty}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={requestSave}
+                disabled={saving || refining || !dirty}
+              >
                 {saving ? "Saving…" : "Save changes"}
-              </Button>
+              </button>
             )}
           </div>
         </div>

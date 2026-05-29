@@ -256,38 +256,35 @@ async function logCallToTable(args: {
   }
 }
 
+type IncrementSpendRow = {
+  before_usd: number | string;
+  after_usd: number | string;
+  cap_usd: number | string | null;
+  just_crossed: boolean;
+};
+
 async function trackSpendAndAlert(costUsd: number): Promise<void> {
   if (costUsd <= 0) return;
   const sb = getServiceClient();
-  const { data: settings, error } = await sb
-    .from("global_settings")
-    .select(
-      "id, anthropic_spend_cap_monthly_usd, anthropic_spend_current_month_usd, cap_alert_sent_this_month",
-    )
-    .limit(1)
-    .maybeSingle();
-
-  if (error || !settings) {
-    console.warn("[anthropic-spend-tracker] could not load global_settings; skipping spend tracking", error);
+  // F004: atomic increment. Concurrent callClaude invocations (VS fans out via
+  // Promise.all) previously raced this counter through a non-atomic
+  // SELECT-then-UPDATE, so the last write dropped the others' spend and two
+  // calls straddling the cap could both skip (or both fire) the alert. The
+  // SECURITY DEFINER RPC increments under a row lock and atomically sets
+  // cap_alert_sent_this_month iff this call crosses the cap, returning the
+  // pre/post values so exactly one caller emails.
+  const { data, error } = await sb.rpc("increment_anthropic_spend", { p_cost: costUsd });
+  if (error) {
+    console.warn("[anthropic-spend-tracker] increment_anthropic_spend RPC failed; spend not tracked", error);
     return;
   }
-
-  const cap = Number(settings.anthropic_spend_cap_monthly_usd ?? 0);
-  const before = Number(settings.anthropic_spend_current_month_usd ?? 0);
-  const after = before + costUsd;
-  const alreadyAlerted = !!settings.cap_alert_sent_this_month;
-  const justCrossed = cap > 0 && before < cap && after >= cap && !alreadyAlerted;
-
-  await sb
-    .from("global_settings")
-    .update({
-      anthropic_spend_current_month_usd: after,
-      ...(justCrossed ? { cap_alert_sent_this_month: true } : {}),
-    })
-    .eq("id", settings.id);
-
-  if (justCrossed) {
-    await emailAdminCapCrossed(before, after, cap);
+  const row = ((data ?? []) as IncrementSpendRow[])[0];
+  if (!row) {
+    console.warn("[anthropic-spend-tracker] increment_anthropic_spend returned no row (no global_settings?)");
+    return;
+  }
+  if (row.just_crossed) {
+    await emailAdminCapCrossed(Number(row.before_usd), Number(row.after_usd), Number(row.cap_usd ?? 0));
   }
 }
 

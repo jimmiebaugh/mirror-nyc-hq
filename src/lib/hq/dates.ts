@@ -38,7 +38,7 @@ export function parseIso(iso: string | null | undefined): Date | null {
   return new Date(y, m - 1, d);
 }
 
-export function weekdayName(iso: string | null | undefined): string {
+function weekdayName(iso: string | null | undefined): string {
   const d = parseIso(iso);
   if (!d) return "";
   return WEEKDAYS[d.getDay()];

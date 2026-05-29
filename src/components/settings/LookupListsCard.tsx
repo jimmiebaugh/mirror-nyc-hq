@@ -14,6 +14,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { LookupListEditor } from "@/components/settings/LookupListEditor";
 import { NeighborhoodsLookupEditor } from "@/components/settings/NeighborhoodsLookupEditor";
+import { VendorSubcategoriesLookupEditor } from "@/components/settings/VendorSubcategoriesLookupEditor";
 import { supabase } from "@/integrations/supabase/client";
 import type { LookupTable } from "@/lib/hq/lookups";
 
@@ -58,6 +59,11 @@ export const HQ_LOOKUPS: LookupListsCardEntry[] = [
     key: "vendor_categories",
     list: "Vendor Categories",
     usedBy: "Vendors database",
+  },
+  {
+    key: "vendor_subcategories",
+    list: "Vendor Subcategories",
+    usedBy: "Vendors database (scoped by category)",
   },
   { key: "departments", list: "Departments", usedBy: "Users database" },
 ];
@@ -108,9 +114,9 @@ export function LookupListsCard({
         <table className="tbl">
           <thead>
             <tr>
-              <th>List</th>
-              <th>Used by</th>
-              <th className="r">Values</th>
+              <th className="l">List</th>
+              <th className="l">Used by</th>
+              <th className="l">Values</th>
               <th className="r" style={{ width: 60 }}></th>
             </tr>
           </thead>
@@ -120,7 +126,7 @@ export function LookupListsCard({
                 <tr>
                   <td className="lead">{l.list}</td>
                   <td className="muted">{l.usedBy}</td>
-                  <td className="r muted">{counts[l.key] ?? "..."}</td>
+                  <td className="muted">{counts[l.key] ?? "..."}</td>
                   <td className="r">
                     <button
                       type="button"
@@ -143,11 +149,14 @@ export function LookupListsCard({
                         padding: 0,
                       }}
                     >
-                      {/* R7 amendment v2 § 3: branch on key — neighborhoods
-                          gets the parent-scoped city editor; everything
-                          else uses the flat LookupListEditor. */}
+                      {/* Branch on key — parent-scoped lookups get a dedicated
+                          editor (neighborhoods: city-scoped;
+                          vendor_subcategories: category-scoped, Phase 6.4);
+                          everything else uses the flat LookupListEditor. */}
                       {l.key === "neighborhoods" ? (
                         <NeighborhoodsLookupEditor inline />
+                      ) : l.key === "vendor_subcategories" ? (
+                        <VendorSubcategoriesLookupEditor inline />
                       ) : (
                         <LookupListEditor table={l.key} layout="tags" />
                       )}

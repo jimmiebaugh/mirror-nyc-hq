@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
-import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { formatPhone } from "@/lib/hq/phone";
 import { invalidateClientsAndVendors } from "@/lib/hq/useClientsAndVendors";
 import {
@@ -212,22 +211,7 @@ export default function ClientEdit() {
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
-      <Link
-        to={isCreate ? "/clients" : `/clients/${id}`}
-        className="tlink"
-        onClick={(e) => {
-          if (dirty) {
-            e.preventDefault();
-            setConfirmLeaveOpen(true);
-          }
-        }}
-      >
-        <IconArrowLeft className="ic" />
-        Back to {isCreate ? "Clients" : "client"}
-      </Link>
-
       <div className="pagehead">
-        <div className="eyebrow">Client</div>
         <h1 className="h-page">{isCreate ? "New Client" : "Edit Client"}</h1>
       </div>
 

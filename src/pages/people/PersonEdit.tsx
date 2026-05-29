@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { syncJoinRows } from "@/lib/projects/syncJoinRows";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
@@ -8,7 +10,6 @@ import {
   CLIENT_MINI_CREATE_FIELDS,
   createClientInline,
 } from "@/lib/hq/inlineCreate";
-import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -236,33 +237,48 @@ export default function PersonEdit() {
     }
 
     // Sync venue_contact_people rows when Type=Venue contact; otherwise clear all.
+    const effectiveVenueIds = form.type === "Venue" ? venueIds : [];
+    const joinErrors: PostgrestError[] = [];
     if (personId) {
-      const effectiveVenueIds = form.type === "Venue" ? venueIds : [];
-      const toAdd = effectiveVenueIds.filter((v) => !initialVenueIds.includes(v));
-      const toRemove = initialVenueIds.filter((v) => !effectiveVenueIds.includes(v));
-      for (const venueId of toAdd) {
-        await supabase
-          .from("venue_contact_people")
-          .insert({ venue_id: venueId, person_id: personId });
-      }
-      for (const venueId of toRemove) {
-        await supabase
-          .from("venue_contact_people")
-          .delete()
-          .eq("venue_id", venueId)
-          .eq("person_id", personId);
-      }
+      const pid = personId;
+      joinErrors.push(
+        ...(await syncJoinRows({
+          prevIds: initialVenueIds,
+          nextIds: effectiveVenueIds,
+          insert: (venueId) =>
+            supabase.from("venue_contact_people").insert({ venue_id: venueId, person_id: pid }),
+          remove: (venueId) =>
+            supabase.from("venue_contact_people").delete().eq("venue_id", venueId).eq("person_id", pid),
+        })),
+      );
     }
 
     setSaving(false);
-    setInitial(form);
-    setInitialVenueIds(form.type === "Venue" ? venueIds : []);
     if (isCreate && personId) {
-      toast({ title: "Person created" });
+      toast(
+        joinErrors.length > 0
+          ? {
+              title: "Person created, but some venue links didn't save",
+              description: joinErrors[0].message,
+              variant: "destructive",
+            }
+          : { title: "Person created" },
+      );
       navigate(`/people/${personId}`);
-    } else {
-      toast({ title: "Saved" });
+      return;
     }
+    setInitial(form);
+    if (joinErrors.length > 0) {
+      // Keep the venue baseline stale so the bar stays dirty for a retry.
+      toast({
+        title: "Some venue links didn't save",
+        description: joinErrors[0].message,
+        variant: "destructive",
+      });
+      return;
+    }
+    setInitialVenueIds(effectiveVenueIds);
+    toast({ title: "Saved" });
   };
 
   // Phase 5.7.3 § 3.B: hard delete. Cascade posture (verified against the
@@ -337,22 +353,7 @@ export default function PersonEdit() {
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
-      <Link
-        to={isCreate ? "/people" : `/people/${id}`}
-        className="tlink"
-        onClick={(e) => {
-          if (dirty) {
-            e.preventDefault();
-            setConfirmLeaveOpen(true);
-          }
-        }}
-      >
-        <IconArrowLeft className="ic" />
-        Back to {isCreate ? "People" : "person"}
-      </Link>
-
       <div className="pagehead">
-        <div className="eyebrow">Person</div>
         <h1 className="h-page">{isCreate ? "New Person" : "Edit Person"}</h1>
       </div>
 
@@ -361,36 +362,38 @@ export default function PersonEdit() {
           <span className="h-card">Details</span>
         </div>
         <div className="card-pad stack-4">
-          <HQFormField label="Full Name" required>
-            <input
-              className={`input ${form.full_name ? "input--filled" : ""}`}
-              value={form.full_name}
-              onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-              placeholder="Sarah Klein"
-            />
-          </HQFormField>
+          <div className="g2">
+            <HQFormField label="Full Name" required>
+              <input
+                className={`input ${form.full_name ? "input--filled" : ""}`}
+                value={form.full_name}
+                onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+                placeholder="Sarah Klein"
+              />
+            </HQFormField>
 
-          <HQFormField label="Type">
-            <div className="row-c wrap" style={{ gap: 12 }}>
-              {(["Client", "Vendor", "Venue", "Unaffiliated"] as PersonType[]).map(
-                (t) => (
-                  <label
-                    key={t}
-                    className="row-c"
-                    style={{ gap: 6, cursor: "pointer", fontSize: 13 }}
-                  >
-                    <input
-                      type="radio"
-                      name="person-type"
-                      checked={form.type === t}
-                      onChange={() => onTypeChange(t)}
-                    />
-                    {t}
-                  </label>
-                ),
-              )}
-            </div>
-          </HQFormField>
+            <HQFormField label="Type">
+              <div className="row-c wrap" style={{ gap: 12 }}>
+                {(["Client", "Vendor", "Venue", "Unaffiliated"] as PersonType[]).map(
+                  (t) => (
+                    <label
+                      key={t}
+                      className="row-c"
+                      style={{ gap: 6, cursor: "pointer", fontSize: 13 }}
+                    >
+                      <input
+                        type="radio"
+                        name="person-type"
+                        checked={form.type === t}
+                        onChange={() => onTypeChange(t)}
+                      />
+                      {t}
+                    </label>
+                  ),
+                )}
+              </div>
+            </HQFormField>
+          </div>
 
           {showClientPicker ? (
             <HQFormField label="Client">

@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/popover";
 import {
   Command,
-  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -45,9 +44,10 @@ import { supabase } from "@/integrations/supabase/client";
  *     resolves to `{ id, label }` so the freshly-inserted record is
  *     immediately selected.
  *
- * Filtering: cmdk's default fuzzy scoring (prefix-match first, then
- * contains). The "+ Add" item always pins to the bottom via `forceMount`
- * so it survives the filter.
+ * Filtering: Phase 6.5 (G7) disabled cmdk's fuzzy scoring
+ * (`shouldFilter={false}`) in favor of a manual case-insensitive
+ * substring/prefix match over the canonical options + alias rows. The
+ * "+ Add" item always pins to the bottom via `forceMount`.
  *
  * Multi-select: pass `multi` + `multiValue` + `onMultiChange`. Selected
  * options render as removable chips above the typeahead input; selecting
@@ -116,11 +116,13 @@ type CommonProps = {
     data: Record<string, string>,
   ) => Promise<Option | null>;
   /**
-   * Phase 5.7.1: when true, "+ Add" inserts the row using the typed input as
-   * the only field (key `name`) instead of opening MiniCreateModal. Use for
-   * record-mode pickers whose insert helper only needs the name (Client,
-   * Venue). Leave false for pickers that need more fields (Vendor → Category,
-   * Person → email).
+   * Phase 5.7.1: hint that "+ Add" should insert the row using the typed
+   * input as the only field (key `name`) instead of opening MiniCreateModal.
+   * Phase 6.5 (G7) superseded this gate: the decision is now driven purely by
+   * `miniCreateFields` -- any source WITHOUT miniCreateFields adds immediately
+   * from the typed input, and any source WITH them always opens the modal.
+   * The prop is retained for call-site compatibility but no longer changes
+   * behavior on its own.
    */
   quickCreate?: boolean;
   /**
@@ -423,6 +425,60 @@ function ComboboxView(props: ViewProps) {
   // no resolver), keep the existing whole-trigger button.
   const linkMode = Boolean(getRecordHref) && filled;
 
+  // Phase 6.5 (G7): manual case-insensitive substring/prefix filter. cmdk's
+  // fuzzy scoring is disabled (shouldFilter={false}) so only labels that
+  // literally contain the typed text show. The alias group matches on the
+  // alias text OR its canonical city, so city-alias search ("Los Angeles" ->
+  // LA) survives now that cmdk no longer auto-filters.
+  const query = inputValue.trim().toLowerCase();
+  const filteredOptions = useMemo(
+    () =>
+      query
+        ? options.filter((o) => o.label.toLowerCase().includes(query))
+        : options,
+    [options, query],
+  );
+  const filteredAliases = useMemo(() => {
+    const list = aliasOptions ?? [];
+    if (!query) return list;
+    return list.filter(
+      (a) =>
+        a.alias.toLowerCase().includes(query) ||
+        a.canonical.toLowerCase().includes(query),
+    );
+  }, [aliasOptions, query]);
+
+  // Phase 6.5 (G7): miniCreateFields wins. When the caller declares multi-
+  // field create, "+ Add" always routes to MiniCreateModal regardless of
+  // quickCreate; single-field sources (no miniCreateFields) add immediately
+  // from the typed input. (Supersedes the old quickCreate gate.)
+  const hasMiniCreateFields = (miniCreateFields?.length ?? 0) > 0;
+
+  // Phase 6.5 follow-up: shared create path for the "+ Add" row AND the Enter
+  // key. Single-field sources add immediately from the typed input; multi-field
+  // sources (or an empty input) open MiniCreateModal so the user can fill the
+  // remaining fields / type a name.
+  const createFromInput = async () => {
+    const typed = inputValue.trim();
+    if (!hasMiniCreateFields && typed) {
+      const created = await insertOption({ name: typed });
+      if (created) {
+        if (isMulti) {
+          const current = new Set(props.multiValue ?? []);
+          current.add(created.id);
+          props.onMultiChange(Array.from(current));
+        } else {
+          props.onChange(created.id);
+          setOpen(false);
+        }
+        setInputValue("");
+      }
+      return;
+    }
+    setMiniOpen(true);
+    setOpen(false);
+  };
+
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
@@ -584,10 +640,29 @@ function ComboboxView(props: ViewProps) {
           </PopoverTrigger>
         )}
         <PopoverContent className="w-[280px] p-0" align="start">
-          <Command shouldFilter>
+          <Command shouldFilter={false}>
             <CommandInput
               value={inputValue}
               onValueChange={setInputValue}
+              onKeyDown={(e) => {
+                // Phase 6.5 follow-up: deterministic "add on Enter". When the
+                // typed text matches no option/alias, Enter routes to create
+                // instead of relying on cmdk to highlight the forceMount
+                // "+ Add" row (unreliable with shouldFilter={false}). When
+                // options DO match, Enter falls through to cmdk to select the
+                // highlighted option.
+                if (
+                  e.key === "Enter" &&
+                  canCreate &&
+                  inputValue.trim() &&
+                  filteredOptions.length === 0 &&
+                  filteredAliases.length === 0
+                ) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void createFromInput();
+                }
+              }}
               placeholder={`Search ${entityLabel}...`}
             />
             <CommandList>
@@ -595,12 +670,16 @@ function ComboboxView(props: ViewProps) {
                 <div className="py-3 text-center text-xs text-muted-foreground">
                   Loading...
                 </div>
-              ) : (
-                <CommandEmpty>No results.</CommandEmpty>
-              )}
-              {options.length > 0 ? (
+              ) : filteredOptions.length === 0 &&
+                filteredAliases.length === 0 &&
+                !canCreate ? (
+                <div className="py-3 text-center text-xs text-muted-foreground">
+                  No results.
+                </div>
+              ) : null}
+              {filteredOptions.length > 0 ? (
                 <CommandGroup>
-                  {options.map((opt) => {
+                  {filteredOptions.map((opt) => {
                     const isSelected = isMulti
                       ? (props.multiValue ?? []).includes(opt.id)
                       : props.value === opt.id;
@@ -620,11 +699,11 @@ function ComboboxView(props: ViewProps) {
                   })}
                 </CommandGroup>
               ) : null}
-              {aliasOptions && aliasOptions.length > 0 ? (
+              {filteredAliases.length > 0 ? (
                 <>
                   <CommandSeparator />
                   <CommandGroup heading="Aliases">
-                    {aliasOptions.map((a) => (
+                    {filteredAliases.map((a) => (
                       <CommandItem
                         key={`alias:${a.alias}`}
                         value={a.alias}
@@ -653,26 +732,7 @@ function ComboboxView(props: ViewProps) {
                       // Cmdk filters on `value`; a literal sentinel keeps the
                       // Add item visible regardless of typed input.
                       value="__add_new__"
-                      onSelect={async () => {
-                        const typed = inputValue.trim();
-                        if (props.quickCreate && typed) {
-                          const created = await insertOption({ name: typed });
-                          if (created) {
-                            if (isMulti) {
-                              const current = new Set(props.multiValue ?? []);
-                              current.add(created.id);
-                              props.onMultiChange(Array.from(current));
-                            } else {
-                              props.onChange(created.id);
-                              setOpen(false);
-                            }
-                            setInputValue("");
-                          }
-                          return;
-                        }
-                        setMiniOpen(true);
-                        setOpen(false);
-                      }}
+                      onSelect={() => void createFromInput()}
                       className="cursor-pointer text-primary font-mono text-xs uppercase"
                     >
                       {inputValue.trim()

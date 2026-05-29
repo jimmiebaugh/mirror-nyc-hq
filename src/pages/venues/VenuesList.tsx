@@ -297,6 +297,7 @@ export default function VenuesList() {
         </div>
       ) : (
         <>
+          <div className="tbl-list">
           <DataTable<VenueListRow>
             rows={filtered}
             flat
@@ -317,6 +318,7 @@ export default function VenuesList() {
               {
                 key: "name",
                 label: "Venue",
+                align: "l",
                 sort: (a, b) => a.name.localeCompare(b.name),
                 render: (r) => <span className="lead">{r.name}</span>,
               },
@@ -389,6 +391,7 @@ export default function VenuesList() {
               },
             ]}
           />
+          </div>
           <span className="cap">{filtered.length} venues</span>
         </>
       )}

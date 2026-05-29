@@ -340,6 +340,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
         </div>
       ) : view === "list" ? (
         <>
+          <div className="tbl-list">
           <DataTable<typeof filtered[number]>
           rows={filtered}
           flat
@@ -347,7 +348,6 @@ export default function TasksList({ view }: { view: ViewKind }) {
           onSortChange={(next) =>
             setFilterState((prev) => ({ ...prev, sort: next }))
           }
-          rowBorderToken={(r) => taskStatusToken(r.status)}
           onRowClick={(r) => navigate(`/tasks/${r.id}`, { state: { from: fromState } })}
           twoTier={{
             isTerminal: (r) => r.status === "Done",
@@ -367,6 +367,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             {
               key: "title",
               label: "Task",
+              align: "l",
               sort: (a, b) => a.title.localeCompare(b.title),
               render: (r) => (
                 <span
@@ -392,6 +393,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             {
               key: "project",
               label: "Project / Client",
+              align: "l",
               sort: (a, b) => a.projectName.localeCompare(b.projectName),
               render: (r) =>
                 r.project ? (
@@ -428,6 +430,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             {
               key: "assigneeName",
               label: "Assignee",
+              align: "c",
               // 5.7.4 smoke followup: sort by displayed first name so sort
               // order matches what the user sees in the cell.
               sort: (a, b) =>
@@ -481,6 +484,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             {
               key: "notesblocks",
               label: "Notes / Blocks",
+              align: "l",
               render: (r) => (
                 <div
                   className="muted"
@@ -523,6 +527,7 @@ export default function TasksList({ view }: { view: ViewKind }) {
             },
           ]}
           />
+          </div>
           <span className="cap">{filtered.length} tasks</span>
         </>
       ) : view === "board" ? (

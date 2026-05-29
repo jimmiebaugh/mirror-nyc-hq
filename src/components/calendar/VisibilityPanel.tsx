@@ -39,8 +39,9 @@ export function CalendarVisibilityPanel({
   onSetShowMyTasks: (v: boolean) => void;
   onToggleProject: (id: string, visible: boolean) => void;
   /**
-   * Phase 5.6.5. Renders the owner-only "Save as global calendar
-   * default" button below the master-toggle divider.
+   * Phase 5.6.5. Renders the owner-only "Save as default" button in the
+   * card headbar's right slot (Phase 6.2 moved it from below the
+   * master-toggle divider).
    */
   canPublishGlobal?: boolean;
   /**
@@ -54,10 +55,20 @@ export function CalendarVisibilityPanel({
   const hiddenSet = new Set(hiddenProjectIds);
   return (
     <aside className="card">
+      <div className="card-headbar">
+        <span className="h-card">Show on calendar</span>
+        {canPublishGlobal ? (
+          <button
+            type="button"
+            className="tlink"
+            style={{ background: "none", border: "none" }}
+            onClick={onPublishGlobal}
+          >
+            Save as default
+          </button>
+        ) : null}
+      </div>
       <div className="card-pad stack-3">
-        <div className="block-lbl">
-          <span className="label-section">Show on calendar</span>
-        </div>
         <div className="stack-2">
           <ToggleRow
             label="All Deliverables"
@@ -84,37 +95,20 @@ export function CalendarVisibilityPanel({
             margin: "4px 0",
           }}
         />
-        {canPublishGlobal || canResetToGlobal ? (
+        {canResetToGlobal ? (
           <div className="stack-2">
-            {canPublishGlobal ? (
-              <button
-                type="button"
-                className="tlink"
-                style={{
-                  padding: "6px 8px",
-                  fontSize: 11,
-                  color: "hsl(var(--primary))",
-                  justifyContent: "flex-start",
-                }}
-                onClick={onPublishGlobal}
-              >
-                Save as global calendar default
-              </button>
-            ) : null}
-            {canResetToGlobal ? (
-              <button
-                type="button"
-                className="tlink"
-                style={{
-                  padding: "6px 8px",
-                  fontSize: 11,
-                  justifyContent: "flex-start",
-                }}
-                onClick={onResetToGlobal}
-              >
-                Reset to global default
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="tlink"
+              style={{
+                padding: "6px 8px",
+                fontSize: 11,
+                justifyContent: "flex-start",
+              }}
+              onClick={onResetToGlobal}
+            >
+              Reset to global default
+            </button>
           </div>
         ) : null}
         <div className="block-lbl">

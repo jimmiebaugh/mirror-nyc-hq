@@ -26,6 +26,26 @@ function asString(v: unknown): string {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function normalizeHttpUrl(raw: unknown): string {
+  const value = asString(raw);
+  if (!value) return "";
+  const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return value;
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+export function normalizeVendorImportRows(rows: Row[]): Row[] {
+  return rows.map((row) => ({
+    ...row,
+    website_url: normalizeHttpUrl(row.website_url),
+  }));
+}
+
 export function validateVendorImport(
   rows: Row[],
   _queued_refs: Record<string, Array<Record<string, unknown>>>,
@@ -79,7 +99,10 @@ export function validateVendorImport(
     const url = asString(row.website_url);
     if (url) {
       try {
-        new URL(url);
+        const parsed = new URL(url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          throw new Error("unsupported protocol");
+        }
       } catch {
         errors.push({
           row_index: i,

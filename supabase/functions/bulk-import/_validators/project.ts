@@ -24,6 +24,15 @@ function asString(v: unknown): string {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
 
+function normalizeMoney(raw: unknown): string {
+  const value = asString(raw);
+  if (!value) return "";
+  const cleaned = value.replace(/[$,\s]/g, "");
+  const n = Number(cleaned);
+  if (!Number.isNaN(n) && n >= 0) return cleaned;
+  return value;
+}
+
 const VALID_STATUS = new Set([
   "Approved",
   "In Production",
@@ -51,6 +60,13 @@ const DATE_KEYS = [
 ];
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function normalizeProjectImportRows(rows: Row[]): Row[] {
+  return rows.map((row) => ({
+    ...row,
+    budget: normalizeMoney(row.budget),
+  }));
+}
 
 export function validateProjectImport(
   rows: Row[],

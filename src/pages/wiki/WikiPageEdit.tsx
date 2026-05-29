@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/hooks/useAuth";
-import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { WikiLayout } from "@/components/wiki/WikiLayout";
 import { WikiEditor } from "@/components/wiki/WikiEditor";
@@ -273,22 +272,7 @@ export default function WikiPageEdit() {
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120 }}>
-      <Link
-        to={routeSlug ? `/wiki/${routeSlug}` : "/wiki"}
-        className="tlink"
-        onClick={(e) => {
-          if (dirty) {
-            e.preventDefault();
-            setConfirmLeaveOpen(true);
-          }
-        }}
-      >
-        <IconArrowLeft className="ic" />
-        Back to Wiki
-      </Link>
-
       <div className="pagehead">
-        <div className="eyebrow">Team Wiki</div>
         <h1 className="h-page" style={{ marginTop: 4 }}>
           {isCreate ? "New Page" : "Edit Page"}
         </h1>
@@ -301,10 +285,10 @@ export default function WikiPageEdit() {
       >
         <div className="wikipage" style={{ maxWidth: 760 }}>
           <section className="card">
+            <div className="card-headbar">
+              <span className="h-card">Page Details</span>
+            </div>
             <div className="card-pad stack-4">
-              <div className="block-lbl">
-                <span className="label-section">Page Details</span>
-              </div>
               <div className="g2">
                 <div className="field">
                   <label className="label-form">Title<span className="req">*</span></label>
@@ -357,10 +341,10 @@ export default function WikiPageEdit() {
           </section>
 
           <section className="card" style={{ marginTop: 16 }}>
+            <div className="card-headbar">
+              <span className="h-card">Body</span>
+            </div>
             <div className="card-pad stack-4">
-              <div className="block-lbl">
-                <span className="label-section">Body</span>
-              </div>
               <WikiEditor
                 value={form.body}
                 onChange={(html) => setForm((f) => ({ ...f, body: html }))}

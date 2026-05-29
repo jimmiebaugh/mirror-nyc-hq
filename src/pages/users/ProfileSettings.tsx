@@ -184,29 +184,16 @@ export default function ProfileSettings() {
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120 }}>
-      <Link
-        to={viewerId ? `/users/${viewerId}` : "/"}
-        className="tlink"
-        onClick={(e) => {
-          if (dirty) {
-            e.preventDefault();
-            setConfirmLeaveOpen(true);
-          }
-        }}
-      >
-        <IconArrowLeft className="ic" /> Back to profile
-      </Link>
-
       <div className="pagehead">
         <div className="eyebrow">Settings</div>
         <h1 className="h-page" style={{ marginTop: 4 }}>Your profile</h1>
       </div>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Identity</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Identity</span>
-          </div>
           <div className="row-c" style={{ alignItems: "flex-start", gap: 16 }}>
             <span
               aria-label={initials}
@@ -266,10 +253,10 @@ export default function ProfileSettings() {
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Role &amp; Team</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Role &amp; Team</span>
-          </div>
           <div className="g2">
             <div className="field">
               <label className="label-form">Role / Title</label>
@@ -299,10 +286,10 @@ export default function ProfileSettings() {
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Slack</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Slack</span>
-          </div>
           <div className="g2">
             <div className="field">
               <label className="label-form">Slack Handle</label>

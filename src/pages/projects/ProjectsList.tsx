@@ -67,6 +67,11 @@ const BOARD_ROWS: { label: string; statuses: ProjectStatus[] }[] = [
 
 const FROM_LABEL = "Projects";
 
+// Phase 6.1 (P1): first-name extraction shared by the split Account /
+// Design columns (was inline in the old combined leadDesignerNames cell).
+const firstNamesOf = (names: string[]): string[] =>
+  names.map((n) => n.trim().split(/\s+/)[0]).filter(Boolean);
+
 export default function ProjectsList({ view }: { view: ViewKind }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -284,6 +289,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
         </div>
       ) : view === "list" ? (
         <>
+          <div className="tbl-list">
           <DataTable<ProjectListRow>
             rows={filtered}
             flat
@@ -291,7 +297,6 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
             onSortChange={(next) =>
               setFilterState((prev) => ({ ...prev, sort: next }))
             }
-            rowBorderToken={(r) => projectStatusToken(r.status)}
             onRowClick={(r) => navigate(`/projects/${r.id}`, { state: { from: fromState } })}
             twoTier={{
               isTerminal: (r) => TERMINAL_PROJECT_STATUSES.includes(r.status),
@@ -306,7 +311,8 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "jobNumber",
                 label: "Job #",
-                width: 55,
+                width: 70,
+                align: "l",
                 noRightDivider: true,
                 headerStyle: { paddingLeft: 14, paddingRight: 2 },
                 sort: (a, b) => (a.jobNumber ?? "").localeCompare(b.jobNumber ?? ""),
@@ -317,6 +323,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "name",
                 label: "Project / Client",
+                align: "l",
                 sort: (a, b) => a.name.localeCompare(b.name),
                 render: (r) => {
                   // Resolve the client label defensively: prefer the embed,
@@ -389,7 +396,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                 key: "status",
                 label: "Status",
                 align: "c",
-                width: 96,
+                width: 110,
                 sort: (a, b) => a.status.localeCompare(b.status),
                 render: (r) => (
                   <ClickPillCell
@@ -410,6 +417,7 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "nextDeliverable",
                 label: "Next Deliverable",
+                align: "l",
                 render: (r) =>
                   r.nextDeliverableTitle ? (
                     <div>
@@ -425,6 +433,8 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
               {
                 key: "live",
                 label: "Live",
+                align: "l",
+                width: 120,
                 sort: (a, b) => (a.liveStartIso ?? "").localeCompare(b.liveStartIso ?? ""),
                 render: (r) =>
                   r.liveStartIso ? (
@@ -437,39 +447,44 @@ export default function ProjectsList({ view }: { view: ViewKind }) {
                   ),
               },
               {
-                key: "leadDesignerNames",
-                label: "Account / Design Leads",
-                width: 150,
+                // Phase 6.1 (P1): split the old combined "Account / Design
+                // Leads" cell into two centered columns (first names only),
+                // dropping the 60%-width hairline divider. Mirrors
+                // AllActiveProjectsCard's separate Lead / Design rendering.
+                key: "account",
+                label: "Account",
+                align: "c",
+                width: 95,
                 sort: (a, b) =>
                   (a.leadNames[0] ?? "").localeCompare(b.leadNames[0] ?? ""),
                 render: (r) => {
-                  // 5.7.4 smoke round 2: show first names only; both rows
-                  // share the same text style; hairline divider is 60% of
-                  // cell width with the left edge flush at the cell start.
-                  const firstNamesOf = (names: string[]) =>
-                    names
-                      .map((n) => n.trim().split(/\s+/)[0])
-                      .filter(Boolean);
                   const leads = firstNamesOf(r.leadNames);
+                  return (
+                    <div style={{ fontSize: 12, lineHeight: 1.35 }}>
+                      {leads.length ? leads.join(" · ") : "-"}
+                    </div>
+                  );
+                },
+              },
+              {
+                key: "design",
+                label: "Design",
+                align: "c",
+                width: 95,
+                sort: (a, b) =>
+                  (a.designerNames[0] ?? "").localeCompare(b.designerNames[0] ?? ""),
+                render: (r) => {
                   const designers = firstNamesOf(r.designerNames);
                   return (
                     <div style={{ fontSize: 12, lineHeight: 1.35 }}>
-                      <div>{leads.length ? leads.join(" · ") : "-"}</div>
-                      <div
-                        style={{
-                          height: 1,
-                          width: "75%",
-                          background: "hsl(var(--border))",
-                          margin: "4px 0",
-                        }}
-                      />
-                      <div>{designers.length ? designers.join(" · ") : "-"}</div>
+                      {designers.length ? designers.join(" · ") : "-"}
                     </div>
                   );
                 },
               },
             ]}
           />
+          </div>
           <span className="cap">
             {activeCount} active projects shown · {terminalCount} complete or cancelled hidden
           </span>

@@ -26,9 +26,9 @@ import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 import { unzipSync, strFromU8 } from "https://esm.sh/fflate@0.8.2";
 import { parseClaudeJson } from "../_shared/parseClaudeJson.ts";
 import { buildClaudeEvalRequest, classifyDetectedUrls, getClaudeStaticPrefixLength } from "../_shared/buildClaudeEvalRequest.ts";
-import { pickBestPortfolioUrl, pickPortfolioAttachment, buildPortfolioInputs, unwrapSecurityWrapper } from "../_shared/unwrapUrl.ts";
-import { uploadAttachmentToStorage, LARGE_ATTACHMENT_THRESHOLD_BYTES } from "../_shared/attachmentStorage.ts";
-import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
+import { pickBestPortfolioUrl, pickPortfolioAttachment, buildPortfolioInputs } from "../_shared/unwrapUrl.ts";
+import { uploadAttachmentToStorage } from "../_shared/attachmentStorage.ts";
+import { requireInternalOrAdminUser } from "../_shared/internalAuth.ts";
 import { getGmailAccessToken } from "../_shared/gmailServiceAccount.ts";
 import { callClaude } from "../_shared/anthropic.ts";
 import type { ClaudeContentPart, ClaudeMessage } from "../_shared/anthropic.ts";
@@ -1236,9 +1236,6 @@ async function processOne(
     bodyHtml = "";
     attachments = [];
     parsedResult = null;
-    // bind unused imports so lint stays quiet
-    void unwrapSecurityWrapper;
-    void LARGE_ATTACHMENT_THRESHOLD_BYTES;
   }
 
   // Phase 3.7.2.1: AI rejection now uses 'reject' (was 'auto_rejected').
@@ -1517,7 +1514,7 @@ async function startPull(supabase: ServiceClient, roleId: string, body: PullRequ
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  const authFail = await requireInternalOrUserAuth(req);
+  const authFail = await requireInternalOrAdminUser(req);
   if (authFail) return new Response(authFail.body, { status: authFail.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   const supabase = sb();
 

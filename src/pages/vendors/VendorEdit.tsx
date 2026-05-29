@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { syncJoinRows } from "@/lib/projects/syncJoinRows";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
-import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { VendorFilesEditor } from "@/components/data/VendorFilesEditor";
 import { useLookup } from "@/lib/hq/lookups";
 import { formatPhone } from "@/lib/hq/phone";
@@ -272,33 +273,48 @@ export default function VendorEdit() {
       }
     }
 
-    // Diff project_vendors join. Insert added pairs, delete removed pairs.
+    // Diff the project_vendors join, collecting (not swallowing) errors.
+    const joinErrors: PostgrestError[] = [];
     if (vendorId) {
-      const pvAdd = projectIds.filter((p) => !initialProjectIds.includes(p));
-      const pvRemove = initialProjectIds.filter((p) => !projectIds.includes(p));
-      for (const projectId of pvAdd) {
-        await supabase
-          .from("project_vendors")
-          .insert({ project_id: projectId, vendor_id: vendorId });
-      }
-      for (const projectId of pvRemove) {
-        await supabase
-          .from("project_vendors")
-          .delete()
-          .eq("project_id", projectId)
-          .eq("vendor_id", vendorId);
-      }
+      const vid = vendorId;
+      joinErrors.push(
+        ...(await syncJoinRows({
+          prevIds: initialProjectIds,
+          nextIds: projectIds,
+          insert: (projectId) =>
+            supabase.from("project_vendors").insert({ project_id: projectId, vendor_id: vid }),
+          remove: (projectId) =>
+            supabase.from("project_vendors").delete().eq("project_id", projectId).eq("vendor_id", vid),
+        })),
+      );
     }
 
     setSaving(false);
     if (isCreate && vendorId) {
-      toast({ title: "Vendor created" });
+      toast(
+        joinErrors.length > 0
+          ? {
+              title: "Vendor created, but some project links didn't save",
+              description: joinErrors[0].message,
+              variant: "destructive",
+            }
+          : { title: "Vendor created" },
+      );
       navigate(`/vendors/${vendorId}`);
-    } else {
-      setInitial(form);
-      setInitialProjectIds(projectIds);
-      toast({ title: "Saved" });
+      return;
     }
+    setInitial(form);
+    if (joinErrors.length > 0) {
+      // Keep the project baseline stale so the bar stays dirty for a retry.
+      toast({
+        title: "Some project links didn't save",
+        description: joinErrors[0].message,
+        variant: "destructive",
+      });
+      return;
+    }
+    setInitialProjectIds(projectIds);
+    toast({ title: "Saved" });
   };
 
   // Phase 5.7.3 § 3.B: hard delete. Cascade posture (verified against the
@@ -332,22 +348,7 @@ export default function VendorEdit() {
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
-      <Link
-        to={isCreate ? "/vendors" : `/vendors/${id}`}
-        className="tlink"
-        onClick={(e) => {
-          if (dirty) {
-            e.preventDefault();
-            setConfirmLeaveOpen(true);
-          }
-        }}
-      >
-        <IconArrowLeft className="ic" />
-        Back to {isCreate ? "Vendors" : "vendor"}
-      </Link>
-
       <div className="pagehead">
-        <div className="eyebrow">Vendor</div>
         <h1 className="h-page">{isCreate ? "New Vendor" : "Edit Vendor"}</h1>
       </div>
 

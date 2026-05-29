@@ -23,7 +23,7 @@ import { parseClaudeJson } from "../_shared/parseClaudeJson.ts";
 import { buildClaudeEvalRequest, classifyDetectedUrls, getClaudeStaticPrefixLength } from "../_shared/buildClaudeEvalRequest.ts";
 import { pickBestPortfolioUrl, pickPortfolioAttachment, buildPortfolioInputs } from "../_shared/unwrapUrl.ts";
 import { uploadAttachmentToStorage } from "../_shared/attachmentStorage.ts";
-import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
+import { requireInternalOrAdminUser } from "../_shared/internalAuth.ts";
 import { getGmailAccessToken } from "../_shared/gmailServiceAccount.ts";
 import { callClaude, type ClaudeMessage, type ClaudeContentPart } from "../_shared/anthropic.ts";
 
@@ -120,7 +120,7 @@ async function extractDocxText(bytes: Uint8Array, filename = "document.docx"): P
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  const authFail = await requireInternalOrUserAuth(req);
+  const authFail = await requireInternalOrAdminUser(req);
   if (authFail) return new Response(authFail.body, { status: authFail.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   const supabase = sb();

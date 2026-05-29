@@ -5,9 +5,10 @@ import { splitMultiValue } from "@/lib/multiValue";
  * Generic unresolved-ref enumeration shared by every entity's
  * `buildUnresolved`. Walks the parsed sheet, collects every distinct raw
  * value found in `refResolved` columns, grouped by ref kind. Multi-value
- * columns split on the canonical delimiter set (`/`, `,`; `|` accepted during
- * the Phase 5.16.1.1 transition window) so each token resolves independently.
- * Sync (no DB): the actual existence match happens in MapStep.
+ * columns split on pipe `|` ONLY (the v1.0 contract): slash `/` and comma `,`
+ * are literal content from the splitter's view, so a value like
+ * "Theatre/Auditorium" stays one token and each piped token resolves
+ * independently. Sync (no DB): the actual existence match happens in MapStep.
  *
  * Columns that share a `refKind` collapse into one group, so a value that
  * appears in multiple columns resolves once and applies everywhere.
@@ -55,10 +56,11 @@ export function enumerateUnresolvedRefs(
 }
 
 /**
- * Split a multi-value cell into trimmed non-empty tokens on the canonical
- * delimiter set (`/`, `,`; legacy `|` during the transition window). Thin
- * wrapper over the shared `splitMultiValue` so all bulk-import callsites and
- * the edge parser stay on one delimiter contract.
+ * Split a multi-value cell into trimmed non-empty tokens on pipe `|` ONLY
+ * (the v1.0 contract): slash `/` and comma `,` are literal (comma stays the
+ * CSV column delimiter, never a multi-value separator). Thin wrapper over the
+ * shared `splitMultiValue` so all bulk-import callsites and the edge parser
+ * stay on one delimiter contract.
  */
 export function splitMulti(cell: unknown): string[] {
   return splitMultiValue(cell);

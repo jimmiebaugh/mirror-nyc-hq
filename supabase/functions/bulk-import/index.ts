@@ -18,9 +18,9 @@
 // RPC) can roll back the cross-table write atomically.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { validateProjectImport } from "./_validators/project.ts";
-import { validateVendorImport } from "./_validators/vendor.ts";
-import { validateVenueImport } from "./_validators/venue.ts";
+import { normalizeProjectImportRows, validateProjectImport } from "./_validators/project.ts";
+import { normalizeVendorImportRows, validateVendorImport } from "./_validators/vendor.ts";
+import { normalizeVenueImportRows, validateVenueImport } from "./_validators/venue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,6 +65,7 @@ type EntityHandlerResult = {
 
 type EntityHandler = {
   entity_type: string;
+  normalize?: (rows: Record<string, unknown>[]) => Record<string, unknown>[];
   validate: (
     rows: Record<string, unknown>[],
     queued_refs: Record<string, Array<Record<string, unknown>>>,
@@ -85,11 +86,26 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function validationSummary(errors: ValidationError[], unresolved: UnresolvedRef[]): string {
+  const parts = errors.slice(0, 3).map((e) =>
+    `Row ${e.row_index + 1}, ${e.column}: ${e.message}`
+  );
+  if (unresolved.length > 0 && parts.length < 3) {
+    parts.push(...unresolved.slice(0, 3 - parts.length).map((r) =>
+      `${r.kind}: "${r.raw_value}" is unresolved`
+    ));
+  }
+  const total = errors.length + unresolved.length;
+  const suffix = total > parts.length ? `; and ${total - parts.length} more` : "";
+  return parts.length > 0 ? `Validation failed: ${parts.join("; ")}${suffix}` : "Validation failed";
+}
+
 // project handler: thin wrapper over the SECURITY DEFINER RPC. The RPC owns the
 // session + activity_log writes, so commit() returns session_id and the edge
 // function skips its own session write below.
 const projectHandler: EntityHandler = {
   entity_type: "project",
+  normalize: normalizeProjectImportRows,
   validate: (rows, queued_refs) => validateProjectImport(rows, queued_refs),
   commit: async (rows, queued_refs, sb, actor_id, column_set) => {
     const { data, error } = await sb.rpc("bulk_import_commit_projects", {
@@ -121,6 +137,7 @@ const projectHandler: EntityHandler = {
 // returns session_id, so the edge function skips its own session write below.
 const vendorHandler: EntityHandler = {
   entity_type: "vendor",
+  normalize: normalizeVendorImportRows,
   validate: (rows, queued_refs) => validateVendorImport(rows, queued_refs),
   commit: async (rows, queued_refs, sb, actor_id, column_set) => {
     const { data, error } = await sb.rpc("bulk_import_commit_vendors", {
@@ -152,6 +169,7 @@ const vendorHandler: EntityHandler = {
 // returns session_id, so the edge function skips its own session write below.
 const venueHandler: EntityHandler = {
   entity_type: "venue",
+  normalize: normalizeVenueImportRows,
   validate: (rows, queued_refs) => validateVenueImport(rows, queued_refs),
   commit: async (rows, queued_refs, sb, actor_id, column_set) => {
     const { data, error } = await sb.rpc("bulk_import_commit_venues", {
@@ -276,11 +294,12 @@ Deno.serve(async (req) => {
     );
   }
 
-  const { errors, unresolved } = handler.validate(rows, queued_refs);
+  const normalizedRows = handler.normalize ? handler.normalize(rows) : rows;
+  const { errors, unresolved } = handler.validate(normalizedRows, queued_refs);
   if (errors.length > 0 || unresolved.length > 0) {
     return jsonResponse({
       ok: false,
-      error: "Validation failed",
+      error: validationSummary(errors, unresolved),
       validation_errors: errors,
       unresolved_refs: unresolved,
     }, 400);
@@ -290,8 +309,8 @@ Deno.serve(async (req) => {
     return jsonResponse({
       ok: true,
       mode,
-      parsed_count: rows.length,
-      summary: { rows: rows.length, queued_ref_kinds: Object.keys(queued_refs) },
+      parsed_count: normalizedRows.length,
+      summary: { rows: normalizedRows.length, queued_ref_kinds: Object.keys(queued_refs) },
     });
   }
 
@@ -303,7 +322,7 @@ Deno.serve(async (req) => {
 
   try {
     const result = await handler.commit(
-      rows,
+      normalizedRows,
       queued_refs,
       adminClient,
       userId,

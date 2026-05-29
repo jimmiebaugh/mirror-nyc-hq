@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { syncJoinRows } from "@/lib/projects/syncJoinRows";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
+import { VenueFilesEditor } from "@/components/data/VenueFilesEditor";
 import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import { InlineEditText } from "@/components/hq/InlineEditText";
-import { IconArrowLeft, IconLink, IconSlides } from "@/components/icons/HQIcons";
+import { IconLink, IconSlides } from "@/components/icons/HQIcons";
 import { prettyHost } from "@/lib/url";
 import { VenueTypePill } from "@/components/venues/VenueTypePill";
 import { Button } from "@/components/ui/button";
@@ -265,33 +268,49 @@ export default function VenueEdit() {
       }
     }
 
+    const joinErrors: PostgrestError[] = [];
     if (venueId) {
-      const toAdd = typeIds.filter((t) => !initialTypeIds.includes(t));
-      const toRemove = initialTypeIds.filter((t) => !typeIds.includes(t));
-      for (const venueTypeId of toAdd) {
-        await supabase
-          .from("venue_venue_types")
-          .insert({ venue_id: venueId, venue_type_id: venueTypeId });
-      }
-      for (const venueTypeId of toRemove) {
-        await supabase
-          .from("venue_venue_types")
-          .delete()
-          .eq("venue_id", venueId)
-          .eq("venue_type_id", venueTypeId);
-      }
+      const vid = venueId;
+      joinErrors.push(
+        ...(await syncJoinRows({
+          prevIds: initialTypeIds,
+          nextIds: typeIds,
+          insert: (venueTypeId) =>
+            supabase.from("venue_venue_types").insert({ venue_id: vid, venue_type_id: venueTypeId }),
+          remove: (venueTypeId) =>
+            supabase.from("venue_venue_types").delete().eq("venue_id", vid).eq("venue_type_id", venueTypeId),
+        })),
+      );
     }
 
     setSaving(false);
-    setInitial(form);
-    setInitialTypeIds(typeIds);
-    setInitialVendorIds(vendorIds);
     if (isCreate && venueId) {
-      toast({ title: "Venue created" });
+      toast(
+        joinErrors.length > 0
+          ? {
+              title: "Venue created, but some venue types didn't save",
+              description: joinErrors[0].message,
+              variant: "destructive",
+            }
+          : { title: "Venue created" },
+      );
       navigate(`/venues/${venueId}`);
-    } else {
-      toast({ title: "Saved" });
+      return;
     }
+    // Update mode: the venues row + exclusive_vendor_ids column persisted.
+    setInitial(form);
+    setInitialVendorIds(vendorIds);
+    if (joinErrors.length > 0) {
+      // Keep the type baseline stale so the bar stays dirty for a retry.
+      toast({
+        title: "Some venue types didn't save",
+        description: joinErrors[0].message,
+        variant: "destructive",
+      });
+      return;
+    }
+    setInitialTypeIds(typeIds);
+    toast({ title: "Saved" });
   };
 
   const onLogRate = async () => {
@@ -392,22 +411,7 @@ export default function VenueEdit() {
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
-      <Link
-        to={isCreate ? "/venues" : `/venues/${id}`}
-        className="tlink"
-        onClick={(e) => {
-          if (dirty) {
-            e.preventDefault();
-            setConfirmLeaveOpen(true);
-          }
-        }}
-      >
-        <IconArrowLeft className="ic" />
-        Back to {isCreate ? "Venues" : "venue"}
-      </Link>
-
       <div className="pagehead">
-        <div className="eyebrow">Venue</div>
         <h1 className="h-page">{isCreate ? "New Venue" : "Edit Venue"}</h1>
       </div>
 
@@ -690,6 +694,8 @@ export default function VenueEdit() {
           />
         </div>
       </section>
+
+      {!isCreate && id ? <VenueFilesEditor venueId={id} /> : null}
 
       <StickySaveBar
         dirty={dirty}

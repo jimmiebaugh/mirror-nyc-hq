@@ -17,25 +17,7 @@ The deck template's master slide settings nail down exact font families, weights
 
 ## 1. Color palette
 
-All values from `BLANK DECK TEMPLATE (2026).pptx` slide-master XML.
-
-| Token | Hex | HSL | Usage |
-| --- | --- | --- | --- |
-| `--background` | `#000000` | `0 0% 0%` | Page background, primary surface |
-| `--foreground` | `#FFFFFF` | `0 0% 100%` | Primary text |
-| `--surface` | `#0A0A0A` | `0 0% 4%` | Default cards / panels (lifted from black by 4%) |
-| `--surface-alt` | `#141414` | `0 0% 8%` | Inputs, hover-state surfaces, and applied HQ sectioned cards per `docs/design-system.md` |
-| `--surface-raised` | `#1F1F1F` | `0 0% 12%` | Elevated panels, popovers |
-| **`--primary`** | **`#BE4E44`** | `4 47% 51%` | **The Mirror coral.** All CTAs, accent text, brand mark "HQ" suffix, R-round pills |
-| `--primary-hover` | `#CC5C52` | `4 53% 56%` | Hover state on coral CTAs (lift +5% lightness) |
-| `--primary-foreground` | `#FFFFFF` | `0 0% 100%` | Text on coral |
-| `--muted-foreground` | `#C8C8C8` | `0 0% 78%` | Secondary text |
-| `--subtle-foreground` | `#8A8A8A` | `0 0% 54%` | Tertiary / placeholder text |
-| `--border` | `#2A2A2A` | `0 0% 16%` | Default hairlines |
-| `--border-strong` | `#3A3A3A` | `0 0% 23%` | Stronger borders for inputs / dividers |
-| `--success` | `#4ADE80` | `142 76% 64%` | Latest / Final Report / T3 / Complete |
-| `--warn` | `#F59E0B` | `38 92% 50%` | Running / In Pool / In progress |
-| `--destructive` | `#EF4444` | `0 84% 60%` | Failed / Stalled / Closed / T1 / Reject |
+All values sourced from `BLANK DECK TEMPLATE (2026).pptx` slide-master XML. The shipped token table (hex + HSL + usage, matching the locked `src/index.css`) lives in `docs/design-system.md` § 1 Tokens, canonical. The deck-voice notes below are the part that lives nowhere else.
 
 **Notes on coral:** The deck's coral is `#BE4E44`: duskier and more terracotta than the source app's `#ef5b5b`. On a black background it reads more "Mirror branded" and less "consumer-tech CTA red." This is the single biggest token change vs Phase 3.5b's current branch.
 
@@ -66,28 +48,9 @@ Google Fonts import:
 --font-mono: 'Roboto Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 ```
 
-### Type scale (proposed)
+### Type scale
 
-**Note:** the table below captures the deck-canonical brand voice for type. It is **approximate** and has not been updated to match shipped CSS values. For all type utility class specs, `docs/design-system.md` § 1 is authoritative (values there match `src/index.css` exactly). Key divergences: `.eyebrow` ships at 14px / Roboto Mono 700 (not 11px 400-weight); `.label-section` ships at 13px 400-weight; `.label-form` ships at 12px 700-weight. `design-system.md` wins on any conflict.
-
-The deck uses 36pt for hero titles and 16pt for accent captions on a presentation slide. For a dashboard at typical viewing distance, scale to:
-
-| Use | Family / weight | Size | Tracking | Casing |
-| --- | --- | --- | --- | --- |
-| Page subtitle | Roboto Mono 400 | 13px | 0.06em | UPPERCASE |
-| Card title (h3) | Montserrat ExtraBold (800) | 18px | normal | Title Case OK |
-| Eyebrow caption (e.g. "TALENT SCOUT", "PULL ROUND") | Roboto Mono 400 | 11px | 0.08em | UPPERCASE |
-| Section label (e.g. "RECRUITER OVERVIEW", "FILES & MATERIALS") | Roboto Mono 700 | 11px | 0.06em | UPPERCASE |
-| Form label | Roboto Mono 700 | 11px | 0.06em | UPPERCASE |
-| Stat tile label | Roboto Mono 700 | 11px | 0.08em | UPPERCASE |
-| Stat tile number | Montserrat ExtraBold (800) | 32px tabular | normal | as-is |
-| Body paragraph | Roboto 400 | 14px | normal | Sentence case |
-| Body small (notes, captions, helper text) | Roboto 400 | 13px | normal | Sentence case |
-| Pill / badge | Roboto Mono 700 | 10.5px | 0.06em | UPPERCASE |
-| Button label | Roboto Mono 700 | 12px | 0.06em | UPPERCASE |
-| Inline timestamp / metadata | Roboto Mono 400 | 12px | normal | as-is |
-| Table header | Roboto Mono 700 | 11px | 0.06em | UPPERCASE |
-| Table cell | Roboto 400 | 13-14px | normal | Sentence case |
+The deck uses 36pt hero titles and 16pt accent captions on a presentation slide; HQ scales that down for dashboard viewing distance. The shipped type utility class specs (sizes, weights, tracking, casing, matching `src/index.css`) are canonical in `docs/design-system.md` § 1 Type. (An earlier approximate table here had diverged from the shipped CSS, so it was dropped; `design-system.md` wins on any conflict.)
 
 ### Why all-caps everywhere
 
@@ -95,123 +58,43 @@ It's not "Mirror loves yelling." All-caps + Roboto Mono is the deck's caption sy
 
 ## 3. Component conventions
 
+Applied className specs for these components (button / pill / tier-badge / input / card / header-nav / eyebrow / page-title sizing) were promoted to `docs/design-system.md` in the Phase 5 reconciliation; that doc is canonical. What follows is the brand-signal voice that lives nowhere else.
+
 ### Buttons
 
-```tsx
-// Primary (coral)
-className="h-10 px-5 rounded-sm bg-primary text-primary-foreground hover:bg-primary-hover
-           font-mono font-bold uppercase text-[12px] tracking-[0.06em]"
-
-// Secondary (ghost outline)
-className="h-10 px-5 rounded-sm bg-transparent border border-border-strong text-foreground
-           hover:bg-white/5 hover:border-foreground
-           font-mono font-bold uppercase text-[12px] tracking-[0.06em]"
-
-// Tertiary (text-only)
-className="h-9 px-3 text-foreground hover:text-primary
-           font-mono font-bold uppercase text-[11px] tracking-[0.06em]"
-```
-
-- **Radius:** 4px (`rounded-sm` with current Tailwind base of `0.25rem`).
-- **Height:** 40px primary/secondary, 36px tertiary.
-- **Casing:** Use sentence/title case in source strings and let the component class control uppercase where the system calls for it. Avoid all-caps source labels for working-app commands.
-- **Coral usage:** Only ONE primary coral button per visible viewport. Anything else is secondary or tertiary.
+**Coral restraint:** only ONE primary coral button per visible viewport. Everything else is secondary (ghost outline) or tertiary (text-only). Casing: keep sentence/title case in source strings and let the component class apply uppercase where the system calls for it; avoid all-caps source labels for working-app commands.
 
 ### Pills (status, tier, R-round)
 
-```tsx
-// R-round pill (coral primary)
-className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-primary/40 bg-primary/15 text-primary
-           font-mono font-bold uppercase text-[10.5px] tracking-[0.06em]"
-
-// Status: Active / Running (warn amber)
-className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-warn/30 bg-warn/10 text-warn
-           font-mono font-bold uppercase text-[10.5px] tracking-[0.06em]"
-
-// Status: Complete / Latest / Final Report (success green)
-className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-success/30 bg-success/10 text-success
-           font-mono font-bold uppercase text-[10.5px] tracking-[0.06em]"
-
-// Status: Failed / Stalled / Closed (destructive red)
-className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-destructive/30 bg-destructive/10 text-destructive
-           font-mono font-bold uppercase text-[10.5px] tracking-[0.06em]"
-```
-
-All pills get a 6px round dot prefix (`<span className="h-1.5 w-1.5 rounded-full bg-current" />`): that's the deck's micro-marker pattern.
+Every pill gets a 6px round dot prefix (`bg-current`): that's the deck's micro-marker pattern. The R-round pill carries coral primary; status and tier pills draw from the success / warn / destructive signal colors.
 
 ### Tier badges (scorecard)
 
-| Tier | Color | Visual |
-| --- | --- | --- |
-| Tier 1: Must-Haves | Destructive red `#EF4444` | `bg-destructive/10 border-destructive/30 text-destructive` |
-| Tier 2: Strong Differentiators | Warn amber `#F59E0B` | `bg-warn/10 border-warn/30 text-warn` |
-| Tier 3: Nice-to-Haves | Success green `#4ADE80` | `bg-success/10 border-success/30 text-success` |
-| Bonus: Competitor Experience | Coral primary `#BE4E44` | `bg-primary/15 border-primary/40 text-primary` |
+Tier 1 Must-Haves = destructive, Tier 2 Strong Differentiators = warn, Tier 3 Nice-to-Haves = success, Bonus Competitor Experience = coral primary. Hex + applied classes in `docs/design-system.md` § 1.
 
 ### StatusDropdown (candidate status)
 
-| Status | Color | Hex |
-| --- | --- | --- |
-| Interview | Cyan-500 | `#06B6D4` |
-| Fast-Track | Purple-500 | `#A855F7` |
-| Consider | Warn amber | `#F59E0B` |
-| Reject | Destructive red | `#EF4444` |
-| Auto-Rejected | Muted destructive (red-400 at 80%) | (disabled state) |
-
-These don't appear in the deck (deck doesn't have status dropdowns), so this is "source-aligned with brand-friendly neutrals": interview cyan and fast-track purple are bright but not in the brand palette, used only on inline controls where they need to be quickly distinguishable.
+Status dropdowns don't appear in the deck, so interview cyan and fast-track purple are bright non-brand neutrals used only on inline controls where statuses need to be quickly distinguishable. Hex values are canonical in `docs/design-system.md` § 1 (`--info` cyan, `--purple`).
 
 ### Inputs
 
-```tsx
-className="w-full h-11 px-3 rounded-sm bg-surface-alt border border-border-strong
-           text-foreground text-[14px] outline-none transition-shadow
-           focus:border-primary focus:shadow-[0_0_0_3px_hsl(var(--primary)/0.15)]
-           placeholder:text-subtle-foreground placeholder:font-mono placeholder:text-[13px]"
-```
-
-- **Height:** 44px (deck's input metric).
-- **Radius:** 4px.
-- **Focus ring:** 3px coral at 15%: the deck's accent treatment.
-- **Filled state:** add `border-l-2 border-l-primary` to indicate completed-step inputs in wizard flows.
+Focus ring is 3px coral at 15%: the deck's accent treatment. In wizard flows, a `border-l-2 border-l-primary` left edge marks completed-step inputs. Sizing canon in `docs/design-system.md` § 1.
 
 ### Cards / panels
 
-- 4px radius. Pure flat: no shadow.
-- Background starts from `--surface` (`#0A0A0A`: barely lifted off black). Applied HQ sectioned content cards use `--surface-alt` per `docs/design-system.md`; use `--surface` for quieter default panels.
-
-For padding + sizing canon, see `docs/design-system.md` § 1 Spacing + radius + Component sizing.
+Pure flat, no shadow. Background starts from `--surface` (barely lifted off black) for quieter default panels; applied HQ sectioned content cards use `--surface-alt`. Padding + sizing canon in `docs/design-system.md` § 1 Spacing + radius + Component sizing.
 
 ### Header / nav
 
-```tsx
-// Nav bar
-className="sticky top-0 z-40 border-b border-border bg-background h-14"
-
-// Brand wordmark
-"Mirror NYC HQ" with HQ in coral primary, Montserrat ExtraBold-equivalent.
-className="font-display font-extrabold uppercase text-[15px] tracking-tight"
-
-// Nav links
-className="font-mono font-bold uppercase text-[11px] tracking-[0.08em] text-muted-foreground hover:text-foreground"
-```
+Brand wordmark is "Mirror NYC HQ" with the "HQ" suffix in coral primary, Montserrat ExtraBold display. Applied nav-bar / wordmark / nav-link specs in `docs/design-system.md`.
 
 ### Eyebrow caption (the `TALENT SCOUT` / `← BACK TO ROLE` pattern)
 
-```tsx
-className="font-mono font-bold uppercase text-[11px] tracking-[0.08em] text-primary mb-2"
-```
-
-Use this above every page title to create the deck's hierarchy of "small mono caption → big Montserrat title."
+A small coral mono-caps caption sits above every page title to create the deck's hierarchy of "small mono caption → big Montserrat title." Applied className in `docs/design-system.md`.
 
 ### Page title (h1)
 
-```tsx
-<h1 className="font-display font-extrabold uppercase text-[32px] leading-none tracking-[-0.01em] mb-2">
-  {title}
-</h1>
-```
-
-For role names, candidate names, settings titles: same treatment.
+Big Montserrat ExtraBold uppercase, same treatment for role names, candidate names, and settings titles. Applied className in `docs/design-system.md`.
 
 ### Side rail (optional decorative, not a system pattern)
 
@@ -219,7 +102,7 @@ The deck's vertical "STRATEGY / DESIGN / PRODUCTION" + "MIRROR NYC" rail with a 
 
 ## 4. Locked decisions (history)
 
-The Phase 3.5b application of this guide locked the brand foundation: coral `#BE4E44` (dusty terracotta, not the original `#ef5b5b` bright); Montserrat ExtraBold display + Roboto Mono caption + Roboto body; ALL CAPS page titles + sentence-case button source strings (uppercase via component classes); coral restraint kept at the existing frequency (CTAs + eyebrows + R-round pill). Side-rail pattern explored only on landing pages, not in Talent Scout. For the original application notes + open-question Q&A see commit history.
+The brand foundation (dusty coral, Montserrat/Roboto Mono/Roboto stack, all-caps titles, coral restraint, side-rail kept off the dashboard) was locked in Phase 3.5b; rationale in `docs/decisions.md`, phase narration in `docs/v1-changelog.md`.
 
 ## 5. What this style guide does NOT cover
 

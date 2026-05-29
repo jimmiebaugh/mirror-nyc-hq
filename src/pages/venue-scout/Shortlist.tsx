@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check } from "lucide-react";
+import { Check } from "lucide-react";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Th } from "@/components/venue-scout/matrix/primitives";
 import { VenueMatrixRow } from "@/components/venue-scout/matrix/VenueMatrixRow";
 import { useVenueTypes } from "@/lib/venue-scout/useVenueTypes";
@@ -423,9 +423,10 @@ export default function Shortlist() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-6">
           <Link
             to={`/venue-scout/scouts/${scoutId}/sourcing/report`}
-            className="crumb inline-flex items-center gap-1.5"
+            className="btn btn-tertiary"
           >
-            <ArrowLeft className="h-3 w-3" /> Back
+            <IconArrowLeft className="ic" />
+            Back
           </Link>
           {/* R6 § H.2: text-xs → text-base to match Review's action bar
               center text. */}
@@ -434,9 +435,14 @@ export default function Shortlist() {
             deck ·{" "}
             <strong className="text-foreground">2</strong> minimum to continue
           </div>
-          <Button onClick={onContinue} disabled={!canContinue}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onContinue}
+            disabled={!canContinue}
+          >
             Continue · Review Selects →
-          </Button>
+          </button>
         </div>
       </div>
 

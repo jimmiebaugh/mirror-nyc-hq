@@ -275,6 +275,7 @@ export default function VendorsList() {
         </div>
       ) : (
         <>
+          <div className="tbl-list">
           <DataTable<VendorListRow>
             rows={filtered}
             flat
@@ -295,6 +296,7 @@ export default function VendorsList() {
               {
                 key: "name",
                 label: "Vendor",
+                align: "l",
                 sort: (a, b) => a.name.localeCompare(b.name),
                 render: (r) => (
                   <span className="lead">{r.name}</span>
@@ -337,6 +339,7 @@ export default function VendorsList() {
               {
                 key: "capabilities",
                 label: "Capabilities",
+                align: "l",
                 render: (r) => (
                   <OverflowList
                     asChip
@@ -387,6 +390,7 @@ export default function VendorsList() {
               },
             ]}
           />
+          </div>
           <span className="cap">{filtered.length} vendors</span>
         </>
       )}

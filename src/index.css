@@ -434,7 +434,10 @@
     line-height: 1.35;
   }
   .hq-rail-who b {
+    /* Phase 6.5 (M5): username on Montserrat (display) to match nav chrome;
+       the role line below stays on Roboto Mono (var(--font-mono)). */
     @apply block font-bold;
+    font-family: var(--font-display);
     color: hsl(var(--foreground));
   }
   .hq-rail-who span { color: hsl(var(--subtle-foreground)); }
@@ -521,7 +524,16 @@
   }
 
   /* Home greeting + quick-add cluster */
-  .hq-quickadd { @apply flex gap-2 flex-wrap; }
+  .hq-quickadd { @apply flex gap-2 flex-nowrap min-w-0; }
+  /* Phase 6.4 follow-up: quick-add buttons stay on ONE line as the greeting
+     row narrows (was flex-wrap, which spilled to a 2nd line). nowrap + shrink
+     + reduced padding + label ellipsis; the + icon holds its size. */
+  /* ~20% smaller than the base .btn (height 40->32, font 12->10, icon 14->11
+     via QuickAddCluster, padding/gap trimmed) so the Home cluster reads as
+     compact chips. */
+  .hq-quickadd .btn { flex: 0 1 auto; min-width: 0; height: 32px; gap: 6px; padding-left: 10px; padding-right: 10px; font-size: 10px; }
+  .hq-quickadd .btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hq-quickadd .btn > svg { flex: none; }
   .hq-qa {
     @apply inline-flex items-center gap-[7px] px-[13px];
     height: 36px;
@@ -682,6 +694,12 @@
   .stack-2 > * + *{margin-top:8px;}
   .row{display:flex;gap:12px;}
   .row-c{display:flex;align-items:center;gap:12px;}
+  /* Phase 6.4 (D1): single-line detail-page title row. The h1 ellipsizes
+     while the trailing pills hold their intrinsic size and never wrap, so
+     the title truncates before the pills shrink or drop to a second line. */
+  .row-c-title{display:flex;align-items:center;gap:12px;min-width:0;flex-wrap:nowrap;}
+  .row-c-title > .h-page{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .row-c-title > :not(.h-page){flex:none;}
   .between{justify-content:space-between;}
   .list-head{align-items:flex-end;}
   .wrap{flex-wrap:wrap;}
@@ -793,25 +811,27 @@
   .btn-quickadd:hover{background:hsl(var(--primary-hover));border-color:hsl(var(--primary-hover));}
   .btn-quickadd:disabled{opacity:.5;cursor:not-allowed;}
 
-  /* Phase 5.7.5 follow-up round 1: HQ Core edit-page input restyle.
-     Match the .combobox-trigger inline-edit chrome — transparent fill, no
-     border outline, no coral left edge. Hover/focus get a light coral
-     tint just like RecordCombobox. Scoped to .hq-form wrappers so Talent
-     Scout + Venue Scout forms keep the original surface-alt chrome. */
+  /* Phase 6.4 (N3): HQ Core edit-page input contrast. The new/edit form
+     pages are no-click-to-edit surfaces, so the fields read as contained
+     dark inputs (matching VS BriefEvent/BriefVenue) rather than the
+     transparent inline-edit chrome used on click-to-edit detail surfaces.
+     Solid hsl(var(--input)) fill + border-strong outline; coral focus ring.
+     Scoped to .hq-form so detail-page inline edits + TS/VS forms keep their
+     own chrome. (Reverses the Phase 5.7.5 transparent restyle.) */
   .hq-form .input,
   .hq-form select.input,
   .hq-form textarea.input{
-    background:transparent;
-    border:1px solid transparent;
-    transition:background-color .12s ease;
+    background:hsl(var(--input));
+    border:1px solid hsl(var(--border-strong));
+    transition:background-color .12s ease, border-color .12s ease;
   }
-  .hq-form .input:hover{background:rgba(190,78,68,.06);}
+  .hq-form .input:hover{background:hsl(var(--input));}
   .hq-form .input:focus{
-    background:rgba(190,78,68,.08);
-    border-color:transparent;
-    box-shadow:none;
+    background:hsl(var(--input));
+    border-color:hsl(var(--primary));
+    box-shadow:0 0 0 3px rgba(190,78,68,.15);
   }
-  .hq-form .input--filled{border-left:1px solid transparent;}
+  .hq-form .input--filled{border-left:1px solid hsl(var(--border-strong));}
   .textarea{height:auto;min-height:92px;padding:11px 12px;line-height:1.55;}
   .field{display:flex;flex-direction:column;gap:8px;}
   .field .hint{font-size:12px;color:hsl(var(--subtle-foreground));}
@@ -831,6 +851,24 @@
   .combobox-trigger:hover{background:rgba(190,78,68,.06);}
   .combobox-trigger:focus{background:rgba(190,78,68,.08);}
   .combobox-trigger[disabled]{opacity:.5;cursor:not-allowed;}
+
+  /* Phase 6.4 (N3): inside .hq-form (edit pages), RecordCombobox triggers
+     read as contained dark inputs to match the .input contrast fill + the
+     VS BriefEvent field look, rather than the content-sized transparent
+     inline-edit chrome used on detail surfaces. */
+  .hq-form .combobox-trigger{
+    width:100%;
+    min-height:44px;
+    padding:0 12px;
+    background:hsl(var(--input));
+    border:1px solid hsl(var(--border-strong));
+  }
+  .hq-form .combobox-trigger:hover{background:hsl(var(--input));}
+  .hq-form .combobox-trigger:focus{
+    background:hsl(var(--input));
+    border-color:hsl(var(--primary));
+    box-shadow:0 0 0 3px rgba(190,78,68,.15);
+  }
 
   /* Followup-5: linked-record presentation. When the selected value is
      navigable, the label renders as a coral hyperlink (.combo-link)
@@ -883,7 +921,10 @@
   .rb-destructive{border-left-color:hsl(var(--destructive))!important;}
   .rb-muted{border-left-color:hsl(var(--border-strong))!important;}
   .rb-purple{border-left-color:hsl(var(--purple))!important;}
-  .tbl--flat tbody tr{border-left-color:transparent!important;}
+  /* Phase 6.1 (P6/T3): flat tables carry no left accent, so remove the
+     3px gutter entirely (was `border-left-color:transparent`, which left a
+     dead 3px reserve). Applies to every `.tbl--flat` table by design. */
+  .tbl--flat tbody tr{border-left:0!important;}
 
   /* R7 § A → R7 amendment v1 § 2: `.tbl--matrix` is the VS-matrix canon for
      Sourcing + Shortlist. The matrix bypasses `.tbl` entirely — the
@@ -975,6 +1016,16 @@
      while the base path keeps applying on canonical `.tbl` consumers. */
   .tbl-divider td,
   .tbl-list .tbl tbody tr.tbl-divider td{background:hsl(var(--primary) / 0.3);color:hsl(var(--primary-foreground));padding:10px 14px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-top:1px solid hsl(var(--primary) / 0.3);border-bottom:1px solid hsl(var(--primary) / 0.3);}
+
+  /* Phase 6.1 (G6): done/complete-section divider. Mirrors `.tbl-divider`'s
+     mono chrome but with a muted/neutral fill (surface + subtle-foreground +
+     border) so a "done" divider reads distinct from the active coral
+     `.tbl-divider` (coral is reserved for active/CTA per brand). Dual
+     selector matches `.tbl-divider` so it wins the cell-bg cascade inside
+     `.tbl-list` too. Additive: no consumer is wired this round; swap the
+     three color values to the `--primary` set to make it coral-identical. */
+  .tbl-done td,
+  .tbl-list .tbl tbody tr.tbl-done td{background:hsl(var(--surface));color:hsl(var(--subtle-foreground));padding:10px 14px;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-top:1px solid hsl(var(--border));border-bottom:1px solid hsl(var(--border));}
 
   /* View switcher (icon-segmented). Active = .on. */
   .viewswitch{display:inline-flex;border:1px solid hsl(var(--border-strong));border-radius:var(--radius);overflow:hidden;}
@@ -1171,6 +1222,16 @@
   .actionbar .dirty{font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:hsl(var(--warn));}
   .actionbar .btn{font-size:13px;height:44px;}
   .actionbar .btn-tertiary{height:40px;}
+  /* Phase 6.5 (G8): lift the toast viewport clear of the sticky actionbar
+     whenever one is mounted, so a toast never covers the bar's right button.
+     CSS-only presence detector (no per-component hook) -- :has() targets any
+     .actionbar in the DOM. Scoped to >=640px because the toast is top-
+     positioned on mobile (sm:bottom-0 sm:top-auto); a global bottom would
+     leave mobile pinned both top:0 and bottom:84px. ~76px bar (py-4 32 +
+     44px button) -> 84px offset. */
+  @media (min-width: 640px) {
+    body:has(.actionbar) [data-toast-viewport] { bottom: 84px; }
+  }
 
   /* Phase 5.12.14 HQ Core surfaces */
   /* R7 § C: .hq-explainer flipped to flex-sibling layout. Label sits left
@@ -1241,9 +1302,9 @@
 
   /* Calendar grid */
   .calgrid{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid hsl(var(--border));border-radius:var(--radius);overflow:hidden;}
-  .caldow{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.06em;color:hsl(var(--subtle-foreground));padding:8px 10px;background:hsl(var(--surface-alt));border-bottom:1px solid hsl(var(--border));border-left:1px solid hsl(var(--border));text-transform:uppercase;}
+  .caldow{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.06em;color:hsl(var(--subtle-foreground));padding:8px 10px;background:hsl(var(--surface));border-bottom:1px solid hsl(var(--border));border-left:1px solid hsl(var(--border));text-transform:uppercase;}
   .caldow:first-child{border-left:none;}
-  .calcell{min-height:140px;border-left:1px solid hsl(var(--border));border-bottom:1px solid hsl(var(--border));padding:6px 7px;}
+  .calcell{min-height:140px;border-left:1px solid hsl(var(--border));border-bottom:1px solid hsl(var(--border));padding:6px 7px;background:hsl(var(--surface-alt));}
   .calcell:nth-child(7n+1){border-left:none;}
   .calcell .dn{font-family:var(--font-mono);font-size:10.5px;color:hsl(var(--subtle-foreground));}
   .calcell--off{background:hsl(var(--surface));}
@@ -1293,13 +1354,13 @@
      locked-decisions § 4: On Radar = amber, Likely = cyan, Confirmed =
      green, Complete = gray. Documented in docs/decisions.md Phase 5.3. */
   .olgrid{border:1px solid hsl(var(--border));border-radius:var(--radius);overflow:hidden;}
-  .ol-head{display:grid;grid-template-columns:88px repeat(4,1fr);background:hsl(var(--surface-alt));border-bottom:1px solid hsl(var(--border));}
-  .ol-head div{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.06em;color:hsl(var(--subtle-foreground));padding:8px 10px;text-transform:uppercase;border-left:1px solid hsl(var(--border));}
+  .ol-head{display:grid;grid-template-columns:88px repeat(4,1fr);background:hsl(var(--surface));border-bottom:1px solid hsl(var(--border));}
+  .ol-head div{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.06em;color:hsl(var(--subtle-foreground));padding:8px 10px;text-transform:uppercase;text-align:left;border-left:1px solid hsl(var(--border));}
   .ol-head div:first-child{border-left:none;}
   .ol-row{display:grid;grid-template-columns:88px repeat(4,1fr);border-bottom:1px solid hsl(var(--border));}
   .ol-row:last-child{border-bottom:none;}
   .ol-mn{font-family:var(--font-mono);font-size:11px;font-weight:700;padding:10px;display:flex;align-items:center;background:hsl(var(--surface));text-transform:uppercase;letter-spacing:.04em;}
-  .ol-cell{border-left:1px solid hsl(var(--border));padding:6px;min-height:62px;display:flex;flex-direction:column;gap:4px;}
+  .ol-cell{border-left:1px solid hsl(var(--border));padding:6px;min-height:62px;display:flex;flex-direction:column;gap:4px;background:hsl(var(--surface-alt));}
   .ol-ev{border-radius:3px;padding:5px 7px;border-left:3px solid;font-size:12px;line-height:1.32;cursor:pointer;text-align:left;background:transparent;border-top:none;border-right:none;border-bottom:none;width:100%;}
   .ol-ev .en{font-weight:600;color:hsl(var(--foreground));display:block;}
   .ol-ev .em{font-family:var(--font-mono);font-size:11px;color:hsl(var(--subtle-foreground));margin-top:2px;display:block;}
@@ -1484,6 +1545,37 @@
 }
 
 @layer utilities {
+  /* Phase 6.4 follow-up: VS brief surfaces (BriefEvent/BriefVenue) + the New
+     Scout modal get the same contrast field fill as HQ .hq-form inputs
+     (Jimmie). MUST live in @layer utilities — the shadcn field components use
+     bg-background (a utility-layer class), so a components-layer rule would
+     lose by layer order regardless of specificity. The field components
+     (Input / Textarea / Select / DateRangePicker triggers + the TagInput
+     container) all carry bg-background (pure black); flip them to
+     hsl(var(--input)). RecordCombobox triggers get the same boxed fill as
+     .hq-form for parity. Radix dropdown / calendar popovers portal to <body>,
+     outside this scope, so only the in-flow field triggers change. */
+  .vs-input-contrast .bg-background { background-color: hsl(var(--input)); }
+  /* TagInput pills are bg-input (= --input); once their container flips to
+     --input they would blend in. Bump pills nested inside a flipped container
+     to --border-strong so they stay legible. Scoped to ".bg-background
+     .bg-input" so the standalone DropZone / upload-status boxes (bg-input but
+     NOT nested in a bg-background field) are untouched. */
+  .vs-input-contrast .bg-background .bg-input { background-color: hsl(var(--border-strong)); }
+  .vs-input-contrast .combobox-trigger {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    background: hsl(var(--input));
+    border: 1px solid hsl(var(--border-strong));
+  }
+  .vs-input-contrast .combobox-trigger:hover { background: hsl(var(--input)); }
+  .vs-input-contrast .combobox-trigger:focus {
+    background: hsl(var(--input));
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px rgba(190, 78, 68, 0.15);
+  }
+
   /* ─── Venue Scout matrix utilities (Phase 4.6-port) ───────────────────
      Thin scrollbar for the matrix horizontal scroll. Matrix column-header
      text wrapping keeps "Notes / Feedback" tight. Subtle-text aliases match

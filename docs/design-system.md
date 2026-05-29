@@ -31,7 +31,7 @@ Every new surface uses these. Don't introduce new ones unless approved.
 | `--info` | `189 94% 43%` | `#06B6D4` | Cyan status (In Progress, Install, Likely). Exposed as Tailwind `info` |
 | `--purple` | `268 86% 72%` | `#B57BF5` | Purple status (Removal, Vendor affiliation). Exposed as Tailwind `purple` |
 
-**Gotcha:** slider track + score-bar track must be `bg-input` (not `bg-secondary`). On `bg-surface-alt` cards both share `#141414`, making `bg-secondary` invisible. Phase 3.5/3.7 cost us multiple sessions catching this. See `src/components/ui/slider.tsx` and `src/components/talent-scout/ScoreInline.tsx`.
+**Gotcha:** slider track + score-bar track must be `bg-input` (not `bg-secondary`). On `bg-surface-alt` cards both share `#141414`, making `bg-secondary` invisible (see § 12 item 1). See `src/components/ui/slider.tsx` and `src/components/talent-scout/ScoreInline.tsx`.
 
 ### Type
 
@@ -44,7 +44,7 @@ Sizes (utility classes in `src/index.css`; values below match the shipped CSS, w
 - `.h-page`: page title (`text-[34px] font-display font-extrabold uppercase`)
 - `.h-section`: section header inside a card (`text-[22px] font-display font-extrabold uppercase`)
 - `.h-card`: in-card title on dashboards + `card-headbar` headers (`text-[18px] font-display font-extrabold`)
-- `.label-section`: section eyebrow (`text-[13px] font-mono uppercase tracking-[0.08em]`, **grey** `muted-foreground`)
+- `.label-section`: in-body form-section sub-label, or a label above a list / report (`text-[13px] font-mono uppercase tracking-[0.08em]`, **grey** `muted-foreground`). Phase 6.2: this is NOT a card title. A card's title is always `.h-card` inside its `.card-headbar` (see § 2 Card surfaces).
 - `.label-form`: form-field label (`text-[12px] font-mono font-bold uppercase tracking-[0.06em]`, **grey** `subtle-foreground`)
 - `.eyebrow`: coral eyebrow above a title (`text-[14px] font-mono font-bold uppercase tracking-[0.08em] text-primary`)
 - `.crumb`: back-link breadcrumb (`text-[12px] font-mono font-medium uppercase tracking-[0.08em] text-primary hover:underline`)
@@ -105,15 +105,17 @@ Standard pattern (Phase 5.12.14.3: back-crumb relocated to TopBar globally; capt
 ```
 
 **Eyebrow per surface:**
-- **HQ Core:** eyebrow on Detail and Edit pages (standard).
+- **HQ Core:** eyebrow on Detail pages only. Phase 6.4 dropped the `.pagehead` eyebrow from the Edit / New forms (the `.pagehead` wrapper + h1 stay); ProfileSettings keeps its eyebrow.
 - **Venue Scout:** no `.eyebrow` div. `ScoutPageHeader` (3-zone breadcrumb row) replaces it on in-scout pages.
 - **Talent Scout:** eyebrow only on the New Role wizard (`New Role`) and Edit Role page (`Edit Role`). Non-wizard TS pages (RoleDashboard, PullDetail, Index, CandidateDetail, FinalReviewDetail, FinalReviewLoading, Settings) omit the eyebrow.
 
-The back-crumb is a single global mount in `src/components/shell/TopBar.tsx` via `useReferrerCrumb()`. Renders as `<Link className="crumb hidden md:inline-flex"><IconArrowLeft className="ic ic-sm" />Back</Link>`. Always the literal "Back" (Phase 5.13.1 simplified from contextual `{label}`). Hidden below md. Predicate `showCrumb = href !== "/"` suppresses on root-tier pages. The hook still resolves the correct `href`; the `label` field is retained in the interface for programmatic consumers. See `decisions.md` § Phase 5.12 decision "back-crumb relocation."
+The back-crumb is a single global mount in `src/components/shell/TopBar.tsx` via `useReferrerCrumb()`. Renders as `<Link className="crumb hidden md:inline-flex"><IconArrowLeft className="ic ic-sm" />Back</Link>`. Always the literal "Back" (Phase 5.13.1 simplified from contextual `{label}`). Hidden below md. Predicate `showCrumb = href !== "/"` suppresses on root-tier pages. The hook still resolves the correct `href`; the `label` field is retained in the interface for programmatic consumers. See `decisions.md` § Phase 5.12.
 
 If a page needs instruction copy, use the `.hq-explainer` block below the header, not in the header.
 
 VS scout pages additionally render `<ScoutPageHeader>` (a 3-zone grid: empty left / centered ScoutPhaseBreadcrumb / ScoutSettingsLink right) between the TopBar crumb and the page body. See § 10 for the component.
+
+`.hq-scout-label` is the TopBar center-zone label rendered inside any active VS scout route (`/venue-scout/scouts/:id/*`): Montserrat 15px font-extrabold uppercase tracking-[-0.01em], `foreground` color, matching the `.hq-brand-txt` cadence as a peer of the left-zone wordmark (defers visually to the brand's 21px). TopBar renders `Client Name · Event Name` with a `mx-2 opacity-50` mid-dot separator; hidden below md. Consumer: `src/components/shell/TopBar.tsx`.
 
 Reference: `src/pages/talent-scout/Settings.tsx`, `src/pages/projects/ProjectDetail.tsx`. VS reference: `src/pages/venue-scout/BriefEvent.tsx`.
 
@@ -136,6 +138,7 @@ HQ Core detail pages use a shared header and field rhythm:
 
 - Back-crumb renders globally in TopBar (not in page chrome). See "Page header" above.
 - Header stack is `.eyebrow`, plain `.h-page` title, optional hero pill next to the title, then `.detail-meta` with 8px top margin.
+- The title row uses `.row-c-title` (Phase 6.4 D1): the `.h-page` h1 ellipsizes single-line while any hero pill holds its size, so a long title truncates instead of wrapping under the pill (VenueDetail + ProjectDetail headers).
 - `.detail-meta` values are truthy-only and joined with `·`; do not render placeholder bullets.
 - Card fields use `src/components/hq/DField.tsx`, label above value, and row dividers between logical groups.
 - Schedule dates use `formatShortDate()`. Completion and historical dates keep the year with `formatMediumDate()`.
@@ -163,9 +166,9 @@ The `.card` pattern is canonical for all surfaces (established in 5.12.14.3, con
 
 CSS: `.card` = `bg-surface-alt` + `border` + `border-radius`. `.card-headbar` = flex row with bottom border, 14px 20px padding. `.h-card` inside `.card-headbar` = 15px (overrides the base 18px). `.card-pad` = 24px padding. Defined in `src/index.css`.
 
-Reference: `src/pages/projects/ProjectDetail.tsx` (Details, Deliverables, Tasks, Team, Vendors sections all use this pattern).
+**Card-title canon (Phase 6.2): every card's title is a `.h-card` inside its `.card-headbar`, app-wide, no exceptions.** An optional right-slot action (e.g. a `.tlink` "Save as default") lives in the same headbar. `.label-section` / `.block-lbl` are NOT card titles (they are in-body form-section sub-labels and labels above lists / reports). The 6.2 sweep flipped the last holdouts onto this canon (TeamMemberEdit, ProfileSettings, WikiPageEdit) and converted SheetUploadCard from shadcn `<Card>` / `<CardContent>` to `.card` + `.card-headbar` + `.card-pad`.
 
-Reference: `src/pages/projects/ProjectDetail.tsx`, `src/pages/talent-scout/RoleSettings.tsx`, `src/pages/venue-scout/BriefEvent.tsx`.
+Reference: `src/pages/projects/ProjectDetail.tsx` (Details, Deliverables, Tasks, Team, Vendors sections all use this pattern), `src/pages/talent-scout/RoleSettings.tsx`, `src/pages/venue-scout/BriefEvent.tsx`.
 
 ---
 
@@ -196,6 +199,8 @@ export function HQFormField({ label, required, hint, children }: {
 shadcn/ui primitives first: `Input`, `Textarea`, `Select`, `RadioGroup`, `Checkbox`, `Slider`. No custom inputs unless a real gap.
 
 Keyword/tag input is custom: `src/components/talent-scout/TagInput.tsx`. Reuse for any "list of strings" field.
+
+**Edit-page input contrast (Phase 6.4 N3, reverses 5.7.5).** On `.hq-form` edit / new surfaces, inputs + selects + RecordCombobox triggers render a contained dark fill (`hsl(var(--input))` + `--border-strong` border + coral focus) rather than the transparent inline-edit chrome. The split is by surface: no-click edit / new forms get the boxed fill; click-to-edit DETAIL fields keep the transparent treatment. `.vs-input-contrast` carries the same fill to the VS brief surfaces (BriefEvent / BriefVenue + the New Scout modal); its TagInput pills bump to `--border-strong` so they don't blend into the filled container. Token = `--input` (grey). See `decisions.md` § Phase 6.0 capability clusters D4.
 
 ### Multi-step wizards
 
@@ -229,6 +234,16 @@ Same shell as `.actionbar` but includes the cancel/save flex layout internally. 
 <StickySaveBar dirty={dirty} saving={saving} onSave={save} onCancel={cancel} />
 ```
 
+**Button pattern + arrow convention (Phase 6.5; canonical for all 14 `.actionbar` consumers):**
+
+- **Buttons.** Every actionbar button is a `.btn`: Back / Cancel = `.btn btn-tertiary`, primary = `.btn btn-primary`. No shadcn `<Button>` inside an actionbar. One height (44 / 40px), uniform style.
+- **Arrow = back-navigation ONLY.** A leading `<IconArrowLeft className="ic" />` marks a Back (go back a step) action and nothing else. It is NEVER on a Cancel / discard / exit button.
+- **2-zone bars** (most edit / form bars, no Back): Cancel far-left, primary far-right.
+- **3-zone bars** use `grid-cols-[1fr_auto_1fr]`: the leave / back affordance far-left, a secondary action truly centered, the primary far-right. StickySaveBar = Cancel (no arrow) left, Delete centered, Save right.
+- **Bulk-import wizard exception:** it carries BOTH a Back (arrow, far-left) AND a Cancel (no arrow, centered), because its Stepper is a non-clickable progress indicator, so the wizard needs an explicit step-back affordance.
+
+See `decisions.md` § Phase 6.0 capability clusters D9.
+
 Reference: `src/pages/venue-scout/BriefEvent.tsx` (`.actionbar`), `src/pages/projects/ProjectEdit.tsx` (`StickySaveBar`).
 
 ### HQ Core edit page canon
@@ -247,13 +262,15 @@ HQ Core edit pages use `src/components/hq/HQFormField.tsx` for grey `.label-form
 
 Three table families coexist. `.tbl` is the canonical base for HQ Core and Talent Scout tables. VS matrix tables use `.tbl--matrix` standalone (decoupled from `.tbl` per `decisions.md` § Phase 5.12). List-view tables (TS Index, VS ScoutIndex, HQ admin breakdown surfaces) wrap `.tbl` in `.tbl-list` to inherit the matrix visual contract.
 
-**`.tbl` (canonical for HQ Core + TS):** `width:100%; border-collapse:collapse`. Full rule set covers thead th (mono 11px uppercase), tbody td (12px 14px padding, 13px font), row hover, 3px transparent left-border (colorable for status rows via `rowBorderToken`), vertical cell dividers via `::after` pseudo-elements. `.tbl--flat` strips row left-borders. TS's FinalReviewDetail will adopt `.tbl` during the Phase 5.13 review (currently uses bare `w-full`).
+**`.tbl` (canonical for HQ Core + TS):** `width:100%; border-collapse:collapse`. Full rule set covers thead th (mono 11px uppercase), tbody td (12px 14px padding, 13px font), row hover, 3px transparent left-border (colorable for status rows via `rowBorderToken`), vertical cell dividers via `::after` pseudo-elements. `.tbl--flat` strips row left-borders. TS's FinalReviewDetail adopted `.tbl` in the Phase 5.13 review.
 
 **`.tbl--matrix` (VS Sourcing + Shortlist):** Standalone class, does NOT compose with `.tbl`. `width:100%; border-collapse:collapse; min-width:1280px; table-layout:fixed`. Matrix Th/Td primitives in `src/components/venue-scout/matrix/primitives.tsx` drive all chrome via Tailwind utilities. Decoupled because `.tbl` base specificity was burying matrix utilities for header alignment, td padding, row hover, and the `::after` pseudo was painting over content.
 
-**`.tbl-list` (canonical list-view wrapper):** Scopes overrides through to the inner `.tbl` to inherit the matrix visual contract without matrix-specific deltas (no sticky col, no 1280 min-width, no table-layout fixed). Consumed by TS Index, VS ScoutIndex, and the HQ Anthropic spend breakdown table. Renamed from `.scout-list-tbl` in Phase 5.15 so the class name signals cross-cutting canon rather than a single VS consumer.
+**`.tbl-list` (canonical list-view wrapper):** Scopes overrides through to the inner `.tbl` to inherit the matrix visual contract without matrix-specific deltas (no sticky col, no 1280 min-width, no table-layout fixed). Renamed from `.scout-list-tbl` in Phase 5.15 so the class name signals cross-cutting canon rather than a single VS consumer. Phase 6.1 completed the rollout: it now wraps all 7 HQ Core DataTable list pages (Projects, Tasks, Deliverables, Venues, Vendors, People, Clients) in addition to TS Index, VS ScoutIndex, and the HQ Anthropic spend breakdown table.
 
-**`.tbl-divider` (structural section header inside a table):** Single-row `<tr>` class that paints muted coral background + bold white 11px uppercase mono text (Phase 5.15 repaint; previously surface-alt + subtle-foreground). Used by `<DataTable>`'s two-tier "Done · N hidden" footer and by `<AnthropicSpendBreakdownTable>`'s HQ / TS / VS section headers. Carries enough contrast against any tbody-bg context (canonical `.tbl` or lifted `.tbl-list`).
+**`.tbl-divider` (coral structural section header inside a table):** Single-row `<tr>` class that paints muted coral background + bold white 11px uppercase mono text (Phase 5.15 repaint; previously surface-alt + subtle-foreground). Used by `<AnthropicSpendBreakdownTable>`'s HQ / TS / VS section headers. Carries enough contrast against any tbody-bg context (canonical `.tbl` or lifted `.tbl-list`). Phase 6.5: `<DataTable>`'s two-tier "Done · N hidden" terminal footer moved OFF this coral class onto the muted `.tbl-done` below; only the spend-table section headers stay on `.tbl-divider`.
+
+**`.tbl-done` (muted "done / complete" terminal divider):** Single-row `<tr>` class added in Phase 6.1, wired in Phase 6.5. Mirrors `.tbl-divider`'s 11px uppercase mono chrome but paints `--surface` bg + `--subtle-foreground` text + `--border` top/bottom rules (muted, not coral). Carries the `<DataTable>` two-tier "Done · N hidden" terminal footer across its 4 consumers (Projects, Tasks, VS ScoutIndex, TS Index). Dual selector (`.tbl-done td, .tbl-list .tbl tbody tr.tbl-done td`) so it wins inside the lifted-cells `.tbl-list` context. Use it for a muted terminal / collapsed-section divider; use `.tbl-divider` (coral) only for an attention-drawing structural section header like the spend breakdown.
 
 **Two-tier pattern** (active rows above, rejected/archived rows below collapsible) is available on both `<DataTable>` (HQ Core) and `CandidateTable` (TS). CandidateTable carries its own select-row + bulk action bar (round-level Re-evaluate / Reject / Promote flow); HQ Core's DataTable does NOT carry row selection.
 
@@ -286,6 +303,10 @@ ProjectsList is the reference for HQ Core list pages. All non-Talent / non-Venue
 - **Deliverables exception:** Deliverables remains a grouped-list page with no global footer.
 
 When a list table needs to diverge (Talent Scout's CandidateTable two-tier active/rejected; Venue Scout matrices), document the deviation inline near the component with a one-line rationale.
+
+### Counter row
+
+VS Review / Sourcing / Shortlist place a right-aligned count affordance between the explainer card and the table: `<div className="text-right text-base text-muted-foreground mb-3">` ("X selected of N" / "X marked for deck" / "Venues Selected"). Consistent across all three.
 
 ---
 
@@ -320,6 +341,10 @@ Sub-default-size pill rendered at the bottom of `VenueIdentityStack` on the Sour
 | `research` | Sourced | muted gray (`bg-input text-muted-foreground border-border`) | `vs-research-venues` Phase B Claude pass |
 
 `SOURCE_PRIORITY` in `src/lib/venue-scout/format.ts` orders the matrix sort: manual (0) < sheet (1) < hq_pool (2) < research (3). Tiebreak alphabetical by name. Phase 5.12.1 added the `hq_pool` rank between sheet and research; admin-curated HQ pool sits below producer-uploaded sheets but above AI-sourced. Tune the teal palette in Phase 5.12.7 if the VS visual smoke surfaces a closer brand tone.
+
+### Venue Scout VenueTypePill (palette pivot, Phase 6.5)
+
+The venue-type pills on the Sourcing / Shortlist matrices (`TYPE_STYLES` + `TYPE_FALLBACK_STYLE` in `src/lib/venue-scout/venueTypes.ts`) use a bold design-system HSL status-pill scale: fill ~22% alpha, bright text, border ~55% alpha (the status-pill idiom from `src/lib/venue-scout/format.ts`). Four types map to the exact HQ accent tokens (Event Venue = `--info`, Warehouse = `--warn`, Gallery = `--purple`, Outdoor = `--success`); the rest are bold hues in the same idiom. Coral (`--primary`) is reserved. Comma-form `hsla()` is required because Tailwind drops an arbitrary value that carries an in-bracket `/ alpha`. Phase 6.5 replaced the desaturated "lifted-from-VS-Pro" rgba palette, which **supersedes** the old "do-not-touch `TYPE_STYLES`" lock. Exact hues / alphas are a live tune. See `decisions.md` § Phase 6.0 capability clusters D11.
 
 ---
 
@@ -392,6 +417,18 @@ Upcoming and Skipped share the gray token. Skipped differentiates with `text-dec
 Reads as a step-up ladder: speculative (amber), looking good (cyan), locked (green), done (gray). This flips the wireframe's drawn mapping for Outlook Confidence; build enforces this version.
 
 Implementation pointer: `src/lib/home/projectStatusToken.ts` is the canonical mapper for the Project + Task enums; `.pill.p-<token>` classes in `src/index.css` render the resolved color.
+
+### VS scout phase (ScoutIndex Phase column)
+
+`SCOUT_PHASE_TOKENS: Record<string, StatusToken>` in `src/pages/venue-scout/ScoutIndex.tsx` maps a scout's `current_step` to a token. Renders via `<span className="pill pill-sm p-{token}"><span className="dt" /> {label}</span>`. Phase is the sole producer-facing state surface on ScoutIndex (the old Status column was removed).
+
+| Scout `current_step` | Token |
+|---|---|
+| `brief` / `sheet_prompt` / `sheet_upload` | `muted` (grey) |
+| `researching` / `sourcing_report` | `info` (blue) |
+| `shortlist` | `purple` |
+| `review_selects` / `compiling` / `deck_prep` | `warn` (amber) |
+| `completed` | `success` (green) |
 
 ---
 
@@ -516,6 +553,15 @@ Talent Scout uses **explicit save** universally (sticky save bar). Internal Note
 
 Default to server-confirmed: disable button → await response → update state → toast. Optimistic only when the operation is locally safe (e.g. status dropdown change has a rollback path).
 
+### RecordCombobox search + create (Phase 6.5)
+
+Canonical behavior for the shared `<RecordCombobox>` record / lookup picker, not just visual polish:
+
+- **Search:** cmdk fuzzy matching is disabled (`shouldFilter={false}`). A manual case-insensitive substring / prefix filter runs over the canonical options AND alias rows (so city-alias search survives). The empty state is computed manually.
+- **Create:** `miniCreateFields` wins. Any source WITH `miniCreateFields` (a multi-field create, e.g. Client = name + industry) always opens `MiniCreateModal`. Single-field sources (no `miniCreateFields`, e.g. Venue) add immediately from the typed text on Enter / "+ Add" via a deterministic `createFromInput()` handler (an `onKeyDown` on the input fires create when the typed text matches no option / alias); no confirm modal. `quickCreate` is now vestigial (kept for call-site compat).
+
+See `decisions.md` § Phase 6.0 capability clusters D10.
+
 ### Motion
 
 HQ uses motion sparingly: hover background transitions (~0.12s), the toggle slide (0.15s), the Radix accordion (0.2s), and `Loader2` spinners. These durations are ad hoc literals, not tokens; if motion grows, introduce `--motion-fast` / `--motion-base` tokens and a standard easing.
@@ -537,22 +583,29 @@ Worth knowing what's already built before reaching for shadcn/ui:
 - `src/components/hq/ContactsCard.tsx`: shared Contacts card for Venue, Vendor, and Client detail pages.
 - `src/components/hq/WebsiteActionButton.tsx`: shared list-page Website action button.
 - `src/components/data/ListPageChrome.tsx`: shared list search input and chip-radio group.
+- `src/components/settings/LookupListsCard.tsx`: shared Settings Lookup Lists card (the `LIST | USED BY | VALUES | Edit` table with inline-expansion editor row). Caller passes a `lookups` filter: HQ Settings consumes the full 7-entry `HQ_LOOKUPS`, VS Settings the 3-entry Cities / Neighborhoods / Venue Types subset. Expansion branches on entry key (`neighborhoods` → `<NeighborhoodsLookupEditor inline />`, else `<LookupListEditor table layout="tags">`).
+- `src/components/venue-scout/ScoutPageHeader.tsx`: 3-zone top row for every in-scout VS page (empty left / centered `ScoutPhaseBreadcrumb` / `ScoutSettingsLink` right, overridable via `right` prop). Reach for it on any new in-scout VS surface. Consumed by BriefEvent, BriefVenue, BriefReport, SourcingReport, Shortlist, Review, ScoutSettings, SheetPrompt.
 - `src/lib/url.ts`: neutral URL helpers, including `prettyHost`.
+- `VenueFilesEditor` (Phase 6.4): Files & Assets editor for venues, a clone of `VendorFilesEditor` (title + URL rows, delete + re-add, any URL accepted). Backs the VenueDetail Files & Assets card (top of the right aside) + the VenueEdit section. See the `venue_files` table in `docs/schema.md`.
+- `src/components/settings/VendorSubcategoriesLookupEditor.tsx` (Phase 6.4): Settings Lookup Lists editor for Vendor Subcategories, parent-scoped under Vendor Categories; cloned from the neighborhoods editor.
+- `src/lib/hq/currency.ts` (Phase 6.4): `formatCurrencyInput` (format-on-keystroke) / `formatCurrencyDisplay` (hydration; rounds, avoids the decimal-strip 10x bug) / `parseCurrencyToNumber` (parse to int for NUMERIC columns). Used by ProjectEdit budget + BriefEvent. Repo-wide budget-formatter convergence onto this helper is a tracked tech-debt item (F033), not yet complete.
+- Settings `BulkImportCard` (Phase 6.5): gained a "Templates" subgroup with 3 per-entity CSV template download links (Projects / Vendors / Venues; `.tlink` + Download icon, pointing at `public/templates/bulk-import-*-template.csv`). The refreshed templates carry a header row + exactly one fully-populated example row; header keys + column order match the per-entity import configs so they parse straight through.
 
 **Sanctioned HQ Core exceptions:**
 - Venue Slide stays as a VenueDetail header action and VenueEdit "Master Venue Deck Slide" card. Do not move it into a generic Links card unless more Venue link types appear.
 - Client, Person, and Vendor detail pages do not render raw `tags` arrays. Vendor Capabilities is the visible vendor tag-like surface.
 
 **Venue-Scout-specific:**
-- `src/components/venue-scout/matrix/primitives.tsx` — matrix shared module. Phase 5.12.14 swept the file (~830 → ~500 lines): deleted `VenueIdentityStack`, `WebsiteArrow`, `HdrStack`, all RANK scaffolding (`RankDisplay`, `rankBucket`, `RANK_TEXT`, `RANK_BAR`, `RankTier`), `EditableVenueName`, `NotesCellButton`, `EditableTextarea`, `StackDivider`; dropped `Pill` from exports (kept as internal helper for TypeTogglePopover); dropped 4 re-exports (`TYPE_STYLES`, `TYPE_FALLBACK_STYLE`, `parseTypes`, `CanonicalType`) — consumers import directly from `@/lib/venue-scout/venueTypes`. Surviving exports: `Th`, `Td`, `VStack`, `Bullets`, `EditableField`, `SourcePill` (4-state: Uploaded / Sourced / Manual / Venues DB; see § 5 above for tokens), `TypeTogglePopover` (horizontal variant enforces max-2-per-row via deterministic `grid grid-cols-2 gap-[6px] justify-items-start` when ≥2 pills). `DedupeMetaIndicator` + `normalizeDedupeMeta` + `DedupeMetaShape` were pruned in Phase 5.12.14.2 (no active UI consumer). The `dedupe_meta` jsonb column on `vs_candidate_venues` is still written by `_shared/venueDedupe.ts`; a future UI consumer would re-introduce the indicator from the existing data shape.
+- `src/components/venue-scout/matrix/primitives.tsx` (matrix shared module): the Th/Td/cell primitives all Sourcing + Shortlist matrices render through. Surviving exports: `Th`, `Td`, `VStack`, `Bullets`, `EditableField`, `SourcePill` (4-state: Uploaded / Sourced / Manual / Venues DB; see § 5 above for tokens), `TypeTogglePopover` (horizontal variant enforces max-2-per-row via deterministic `grid grid-cols-2 gap-[6px] justify-items-start` when ≥2 pills). Type maps (`TYPE_STYLES`, `TYPE_FALLBACK_STYLE`, `parseTypes`, `CanonicalType`) import directly from `@/lib/venue-scout/venueTypes`, not via this module. Note: the `dedupe_meta` jsonb column on `vs_candidate_venues` is still written by `_shared/venueDedupe.ts` but has no active UI consumer (the indicator + normalizer were pruned); a future consumer would re-introduce the indicator from the existing data shape.
 - `src/components/venue-scout/matrix/VenueMatrixRow.tsx` (Phase 5.12.14): shared row primitive that Sourcing + Shortlist both render through. Per-page differences collapse to the col-1 label (Shortlist vs Pitch) + col-1 handler + page-level source-of-truth (`shortlisted` vs `pitched`). 7-column layout: Shortlist/Pitch+Source (110px, stacked) | Venue (230px, name + horizontal type pills) | Location (180px, neighborhood + address) | Website (130px, InlineEditText with prettyHost tlink) | Features (230px, compact TagInput) | Recommendations (280px, Bullets) | Considerations (280px, Bullets). Total ~1440px.
 - `src/components/venue-scout/ScoutPhaseBreadcrumb.tsx` (Phase 5.12.14): scout-level breadcrumb-stepper that replaced the prior `ScoutStepThroughNav` chip strip. 20px numbered circles + mono uppercase labels + `›` separators. Color states mirror `Stepper.tsx` (active = white-filled + coral label; reached = coral-filled with check + white label; unreached = grey + grey). Renders inline below the page crumb, above the eyebrow, on every scout action page with a defined `current_step`.
 - `src/components/venue-scout/Stepper.tsx` (Phase 4 port; resized in 5.12.14.1): brief-intake stepper. **20px** numbered circles (informational size) + 13px mono uppercase labels + `w-10` connector hairlines. `active` prop accepts 1-3 for an active step and 4 for the all-done BriefReport state. Renders inline with the `<h1>Brief</h1>` title on BriefEvent/BriefVenue (the stepper is an informational sub-indicator, not a title replacement; the h1 "Brief" was restored in 5.12.14.1 revision rounds). Hidden on BriefReport. **Canonical stepper sizes:** ScoutPhaseBreadcrumb = 20px circles (responsive: text-[11/12/13px] + h-5/5/6 at sm/md/lg); brief-intake Stepper = 20px circles.
 - `src/components/ReferrerCrumb.tsx` (Phase 5.12.14.1 Stage 2C — relocated from `/venue-scout/`): canonical app-wide back-crumb component. Renders `<IconArrowLeft className="ic ic-sm" /> Back to {label}` inside a `<Link className="crumb">`. Consumes `useReferrerCrumb` (`src/hooks/useReferrerCrumb.ts`) which resolves the crumb via three layers: (1) explicit `location.state.from` (list-page filtered-view "from" with `search` preserved — replaces the old `useBackHref` opt-in mechanism), (2) sessionStorage-tracked referrer with per-tab scope + loop protection, (3) caller-provided `fallback` prop OR canonical-parent fallback from the hook's route table. Use on every detail-page back-crumb. Optional `fallback={{ to, label }}` prop sets the layer-3 fallback. The old `src/lib/hq/useBackHref.ts` was deleted in 2C; `backState(location, label)` re-exports from `useReferrerCrumb.ts` for list-page navigators that explicitly push `state.from`.
 - `src/components/venue-scout/SheetUploadCard.tsx` (Phase 5.12.14.1 Stage 2C item 4): drop-zone + parse-state + Continue action extracted from the deleted `SheetUpload.tsx` page. Mounts below the choice cards on the merged SheetPrompt surface when the producer picks "Yes, I have one". `vs-parse-sheet` edge-fn call + stale-parse race guard (parseGenRef) + error routing byte-identical to the pre-merge SheetUpload.
-- `src/components/venue-scout/GeneratedDecksCard.tsx` (Phase 5.12.14; reshaped 5.12.14.3 R2): deck list with show-3 + expand toggle + deck row chrome (v{N} title, relative date, muted "Open" for prior decks). Presentational; parent owns the post-generate success toast.
-- `src/components/venue-scout/BriefReportRow.tsx` (Phase 5.12.14 as BriefReportCard; renamed to BriefReportRow in 5.12.14.3 R1): generic inline-editable row primitive for BriefReport's section-card body. `BriefReportRow<T>` with optional `editorLeftActions` slot. State logic (edit/display toggle, isBlank, sourceHash, debounced save, dirty tracking) encapsulated inside the primitive; only the outer chrome changed from a `<Card>` wrapper to a row `<div>` with border-b.
-- `src/components/ui/DateRangePicker.tsx` + `src/components/ui/calendar.tsx` (Phase 5.12.14, new dependencies `react-day-picker` + `date-fns`): range-mode date picker for Venue Scout brief intake + report pages. Stores formatted display strings ("Oct 15-17, 2026") into existing `text` columns; `parseOwnFormat` round-trips picker outputs (single / range-same-month / range-cross-month / range-cross-year). Future-lift opportunity to HQ surfaces (TaskEdit / ProjectEdit / DateCell / MirrorHolidaysEditor) tracked in code-observations.
+- `src/components/venue-scout/GeneratedDecksCard.tsx`: deck list with show-3 + expand toggle + deck row chrome (v{N} title, relative date, muted "Open" for prior decks). Presentational; parent owns the post-generate success toast.
+- `src/components/venue-scout/BriefReportRow.tsx`: generic inline-editable row primitive for BriefReport's section-card body. `BriefReportRow<T>` with optional `editorLeftActions` slot. State logic (edit/display toggle, isBlank, sourceHash, debounced save, dirty tracking) is encapsulated inside the primitive. Reach for it for any inline-editable BriefReport row.
+- `src/components/ui/DateRangePicker.tsx` + `src/components/ui/calendar.tsx` (Phase 5.12.14, new dependencies `react-day-picker` + `date-fns`): range-mode date picker for Venue Scout brief intake + report pages. Stores formatted display strings ("Oct 15-17, 2026") into existing `text` columns; `parseOwnFormat` round-trips picker outputs (single / range-same-month / range-cross-month / range-cross-year). The HQ date primitive shipped separately as `DateField` (Phase 6.3, below), so `DateRangePicker` stays VS-only.
+- `src/components/ui/DateField.tsx` (Phase 6.3): the HQ Core date primitive. Value is ISO `{start, end}` (a single date is `{start, end: null}`; end-null is the canonical "single date" shape, so single + range share one column contract); the `variant` prop renders a boxed input (ProjectEdit / New) or an inline transparent control (ProjectDetail). This is the dual-contract picker that 5.16.1.1 D7 deferred, built fresh rather than extending the VS `DateRangePicker` above (display-string + range-only, for VS `text` columns). Use `DateField` for HQ `date` columns; `DateRangePicker` stays VS-only. See `decisions.md` § Phase 6.0 capability clusters D3.
 
 **Talent-Scout-specific (some worth lifting to shared if Phase 4 / 5 want them):**
 - `src/components/talent-scout/TagInput.tsx`: tag/keyword input with case-insensitive dedup. Already used in Settings + RoleSettings + NewRoleSearch. **Already generic; no rename needed.**
@@ -580,42 +633,14 @@ The `TopBar` (`src/components/shell/TopBar.tsx`) hides its global search bar ins
 
 All chrome reuses existing tokens (`--primary` for coral, `--foreground` for white, `--surface` for the rail background, `--border` for the brand-block underline); no new design tokens introduced. **Icons (Phase 5.13.1):** `IconScout` retired. Replaced by `IconTalentScout` (two-person SVG: primary circle + path for a smaller secondary figure) for every Talent Scout entry across LeftRail + NotificationRow, and `IconVenueScout` (two-buildings SVG: tall rect + shorter rect + window paths) for every Venue Scout entry. Future tool apps follow the VS/TS pattern: replace the group + brand entirely by hardcoding a tool-items config + a brand variant with its own `.hq-brand-<tool>` accent class and `forceActive: true` on all items.
 
-### Phase 5.12.14.3 (2026-05-27) tokens + patterns — VS UX Audit Pass 4
+### VS scout-page durable primitives (Phase 5.12.14.3)
 
-New tokens / primitives / patterns introduced across the 7-round phase. Cross-references to `decisions.md § Phase 5.12.14.3` and `v1-changelog.md` entry.
+The VS UX Audit Pass 4 (7-round phase) durable primitives now live in their evergreen homes: `.hq-scout-label` (§ 2 Page header), counter row (§ 4 Tables), ScoutIndex Phase pill mapping (§ 5b), `<ScoutPageHeader>` + `<LookupListsCard>` (§ 10). `.tbl-list` and `.tbl--matrix` are defined in § 4. Two behavioral notes:
 
-**Tokens / classes (`src/index.css`):**
+- **`.hq-explainer` flex-sibling layout.** The explainer card lays out as `display: flex; align-items: flex-start; gap: 12px;` (label left sibling, prose right). Consumed by Review + Sourcing + Shortlist.
+- **BriefReport stage-aware crumb override.** `useReferrerCrumb` fires a supabase fetch on `/venue-scout/scouts/:id/brief/report` and routes back to Brief Intake / Sourcing / Shortlist / Review per the scout's `current_step`. Hook-internal; every other page skips the fetch. (Back-crumb single-source-of-truth canon is in § 2 Page header.)
 
-- **`.hq-scout-label`** — TopBar center-zone label rendered inside any active VS scout route (`/venue-scout/scouts/:id/*`). Font: `var(--font-display)` (Montserrat) at 15px font-extrabold uppercase tracking-[-0.01em]. Color: `hsl(var(--foreground))`. Matches the `.hq-brand-txt` cadence as a peer of the left-zone wordmark. Defers visually to the brand (15px vs the brand's 21px). TopBar consumer: `src/components/shell/TopBar.tsx`; renders `Client Name · Event Name` with a `mx-2 opacity-50` mid-dot separator. Hidden below md.
-- **`.tbl-list`** — renamed from `.scout-list-tbl` in Phase 5.15. Canonical wrapper class for list-view tables across HQ Core, Talent Scout, and Venue Scout. Currently consumed by TS Index, VS ScoutIndex, and the HQ Anthropic spend breakdown table; future HQ Core list-page sweeps will adopt it too. Scopes a small set of overrides through to the inner `.tbl` to inherit the Sourcing/Shortlist matrix visual contract WITHOUT the matrix-specific deltas (no sticky col, no 1280 min-width, no `table-layout: fixed`). Overrides: header text-align center + bg `hsl(var(--surface))`, body td bg `hsl(var(--surface-alt))`, archived rows (selector hook `tr[style*="opacity"]`) match header bg + subtle-foreground text, per-cell border-right column dividers, drop the canon `::after` cell-divider pseudo bar.
-- **`.tbl--matrix`** — VS matrix canon (Sourcing/Shortlist tables in `src/pages/venue-scout/SourcingReport.tsx` + `Shortlist.tsx`). Rule body: `width:100%; border-collapse:collapse; min-width:1280px; table-layout:fixed;`. **Standalone class — does NOT compose with `.tbl`** (see `decisions.md § Phase 5.12.14.3` decision 1 for the cascade rationale). Matrix Th/Td primitives in `src/components/venue-scout/matrix/primitives.tsx` drive the rest of the chrome via Tailwind utilities.
-
-**Phase pill mapping** — design-system tokens applied to ScoutIndex's Phase column rendering. Module-level `SCOUT_PHASE_TOKENS: Record<string, StatusToken>` map in `src/pages/venue-scout/ScoutIndex.tsx`:
-
-| Scout `current_step` | Token | Visual |
-|---|---|---|
-| `brief` / `sheet_prompt` / `sheet_upload` | `muted` | neutral grey |
-| `researching` / `sourcing_report` | `info` | blue |
-| `shortlist` | `purple` | purple |
-| `review_selects` / `compiling` / `deck_prep` | `warn` | amber |
-| `completed` | `success` | green |
-
-Renders via `<span className="pill pill-sm p-{token}"><span className="dt" /> {label}</span>` — same chrome the old Status column used. Producer-revisable. Currently Status column is removed entirely; Phase is the sole producer-facing state surface on ScoutIndex.
-
-**Layout primitives:**
-
-- **`<ScoutPageHeader scoutId scout right?>`** (`src/components/venue-scout/ScoutPageHeader.tsx`) — 3-zone top row for every in-scout VS page. Layout: `[empty left] [ScoutPhaseBreadcrumb centered] [ScoutSettingsLink right (or override via `right` prop)]`. Empty left zone preserves the centered breadcrumb's visual balance regardless of right-zone width. Consumed by BriefEvent, BriefVenue, BriefReport, SourcingReport, Shortlist, Review, ScoutSettings, SheetPrompt (8 pages).
-- **Counter row pattern** — `<div className="text-right text-base text-muted-foreground mb-3">` between the explainer card and the table/list on Review, Sourcing, Shortlist. Consistent across all three; produces the "X selected of N" / "X marked for deck" / "Venues Selected" affordance.
-
-**Behavioral patterns:**
-
-- **Back-crumb in TopBar (single source of truth).** Page-chrome `<ReferrerCrumb>` mounts retired across 21 pages/components. The TopBar (`src/components/shell/TopBar.tsx`) renders the global crumb via `useReferrerCrumb()` once per app shell. Predicate `showCrumb = referrerCrumb.href !== "/"` hides on root-tier pages (Home, list pages) where the crumb resolves to root and is meaningless. Hidden below md so mobile TopBar stays uncluttered. See `decisions.md § Phase 5.12.14.3` decision 2 for full rationale. **Label simplified (Phase 5.13.1).** The crumb always renders the arrow + "Back" — the contextual "Back to {destination}" label is gone. The hook still resolves the correct `href`; the `label` field in its return value is retained in the interface for programmatic consumers.
-- **BriefReport stage-aware crumb override.** Hub page with multiple post-intake stages reachable; back-target depends on the scout's `current_step`. `useReferrerCrumb` extension fires a supabase fetch on pathname `/venue-scout/scouts/:id/brief/report`; routes to Brief Intake / Sourcing / Shortlist / Review per current_step. Hook-internal — every other page skips the fetch.
-- **`.hq-explainer` flex-sibling layout.** Producer-call shift in R7 § C: explainer card flips from `<label> + <body>` stacked column to `display: flex; align-items: flex-start; gap: 12px;` with label as left sibling + prose as right sibling. Surrounding border + padding stays. Consumed by Review + Sourcing + Shortlist.
-
-**Shared component lift (HQ + VS Settings):**
-
-- **`<LookupListsCard lookups>`** (`src/components/settings/LookupListsCard.tsx`) — extracted from the inline `src/pages/settings/SettingsPage.tsx` Lookup Lists block during R7 amendment v1 § 6. Renders the `LIST | USED BY | VALUES | Edit` table with inline-expansion editor row. Caller-supplied `lookups: LookupListsCardEntry[]` filter. HQ Settings consumes the full 7-entry `HQ_LOOKUPS` (Project Categories / Cities / Neighborhoods / Venue Types / Vendor Capabilities / Vendor Categories / Departments); VS Settings consumes the 3-entry filter (Cities / Neighborhoods / Venue Types). Expansion-content branches on entry key: `neighborhoods` → `<NeighborhoodsLookupEditor inline />`; every other key → `<LookupListEditor table layout="tags">`. New `inline?: boolean` prop on `NeighborhoodsLookupEditor` drops the outer card chrome so it reads cleanly inside the expanded row.
+Round-by-round narration (R7 § C explainer flip, the primitives.tsx 830 to 500 line sweep) lives in `v1-changelog.md` + `decisions.md § Phase 5.12`.
 
 ---
 

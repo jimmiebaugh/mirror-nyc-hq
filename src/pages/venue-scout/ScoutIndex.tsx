@@ -158,7 +158,18 @@ export default function ScoutIndex() {
         .eq("scout_id", s.id)
         .order("id")
         .range(from, from + PAGE_SIZE - 1);
-      if (error) break;
+      if (error) {
+        console.warn(
+          "[ScoutIndex] delete-preview candidate pagination failed; count may be incomplete",
+          error,
+        );
+        toast({
+          title: "Delete preview may be incomplete",
+          description: "Couldn't tally every candidate queued for deletion. Proceed with care.",
+          variant: "destructive",
+        });
+        break;
+      }
       const ids = (page ?? []).map((c) => c.id);
       candidateIds.push(...ids);
       if (ids.length < PAGE_SIZE) break;

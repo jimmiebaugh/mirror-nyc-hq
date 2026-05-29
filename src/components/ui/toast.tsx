@@ -13,6 +13,9 @@ const ToastViewport = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ToastPrimitives.Viewport
     ref={ref}
+    // Phase 6.5 (G8): presence hook for the CSS rule that lifts the toast
+    // above a sticky .actionbar (body:has(.actionbar) [data-toast-viewport]).
+    data-toast-viewport=""
     className={cn(
       "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
       className,

@@ -193,12 +193,12 @@ export default function TeamList() {
             <table className="tbl tbl--flat">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Role / Title</th>
-                  <th>Department</th>
-                  <th>Tier</th>
-                  <th>Account</th>
-                  <th>Last Active</th>
+                  <th className="l">Name</th>
+                  <th className="l">Role / Title</th>
+                  <th className="l">Department</th>
+                  <th className="c">Tier</th>
+                  <th className="c">Account</th>
+                  <th className="l">Last Active</th>
                   <th className="c" style={{ width: 80 }}>Active</th>
                 </tr>
               </thead>
@@ -214,17 +214,17 @@ export default function TeamList() {
                       navigate(`/users/${r.id}/edit`);
                     }}
                   >
-                    <td className="lead">{r.full_name ?? r.email}</td>
-                    <td className="muted">{r.role_title ?? "-"}</td>
-                    <td className="muted">{r.department_name ?? "-"}</td>
-                    <td data-no-nav>
+                    <td className="lead l">{r.full_name ?? r.email}</td>
+                    <td className="muted l">{r.role_title ?? "-"}</td>
+                    <td className="muted l">{r.department_name ?? "-"}</td>
+                    <td className="c" data-no-nav>
                       <TierPopover
                         current={r.permission_role}
                         onPick={(t) => updateTier(r, t)}
                       />
                     </td>
-                    <td>{accountPill(r.last_active_at)}</td>
-                    <td className="muted">{formatLastActive(r.last_active_at)}</td>
+                    <td className="c">{accountPill(r.last_active_at)}</td>
+                    <td className="muted l">{formatLastActive(r.last_active_at)}</td>
                     <td className="c" data-no-nav>
                       <button
                         type="button"

@@ -10,8 +10,6 @@
 
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { DropZone } from "@/components/ui/DropZone";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -145,12 +143,11 @@ export function SheetUploadCard({ scoutId }: { scoutId: string }) {
 
   return (
     <>
-      <Card className="bg-surface-alt">
-        <CardContent className="p-8">
-          <div className="mb-6 flex items-center justify-between">
-            <span className="label-section">Sheet Upload</span>
-          </div>
-
+      <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Sheet Upload</span>
+        </div>
+        <div className="card-pad">
           <DropZone
             accept=".pdf,.xlsx,.csv"
             multiple={false}
@@ -175,14 +172,19 @@ export function SheetUploadCard({ scoutId }: { scoutId: string }) {
               <span className="text-muted-foreground">detected</span>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
       <div className="actionbar">
         <div className="mx-auto flex max-w-3xl items-center justify-end gap-3 px-6 py-4">
-          <Button onClick={onContinue} disabled={status !== "done"}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onContinue}
+            disabled={status !== "done"}
+          >
             Continue · Research →
-          </Button>
+          </button>
         </div>
       </div>
     </>

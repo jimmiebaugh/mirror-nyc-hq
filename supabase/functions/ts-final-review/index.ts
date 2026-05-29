@@ -19,7 +19,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { parseClaudeJson } from "../_shared/parseClaudeJson.ts";
 import { callClaude } from "../_shared/anthropic.ts";
-import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
+import { requireInternalOrAdminUser } from "../_shared/internalAuth.ts";
 import { FINAL_REVIEW_PROMPT_TEMPLATE } from "../_shared/prompts.ts";
 
 const corsHeaders = {
@@ -98,7 +98,7 @@ async function setProgress(supabase: SupabaseClient, id: string, progress: Progr
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  const authFail = await requireInternalOrUserAuth(req);
+  const authFail = await requireInternalOrAdminUser(req);
   if (authFail) {
     return new Response(authFail.body, {
       status: authFail.status,

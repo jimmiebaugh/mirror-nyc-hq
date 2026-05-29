@@ -4,8 +4,16 @@ import type {
   DedupeMatch,
   EntityConfig,
   ResolvedRow,
+  RowValidationError,
 } from "../types";
 import { enumerateUnresolvedRefs, splitMulti } from "../refEnumerate";
+import {
+  EMAIL_RE,
+  asImportString,
+  isValidHttpUrl,
+  normalizeHttpUrl,
+  pushError,
+} from "../validation";
 
 /**
  * Vendor EntityConfig (Phase 5.9.3). Second real consumer of the 5.9.1
@@ -44,6 +52,44 @@ const SUBCATEGORY_CREATE_FIELDS = [
 
 function dedupeKeyFor(name: unknown, city: unknown): string {
   return `${String(name ?? "").trim().toLowerCase()}|${String(city ?? "").trim().toLowerCase()}`;
+}
+
+function validateVendorRows(rows: Record<string, unknown>[]): RowValidationError[] {
+  const errors: RowValidationError[] = [];
+  rows.forEach((row, i) => {
+    if (asImportString(row.dedupe_action) === "skip") return;
+
+    if (!asImportString(row.name)) {
+      pushError(errors, i, "name", "Name is required.");
+    }
+
+    for (const key of ["preferred", "nationwide"] as const) {
+      const value = asImportString(row[key]).toLowerCase();
+      if (value && value !== "true" && value !== "false") {
+        pushError(errors, i, key, `${key} must be "true" or "false" (got "${asImportString(row[key])}").`);
+      }
+    }
+
+    const contactEmail = asImportString(row.contact_email);
+    if (contactEmail && !EMAIL_RE.test(contactEmail)) {
+      pushError(errors, i, "contact_email", `Contact email looks invalid (got "${contactEmail}").`);
+    }
+
+    const generalEmail = asImportString(row.general_email);
+    if (generalEmail && !EMAIL_RE.test(generalEmail)) {
+      pushError(errors, i, "general_email", `General email looks invalid (got "${generalEmail}").`);
+    }
+
+    const website = asImportString(row.website_url);
+    if (website && !isValidHttpUrl(website)) {
+      pushError(errors, i, "website_url", `Website must be a valid http(s) URL (got "${website}").`);
+    }
+
+    if (asImportString(row.subcategory) && !asImportString(row.category)) {
+      pushError(errors, i, "subcategory", "Subcategory requires a Category on the same row.");
+    }
+  });
+  return errors;
 }
 
 export const vendorConfig: EntityConfig = {
@@ -147,6 +193,8 @@ export const vendorConfig: EntityConfig = {
     return matches;
   },
 
+  validateRows: (rows) => validateVendorRows(rows),
+
   buildCommitPayload: (gridRows, mappings, decisions): CommitPayload => {
     const queued_refs: Record<string, Array<Record<string, string>>> = {};
     // Build queue index maps for the name-mode ref kinds (category + subcategory).
@@ -187,7 +235,7 @@ export const vendorConfig: EntityConfig = {
           capabilities: splitMulti(row.capabilities),
           city: String(row.city ?? "").trim(),
           primary_address: String(row.primary_address ?? "").trim(),
-          website_url: String(row.website_url ?? "").trim(),
+          website_url: normalizeHttpUrl(row.website_url),
           general_email: String(row.general_email ?? "").trim(),
           contact_name: String(row.contact_name ?? "").trim(),
           contact_email: String(row.contact_email ?? "").trim(),

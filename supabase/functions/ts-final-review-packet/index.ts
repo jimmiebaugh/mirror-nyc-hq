@@ -10,7 +10,7 @@
 // final_overview was removed in Phase 3.6.1 — see docs/decisions.md.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
+import { requireInternalOrAdminUser } from "../_shared/internalAuth.ts";
 import {
   C_CORAL,
   C_TIER1,
@@ -109,7 +109,7 @@ interface EnrichedFinalCandidate extends Partial<FinalCandidateRow> {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  const authFail = await requireInternalOrUserAuth(req);
+  const authFail = await requireInternalOrAdminUser(req);
   if (authFail) {
     return new Response(authFail.body, {
       status: authFail.status,

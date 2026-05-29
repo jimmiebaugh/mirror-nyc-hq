@@ -27,24 +27,35 @@ export const CANONICAL_TYPES = [
 
 export type CanonicalType = (typeof CANONICAL_TYPES)[number];
 
-// Venue-type pill palette. Lifted verbatim from VS Pro
-// (src/components/sourcing/matrix/primitives.tsx). These rgba values are an
-// intentional desaturated brand-context palette; do NOT substitute HQ design
-// tokens here. See docs/decisions.md Phase 4.6-port for rationale.
+// Venue-type pill palette. Phase 6.5 follow-up (smoke feedback): replaced the
+// desaturated "VS Pro" rgba palette (read too pastel/floral against the dark
+// UI) with a bold, design-system-aligned scale. Each type maps to a saturated
+// HSL hue in the app's pill idiom (fill ~22% / bright text / border ~55%,
+// mirroring the status-pill convention in src/lib/venue-scout/format.ts). Four
+// types use the exact HQ accent token VALUES (Event Venue = --info,
+// Warehouse = --warn, Gallery = --purple, Outdoor = --success); the rest are
+// bold hues in the same idiom. Coral (--primary) is intentionally NOT used
+// (reserved for CTAs/links/active per design-system). Values are literal HSL
+// (not var()) because this map is the static palette-key set kept in lockstep
+// with the server mirror. Alphas/hues are a live tune during smoke.
+// NOTE: fills/borders use comma-form hsla() (not the space/slash hsl(.. / ..)
+// form) because Tailwind's opacity-modifier parser drops an arbitrary value
+// that carries an in-bracket "/ alpha"; the comma form mirrors the old rgba()
+// palette and emits reliably. Text uses comma-form hsl() (no alpha).
 export const TYPE_STYLES: Record<CanonicalType, string> = {
-  Retail:        "bg-[rgba(181,133,136,0.18)] text-[#D89BA0] border-[rgba(181,133,136,0.42)]",
-  "Event Venue": "bg-[rgba(104,142,142,0.18)] text-[#8FB3B3] border-[rgba(104,142,142,0.42)]",
-  "White Box":   "bg-[rgba(140,140,144,0.18)] text-[#BCBCC0] border-[rgba(140,140,144,0.42)]",
-  Industrial:    "bg-[rgba(120,146,171,0.18)] text-[#94B0C8] border-[rgba(120,146,171,0.42)]",
-  Warehouse:     "bg-[rgba(168,147,112,0.18)] text-[#C8B190] border-[rgba(168,147,112,0.42)]",
-  Gallery:       "bg-[rgba(144,128,176,0.18)] text-[#B5A3D4] border-[rgba(144,128,176,0.42)]",
-  Studio:        "bg-[rgba(124,124,144,0.18)] text-[#A6A6BC] border-[rgba(124,124,144,0.40)]",
-  Outdoor:       "bg-[rgba(144,163,128,0.18)] text-[#A8C098] border-[rgba(144,163,128,0.42)]",
-  Mobile:        "bg-[rgba(168,132,104,0.18)] text-[#CCA088] border-[rgba(168,132,104,0.42)]",
+  Retail:        "bg-[hsla(340,82%,62%,0.22)] text-[hsl(340,82%,72%)] border-[hsla(340,82%,62%,0.55)]",
+  "Event Venue": "bg-[hsla(189,94%,43%,0.22)] text-[hsl(189,94%,52%)] border-[hsla(189,94%,43%,0.55)]",
+  "White Box":   "bg-[hsla(214,16%,58%,0.22)] text-[hsl(214,16%,76%)] border-[hsla(214,16%,58%,0.55)]",
+  Industrial:    "bg-[hsla(217,88%,60%,0.22)] text-[hsl(217,88%,72%)] border-[hsla(217,88%,60%,0.55)]",
+  Warehouse:     "bg-[hsla(38,92%,50%,0.22)] text-[hsl(38,92%,56%)] border-[hsla(38,92%,50%,0.55)]",
+  Gallery:       "bg-[hsla(268,86%,72%,0.22)] text-[hsl(268,86%,80%)] border-[hsla(268,86%,72%,0.55)]",
+  Studio:        "bg-[hsla(300,70%,62%,0.22)] text-[hsl(300,70%,76%)] border-[hsla(300,70%,62%,0.55)]",
+  Outdoor:       "bg-[hsla(142,76%,55%,0.22)] text-[hsl(142,76%,64%)] border-[hsla(142,76%,55%,0.55)]",
+  Mobile:        "bg-[hsla(25,90%,56%,0.22)] text-[hsl(25,90%,66%)] border-[hsla(25,90%,56%,0.55)]",
 };
 
 export const TYPE_FALLBACK_STYLE =
-  "bg-[rgba(124,124,144,0.18)] text-[#A6A6BC] border-[rgba(124,124,144,0.40)]";
+  "bg-[hsla(0,0%,58%,0.20)] text-[hsl(0,0%,76%)] border-[hsla(0,0%,58%,0.5)]";
 
 /**
  * Phase 5.12.10: case-insensitive palette lookup. Returns the rgba
@@ -163,9 +174,3 @@ export function sanitizeWebsiteUrl(raw: unknown): string | null {
 
   return url.toString();
 }
-
-/**
- * Root host for an inline website link: strips protocol + leading `www.`.
- * Falls back to the raw string for unparseable input. Shared by VenueEdit
- * + VenueDetail (was a per-file copy before the Phase 5.10.1 dedupe).
- */

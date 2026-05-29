@@ -263,6 +263,25 @@ export default function ProjectDetail() {
     }
   };
 
+  // Phase 6.3 (P8): atomic multi-column save for the single-or-range
+  // DateFields, which must write both halves of a date pair in ONE update
+  // (two saveField calls would be non-atomic — a partial row between them).
+  // Fire-and-forget like saveClientId/saveVenueIds: toasts + reverts on error
+  // rather than throwing (DateField's onChange has no catch wrapper).
+  const saveFields = async (patch: Partial<Project>) => {
+    if (!project) return;
+    const prev = project;
+    setProject({ ...project, ...patch });
+    const { error } = await supabase
+      .from("projects")
+      .update(patch)
+      .eq("id", project.id);
+    if (error) {
+      setProject(prev);
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+    }
+  };
+
   const saveClientId = async (nextId: string | null) => {
     if (!project) return;
     const prev = { client_id: project.client_id, client: project.client };
@@ -534,7 +553,7 @@ export default function ProjectDetail() {
           <div className="eyebrow" style={{ paddingTop: 8 }}>Job #{project.job_number}</div>
         ) : null}
         <div className="row between" style={{ alignItems: "center" }}>
-          <div className="row-c" style={{ flex: 1, gap: 16, alignItems: "center", minWidth: 0, flexWrap: "wrap" }}>
+          <div className="row-c-title" style={{ flex: 1, gap: 16, alignItems: "center" }}>
             <h1 className="h-page" style={{ minWidth: 0 }}>{project.name || "(untitled)"}</h1>
             <ClickPillCell
               value={project.status}
@@ -582,13 +601,16 @@ export default function ProjectDetail() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "auto auto auto 1px 1fr",
-                gap: 0,
+                gridTemplateColumns: "auto 1px auto 1px 1fr",
+                gridTemplateRows: "auto auto",
+                columnGap: 0,
+                rowGap: 14,
                 alignItems: "center",
                 width: "100%",
               }}
             >
-              <div>
+              {/* Col 1: Install + Removal stacked */}
+              <div style={{ gridColumn: 1, gridRow: 1, paddingRight: 24 }}>
                 <div className="label-form">Install</div>
                 <div className="mono" style={{ marginTop: 4 }}>
                   {project.install_dates_start
@@ -600,30 +622,7 @@ export default function ProjectDetail() {
                     : "-"}
                 </div>
               </div>
-              <div
-                style={{
-                  marginLeft: 24,
-                  paddingLeft: 24,
-                  borderLeft: "1px solid hsl(var(--border))",
-                }}
-              >
-                <div className="label-form">Live</div>
-                <div className="mono" style={{ marginTop: 4 }}>
-                  {project.live_dates_start
-                    ? `${formatShortDate(project.live_dates_start)}${
-                        project.live_dates_end ? ` to ${formatShortDate(project.live_dates_end)}` : ""
-                      }`
-                    : "-"}
-                </div>
-              </div>
-              <div
-                style={{
-                  marginLeft: 24,
-                  paddingRight: 24,
-                  paddingLeft: 24,
-                  borderLeft: "1px solid hsl(var(--border))",
-                }}
-              >
+              <div style={{ gridColumn: 1, gridRow: 2, paddingRight: 24 }}>
                 <div className="label-form">Removal</div>
                 <div className="mono" style={{ marginTop: 4 }}>
                   {project.removal_dates_start
@@ -635,8 +634,37 @@ export default function ProjectDetail() {
                     : "-"}
                 </div>
               </div>
-              <div style={{ borderLeft: "1px solid hsl(var(--border-strong))", alignSelf: "stretch" }} />
-              <div style={{ paddingLeft: 24, minWidth: 0 }}>
+              {/* Col 2: hairline divider between the Install/Removal stack and Live */}
+              <div
+                style={{
+                  gridColumn: 2,
+                  gridRow: "1 / span 2",
+                  borderLeft: "1px solid hsl(var(--border))",
+                  alignSelf: "stretch",
+                }}
+              />
+              {/* Col 3: Live, spanning the height of both stacked rows */}
+              <div style={{ gridColumn: 3, gridRow: "1 / span 2", paddingLeft: 24, paddingRight: 24 }}>
+                <div className="label-form">Live</div>
+                <div className="mono" style={{ marginTop: 4 }}>
+                  {project.live_dates_start
+                    ? `${formatShortDate(project.live_dates_start)}${
+                        project.live_dates_end ? ` to ${formatShortDate(project.live_dates_end)}` : ""
+                      }`
+                    : "-"}
+                </div>
+              </div>
+              {/* Col 4: stronger divider before Next Deliverable */}
+              <div
+                style={{
+                  gridColumn: 4,
+                  gridRow: "1 / span 2",
+                  borderLeft: "1px solid hsl(var(--border-strong))",
+                  alignSelf: "stretch",
+                }}
+              />
+              {/* Col 5: Next Deliverable, inline to the right of Live */}
+              <div style={{ gridColumn: 5, gridRow: "1 / span 2", paddingLeft: 24, minWidth: 0 }}>
                 <div className="row between" style={{ alignItems: "center" }}>
                   <span className="label-form">Next Deliverable</span>
                   {nextDeliverable?.due_date ? (
@@ -738,6 +766,7 @@ export default function ProjectDetail() {
             project={project}
             venueIds={venueIds}
             saveField={saveField}
+            saveFields={saveFields}
             saveClientId={saveClientId}
             saveVenueIds={saveVenueIds}
             loadClientOptions={loadClientOptions}

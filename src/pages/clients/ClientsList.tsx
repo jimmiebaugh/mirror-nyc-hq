@@ -156,6 +156,7 @@ export default function ClientsList() {
         </div>
       ) : (
         <>
+          <div className="tbl-list">
           <DataTable<ClientListRow>
             rows={filtered}
             flat
@@ -173,6 +174,7 @@ export default function ClientsList() {
               {
                 key: "name",
                 label: "Client",
+                align: "l",
                 sort: (a, b) => a.name.localeCompare(b.name),
                 render: (r) => (
                   <Link
@@ -188,6 +190,7 @@ export default function ClientsList() {
               {
                 key: "projects",
                 label: "Active Projects",
+                align: "l",
                 headerTitle:
                   "Counts only active projects. Complete, Cancelled, and On Hold projects are excluded.",
                 render: (r) => (
@@ -206,6 +209,7 @@ export default function ClientsList() {
               {
                 key: "deliverables",
                 label: "Deliverables",
+                align: "l",
                 // 5.7.4 smoke followup: stacked render — Deliverable title
                 // on top (coral hyperlink), Project title beneath (muted).
                 // "in X days" suffix on the deliverable title lands in a
@@ -234,6 +238,7 @@ export default function ClientsList() {
               },
             ]}
           />
+          </div>
           <span className="cap">{filtered.length} clients</span>
         </>
       )}

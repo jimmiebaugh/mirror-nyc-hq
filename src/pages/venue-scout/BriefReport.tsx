@@ -23,8 +23,8 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { ArrowLeft, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
@@ -1090,13 +1090,19 @@ export default function BriefReport() {
           direct nav). */}
       <div className="actionbar">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
-          <Link to="/venue-scout" className="crumb inline-flex items-center gap-1.5">
-            <ArrowLeft className="h-3 w-3" /> Back
+          <Link to="/venue-scout" className="btn btn-tertiary">
+            <IconArrowLeft className="ic" />
+            Back
           </Link>
           {decks.length === 0 ? (
-            <Button onClick={onForwardClick} disabled={confirming || isArchived}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={onForwardClick}
+              disabled={confirming || isArchived}
+            >
               {confirming ? "Saving…" : cta.label}
-            </Button>
+            </button>
           ) : null}
         </div>
       </div>

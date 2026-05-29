@@ -40,6 +40,12 @@ supabase/.temp/
 .claude/worktrees/
 # Claude Code per-user settings (don't share across the team)
 .claude/settings.local.json
+# Tech-debt audit artifacts (session-local working files; never committed).
+# Durable content folded into code-observations.md (unresolved findings),
+# docs/decisions.md (rationale), docs/roadmap.md (post-v1.0 backlog line).
+.claude/wf-tech-debt-audit.js
+TECH_DEBT_AUDIT.md
+.claude/scheduled_tasks.lock
 
 # Local audit captures and auth state
 .audit/

@@ -9,6 +9,7 @@
 // for plain transactional notifications.
 
 import { getGmailAccessToken } from "./gmailServiceAccount.ts";
+import { stripMimeControl } from "./mimeHeader.ts";
 
 function bytesToBase64(bytes: Uint8Array): string {
   let bin = "";
@@ -30,11 +31,16 @@ function buildMime(opts: {
   bodyText: string;
   bodyHtml?: string;
 }): string {
+  // Sanitize header values so a CR/LF in to/subject/from can't inject extra
+  // MIME headers (F019).
+  const to = stripMimeControl(opts.to);
+  const from = stripMimeControl(opts.from);
+  const subject = stripMimeControl(opts.subject);
   if (!opts.bodyHtml) {
     return [
-      `From: ${opts.from}`,
-      `To: ${opts.to}`,
-      `Subject: ${opts.subject}`,
+      `From: ${from}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
       "MIME-Version: 1.0",
       'Content-Type: text/plain; charset="UTF-8"',
       "Content-Transfer-Encoding: 7bit",
@@ -45,9 +51,9 @@ function buildMime(opts: {
   // Multipart/alternative for HTML + plaintext fallback.
   const boundary = `=_mirror_${Math.random().toString(36).slice(2)}`;
   return [
-    `From: ${opts.from}`,
-    `To: ${opts.to}`,
-    `Subject: ${opts.subject}`,
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     "",

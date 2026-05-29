@@ -82,7 +82,7 @@ type BreakdownRow = {
 // Name carry-over from Phase 5.15 (no cap input lives here anymore;
 // rename to AnthropicSpendCard deferred per Phase 5.15.1 spec § 6).
 function SpendCapCard() {
-  const [window, setWindow] = useState<"month" | "year">("month");
+  const [windowKind, setWindowKind] = useState<"month" | "year">("month");
   const [vsSpend, setVsSpend] = useState(0);
   const [globalSpend, setGlobalSpend] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -93,7 +93,7 @@ function SpendCapCard() {
       setLoading(true);
       const { data: rows, error } = await supabase.rpc(
         "anthropic_spend_breakdown",
-        { window_kind: window },
+        { window_kind: windowKind },
       );
       if (!active) return;
       if (error) {
@@ -121,7 +121,7 @@ function SpendCapCard() {
     return () => {
       active = false;
     };
-  }, [window]);
+  }, [windowKind]);
 
   if (loading) {
     return (
@@ -136,7 +136,7 @@ function SpendCapCard() {
     );
   }
 
-  const windowLabel = window === "year" ? "this year" : "this month";
+  const windowLabel = windowKind === "year" ? "this year" : "this month";
 
   return (
     <section className="card">
@@ -169,24 +169,24 @@ function SpendCapCard() {
               <button
                 type="button"
                 role="tab"
-                aria-selected={window === "month"}
-                className={window === "month" ? "on" : undefined}
-                onClick={() => setWindow("month")}
+                aria-selected={windowKind === "month"}
+                className={windowKind === "month" ? "on" : undefined}
+                onClick={() => setWindowKind("month")}
               >
                 Month
               </button>
               <button
                 type="button"
                 role="tab"
-                aria-selected={window === "year"}
-                className={window === "year" ? "on" : undefined}
-                onClick={() => setWindow("year")}
+                aria-selected={windowKind === "year"}
+                className={windowKind === "year" ? "on" : undefined}
+                onClick={() => setWindowKind("year")}
               >
                 Year
               </button>
             </div>
           </div>
-          <AnthropicSpendBreakdownTable appFilter="venue_scout" window={window} />
+          <AnthropicSpendBreakdownTable appFilter="venue_scout" window={windowKind} />
         </div>
       </div>
     </section>

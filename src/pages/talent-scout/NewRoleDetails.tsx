@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
@@ -187,10 +186,16 @@ export default function NewRoleDetails() {
 
       <div className="actionbar">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
-          <Button variant="ghost" className="text-primary" onClick={() => navigate("/talent-scout")}>
+          <button
+            type="button"
+            className="btn btn-tertiary"
+            onClick={() => navigate("/talent-scout")}
+          >
             Cancel
-          </Button>
-          <Button onClick={onContinue}>Continue →</Button>
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onContinue}>
+            Continue →
+          </button>
         </div>
       </div>
     </div>

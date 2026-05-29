@@ -20,7 +20,7 @@
 //   - status_filter param consolidates retry-failed-candidates' role here.
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
+import { requireInternalOrAdminUser } from "../_shared/internalAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -243,7 +243,7 @@ async function processRole(supabase: SupabaseClient, roleId: string): Promise<Re
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  const authFail = await requireInternalOrUserAuth(req);
+  const authFail = await requireInternalOrAdminUser(req);
   if (authFail) return new Response(authFail.body, { status: authFail.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
@@ -267,6 +267,11 @@ Deno.serve(async (req) => {
     const f = statusInClauseForFilter(filter);
     if (f.include) q = q.in("status", f.include);
     if (f.exclude) q = q.not("status", "in", `(${f.exclude.join(",")})`);
+    // F035: mirror listPendingCandidates exactly so reeval_total counts the
+    // real work set. The manuallyReviewed / orExpr clauses were omitted here,
+    // over-counting the denominator and stranding the progress bar below 100%.
+    if (f.manuallyReviewed !== undefined) q = q.eq("manually_reviewed", f.manuallyReviewed);
+    if (f.orExpr) q = q.or(f.orExpr);
     const { count: total } = await q;
     const totalNum = total ?? 0;
 

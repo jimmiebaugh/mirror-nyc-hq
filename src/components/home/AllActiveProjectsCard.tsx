@@ -92,11 +92,11 @@ export function AllActiveProjectsCard() {
       <table className="tbl">
         <thead>
           <tr>
-            <th>Job #</th>
-            <th>Project / Client</th>
-            <th>Status</th>
-            <th>Lead</th>
-            <th>Design</th>
+            <th className="l">Job #</th>
+            <th className="l">Project / Client</th>
+            <th className="c">Status</th>
+            <th className="l">Lead</th>
+            <th className="l">Design</th>
           </tr>
         </thead>
         <tbody>
@@ -113,10 +113,10 @@ export function AllActiveProjectsCard() {
                 className="cursor-pointer"
                 onClick={() => navigate(`/projects/${r.id}`)}
               >
-                <td className="font-mono text-[hsl(var(--muted-foreground))]">
+                <td className="l font-mono text-[hsl(var(--muted-foreground))]">
                   {r.jobNumber ?? "-"}
                 </td>
-                <td>
+                <td className="l">
                   <div className="lead">{r.name}</div>
                   {r.clientName ? (
                     <Link
@@ -128,14 +128,14 @@ export function AllActiveProjectsCard() {
                     </Link>
                   ) : null}
                 </td>
-                <td>
+                <td className="c">
                   <span className={pillClass(r.status)}>
                     <span className="dt" />
                     {r.status || "Queued"}
                   </span>
                 </td>
-                <td className="text-[hsl(var(--muted-foreground))]">{r.leadName ?? "-"}</td>
-                <td className="text-[hsl(var(--muted-foreground))]">{r.designerName ?? "-"}</td>
+                <td className="l text-[hsl(var(--muted-foreground))]">{r.leadName ?? "-"}</td>
+                <td className="l text-[hsl(var(--muted-foreground))]">{r.designerName ?? "-"}</td>
               </tr>
             ))
           )}

@@ -98,10 +98,10 @@ export function AdminsCard() {
           <table className="tbl tbl--flat">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Role / Title</th>
-                <th>Department</th>
-                <th>Last Active</th>
+                <th className="l">Name</th>
+                <th className="l">Role / Title</th>
+                <th className="l">Department</th>
+                <th className="l">Last Active</th>
                 <th className="r" style={{ width: 40 }}></th>
               </tr>
             </thead>

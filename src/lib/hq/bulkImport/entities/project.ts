@@ -5,8 +5,10 @@ import type {
   DedupeMatch,
   EntityConfig,
   ResolvedRow,
+  RowValidationError,
 } from "../types";
 import { enumerateUnresolvedRefs, splitMulti } from "../refEnumerate";
+import { asImportString, isValidMoney, normalizeMoney, pushError } from "../validation";
 
 /**
  * Project EntityConfig (Phase 5.9.2). First real consumer of the 5.9.1
@@ -36,6 +38,46 @@ const VENUE_CREATE_FIELDS = [
 
 function dedupeKeyFor(name: unknown, jobNumber: unknown): string {
   return `${String(name ?? "").trim().toLowerCase()}|${String(jobNumber ?? "").trim()}`;
+}
+
+const DATE_KEYS = [
+  "live_start",
+  "live_end",
+  "install_start",
+  "install_end",
+  "removal_start",
+  "removal_end",
+] as const;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function validateProjectRows(rows: Record<string, unknown>[]): RowValidationError[] {
+  const errors: RowValidationError[] = [];
+  rows.forEach((row, i) => {
+    if (asImportString(row.dedupe_action) === "skip") return;
+
+    if (!asImportString(row.name)) {
+      pushError(errors, i, "name", "Name is required.");
+    }
+
+    const status = asImportString(row.status);
+    if (status && !PROJECT_STATUS_VALUES.includes(status as (typeof PROJECT_STATUS_VALUES)[number])) {
+      pushError(errors, i, "status", `Unknown status "${status}".`);
+    }
+
+    for (const key of DATE_KEYS) {
+      const date = asImportString(row[key]);
+      if (date && !ISO_DATE.test(date)) {
+        pushError(errors, i, key, `Date must be YYYY-MM-DD (got "${date}").`);
+      }
+    }
+
+    const budget = asImportString(row.budget);
+    if (budget && !isValidMoney(budget)) {
+      pushError(errors, i, "budget", `Budget must be numeric (got "${budget}").`);
+    }
+  });
+  return errors;
 }
 
 export const projectConfig: EntityConfig = {
@@ -145,6 +187,8 @@ export const projectConfig: EntityConfig = {
     return matches;
   },
 
+  validateRows: (rows) => validateProjectRows(rows),
+
   buildCommitPayload: (gridRows, mappings, decisions): CommitPayload => {
     const queued_refs: Record<string, Array<Record<string, string>>> = {};
     // Build queue index maps for the name-mode ref kinds (client + venue).
@@ -185,7 +229,7 @@ export const projectConfig: EntityConfig = {
           category: String(row.category ?? "").trim(),
           city: String(row.city ?? "").trim(),
           tags: splitMulti(row.tags),
-          budget: String(row.budget ?? "").trim(),
+          budget: normalizeMoney(row.budget),
           live_start: String(row.live_start ?? "").trim(),
           live_end: String(row.live_end ?? "").trim(),
           install_start: String(row.install_start ?? "").trim(),

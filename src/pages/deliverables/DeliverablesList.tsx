@@ -592,10 +592,10 @@ function DeliverablesGroupedList({
                 </button>
               ) : null}
             </div>
+            <div className="tbl-list">
             <DataTable<Row>
               rows={tableRows}
               flat
-              rowBorderToken={(r) => deliverableStatusToken(r.status)}
               onRowClick={(r) => {
                 if (isDraftRow(r)) return;
                 onRowClick(r);
@@ -604,6 +604,8 @@ function DeliverablesGroupedList({
                 {
                   key: "title",
                   label: "Title",
+                  align: "l",
+                  width: 300,
                   sort: (a, b) => a.title.localeCompare(b.title),
                   render: (r) =>
                     isDraftRow(r) ? (
@@ -654,7 +656,7 @@ function DeliverablesGroupedList({
                 {
                   key: "due_relative",
                   label: "",
-                  group: "Due",
+                  group: "Date Due",
                   align: "c",
                   width: 160,
                   sort: (a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""),
@@ -676,7 +678,7 @@ function DeliverablesGroupedList({
                 {
                   key: "due_date",
                   label: "",
-                  group: "Due",
+                  group: "Date Due",
                   align: "c",
                   width: 110,
                   sort: (a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""),
@@ -694,6 +696,7 @@ function DeliverablesGroupedList({
                 {
                   key: "status",
                   label: "Status",
+                  align: "c",
                   width: 140,
                   sort: (a, b) => a.status.localeCompare(b.status),
                   render: (r) =>
@@ -713,6 +716,7 @@ function DeliverablesGroupedList({
                 },
               ]}
             />
+            </div>
           </div>
         );
       })}

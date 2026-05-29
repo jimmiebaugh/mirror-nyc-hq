@@ -98,20 +98,6 @@ export async function loadOutlookEntriesForYear(year: number): Promise<OutlookEn
   return ((data ?? []) as unknown as EntryRow[]).map(mapEntry);
 }
 
-export async function loadOutlookEntryById(id: string): Promise<OutlookEntry | null> {
-  const { data, error } = await supabase
-    .from("outlook_entries" as never)
-    .select(SELECT_COLUMNS)
-    .eq("id", id)
-    .maybeSingle();
-  if (error) {
-    console.warn("loadOutlookEntryById error", error);
-    return null;
-  }
-  if (!data) return null;
-  return mapEntry(data as unknown as EntryRow);
-}
-
 export async function loadDistinctOutlookYears(): Promise<number[]> {
   const { data, error } = await supabase
     .from("outlook_entries" as never)

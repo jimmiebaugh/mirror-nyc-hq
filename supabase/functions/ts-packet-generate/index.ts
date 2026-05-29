@@ -10,7 +10,7 @@
 // account's gmail.send scope.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { requireInternalOrUserAuth } from "../_shared/internalAuth.ts";
+import { requireInternalOrAdminUser } from "../_shared/internalAuth.ts";
 import {
   C_CORAL,
   C_TIER1,
@@ -125,7 +125,7 @@ function classificationLabel(t: string): string {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  const authFail = await requireInternalOrUserAuth(req);
+  const authFail = await requireInternalOrAdminUser(req);
   if (authFail) {
     return new Response(authFail.body, {
       status: authFail.status,
@@ -348,7 +348,7 @@ Deno.serve(async (req) => {
       await sendPacketEmail({
         to: hm.email,
         subject: `Mirror · ${role.title ?? "Role"} · R${round.round_number ?? "?"} Candidate Review Packet`,
-        bodyText: `Hi ${hm.full_name?.split(/\s+/)[0] ?? "there"},\n\nThe candidate review packet for Round ${round.round_number ?? "?"} of ${role.title ?? "the role"} is ready.\n\n${pulled} candidates pulled, ${inPool} in pool, ${fastTrackCount} fast-tracked.\n\n— Mirror NYC HQ`,
+        bodyText: `Hi ${hm.full_name?.split(/\s+/)[0] ?? "there"},\n\nThe candidate review packet for Round ${round.round_number ?? "?"} of ${role.title ?? "the role"} is ready.\n\n${pulled} candidates pulled, ${inPool} in pool, ${fastTrackCount} fast-tracked.\n\n- Mirror NYC HQ`,
         packetUrl: emailUrl,
         attachmentFilename: friendlyName,
       });

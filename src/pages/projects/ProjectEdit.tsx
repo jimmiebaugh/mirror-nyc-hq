@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { syncJoinRows } from "@/lib/projects/syncJoinRows";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { HQFormField } from "@/components/hq/HQFormField";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { DateField } from "@/components/ui/DateField";
 import { InternalNotesEditor } from "@/components/data/InternalNotesEditor";
-import { IconArrowLeft } from "@/components/icons/HQIcons";
+import {
+  formatCurrencyDisplay,
+  formatCurrencyInput,
+  parseCurrencyToNumber,
+} from "@/lib/hq/currency";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -227,7 +234,7 @@ export default function ProjectEdit() {
           jobNumber: p.job_number ?? "",
           category: p.category ?? "",
           city: p.city ?? "",
-          budget: p.budget != null ? String(p.budget) : "",
+          budget: formatCurrencyDisplay(p.budget),
           tags: p.tags ?? [],
           installDatesStart: p.install_dates_start ?? "",
           installDatesEnd: p.install_dates_end ?? "",
@@ -409,8 +416,8 @@ export default function ProjectEdit() {
       toast({ title: "Project name is required", variant: "destructive" });
       return;
     }
-    const parsedBudget = form.budget.trim() ? Number(form.budget.replace(/[$,\s]/g, "")) : null;
-    if (form.budget.trim() && (parsedBudget == null || Number.isNaN(parsedBudget))) {
+    const parsedBudget = parseCurrencyToNumber(form.budget);
+    if (form.budget.trim() && parsedBudget == null) {
       toast({ title: "Budget must be a number", variant: "destructive" });
       return;
     }
@@ -459,85 +466,80 @@ export default function ProjectEdit() {
       }
     }
 
+    const joinErrors: PostgrestError[] = [];
     if (projectId) {
-      const amAdd = accountManagerIds.filter((u) => !initialAccountManagerIds.includes(u));
-      const amRemove = initialAccountManagerIds.filter((u) => !accountManagerIds.includes(u));
-      for (const userId of amAdd) {
-        await supabase
-          .from("project_account_managers")
-          .insert({ project_id: projectId, user_id: userId });
-      }
-      for (const userId of amRemove) {
-        await supabase
-          .from("project_account_managers")
-          .delete()
-          .eq("project_id", projectId)
-          .eq("user_id", userId);
-      }
-      const dsAdd = designerIds.filter((u) => !initialDesignerIds.includes(u));
-      const dsRemove = initialDesignerIds.filter((u) => !designerIds.includes(u));
-      for (const userId of dsAdd) {
-        await supabase
-          .from("project_designers")
-          .insert({ project_id: projectId, user_id: userId });
-      }
-      for (const userId of dsRemove) {
-        await supabase
-          .from("project_designers")
-          .delete()
-          .eq("project_id", projectId)
-          .eq("user_id", userId);
-      }
-      const pmAdd = memberIds.filter((u) => !initialMemberIds.includes(u));
-      const pmRemove = initialMemberIds.filter((u) => !memberIds.includes(u));
-      if (pmAdd.length > 0 || pmRemove.length > 0) {
-        const { data: userRes } = await supabase.auth.getUser();
-        const createdBy = userRes.user?.id ?? null;
-        for (const userId of pmAdd) {
-          await supabase
-            .from("project_members")
-            .insert({
-              project_id: projectId,
-              user_id: userId,
-              created_by: createdBy,
-            });
-        }
-        for (const userId of pmRemove) {
-          await supabase
-            .from("project_members")
-            .delete()
-            .eq("project_id", projectId)
-            .eq("user_id", userId);
-        }
-      }
-      const pvAdd = vendorIds.filter((v) => !initialVendorIds.includes(v));
-      const pvRemove = initialVendorIds.filter((v) => !vendorIds.includes(v));
-      for (const vendorId of pvAdd) {
-        await supabase
-          .from("project_vendors")
-          .insert({ project_id: projectId, vendor_id: vendorId });
-      }
-      for (const vendorId of pvRemove) {
-        await supabase
-          .from("project_vendors")
-          .delete()
-          .eq("project_id", projectId)
-          .eq("vendor_id", vendorId);
-      }
+      const pid = projectId;
+      const { data: userRes } = await supabase.auth.getUser();
+      const createdBy = userRes.user?.id ?? null;
+      joinErrors.push(
+        ...(await syncJoinRows({
+          prevIds: initialAccountManagerIds,
+          nextIds: accountManagerIds,
+          insert: (userId) =>
+            supabase.from("project_account_managers").insert({ project_id: pid, user_id: userId }),
+          remove: (userId) =>
+            supabase.from("project_account_managers").delete().eq("project_id", pid).eq("user_id", userId),
+        })),
+        ...(await syncJoinRows({
+          prevIds: initialDesignerIds,
+          nextIds: designerIds,
+          insert: (userId) =>
+            supabase.from("project_designers").insert({ project_id: pid, user_id: userId }),
+          remove: (userId) =>
+            supabase.from("project_designers").delete().eq("project_id", pid).eq("user_id", userId),
+        })),
+        ...(await syncJoinRows({
+          prevIds: initialMemberIds,
+          nextIds: memberIds,
+          insert: (userId) =>
+            supabase.from("project_members").insert({ project_id: pid, user_id: userId, created_by: createdBy }),
+          remove: (userId) =>
+            supabase.from("project_members").delete().eq("project_id", pid).eq("user_id", userId),
+        })),
+        ...(await syncJoinRows({
+          prevIds: initialVendorIds,
+          nextIds: vendorIds,
+          insert: (vendorId) =>
+            supabase.from("project_vendors").insert({ project_id: pid, vendor_id: vendorId }),
+          remove: (vendorId) =>
+            supabase.from("project_vendors").delete().eq("project_id", pid).eq("vendor_id", vendorId),
+        })),
+      );
     }
 
     setSaving(false);
+    if (isCreate && projectId) {
+      // The projects row was created; navigate regardless so a re-save can't
+      // re-INSERT it. Surface any partial join failure.
+      toast(
+        joinErrors.length > 0
+          ? {
+              title: "Project created, but some team/vendor changes didn't save",
+              description: joinErrors[0].message,
+              variant: "destructive",
+            }
+          : { title: "Project created" },
+      );
+      navigate(`/projects/${projectId}`);
+      return;
+    }
+    // Update mode: the projects row persisted, so clear the scalar baseline.
     setInitial(form);
+    if (joinErrors.length > 0) {
+      // Keep the join baselines stale so the bar stays dirty and a re-save
+      // retries only the failed buckets (re-adds are idempotent via 23505).
+      toast({
+        title: "Some team/vendor changes didn't save",
+        description: joinErrors[0].message,
+        variant: "destructive",
+      });
+      return;
+    }
     setInitialAccountManagerIds(accountManagerIds);
     setInitialDesignerIds(designerIds);
     setInitialMemberIds(memberIds);
     setInitialVendorIds(vendorIds);
-    if (isCreate && projectId) {
-      toast({ title: "Project created" });
-      navigate(`/projects/${projectId}`);
-    } else {
-      toast({ title: "Saved" });
-    }
+    toast({ title: "Saved" });
   };
 
   if (loading) {
@@ -550,22 +552,7 @@ export default function ProjectEdit() {
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120 }}>
-      <Link
-        to={isCreate ? "/projects" : `/projects/${id}`}
-        className="tlink"
-        onClick={(e) => {
-          if (dirty) {
-            e.preventDefault();
-            setConfirmLeaveOpen(true);
-          }
-        }}
-      >
-        <IconArrowLeft className="ic" />
-        Back to {isCreate ? "Projects" : "project"}
-      </Link>
-
       <div className="pagehead">
-        <div className="eyebrow">Project</div>
         <h1 className="h-page">{isCreate ? "New Project" : "Edit Project"}</h1>
       </div>
 
@@ -646,7 +633,9 @@ export default function ProjectEdit() {
               <input
                 className={`input ${form.budget ? "input--filled" : ""}`}
                 value={form.budget}
-                onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, budget: formatCurrencyInput(e.target.value) }))
+                }
                 placeholder="$185,000"
               />
             </HQFormField>
@@ -671,53 +660,56 @@ export default function ProjectEdit() {
           <span className="h-card">Event Info</span>
         </div>
         <div className="card-pad stack-4">
-          <div className="g2">
-            <HQFormField label="Install Date (start)">
-              <input
-                type="date"
-                className={`input ${form.installDatesStart ? "input--filled" : ""}`}
-                value={form.installDatesStart}
-                onChange={(e) => setForm((f) => ({ ...f, installDatesStart: e.target.value }))}
+          {/* Phase 6.3 (N5 + P9): each category is one single-or-range
+              DateField over its start/end pair, laid out 3-col. Single =
+              start set + end null; range = both. */}
+          <div className="g3">
+            <HQFormField label="Install">
+              <DateField
+                value={{
+                  start: form.installDatesStart || null,
+                  end: form.installDatesEnd || null,
+                }}
+                onChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    installDatesStart: v.start ?? "",
+                    installDatesEnd: v.end ?? "",
+                  }))
+                }
+                placeholder="Install dates"
               />
             </HQFormField>
-            <HQFormField label="Install Date (end)">
-              <input
-                type="date"
-                className={`input ${form.installDatesEnd ? "input--filled" : ""}`}
-                value={form.installDatesEnd}
-                onChange={(e) => setForm((f) => ({ ...f, installDatesEnd: e.target.value }))}
+            <HQFormField label="Live">
+              <DateField
+                value={{
+                  start: form.liveDatesStart || null,
+                  end: form.liveDatesEnd || null,
+                }}
+                onChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    liveDatesStart: v.start ?? "",
+                    liveDatesEnd: v.end ?? "",
+                  }))
+                }
+                placeholder="Live dates"
               />
             </HQFormField>
-            <HQFormField label="Live Date (start)">
-              <input
-                type="date"
-                className={`input ${form.liveDatesStart ? "input--filled" : ""}`}
-                value={form.liveDatesStart}
-                onChange={(e) => setForm((f) => ({ ...f, liveDatesStart: e.target.value }))}
-              />
-            </HQFormField>
-            <HQFormField label="Live Date (end)">
-              <input
-                type="date"
-                className={`input ${form.liveDatesEnd ? "input--filled" : ""}`}
-                value={form.liveDatesEnd}
-                onChange={(e) => setForm((f) => ({ ...f, liveDatesEnd: e.target.value }))}
-              />
-            </HQFormField>
-            <HQFormField label="Removal Date (start)">
-              <input
-                type="date"
-                className={`input ${form.removalDatesStart ? "input--filled" : ""}`}
-                value={form.removalDatesStart}
-                onChange={(e) => setForm((f) => ({ ...f, removalDatesStart: e.target.value }))}
-              />
-            </HQFormField>
-            <HQFormField label="Removal Date (end)">
-              <input
-                type="date"
-                className={`input ${form.removalDatesEnd ? "input--filled" : ""}`}
-                value={form.removalDatesEnd}
-                onChange={(e) => setForm((f) => ({ ...f, removalDatesEnd: e.target.value }))}
+            <HQFormField label="Removal">
+              <DateField
+                value={{
+                  start: form.removalDatesStart || null,
+                  end: form.removalDatesEnd || null,
+                }}
+                onChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    removalDatesStart: v.start ?? "",
+                    removalDatesEnd: v.end ?? "",
+                  }))
+                }
+                placeholder="Removal dates"
               />
             </HQFormField>
           </div>

@@ -179,14 +179,16 @@ Deno.serve(async (req) => {
           "borough",
         ]),
         address: pick(r, ["address", "location"]),
-        // VS Pro `type` -> HQ `venue_type` (port plan-locked rename;
-        // `type` reads as a Postgres / TS reserved word and was renamed at
-        // 4.1-port migration time). Phase 5.16.1.1 (Edge #15): split the
-        // producer's multi-value cell on the canonical delimiter set and
-        // re-join with " / " so downstream Phase A `sanitizeMultiAgainst`
-        // (which splits on / and ,) canonicalizes each token. Previously the
-        // raw cell was stored verbatim, so "Retail|Event Venue" failed
-        // canonicalize and rendered as one stale-token fallback chip.
+        // VS Pro `type` -> HQ `venue_type` (port-locked rename; `type` is a
+        // reserved word, renamed at 4.1-port). v1.0 producer contract: split the
+        // producer cell on PIPE `|` only (via splitMultiValue), so a slash in a
+        // type name (e.g. "Theatre/Auditorium") survives this initial parse. The
+        // " / " re-join below is INTERNAL LEGACY SERIALIZATION for downstream
+        // compat, NOT producer input syntax: the VS-internal `venue_type` is
+        // consumed by `sanitizeMultiAgainst` + matrix `parseTypes`, which still
+        // slash-split, so a canonical type name containing `/` can still split
+        // later in those paths (full realign is a post-v1 refactor; see
+        // code-observations Edge #34).
         venue_type: (() => {
           const v = pick(r, ["type", "category", "kind"]);
           if (!v) return v;
@@ -253,8 +255,11 @@ Deno.serve(async (req) => {
             "description",
             "details",
           ]);
+          // v1.0: split on pipe `|` + newline only, so slash/comma feature
+          // names stay intact (comma is the CSV column delimiter, not a
+          // multi-value separator).
           return v
-            ? v.split(/[,;|\n]/).map((s) => s.trim()).filter(Boolean)
+            ? v.split(/[|\n]/).map((s) => s.trim()).filter(Boolean)
             : [];
         })(),
       }))

@@ -6,13 +6,12 @@ import type { Dispatch, SetStateAction } from "react";
 import { DField } from "@/components/hq/DField";
 import { InlineEditText } from "@/components/hq/InlineEditText";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
+import { DateField } from "@/components/ui/DateField";
 import {
   createClientInline,
   createVenueInline,
   CLIENT_MINI_CREATE_FIELDS,
-  VENUE_MINI_CREATE_FIELDS,
 } from "@/lib/hq/inlineCreate";
-import { formatShortDate } from "@/lib/hq/dates";
 import type { Project } from "@/pages/projects/ProjectDetail";
 
 function formatBudget(b: number | null): string {
@@ -24,6 +23,7 @@ export function ProjectDetailsCard({
   project,
   venueIds,
   saveField,
+  saveFields,
   saveClientId,
   saveVenueIds,
   loadClientOptions,
@@ -34,6 +34,7 @@ export function ProjectDetailsCard({
   project: Project;
   venueIds: string[];
   saveField: <K extends keyof Project>(field: K, nextValue: Project[K]) => Promise<void>;
+  saveFields: (patch: Partial<Project>) => Promise<void>;
   saveClientId: (nextId: string | null) => Promise<void>;
   saveVenueIds: (nextIds: string[]) => Promise<void>;
   loadClientOptions: () => Promise<{ id: string; label: string }[]>;
@@ -148,10 +149,12 @@ export function ProjectDetailsCard({
               onMultiChange={(next) => void saveVenueIds(next)}
               entityLabel="Venue"
               placeholder="Add venue..."
+              // Venue create is single-field (name only), so it adds immediately
+              // on Enter / "+ Add" with no modal (Phase 6.5 follow-up):
+              // createVenueInline only needs { name }.
               quickCreate
               getRecordHref={(id) => `/venues/${id}`}
               displayAs="stack"
-              miniCreateFields={VENUE_MINI_CREATE_FIELDS}
               onMiniCreate={async (data) => {
                 const created = await createVenueInline(data);
                 if (created) {
@@ -167,105 +170,59 @@ export function ProjectDetailsCard({
           </DField>
         </div>
         <div style={{ borderTop: "1px solid hsl(var(--border))" }} />
-        {/* Combined dates row: Live | Install | Removal with vertical
-            dividers. Tight 4px label-to-input gap so the date pairs
-            read as compact columns. */}
+        {/* Phase 6.3 (P8): Live | Install | Removal, each one single-or-range
+            DateField over its start/end pair, committed atomically via
+            saveFields. Vertical dividers kept; the per-field arrangement
+            restructure (P7) is the LAYOUT cluster, not 6.3. */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 0 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="field" style={{ gap: 4 }}>
-              <div className="label-form">Live start</div>
-              <InlineEditText
-                value={project.live_dates_start}
-                placeholder="YYYY-MM-DD"
-                inputType="date"
-                renderRead={(v) =>
-                  v ? formatShortDate(v) : <span className="muted subtle">Not set</span>
-                }
-                onSave={(next) => saveField("live_dates_start", next || null)}
-              />
-            </div>
-            <div className="field" style={{ gap: 4 }}>
-              <div className="label-form">Live end</div>
-              <InlineEditText
-                value={project.live_dates_end}
-                placeholder="YYYY-MM-DD"
-                inputType="date"
-                renderRead={(v) =>
-                  v ? formatShortDate(v) : <span className="muted subtle">-</span>
-                }
-                onSave={(next) => saveField("live_dates_end", next || null)}
-              />
-            </div>
+          <div className="field" style={{ gap: 4 }}>
+            <div className="label-form">Live</div>
+            <DateField
+              variant="inline"
+              value={{ start: project.live_dates_start, end: project.live_dates_end }}
+              onChange={(v) =>
+                void saveFields({ live_dates_start: v.start, live_dates_end: v.end })
+              }
+              placeholder="Not set"
+            />
           </div>
           <div
+            className="field"
             style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
+              gap: 4,
               borderLeft: "1px solid hsl(var(--border))",
               paddingLeft: 16,
               marginLeft: 16,
             }}
           >
-            <div className="field" style={{ gap: 4 }}>
-              <div className="label-form">Install start</div>
-              <InlineEditText
-                value={project.install_dates_start}
-                placeholder="YYYY-MM-DD"
-                inputType="date"
-                renderRead={(v) =>
-                  v ? formatShortDate(v) : <span className="muted subtle">Not set</span>
-                }
-                onSave={(next) => saveField("install_dates_start", next || null)}
-              />
-            </div>
-            <div className="field" style={{ gap: 4 }}>
-              <div className="label-form">Install end</div>
-              <InlineEditText
-                value={project.install_dates_end}
-                placeholder="YYYY-MM-DD"
-                inputType="date"
-                renderRead={(v) =>
-                  v ? formatShortDate(v) : <span className="muted subtle">-</span>
-                }
-                onSave={(next) => saveField("install_dates_end", next || null)}
-              />
-            </div>
+            <div className="label-form">Install</div>
+            <DateField
+              variant="inline"
+              value={{ start: project.install_dates_start, end: project.install_dates_end }}
+              onChange={(v) =>
+                void saveFields({ install_dates_start: v.start, install_dates_end: v.end })
+              }
+              placeholder="Not set"
+            />
           </div>
           <div
+            className="field"
             style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
+              gap: 4,
               borderLeft: "1px solid hsl(var(--border))",
               paddingLeft: 16,
               marginLeft: 16,
             }}
           >
-            <div className="field" style={{ gap: 4 }}>
-              <div className="label-form">Removal start</div>
-              <InlineEditText
-                value={project.removal_dates_start}
-                placeholder="YYYY-MM-DD"
-                inputType="date"
-                renderRead={(v) =>
-                  v ? formatShortDate(v) : <span className="muted subtle">Not set</span>
-                }
-                onSave={(next) => saveField("removal_dates_start", next || null)}
-              />
-            </div>
-            <div className="field" style={{ gap: 4 }}>
-              <div className="label-form">Removal end</div>
-              <InlineEditText
-                value={project.removal_dates_end}
-                placeholder="YYYY-MM-DD"
-                inputType="date"
-                renderRead={(v) =>
-                  v ? formatShortDate(v) : <span className="muted subtle">-</span>
-                }
-                onSave={(next) => saveField("removal_dates_end", next || null)}
-              />
-            </div>
+            <div className="label-form">Removal</div>
+            <DateField
+              variant="inline"
+              value={{ start: project.removal_dates_start, end: project.removal_dates_end }}
+              onChange={(v) =>
+                void saveFields({ removal_dates_start: v.start, removal_dates_end: v.end })
+              }
+              placeholder="Not set"
+            />
           </div>
         </div>
         <div style={{ borderTop: "1px solid hsl(var(--border))" }} />

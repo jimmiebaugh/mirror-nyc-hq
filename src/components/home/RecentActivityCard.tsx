@@ -263,7 +263,7 @@ export function RecentActivityCard({
           return;
         }
         query = query
-          .eq("entity_type", "project")
+          .in("entity_type", ["project", "projects"])
           .in("entity_id", projectIds);
       }
 

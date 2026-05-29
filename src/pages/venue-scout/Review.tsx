@@ -42,7 +42,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { toast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -591,8 +591,9 @@ export default function Review() {
       {/* Sticky bottom nav */}
       <div className="actionbar">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <Link to={shortlistPath} className="crumb">
-            ← Back
+          <Link to={shortlistPath} className="btn btn-tertiary">
+            <IconArrowLeft className="ic" />
+            Back
           </Link>
           <div className="text-base text-muted-foreground">
             <strong className="text-foreground">{includedVenues.length}</strong>{" "}
@@ -604,12 +605,14 @@ export default function Review() {
               ({FRONT_MATTER_SLIDES} front-end + 2 per venue)
             </span>
           </div>
-          <Button
+          <button
+            type="button"
+            className="btn btn-primary"
             onClick={() => setConfirmOpen(true)}
             disabled={generating || includedVenues.length === 0}
           >
             {generating ? "Generating…" : "Generate Deck →"}
-          </Button>
+          </button>
         </div>
       </div>
 

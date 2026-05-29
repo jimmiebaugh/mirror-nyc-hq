@@ -1,8 +1,8 @@
 # Working with Claude on Mirror NYC HQ
 
-Living playbook for setting up Code + Cowork sessions to ship HQ work cleanly. Tailored to Jimmie's role (Senior Producer, not a developer) and the patterns built up through Phases 1 to 4.
+Living playbook for setting up Code + Cowork sessions to ship HQ work cleanly. Tailored to Jimmie's role (Senior Producer, not a developer). Current phase lives in `CHECKPOINT.md`; finished-phase history in `docs/v1-changelog.md`.
 
-Phase 4 (Venue Scout port) shipped to production 2026-05-13. Phase 5 (HQ Core) is the next major build. All UX/UI design happens directly in Claude (Cowork for wireframing + design specs, Code for implementation). Lovable is no longer in the toolchain. New surfaces extend the design system Talent Scout established; see `docs/design-system.md`.
+All UX/UI design happens directly in Claude (Cowork for wireframing + design specs, Code for implementation). Lovable is no longer in the toolchain. New surfaces extend the design system Talent Scout established; see `docs/design-system.md`.
 
 ---
 
@@ -11,9 +11,9 @@ Phase 4 (Venue Scout port) shipped to production 2026-05-13. Phase 5 (HQ Core) i
 | Surface | Job | When to reach for it |
 | --- | --- | --- |
 | **Cowork** (Claude desktop app) | Planning, prompt-drafting, exploration, "what should we build," wireframes. | Before opening a Code session, drafting specs, refining requirements, recapping a phase. |
-| **Code** (Claude desktop app) | Execution, implementation, anything that touches files, DB, or edge functions. | Once the spec is clear and you want the work done. |
+| **Code** (Claude Code CLI, primary; desktop app secondary) | Execution, implementation, anything that touches files, DB, or edge functions. | Once the spec is clear and you want the work done. |
 
-**How to open Code:** launch the Claude desktop app, switch to Code mode, open the `mirror-nyc-hq` folder directly in the app. Jimmie does not use the CLI. Never instruct `cd` + `claude` in a terminal.
+**How to open Code:** as of 2026-05-27 Jimmie runs Claude Code primarily via the **CLI** (`cd` into `mirror-nyc-hq`, then `claude`); CLI commands are fine to reference. The desktop app (open the `mirror-nyc-hq` folder directly, switch to Code mode) is the secondary Code surface and is mainly reserved for Cowork. Either runtime drives the same repo; the two-session discipline below (Cowork read-only on the repo during active `claude/*` branches) is unchanged.
 
 **The mistake to avoid:** using Code for ideation. Code burns context fast and loses architectural decisions in the noise of file edits. Use Cowork to think; arrive in Code with a tight prompt.
 
@@ -175,13 +175,11 @@ Two options when this happens:
 
 2. **Skip live screenshots** (acceptable fallback): rely on code-reviewer cold pass + JSDoc wireframe-binding citations + post-squash eyeball. Document the decision explicitly in the AWAITING block under a "Screenshots not captured (invasive schema reshape)" subsection citing which migrations created the conflict.
 
-Either option is fine; default to (2) when local Supabase isn't already running, since spinning it up adds Docker + setup overhead that isn't proportional to the sub-phase's risk. Phase 5.2.3 took option (2): the organizations -> vendors rename + the people FK reshape + the affiliations column drop together meant every new shipped surface would fail to render against the still-pre-migration live DB. The post-squash eyeball caught zero drift in that round.
+Either option is fine; default to (2) when local Supabase isn't already running, since spinning it up adds Docker + setup overhead that isn't proportional to the sub-phase's risk. (Phase 5.2.3 took option (2) cleanly; see git history.)
 
 ### 4.2. Migration push timing (deferred until squash-approval gate)
 
-Old habit: `supabase db push --linked` ran during Code's implementation pass so types could regenerate against the live DB. Problem: if the work halts mid-flight (cancelled prompt, scope reset, branch deletion), the live DB is ahead of `main` and the shipped frontend breaks against the renamed columns and tables. The 2026-05-15 Phase 5.2.2 attempt halted exactly this way and required a Step-0 reconciliation pass to unbreak `hq.mirrornyc.com`.
-
-Rule: `supabase db push --linked` runs only at the squash-approval gate, alongside the final build + visual check + code-reviewer pass. Migrations stay local during implementation. Code can iterate against a local Supabase (`supabase start`) or hand-craft `types.ts` from the migration SQL.
+Rule: `supabase db push --linked` runs only at the squash-approval gate, alongside the final build + visual check + code-reviewer pass. Migrations stay local during implementation. Code can iterate against a local Supabase (`supabase start`) or hand-craft `types.ts` from the migration SQL. Pushing during implementation risks leaving the live DB ahead of `main` (renamed columns/tables) and breaking the shipped frontend if the work halts mid-flight. (Phase 5.2.2, 2026-05-15, halted exactly this way and needed a reconciliation pass to unbreak `hq.mirrornyc.com`; see git history.)
 
 If a sub-phase halts, the live DB stays at last-shipped main and nothing breaks.
 
@@ -251,31 +249,19 @@ When Code drafts the AWAITING SQUASH APPROVAL block, frame the squash-flow secti
 
 ### 4.5.a. Why step 7 runs autonomously (Bash permission rule)
 
-(Renumbered from the original 5c → 5b → 7 as the ship flow consolidated from two pushes back to one in 2026-05-17 per § 4.5.c. The Bash allowlist rule applies to the single push.)
-
-
-The auto-mode classifier enforces at the Bash-tool layer; it doesn't read AskUserQuestion answers or chat approvals as policy overrides. Phase 5.2.3 confirmed this empirically (the autonomous push was blocked despite Jimmie's explicit "go"; Jimmie ran the push manually from his terminal). Phase 5.2 cleanup then codified a manual hand-off as the official pattern and immediately bit us: Jimmie pushed cleanup but the 5.2.3 squash + backfill commits from the previous session had never actually reached origin (the prior SHIPPED block claimed "Pushed to origin: yes" but the local-only commits sat unsent until Jimmie ran the next push), forcing two separate Netlify deploys when one was expected.
-
-Phase 5.2 cleanup follow-up (`[skip netlify]` commit on `main`, 2026-05-16) takes the alternative: pre-add a narrowly-scoped `Bash(git push origin main)` permission rule to `.claude/settings.json` so the classifier permits the autonomous push. Trade-offs:
+The auto-mode classifier enforces at the Bash-tool layer; it doesn't read AskUserQuestion answers or chat approvals as policy overrides. So a narrowly-scoped permission rule pre-added to `.claude/settings.json` lets the classifier permit the autonomous push. (Phase 5.2.3 confirmed the block empirically; a codified manual hand-off then bit us with unsent local-only commits and a doubled Netlify deploy, so the allowlist rule replaced it. See git history.)
 
 - The allowlist rule is exact-match only: `Bash(git push origin main)`. Not `git push --force`, not pushes to feature branches, not pushes to `master`, not push with options. Other push patterns still hit the classifier.
 - `.claude/hooks/block_dangerous.sh` already explicitly allows `git push origin main` (it's the merge-event push; CLAUDE.md item 8 documents this is the sanctioned Netlify-deploy moment). The hook layer was never the block.
-- The real gate is the chat approval at the AWAITING block. Code only reaches step 5b after Jimmie says "go" / "squash" / "approve"; the orchestration discipline above the Bash layer is the actual safety check, not a manual-hand-off speed bump that creates stale-sync risk.
-- The SHIPPED block (step 5e) now writes AFTER the push lands, so its "Pushed to origin: yes" claim is honest.
+- The real gate is the chat approval at the AWAITING block. Code only reaches the push step after Jimmie says "go" / "squash" / "approve"; the orchestration discipline above the Bash layer is the actual safety check.
 
-If `.claude/settings.json` is ever reset / cloned fresh, the rule needs to be re-added before any autonomous ship flow runs. Without it, step 5b will be blocked at the classifier and Code will need to fall back to surfacing a manual hand-off to Jimmie.
+If `.claude/settings.json` is ever reset / cloned fresh, the `Bash(git push origin main)` rule must be re-added before any autonomous ship flow runs. Without it, the push will be blocked at the classifier and Code falls back to surfacing a manual hand-off to Jimmie.
 
-Migration push specifically: `supabase db push --linked` reads the CWD's `supabase/migrations/` folder. Since the new migration files only exist on the worktree branch, the push MUST run from inside the worktree directory (`.claude/worktrees/<branch>/`). Running from the bare repo when main lacks the new migration files is a silent no-op and breaks the seed run downstream. The git operations in steps 5 through 5e still need the bare repo (you can't `git merge --squash` from inside a worktree of the branch you're trying to merge), but everything in steps 1-4 happens in the worktree.
+Migration push specifically: `supabase db push --linked` reads the CWD's `supabase/migrations/` folder. Since the new migration files only exist on the worktree branch, the push MUST run from inside the worktree directory (`.claude/worktrees/<branch>/`). Running from the bare repo when main lacks the new migration files is a silent no-op and breaks the seed run downstream. The git operations (steps 5 through 7) still need the bare repo (you can't `git merge --squash` from inside a worktree of the branch you're trying to merge), but everything in steps 1-4 happens in the worktree.
 
 ### 4.5.b. Historical: why the ship flow used two pushes (Phase 5.3 → 5.7.3)
 
-Between Phase 5.3 and Phase 5.7.3, the ship flow used **two separate pushes** to handle Netlify's `[skip netlify]` HEAD-commit-only check. The squash commit (deploy-worthy) pushed alone first; the CHECKPOINT backfill (`[skip netlify]`) pushed alone second so its skip token only applied to itself.
-
-Empirical trigger: Phase 5.3 (2026-05-16) tried single-push and lost the deploy because Netlify saw `[skip netlify]` at HEAD and skipped the whole push.
-
-**Replaced 2026-05-17 by the single-commit convention in § 4.5.c.** The new convention merges the CHECKPOINT.md update INTO the squash commit, so there's only one commit per ship + one push. The "deploy fires only when HEAD lacks `[skip netlify]`" rule still holds, but the single combined commit's `[skip netlify]` (or absence thereof) cleanly maps to "deploy or don't" without needing a follow-on backfill.
-
-The 50+ backfill commits that accumulated under the old convention were rewritten + folded into their squash commits on 2026-05-17 (see `pre-backfill-cleanup-2026-05-17` tag for the pre-rewrite state, `main-backup-pre-cleanup` branch as the local + remote recovery point). The Phase 3.7 backfill remained as a standalone orphan commit (`0dc0ca8`) because its target squash was outside the rebase range.
+Superseded 2026-05-17 by the single-commit convention in § 4.5.c. See git history for the old two-push convention, the 50+ backfill-commit rewrite, and recovery refs.
 
 ### 4.5.c. Single-commit ship convention (current)
 
@@ -307,7 +293,7 @@ git branch -D claude/<branch>
 **Verification gate (mandatory; session is NOT complete until clean):**
 
 1. `git log --oneline -3`. Top line should be the just-shipped commit (or its SHA-backfill follow-on). If you see the predecessor's hash at top, push didn't fire; re-run `git push origin main`.
-2. `head -10 "/Users/jimmie/Claude/Mirror NYC HQ/OUTPUTS/COWORK_SYNC.md"`. Marker commit shows the new ship's squash SHA, not the previous ship's. If you see the previous Marker commit, step 9 didn't write; re-run it.
+2. `head -10 OUTPUTS/COWORK_SYNC.md`. Marker commit shows the new ship's squash SHA, not the previous ship's. If you see the previous Marker commit, step 9 didn't write; re-run it.
 3. `git worktree list`. The just-shipped feature worktree no longer appears. If still listed, re-run step 8's `git worktree remove --force`.
 
 If any verification fails, re-run the corresponding step and re-verify. The session is not done until all three show clean. The `/ship-finalize` command runs all three verifications + reports a PASS/FAIL summary; use it.
@@ -348,11 +334,11 @@ The numbering convention stays § 4.5.X for the ship-flow sub-rules; 4.6 is the 
 
 ## 5. Code observations (passive logging)
 
-After completing each task, Code logs noteworthy findings it encountered into `code-observations.md` at repo root. Persistent across sessions. Triaged on calm afternoons.
+After completing each task, Code logs noteworthy unresolved follow-up findings it encountered into `code-observations.md` at repo root. Persistent across sessions. Triaged on calm afternoons. Issues fixed in the same task, resolved hotfixes, and narrative summaries of completed work belong in the relevant repo docs, CHECKPOINT, changelog, or commit message instead.
 
 Workflow detail lives in `CLAUDE.md` § Code observations and the header of `code-observations.md`. Short version:
 
-- Append-only table per area (Frontend, Edge Functions, Database, Build & Tooling, Docs, Other).
+- Append-only table per area (Frontend, Edge Functions, Database, Build & Tooling, Docs, Other), but only for findings that remain open at the end of the task.
 - Each row carries date, file, introducing commit hash (from `git blame`), severity tag, verify/resolve glyphs, and a one-sentence note.
 - In end-of-turn responses, Code mentions findings only if directly relevant to the current task; otherwise says "N new observations logged."
 
@@ -360,50 +346,19 @@ Don't derail the active task to fix what Code flags. Log it, keep moving. The ve
 
 ---
 
-## 6. Code-side setup (state of the playbook as of Phase 5)
+## 6. Code-side setup
 
 The HQ repo already has a strong `CLAUDE.md` and docs structure. The configuration below is what Code reads at session start.
 
-### Subagents in `.claude/agents/`
+### Subagents, skills, slash commands
 
-Each `*.md` file defines a named subagent runnable via `/agent <name>`. Currently defined:
+Canonical source for each is the file's own frontmatter/body; this list intentionally stays a pointer so it can't drift:
 
-- **`code-reviewer.md`**. Two-Claude review pattern. Run after any substantive feature implementation, before squash-merge. Verifies design-system adherence + brand-rules-that-bit-us list.
-- **`security-auditor.md`**. Runs on any new edge function before deploy. Wired into the `add-edge-function` skill at step 7.
-- **`design-spec-builder.md`**. Cowork-or-Code, drafts a new HQ surface spec before any implementation. Reads design-system.md and finds the closest Talent Scout analog. Save output to `OUTPUTS/phase-X-Y-<surface>-spec.md`.
-- **`migration-reviewer.md`**. Runs before any `supabase db push --linked`. Catches reversibility, RLS, GRANT, and cascade issues.
+- **Subagents** in `.claude/agents/` (`*.md`, runnable via `/agent <name>`): `code-reviewer`, `security-auditor`, `design-spec-builder`, `migration-reviewer`.
+- **Skills** in `.agents/skills/<name>/SKILL.md` (tracked in git with YAML frontmatter; the `.claude/skills/` dir is gitignored): `add-edge-function`, `add-migration`, `ship-phase`, `new-hq-surface`, `triage-observations`.
+- **Slash commands** in `.claude/commands/`: `/ship`, `/ship-finalize` (post-push housekeeping + verification gate per § 4.5.d), `/diagnose`, `/spec`, `/sync-prompts`, `/triage-observations`.
 
-### Skills in `.agents/skills/<name>/SKILL.md`
-
-Repo convention: canonical skill content lives in `.agents/skills/<name>/SKILL.md` (tracked in git, with YAML frontmatter). The `.claude/skills/` directory is gitignored.
-
-Each `SKILL.md` starts with frontmatter:
-
-```yaml
----
-name: skill-name
-description: "Use when <trigger>. Triggers: <comma-separated keywords>."
-metadata:
-  author: hq
-  version: "1.0.0"
----
-```
-
-Currently shipped:
-
-- **`add-edge-function`**. Verify_jwt + config.toml + callClaude + sendEmail conventions. Step 7 invokes `security-auditor`.
-- **`add-migration`**. Migration file naming, types regen, schema.md update, re-eval flag.
-- **`ship-phase`**. The squash-merge dance (pre-merge checklist + squash + post-merge backfill).
-- **`new-hq-surface`**. Phase-5 specific. Pattern for a new page that has no existing template.
-- **`triage-observations`**. Turns the `code-observations.md` log into a summary, a prioritized fix plan with recommended phase/order, and a ready-to-paste Code prompt. Does not implement fixes.
-
-### Custom slash commands in `.claude/commands/`
-
-- **`/ship`**. Pre-merge checklist + report.
-- **`/diagnose`**. Cron + edge fn health + migrations drift check.
-- **`/spec <surface>`**. Boot the design-spec-builder subagent. Save output to `OUTPUTS/phase-X-Y-<surface>-spec.md`.
-- **`/sync-prompts`**. Verify `src/lib/talent-scout/defaultEvalPrompt.ts` matches `supabase/functions/_shared/prompts.ts` DEFAULT_EVAL_PROMPT byte-for-byte.
-- **`/triage-observations`**. Run the `triage-observations` skill against `code-observations.md`: summary, prioritized fix plan, ready-to-paste Code prompt.
+Read the relevant file's frontmatter for the current trigger/behavior of any one of these.
 
 ### Subdirectory CLAUDE.md files
 
@@ -436,66 +391,29 @@ The high-leverage shortcuts inside any active session:
 
 ---
 
-## 8. Phase 5 specific recommendations
+## 8. Phase-specific recommendations
 
-Phase 5 is six cross-cutting surfaces with no reference repo to port from. This is the test of the spec-driven workflow.
-
-### The six surfaces
-
-1. **Notifications dispatch.** Foundation. Folds in `ts-send-pull-notification` and the future bell. Provides the event pipeline before Dashboard tiles or in-app bell can wire to it.
-2. **Dashboard tile grid.** Main landing for authenticated users. Each tile links to a destination. Needs Projects to exist before it lands.
-3. **Real `/projects` page.** Highest-traffic HQ Core surface. Replaces the current stub.
-4. **`/venues`, `/clients`, `/tasks` pages.** Parallelizable once Projects pattern is set.
-5. **Activity log feed.** Cross-cutting. Hooks into project, venue, role, scout, and task triggers.
-6. **Admin pages.** User role management. Global settings UI for fields currently SQL-only.
-
-### Order matters
-
-Dashboard depends on Projects (the tile is hollow without a destination). Notifications can ship in parallel since it's edge-function-plus-table groundwork; the bell wires after Dashboard. Activity log lands after enough event triggers exist to populate it.
-
-### Per-surface discipline
-
-Each surface gets a Cowork-drafted spec before any code. Six surfaces will drift from each other (and from Talent Scout's patterns) without the spec discipline. The cleanup pass after a drifted batch is expensive.
-
-### Phase 4 context
-
-Phase 4 shipped as a 1:1 port from `mirror-nyc-venue-scout-pro`. Cutover sequence + § 8 locked decisions captured in `docs/decisions.md` "Phase 4 cutover + port plan locked decisions". The functional scope of Venue Scout was inherited; HQ design tokens were applied. Phase 5 doesn't have that crutch: every surface is greenfield against the design system Talent Scout established.
+The Phase 5 HQ Core surfaces shipped through 5.16. For what each phase delivered and its locked decisions, see `docs/v1-changelog.md` and the finished-phase summaries in `docs/roadmap.md`. The durable lesson stands: every greenfield surface gets a Cowork-drafted spec before any code, or batches drift from each other and from Talent Scout's patterns and the cleanup pass is expensive.
 
 ---
 
 ## 9. Anti-patterns to avoid (lessons from Phases 3 and 4)
 
-**1. Mid-phase scope creep.** Phase 3.7 was supposed to be candidates UX; it absorbed referral ingestion late and grew into 18 sub-phases. Phase 3.8 absorbed real-cap-alert email mid-stream.
+**1. Mid-phase scope creep.** If a "while we're here" idea comes up mid-phase, capture it in `CHECKPOINT.md` § Next-up for a future phase. Resist absorbing it into the active branch unless the branch is fresh. (Phase 3.7 absorbed referral ingestion late and grew into 18 sub-phases; see git history.)
 
-*Fix:* if a "while we're here" idea comes up mid-phase, capture it in `CHECKPOINT.md` § Next-up for a future phase. Resist absorbing it into the active branch unless the branch is fresh.
+**2. Documentation drift on shared modules.** `src/lib/talent-scout/defaultEvalPrompt.ts` mirrors `supabase/functions/_shared/prompts.ts`; it drifted twice, each drift causing real eval differences. *Fix:* the `/sync-prompts` slash command.
 
-**2. Documentation drift on shared modules.** `src/lib/talent-scout/defaultEvalPrompt.ts` mirrors `supabase/functions/_shared/prompts.ts`. Drifted twice. Each drift caused real eval differences.
+**3. Long-running session context decay.** After 3+ /compact cycles, decisions from early in the session get fuzzy. *Fix:* end a session at phase boundaries, start the next fresh with the kickoff template, and capture decisions to `docs/decisions.md` live during the phase, not retroactively.
 
-*Fix:* the `/sync-prompts` slash command.
+**4. Edge function deploy lag.** Code commits need `supabase functions deploy <name>` to take effect. *Fix:* the `add-edge-function` skill includes the deploy step; the `ship-phase` skill lists which functions need re-deploy at squash-merge time. Use them.
 
-**3. Long-running session context decay.** After 3+ /compact cycles, decisions from early in the session get fuzzy. Phase 3.8's 60-min stall threshold was wrong mid-session because the per-candidate heartbeat detail got lost.
+**5. Em dashes leaking back in.** The rule is in `CLAUDE.md` and `ABOUT ME/anti-ai-writing-style.md`; voice still slips. *Fix:* catch new ones via the `grep -nP "[\x{2014}\x{2013}]"` check before any commit that adds docs.
 
-*Fix:* end a session at phase boundaries. Start the next phase fresh, with the kickoff template. Capture decisions to `docs/decisions.md` live during the phase, not retroactively.
+**6. Port-phase fidelity drift.** For port phases, hold port-fidelity tightly. Allowed divergences: HQ design tokens, port-plan-locked backend changes. Anything else is a bug, not a feature. Memory rule `feedback_port_fidelity`. (The first Phase 4.1 through 4.6 attempt drifted from the Lovable source and was recovered via a fresh 1:1 `vs-port-fresh` branch; see git history.)
 
-**4. Edge function deploy lag.** Repeatedly during Phase 3.X, code commits needed `supabase functions deploy <name>` to take effect, and the deploy lagged the commit by hours.
+**7. Tool-output collapse on AI surfaces.** When an LLM call returns empty payloads (forced `tool_choice` plus per-item gating + schema mismatch), don't edit system prompts to fix it. Move the lever to schema descriptions + post-emission sanitization. Memory rule `feedback_tool_choice_collapse`.
 
-*Fix:* the `add-edge-function` skill includes the deploy step. The `ship-phase` skill explicitly lists which functions need re-deploy at squash-merge time. Use them.
-
-**5. Em dashes leaking back in.** Multiple times. The rule is in `CLAUDE.md` and `ABOUT ME/anti-ai-writing-style.md`. Voice still slips.
-
-*Fix:* the doc-audit sweep (2026-05-13) cleared the existing population. Catch new ones via the `grep -nP "[\x{2014}\x{2013}]"` check before any commit that adds docs.
-
-**6. Phase 4 failed-attempt branch.** The first Phase 4.1 through 4.6 attempt on `main` drifted enough from the Lovable source repo that producer testing exposed a stack of small UX regressions and rework cost grew nonlinearly. Recovery: hard-reset main to a fresh `vs-port-fresh` 1:1 port branch via `--force-with-lease` push.
-
-*Fix:* for port phases, hold port-fidelity tightly. Allowed divergences: HQ design tokens, port-plan-locked backend changes. Anything else is a bug, not a feature. Memory rule `feedback_port_fidelity`.
-
-**7. Tool-output collapse on AI surfaces.** Multiple sessions burned re-tuning system prompts when an LLM call returned empty payloads. Root cause: forced `tool_choice` plus per-item gating + schema mismatch.
-
-*Fix:* don't edit system prompts to fix it. Move the lever to schema descriptions + post-emission sanitization. Memory rule `feedback_tool_choice_collapse`.
-
-**8. CHECKPOINT.md staleness.** The doc that's supposed to be the living state drifted from reality when post-squash backfill commits got delayed. Bit Cowork at 4.3.2 and 4.3.3 wrap-ups.
-
-*Fix:* the COWORK_SYNC two-write convention codified in § 2 above (AWAITING SQUASH APPROVAL stub at the gate, SHIPPED block after squash + push + cleanup). CHECKPOINT.md gets updated in the same commit as any sub-phase completion. Don't defer.
+**8. CHECKPOINT.md staleness.** *Fix:* the COWORK_SYNC convention codified in § 2 above. CHECKPOINT.md gets updated in the same commit as any sub-phase completion. Don't defer.
 
 ---
 

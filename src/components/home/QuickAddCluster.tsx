@@ -9,8 +9,8 @@ const ITEMS = [
 ] as const;
 
 /**
- * Home quick-add cluster: four dashed-border chips that route directly to
- * the relevant `/new` form.
+ * Home quick-add cluster: four coral-ghost buttons (.btn .btn-coral) that
+ * route directly to the relevant `/new` form.
  */
 export function QuickAddCluster() {
   const navigate = useNavigate();
@@ -21,10 +21,10 @@ export function QuickAddCluster() {
         <button
           key={item.label}
           type="button"
-          className="hq-qa"
+          className="btn btn-coral"
           onClick={() => navigate(item.to)}
         >
-          <IconPlus className="h-[14px] w-[14px]" />
+          <IconPlus className="h-[11px] w-[11px]" />
           <span>{item.label}</span>
         </button>
       ))}

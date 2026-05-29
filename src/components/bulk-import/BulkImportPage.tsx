@@ -303,8 +303,18 @@ export function BulkImportPage({
         let msg = error.message;
         if (ctx && typeof ctx.json === "function") {
           try {
-            const body = (await ctx.clone().json()) as { error?: string };
+            const body = (await ctx.clone().json()) as {
+              error?: string;
+              validation_errors?: { row_index: number; column: string; message: string }[];
+            };
             if (body?.error) msg = `${ctx.status}: ${body.error}`;
+            if (body?.validation_errors?.length) {
+              const first = body.validation_errors
+                .slice(0, 3)
+                .map((e) => `Row ${e.row_index + 1}, ${e.column}: ${e.message}`)
+                .join("; ");
+              msg = `${ctx.status}: ${first}`;
+            }
           } catch {
             /* swallow */
           }

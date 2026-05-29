@@ -15,7 +15,7 @@
  * migration at supabase/migrations/2026XXXX_phase_5_6_1_phone_normalization.sql.
  */
 
-export function parsePhone(raw: string | null | undefined): string | null {
+function parsePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
   let digits = raw.replace(/\D/g, "");
   if (digits.length === 11 && digits.startsWith("1")) {

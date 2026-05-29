@@ -3,6 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { IconChevronRight, IconCheck } from "@/components/icons/HQIcons";
 import { currentWeekWindow } from "@/lib/home/week";
+import { ClickPillCell } from "@/components/hq/ClickPillCell";
+import { taskStatusToken } from "@/lib/home/projectStatusToken";
+import { TASK_STATUS_VALUES, type TaskStatus } from "@/lib/tasks/queries";
 
 /**
  * Phase 5.1 Home `My Tasks This Week` card (Standard variant only).
@@ -13,15 +16,17 @@ import { currentWeekWindow } from "@/lib/home/week";
  * immediately for snappy feedback, then the row reloads from the DB to
  * confirm (and revert on failure).
  *
- * Phase 5.7.7 followup-1: Home cards are read-only. The task title links
- * to `/tasks/:id` for detail-page editing; project sub-line links to
- * `/projects/:id`. Field-level inline editing belongs on the detail page,
- * not the dashboard summary.
+ * Phase 5.7.7 followup-1: Home cards are read-only EXCEPT the Phase 6.4
+ * Status pill (the sanctioned Home inline-edit exception) + the Done
+ * checkbox. The task title links to `/tasks/:id` for detail-page editing;
+ * project sub-line links to `/projects/:id`. All other fields edit on the
+ * detail page, not the dashboard summary.
  */
 
 type Row = {
   id: string;
   title: string;
+  status: TaskStatus;
   priority: "Urgent" | "High" | "Normal" | "Low";
   dueDateIso: string | null;
   projectId: string | null;
@@ -95,6 +100,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
       const next: Row[] = ((data ?? []) as unknown as DbTaskRow[]).map((t) => ({
         id: t.id,
         title: t.title,
+        status: t.status as TaskStatus,
         priority: t.priority,
         dueDateIso: t.due_date,
         projectId: t.project_id,
@@ -133,15 +139,16 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
         <thead>
           <tr>
             <th style={{ width: 34 }}></th>
-            <th>Task</th>
-            <th>Priority</th>
+            <th className="l">Task</th>
+            <th className="c">Status</th>
+            <th className="c">Priority</th>
             <th className="r">Due</th>
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={4} className="text-center text-[hsl(var(--subtle-foreground))] py-6">
+              <td colSpan={5} className="text-center text-[hsl(var(--subtle-foreground))] py-6">
                 No tasks due this week.
               </td>
             </tr>
@@ -154,7 +161,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
                   onClick={() => navigate(`/tasks/${r.id}`)}
                   style={{ cursor: "pointer" }}
                 >
-                  <td className="text-center">
+                  <td className="c">
                     <button
                       type="button"
                       aria-label={`Mark "${r.title}" done`}
@@ -168,7 +175,7 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
                       {completing[r.id] ? <IconCheck className="h-[11px] w-[11px] text-primary" /> : null}
                     </button>
                   </td>
-                  <td>
+                  <td className="l">
                     <div className="lead">{r.title}</div>
                     <div className="sub">
                       {r.clientName && r.projectName
@@ -176,7 +183,35 @@ export function MyTasksThisWeekCard({ userId }: { userId: string | undefined }) 
                         : r.projectName ?? "No project"}
                     </div>
                   </td>
-                  <td>
+                  <td className="c">
+                    <ClickPillCell
+                      value={r.status}
+                      options={TASK_STATUS_VALUES}
+                      tokenMap={taskStatusToken}
+                      onSave={async (next) => {
+                        const { error } = await supabase
+                          .from("tasks")
+                          .update({ status: next })
+                          .eq("id", r.id);
+                        if (error) throw error;
+                        if (next === "Done") {
+                          // Match the Done checkbox + the card's query (which
+                          // filters Done out): drop the row so it doesn't
+                          // linger until a reload.
+                          setRows((rs) => rs.filter((row) => row.id !== r.id));
+                          return;
+                        }
+                        setRows((rs) =>
+                          rs.map((row) =>
+                            row.id === r.id
+                              ? { ...row, status: next as TaskStatus }
+                              : row,
+                          ),
+                        );
+                      }}
+                    />
+                  </td>
+                  <td className="c">
                     <span className={priorityBadgeClass(r.priority)}>
                       {r.priority}
                     </span>

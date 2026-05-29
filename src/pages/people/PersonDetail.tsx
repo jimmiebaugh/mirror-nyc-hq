@@ -13,7 +13,6 @@ import {
   createClientInline,
   createVenueInline,
   CLIENT_MINI_CREATE_FIELDS,
-  VENUE_MINI_CREATE_FIELDS,
 } from "@/lib/hq/inlineCreate";
 import { toast } from "@/hooks/use-toast";
 
@@ -441,8 +440,10 @@ export default function PersonDetail() {
                     onMultiChange={(next) => void saveVenueIds(next)}
                     entityLabel="venue"
                     placeholder="+ Add"
+                    // Single-field venue create -> immediate add on Enter, no
+                    // modal (Phase 6.5 follow-up); createVenueInline needs only
+                    // { name }.
                     quickCreate
-                    miniCreateFields={VENUE_MINI_CREATE_FIELDS}
                     onMiniCreate={async (data) => {
                       const created = await createVenueInline(data);
                       if (created) {

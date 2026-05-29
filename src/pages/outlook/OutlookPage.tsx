@@ -36,7 +36,7 @@ import { toast } from "@/hooks/use-toast";
  * Wireframe binding: OUTPUTS/phase-5-hq-wireframe-v1-LOCKED.html
  * Surface 16. Spec: OUTPUTS/phase-5-3-spec.md § 4b.
  *
- * 12-month grid with year tabs and a 277px side panel. The panel handles
+ * 12-month grid with year tabs and a 360px side panel. The panel handles
  * detail / edit / new modes. URL params:
  *   ?year=YYYY            pre-selects the year tab
  *   ?month=MM             reserved for future scroll behavior (not used
@@ -232,8 +232,7 @@ export default function OutlookPage() {
       <div className="pagehead">
         <div className="row between">
           <div>
-            <div className="eyebrow">Admin</div>
-            <h1 className="h-page" style={{ marginTop: 4 }}>
+            <h1 className="h-page">
               Outlook
             </h1>
           </div>

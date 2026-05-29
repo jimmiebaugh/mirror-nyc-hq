@@ -26,6 +26,28 @@ function asString(v: unknown): string {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function normalizeHttpUrl(raw: unknown): string {
+  const value = asString(raw);
+  if (!value) return "";
+  const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return value;
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function normalizeWholeNumber(raw: unknown, options: { currency?: boolean } = {}): string {
+  const value = asString(raw);
+  if (!value) return "";
+  const cleaned = value.replace(options.currency ? /[$,\s]/g : /[,\s]/g, "");
+  const n = Number(cleaned);
+  if (Number.isInteger(n) && n >= 0) return String(n);
+  return value;
+}
+
 function checkNonNegInt(
   row: Row,
   column: string,
@@ -53,7 +75,10 @@ function checkUrl(
   const url = asString(row[column]);
   if (!url) return;
   try {
-    new URL(url);
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("unsupported protocol");
+    }
   } catch {
     errors.push({
       row_index: i,
@@ -61,6 +86,18 @@ function checkUrl(
       message: `${column} must be a valid URL (got "${url}").`,
     });
   }
+}
+
+export function normalizeVenueImportRows(rows: Row[]): Row[] {
+  return rows.map((row) => ({
+    ...row,
+    capacity: normalizeWholeNumber(row.capacity),
+    square_footage: normalizeWholeNumber(row.square_footage),
+    total_sq_ft: normalizeWholeNumber(row.total_sq_ft),
+    event_day_rate: normalizeWholeNumber(row.event_day_rate, { currency: true }),
+    website_url: normalizeHttpUrl(row.website_url),
+    venue_slide_url: normalizeHttpUrl(row.venue_slide_url),
+  }));
 }
 
 export function validateVenueImport(

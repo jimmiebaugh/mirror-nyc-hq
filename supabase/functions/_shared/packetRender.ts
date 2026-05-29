@@ -13,6 +13,7 @@
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 import { getGmailAccessToken } from "./gmailServiceAccount.ts";
 import { MIRROR_LOGO_ASPECT, drawMirrorLogo } from "./mirrorLogo.ts";
+import { stripMimeControl } from "./mimeHeader.ts";
 
 // ============================================================================
 // Layout constants — US Letter portrait, 72 dpi.
@@ -965,6 +966,11 @@ function buildLinkMime(opts: {
   downloadLinkLabel: string;
 }): string {
   const boundary = `mirror_hq_${crypto.randomUUID().replace(/-/g, "")}`;
+  // Sanitize header values so a CR/LF in to/subject/from can't inject extra
+  // MIME headers (F019). role.title flows into the subject from admin input.
+  const to = stripMimeControl(opts.to);
+  const from = stripMimeControl(opts.from);
+  const subject = stripMimeControl(opts.subject);
 
   // Plain text body — keeps the URL inline as a fallback for plaintext clients.
   const plainText = `${opts.bodyText}\n\nDownload: ${opts.downloadUrl}\n\nThis link expires in 7 days. Save the PDF locally for long-term reference.`;
@@ -987,9 +993,9 @@ ${htmlBodyLines}<br>
   const htmlB64 = wrapBase64(bytesToBase64(enc.encode(html)));
 
   return [
-    `From: ${opts.from}`,
-    `To: ${opts.to}`,
-    `Subject: ${opts.subject}`,
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     "",

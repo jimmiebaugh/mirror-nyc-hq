@@ -4,8 +4,18 @@ import type {
   DedupeMatch,
   EntityConfig,
   ResolvedRow,
+  RowValidationError,
 } from "../types";
 import { enumerateUnresolvedRefs, splitMulti } from "../refEnumerate";
+import {
+  EMAIL_RE,
+  asImportString,
+  isValidHttpUrl,
+  isValidWholeNumber,
+  normalizeHttpUrl,
+  normalizeWholeNumber,
+  pushError,
+} from "../validation";
 
 /**
  * Venue EntityConfig (Phase 5.9.4). Third real consumer of the 5.9.1
@@ -38,6 +48,47 @@ const VENUE_TYPE_CREATE_FIELDS = [
 
 function dedupeKeyFor(name: unknown, address: unknown): string {
   return `${String(name ?? "").trim().toLowerCase()}|${String(address ?? "").trim().toLowerCase()}`;
+}
+
+function validateVenueRows(rows: Record<string, unknown>[]): RowValidationError[] {
+  const errors: RowValidationError[] = [];
+  rows.forEach((row, i) => {
+    if (asImportString(row.dedupe_action) === "skip") return;
+
+    if (!asImportString(row.name)) {
+      pushError(errors, i, "name", "Name is required.");
+    }
+
+    for (const key of ["capacity", "square_footage", "total_sq_ft"] as const) {
+      const raw = asImportString(row[key]);
+      if (raw && !isValidWholeNumber(raw)) {
+        pushError(errors, i, key, `${key} must be a non-negative whole number (got "${raw}").`);
+      }
+    }
+
+    const rate = asImportString(row.event_day_rate);
+    if (rate && !isValidWholeNumber(rate, { currency: true })) {
+      pushError(errors, i, "event_day_rate", `event_day_rate must be a non-negative whole number (got "${rate}").`);
+    }
+
+    const contactEmail = asImportString(row.contact_email);
+    if (contactEmail && !EMAIL_RE.test(contactEmail)) {
+      pushError(errors, i, "contact_email", `Contact email looks invalid (got "${contactEmail}").`);
+    }
+
+    const generalEmail = asImportString(row.general_email);
+    if (generalEmail && !EMAIL_RE.test(generalEmail)) {
+      pushError(errors, i, "general_email", `General email looks invalid (got "${generalEmail}").`);
+    }
+
+    for (const key of ["website_url", "venue_slide_url"] as const) {
+      const raw = asImportString(row[key]);
+      if (raw && !isValidHttpUrl(raw)) {
+        pushError(errors, i, key, `${key} must be a valid http(s) URL (got "${raw}").`);
+      }
+    }
+  });
+  return errors;
 }
 
 export const venueConfig: EntityConfig = {
@@ -137,6 +188,8 @@ export const venueConfig: EntityConfig = {
     return matches;
   },
 
+  validateRows: (rows) => validateVenueRows(rows),
+
   buildCommitPayload: (gridRows, mappings, decisions): CommitPayload => {
     const queued_refs: Record<string, Array<Record<string, string>>> = {};
     // venue_type is the only ref kind (exclusive_vendor is not importable).
@@ -174,12 +227,12 @@ export const venueConfig: EntityConfig = {
           neighborhood: String(row.neighborhood ?? "").trim(),
           city: String(row.city ?? "").trim(),
           venue_types: splitMulti(row.venue_types).map((t) => resolveName("venue_type", t)),
-          capacity: String(row.capacity ?? "").trim(),
-          square_footage: String(row.square_footage ?? "").trim(),
-          total_sq_ft: String(row.total_sq_ft ?? "").trim(),
-          event_day_rate: String(row.event_day_rate ?? "").trim(),
-          venue_slide_url: String(row.venue_slide_url ?? "").trim(),
-          website_url: String(row.website_url ?? "").trim(),
+          capacity: normalizeWholeNumber(row.capacity),
+          square_footage: normalizeWholeNumber(row.square_footage),
+          total_sq_ft: normalizeWholeNumber(row.total_sq_ft),
+          event_day_rate: normalizeWholeNumber(row.event_day_rate, { currency: true }),
+          venue_slide_url: normalizeHttpUrl(row.venue_slide_url),
+          website_url: normalizeHttpUrl(row.website_url),
           general_email: String(row.general_email ?? "").trim(),
           contact_name: String(row.contact_name ?? "").trim(),
           contact_email: String(row.contact_email ?? "").trim(),

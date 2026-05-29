@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
 import { HQFormField } from "@/components/hq/HQFormField";
-import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { RecordCombobox, type Option } from "@/components/ui/RecordCombobox";
 import {
   AlertDialog,
@@ -253,22 +252,7 @@ export default function TaskEdit() {
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120, maxWidth: 880, marginLeft: "auto", marginRight: "auto" }}>
-      <Link
-        to={isCreate ? "/tasks" : `/tasks/${id}`}
-        className="tlink"
-        onClick={(e) => {
-          if (dirty) {
-            e.preventDefault();
-            setConfirmLeaveOpen(true);
-          }
-        }}
-      >
-        <IconArrowLeft className="ic" />
-        Back to {isCreate ? "Tasks" : "task"}
-      </Link>
-
       <div className="pagehead">
-        <div className="eyebrow">Task</div>
         <h1 className="h-page">{isCreate ? "New Task" : "Edit Task"}</h1>
       </div>
 

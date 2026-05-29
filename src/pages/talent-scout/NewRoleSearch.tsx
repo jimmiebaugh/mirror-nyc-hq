@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -109,10 +109,17 @@ export default function NewRoleSearch() {
 
       <div className="actionbar">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
-          <Button variant="ghost" className="text-primary" onClick={() => navigate("/talent-scout/new/details")}>
+          <button
+            type="button"
+            className="btn btn-tertiary"
+            onClick={() => navigate("/talent-scout/new/details")}
+          >
+            <IconArrowLeft className="ic" />
             Back
-          </Button>
-          <Button onClick={onContinue}>Generate scorecard →</Button>
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onContinue}>
+            Generate scorecard →
+          </button>
         </div>
       </div>
     </div>

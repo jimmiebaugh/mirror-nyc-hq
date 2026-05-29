@@ -21,9 +21,14 @@
 //   3. Type handling: canonicalizeType per slash-separated token; rebuilt
 //      string lands in vs_candidate_venues.venue_type.
 //   4. EdgeRuntime.waitUntil divorces request lifetime from work lifetime
-//      (port plan § 8.3). The function returns 200 immediately; the AI
-//      work + INSERTs + completion UPDATE run in the background. The
-//      Researching page learns about completion / failure via Realtime
+//      (port plan § 8.3). NOTE (Phase 6.0, finding F039): the fast-return
+//      is only partial. HQ-pool seeding (loadHqVenuesIntoPool, including its
+//      per-photo seedHqPhotosToVs storage I/O) runs SYNCHRONOUSLY in the
+//      handler before the 200; only the Phase A/B Claude work + their INSERTs
+//      + the completion UPDATE run in the background via waitUntil. Moving
+//      HQ-pool seeding into work() is finding F008, deferred to the post-v1
+//      tech-debt phase; when it lands, this reverts to a clean fast-return.
+//      The Researching page learns about completion / failure via Realtime
 //      on vs_scouts (or status='failed' + pipeline_error on failure).
 //
 // Auth posture: verify_jwt = true. User-invoked synchronous handshake; no

@@ -44,6 +44,7 @@ import {
   type ParsedBriefFields,
 } from "@/lib/venue-scout/briefForm";
 import { briefIntake } from "@/lib/venue-scout/briefIntakeStore";
+import { formatCurrencyInput } from "@/lib/hq/currency";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -270,7 +271,7 @@ export default function BriefEvent() {
   // full-width inside the AppShell chrome. `stack-6` (24px gap) replaces the
   // legacy `space-y-6` so vertical rhythm matches BriefReport.
   return (
-    <div className="stack-6 pb-32">
+    <div className="stack-6 pb-32 vs-input-contrast">
       <header className="space-y-2">
         {/* R7 amendment v3 § 2: BriefEvent migrated to ScoutPageHeader
             matching BriefVenue (R7 amendment v2 § 5 producer-call). The
@@ -407,26 +408,14 @@ export default function BriefEvent() {
                 <HQFormField label="Budget">
                   <Input
                     value={form.budget_text}
-                    onChange={(e) => {
-                      // R6 § D.2: auto-format as `$X,XXX` (no decimals)
-                      // on every keystroke. Strip non-digits, reformat with
-                      // en-US thousands separator. Empty input passes through
-                      // as empty so the field can clear. Cursor may jump to
-                      // end mid-edit; tolerated for now (flag for v2 if
-                      // smoke catches it).
-                      const digits = e.target.value.replace(/[^0-9]/g, "");
-                      if (!digits) {
-                        update("budget_text", "");
-                        return;
-                      }
-                      const n = parseInt(digits, 10);
-                      update(
-                        "budget_text",
-                        Number.isFinite(n)
-                          ? `$${n.toLocaleString("en-US")}`
-                          : "",
-                      );
-                    }}
+                    onChange={(e) =>
+                      // Phase 6.4 (N4): shared whole-dollar formatter (single
+                      // source of truth with ProjectEdit). Empty input passes
+                      // through as "" so the field can clear. Cursor may jump
+                      // to end mid-edit; tolerated (flag for v2 if smoke
+                      // catches it).
+                      update("budget_text", formatCurrencyInput(e.target.value))
+                    }
                     placeholder="$0"
                     disabled={isArchived}
                   />
@@ -489,21 +478,27 @@ export default function BriefEvent() {
       {/* ---- Sticky footer ---- */}
       <div className="actionbar">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-4">
-          <Button variant="ghost" onClick={requestCancel}>
-            ← Cancel
-          </Button>
+          <button
+            type="button"
+            className="btn btn-tertiary"
+            onClick={requestCancel}
+          >
+            Cancel
+          </button>
           <div className="flex items-center gap-3">
             {dirty && (
               <span className="text-xs font-mono uppercase tracking-wider text-warn">
                 Unsaved changes
               </span>
             )}
-            <Button
+            <button
+              type="button"
+              className="btn btn-primary"
               onClick={requestContinue}
               disabled={continuing || invalid || isArchived}
             >
               {continuing ? "Saving…" : "Continue"}
-            </Button>
+            </button>
           </div>
         </div>
       </div>

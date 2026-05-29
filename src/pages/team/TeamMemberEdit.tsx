@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { StickySaveBar } from "@/components/data/StickySaveBar";
-import { IconArrowLeft } from "@/components/icons/HQIcons";
 import { useLookup } from "@/lib/hq/lookups";
 import { RecordCombobox } from "@/components/ui/RecordCombobox";
 import {
@@ -217,32 +216,17 @@ export default function TeamMemberEdit() {
 
   return (
     <div className="stack-4 hq-form" style={{ paddingBottom: 120 }}>
-      <Link
-        to="/users"
-        className="tlink"
-        onClick={(e) => {
-          if (dirty) {
-            e.preventDefault();
-            setConfirmLeaveOpen(true);
-          }
-        }}
-      >
-        <IconArrowLeft className="ic" />
-        Back to Users
-      </Link>
-
       <div className="pagehead">
-        <div className="eyebrow">Admin</div>
         <h1 className="h-page" style={{ marginTop: 4 }}>
           {isCreate ? "New User" : "Edit User"}
         </h1>
       </div>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Profile</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Profile</span>
-          </div>
           <div className="g2">
             <div className="field">
               <label className="label-form">Full Name<span className="req">*</span></label>
@@ -289,10 +273,10 @@ export default function TeamMemberEdit() {
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Access</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Access</span>
-          </div>
           <div className="g2">
             <div className="field">
               <label className="label-form">Tier</label>
@@ -355,10 +339,10 @@ export default function TeamMemberEdit() {
       </section>
 
       <section className="card">
+        <div className="card-headbar">
+          <span className="h-card">Slack</span>
+        </div>
         <div className="card-pad stack-4">
-          <div className="block-lbl">
-            <span className="label-section">Slack</span>
-          </div>
           <div className="g2">
             <div className="field">
               <label className="label-form">Slack Handle</label>

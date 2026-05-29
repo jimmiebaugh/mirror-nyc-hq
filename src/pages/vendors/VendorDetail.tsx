@@ -699,11 +699,13 @@ export default function VendorDetail() {
             </div>
           </section>
 
-          <VendorFilesEditor vendorId={vendor.id} />
+          <InternalNotesEditor parentType="vendor" parentId={vendor.id} />
         </div>
 
         <aside className="stack-6">
           <ContactsCard contacts={contacts} />
+
+          <VendorFilesEditor vendorId={vendor.id} />
 
           <section className="card">
             <div className="card-headbar">
@@ -758,8 +760,6 @@ export default function VendorDetail() {
               </div>
             </div>
           </section>
-
-          <InternalNotesEditor parentType="vendor" parentId={vendor.id} />
 
           <section className="card">
             <div className="card-headbar">

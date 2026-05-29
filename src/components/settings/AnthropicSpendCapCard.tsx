@@ -40,7 +40,7 @@ export function AnthropicSpendCapCard() {
   const [capInput, setCapInput] = useState("");
   const [capInitial, setCapInitial] = useState("");
   const [currentSpend, setCurrentSpend] = useState(0);
-  const [window, setWindow] = useState<"month" | "year">("month");
+  const [windowKind, setWindowKind] = useState<"month" | "year">("month");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -55,7 +55,7 @@ export function AnthropicSpendCapCard() {
             .select("id, anthropic_spend_cap_monthly_usd")
             .limit(1)
             .maybeSingle(),
-          supabase.rpc("anthropic_spend_breakdown", { window_kind: window }),
+          supabase.rpc("anthropic_spend_breakdown", { window_kind: windowKind }),
         ]);
       if (!active) return;
       if (gsErr) {
@@ -93,7 +93,7 @@ export function AnthropicSpendCapCard() {
     return () => {
       active = false;
     };
-  }, [window]);
+  }, [windowKind]);
 
   const dirty = capInput.trim() !== capInitial.trim();
 
@@ -128,8 +128,8 @@ export function AnthropicSpendCapCard() {
   };
 
   const monthlyCap = Number(capInitial || 0);
-  const referenceCap = window === "year" ? monthlyCap * 12 : monthlyCap;
-  const referenceLabel = window === "year" ? "annualized" : "cap";
+  const referenceCap = windowKind === "year" ? monthlyCap * 12 : monthlyCap;
+  const referenceLabel = windowKind === "year" ? "annualized" : "cap";
   const overCap = referenceCap > 0 && currentSpend >= referenceCap;
 
   if (loading) {
@@ -198,24 +198,24 @@ export function AnthropicSpendCapCard() {
               <button
                 type="button"
                 role="tab"
-                aria-selected={window === "month"}
-                className={window === "month" ? "on" : undefined}
-                onClick={() => setWindow("month")}
+                aria-selected={windowKind === "month"}
+                className={windowKind === "month" ? "on" : undefined}
+                onClick={() => setWindowKind("month")}
               >
                 Month
               </button>
               <button
                 type="button"
                 role="tab"
-                aria-selected={window === "year"}
-                className={window === "year" ? "on" : undefined}
-                onClick={() => setWindow("year")}
+                aria-selected={windowKind === "year"}
+                className={windowKind === "year" ? "on" : undefined}
+                onClick={() => setWindowKind("year")}
               >
                 Year
               </button>
             </div>
           </div>
-          <AnthropicSpendBreakdownTable window={window} />
+          <AnthropicSpendBreakdownTable window={windowKind} />
         </div>
       </div>
     </section>
