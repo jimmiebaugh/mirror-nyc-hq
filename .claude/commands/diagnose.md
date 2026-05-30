@@ -1,3 +1,7 @@
+---
+description: Run a read-only production health check across HQ's live systems and report drift, errors, or stalled jobs.
+---
+
 Run a production health check across HQ's live systems. Surface drift, errors, or stalled jobs. Read-only — don't fix anything, just report.
 
 ## Checks

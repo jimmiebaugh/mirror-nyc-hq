@@ -1,3 +1,7 @@
+---
+description: Verify the frontend eval prompt matches the DEFAULT_EVAL_PROMPT export in _shared/prompts.ts byte for byte.
+---
+
 Verify that `src/lib/talent-scout/defaultEvalPrompt.ts` matches the `DEFAULT_EVAL_PROMPT` export in `supabase/functions/_shared/prompts.ts` byte-for-byte.
 
 ## Why this exists

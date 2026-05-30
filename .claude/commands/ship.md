@@ -1,3 +1,7 @@
+---
+description: Run the HQ pre-merge checklist and report what's clean vs what needs fixing before squash-merge.
+---
+
 Run the HQ pre-merge checklist and report what's clean vs what needs fixing before squash-merge. Don't run the actual merge — just report the state.
 
 ## Checks
